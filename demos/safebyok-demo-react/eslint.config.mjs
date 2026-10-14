@@ -1,6 +1,6 @@
 // The demo's own lint: the root eslint.config.mjs ignores demos/** because each demo is its own
 // workspace package with its own dependencies and TS project. This config is deliberately lighter
-// than the root's -- no type-aware pass, no chai layer -- but it keeps the rules that matter most
+// than the core's (packages/safebyok/) -- no type-aware pass, no chai layer -- but it keeps the rules that matter most
 // here: nothing written to the console from the library-shaped code, no Math.random near secrets,
 // and the house ban on names that say nothing.
 import { defineConfig, globalIgnores } from 'eslint/config'
@@ -83,7 +83,7 @@ export default defineConfig([
 
   // chai's property assertions (`to.be.null`) read as bare expressions; chai-friendly's rule
   // lets an expect chain stand as a statement and still reports any other expression that does
-  // nothing (as the root config does, STYLE.md *Tests*).
+  // nothing (as the core's config does, STYLE.md *Tests*).
   {
     name: 'safebyok-demo/tests-chai',
     files: ['tests/**/*.ts'],

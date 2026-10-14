@@ -1,4 +1,5 @@
-// eslint.config.mjs
+// eslint.config.mjs -- the core's lint, and the authority on house style: the root's config and the
+// other packages' are cut from this one, and where they disagree, this one is right.
 //
 import { defineConfig, globalIgnores } from 'eslint/config'
 import js                              from '@eslint/js'
@@ -53,13 +54,7 @@ export default defineConfig([
   globalIgnores([
     'dist/**',
     'coverage/**',
-    // Agents' worktrees: another checkout's code, linted there if anywhere.
-    '.claude/worktrees/**',
     '**/*.generated.*',
-    // Companion packages and demo apps are their own workspace packages with their own eslint
-    // configs: their dependencies and TS projects are theirs, not this package's.
-    'packages/**',
-    'demos/**',
   ]),
 
   // == [1. Stock defaults] ==
@@ -160,7 +155,7 @@ export default defineConfig([
       // No extension enforcement: the bundler resolves extensionless imports, the grain of the
       // wider ecosystem, so import-x/extensions (either direction) isn't set here at all.
       'import-x/no-extraneous-dependencies': ['error', {
-        devDependencies: ['tests/**', '**/*.config.{ts,mts,mjs}', 'eslint.config.mjs', 'scripts/**'],
+        devDependencies: ['tests/**', '**/*.config.{ts,mts,mjs}', 'eslint.config.mjs'],
         optionalDependencies: false,
         peerDependencies: true,
       }],

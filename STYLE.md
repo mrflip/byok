@@ -5,8 +5,9 @@ CLAUDE.md's *Conventions At A Glance* covers a small edit; read this when naming
 writing a doc block, or writing a test. The naming vocabulary below is specific, and not
 guessable from general TypeScript habit.
 
-`eslint.config.mjs` is the source of truth for anything mechanically enforceable; where it and
-this document disagree, the linter wins and this document is a bug.
+The core's `eslint.config.mjs` (`packages/safebyok/`) is the source of truth for anything
+mechanically enforceable; where it and this document disagree, the linter wins and this document
+is a bug.
 
 ## Imports
 
@@ -158,7 +159,7 @@ up for a poor name, or marks off a stanza that should be its own function is a s
 
 ## Tests
 
-Vitest, in `tests/`, path for path with `src/`: `src/foo/bar.ts` is tested in
+Vitest, in each package's `tests/`, path for path with its `src/`: `src/foo/bar.ts` is tested in
 `tests/foo/bar.test.ts`. Test and build artifacts never land in `src/`.
 
 * **Assertions are chai-style**: `expect(foo).to.eq(bar)`, `to.deep.equal` (`to.equal` is `===`;
@@ -167,7 +168,7 @@ Vitest, in `tests/`, path for path with `src/`: `src/foo/bar.ts` is tested in
   Never `toBe`, `toEqual` or `toHaveLength`. Two Vitest forms have no chai spelling and are
   allowed: `await expect(promise).rejects.toThrow(...)` and `toMatchSnapshot()`.
 * `eslint-plugin-chai-expect` catches a bare `expect(x)` or a method left uncalled. It knows only
-  the methods in `ChaiMethods` (`eslint.config.mjs`): a new one goes on that list.
+  the methods in `ChaiMethods` (the core's `eslint.config.mjs`): a new one goes on that list.
 * **Every use case of an exported function has a test, and every `@example` has one.**
 * **Each example ties to a plausible failure mode.** Ask what null, undefined and a missing value
   mean; what an absurd type does (`seal(42)`); what a not-quite-absurd one does (a salt one byte
@@ -202,8 +203,8 @@ Vitest, in `tests/`, path for path with `src/`: `src/foo/bar.ts` is tested in
 
 ## Mechanically enforced, and deliberately not
 
-`eslint.config.mjs` is strict. These are **off on purpose**, so don't "fix" code for them:
-`camelcase` (`vaultlabel` is right), `no-use-before-define` (define helpers below their callers
+The core's `eslint.config.mjs` is strict. These are **off on purpose**, so don't "fix" code for
+them: `camelcase` (`vaultlabel` is right), `no-use-before-define` (define helpers below their callers
 when that reads better), `@stylistic/quotes` (the convention above is kept by hand),
 `no-underscore-dangle`, `no-continue`, `no-await-in-loop`.
 

@@ -98,10 +98,10 @@ code in the PR -- then ask in chat first.
 * A change to the public surface or to the stored format says so in its first line, and says
   what a consumer or an existing vault has to do about it.
 
-CI runs on every PR: `lint-typecheck` (lint, typecheck, no merge commits) and `test-build` (tests
-with coverage, then the build with its package checks) must pass; `node-compat` runs the tests on
-the other Node majors and reports. CodeQL scans the code and the workflows, and a finding shows
-on the PR. Dependabot opens grouped `deps:` PRs weekly; they get the same review as any other.
+CI runs on every PR, over the root and every workspace package: `lint-typecheck` (lint, typecheck,
+no merge commits) and `test-build` (tests with coverage, then the builds with their package checks)
+must pass; `node-compat` runs the tests on the other Node majors and reports. CodeQL scans the
+code and the workflows, and a finding shows on the PR. Dependabot opens grouped `deps:` PRs weekly; they get the same review as any other.
 
 ## Releases
 
@@ -109,19 +109,20 @@ The Coach releases; agents never tag, publish, or change a version number unaske
 
 * Versions are semver. Until 1.0, a minor bump may break the public surface, and its release
   notes say how.
-* A release is a PR that bumps `version` in `package.json`, merged; then a GitHub release tagged
-  `v<version>`. Publishing the release runs `.github/workflows/release.yml`, which checks the tag
-  against the version, runs `pnpm justify`, and stages the package on npm with provenance. A
+* A release is a PR that bumps `version` in `packages/safebyok/package.json`, merged; then a
+  GitHub release tagged `v<version>`. Publishing the release runs
+  `.github/workflows/release.yml`, which checks the tag against the version, runs the core's
+  `pnpm justify`, and stages the package on npm with provenance. A
   prerelease version (`0.3.0-beta.1`) goes out under the `next` dist-tag.
 * **Staged, not published.** The workflow's npm trusted publisher may only `npm stage publish`.
   The version goes public when the Coach approves it with 2FA, on npmjs.com or with
   `npm stage approve <stage-id>` (`npm stage list` shows the ids); CI cannot approve its own
   staging. A staged version nobody wants is `npm stage reject`ed.
-* **`pnpm bump`** changes the version, and only that: it rewrites `version` in the root
-  `package.json` and does not commit, tag or push. `pnpm bump` asks which part to bump;
-  `pnpm bump minor` (or `patch`, `major`, an exact `1.2.3`) says so, and
-  `pnpm bump prerelease --preid beta` steps `0.3.0-beta.1` to `0.3.0-beta.2`. The companion
-  packages under `packages/` are not bumped with it.
+* **`pnpm bump`** changes the version, and only that: it rewrites `version` in
+  `packages/safebyok/package.json` and does not commit, tag or push. `pnpm bump` asks which part
+  to bump; `pnpm bump minor` (or `patch`, `major`, an exact `1.2.3`) says so, and
+  `pnpm bump prerelease --preid beta` steps `0.3.0-beta.1` to `0.3.0-beta.2`. The other packages
+  under `packages/` are not bumped with it.
 
 ## Dependencies
 

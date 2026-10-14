@@ -1,5 +1,5 @@
-# The safebyok package itself lives at the root. packages/ holds its companion packages (the React
-# binding); demos/ holds private playground apps that exercise them and are never published.
+# The root is a private workspace that is never published. packages/ holds the published packages
+# (safebyok, the core, and its companions); demos/ holds private playground apps that exercise them.
 packages:
   - packages/*
   - demos/*

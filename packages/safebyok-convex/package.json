@@ -13,7 +13,7 @@
     "./test": "./src/test.ts"
   },
   "scripts": {
-    "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
+    "lint": "eslint --no-error-on-unmatched-pattern --cache --cache-strategy content --cache-location .eslintcache .",
     "build:deps": "pnpm --filter 'safebyok-convex^...' build",
     "typecheck": "tsc --noEmit",
     "pretypecheck": "pnpm build:deps",

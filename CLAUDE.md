@@ -61,9 +61,10 @@ and the security reviewer reading the code.
   WebCrypto is the same global as in a browser.
 * **Security First**: if the stronger security measure (eg Argon) is not available on every platform,
   we nonetheless implement it first, and make it pluggable second
-* **What is exported is a contract.** `src/index.ts` (and each entry point beside it) is the
-  public surface, versioned by semver. **A stored vault is a contract too**: a change to the
-  shape of what is written to storage must still read every vault already written, and says how.
+* **What is exported is a contract.** Each published package's `src/index.ts` (and each entry
+  point beside it) is its public surface, versioned by semver. **A stored vault is a contract
+  too**: a change to the shape of what is written to storage must still read every vault already
+  written, and says how.
 
 ## Non-Negotiables
 
@@ -84,10 +85,11 @@ and the security reviewer reading the code.
 * Validate at module entrypoints; write confident, paranoia-free code past that boundary.
 * Progress notes, development caveats and open questions go in `human/` or `whiteboard/` --
   never in doc blocks or code comments.
-* `eslint.config.mjs` is the final authority on formatting. Run the linter; however, if it
-  conflicts with the higher guidelines of legibility and productivity, you are approved for
-  `eslint-disable-line` (`no-param-reassign`, `no-explicit-any`) or `@ts-expect-error` if they are
-  the correct compromise -- apply them but **report it** in chat, or in the PR's open questions.
+* The core's `eslint.config.mjs` (`packages/safebyok/`) is the final authority on formatting.
+  Run the linter; however, if it conflicts with the higher guidelines of legibility and
+  productivity, you are approved for `eslint-disable-line` (`no-param-reassign`,
+  `no-explicit-any`) or `@ts-expect-error` if they are the correct compromise -- apply them but
+  **report it** in chat, or in the PR's open questions.
 * Never handle a real secret in a test, fixture or example: generate one, or use an obvious fake.
   Credentials for anything (npm, GitHub) come from the environment, never from a file in the repo.
 
@@ -95,24 +97,28 @@ and the security reviewer reading the code.
 
 ```sh
 pnpm install
-pnpm justify         # lint, typecheck, test, build: green before every commit
-pnpm test            # vitest, then every workspace package's tests; pnpm test:watch, pnpm test:coverage
-pnpm --filter safebyok-react test   # one package alone (builds the packages it needs first)
-pnpm lint            # eslint
-pnpm typecheck       # tsc --noEmit
-pnpm build           # tsdown: ESM + CJS + declarations into dist/, checked by publint and attw
+pnpm justify         # lint, typecheck, test, build, every package: green before every commit
+pnpm test            # vitest, every package; pnpm test:coverage likewise
+pnpm lint            # eslint, every package
+pnpm typecheck       # tsc --noEmit, every package
+pnpm build           # tsdown: ESM + CJS + declarations into each dist/, checked by publint and attw
+pnpm --filter safebyok test        # one package, any script (or `pnpm test` in its directory);
+                                   # it builds the packages it depends on first
+pnpm --filter safebyok add <dep>   # a package's dependency; `pnpm add -w` is for root tooling only
 ```
 
 ## Layout
 
-* `src/` -- the package. `src/index.ts` is the entry point; nothing else is importable by a
-  consumer unless it is its own entry in `tsdown.config.ts`.
+* `packages/` -- the workspace packages: `safebyok` (the core), `safebyok-react` (the React
+  binding), `safebyok-convex` (in design, private). Each has its own `package.json`, configs,
+  `src/` and `tests/`, and runs its own `pnpm justify`; the root's runs them all.
+* In a package, `src/index.ts` is the entry point; nothing else is importable by a consumer unless
+  it is its own entry in that package's `tsdown.config.ts`.
 * `tests/` mirrors `src/` path for path: `src/foo/bar.ts` is tested in `tests/foo/bar.test.ts`.
   `fixtures/` holds sample data, when there is some.
-* `packages/` -- companion workspace packages (`safebyok-react`, the React binding). Each lints,
-  typechecks and tests itself (`pnpm justify` inside it); the root `pnpm test` runs their tests but the
-  root justify does not lint or build them, and CI runs each package's justify.
 * `demos/` -- private playground apps exercising the packages; never published.
+* The root is a private workspace, never published: its own `scripts/` (tested in `tests/scripts/`)
+  and the configs that check them.
 * `dist/` is built, never committed.
 * `whiteboard/` -- work threads in progress, under a `YYYYMMDD-threadname` directory.
 * `human/` -- **from agents, to Coaches.** A scratchpad, not a record: write to it, don't read it
@@ -129,8 +135,9 @@ pnpm build           # tsdown: ESM + CJS + declarations into dist/, checked by p
 * `STYLE.md` -- the naming vocabulary (`val`, `ckey`, `bag`, `kind`, and what `key` means here),
   braces, quotes, doc blocks, and how tests are written. These conventions are specific and
   unguessable. **Read before naming anything new or writing a test.**
-* `eslint.config.mjs` -- mechanically enforced style. Where it and a prose document disagree, it
-  is a bug -- flag it.
+* `packages/safebyok/eslint.config.mjs` -- mechanically enforced style; the other packages' and
+  the root's configs are cut from it. Where it and a prose document disagree, it is a bug -- flag
+  it.
 
 ## Conventions At A Glance
 
