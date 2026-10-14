@@ -56,6 +56,7 @@ prefix names the part of the package the commit is about, never the kind of chan
 | `tools`   | build, lint, test and TypeScript configuration, CI and release workflows                                                               |
 | `deps`    | adding, removing or bumping a dependency, and the lockfile. Where reasonable, commit the package change independently |
 | `docs`    | `README.md`, `PROCESS.md`, `STYLE.md`, `notes/`, `CLAUDE.md` and other directives to agents   |
+| `demo`    | the playground apps under `demos/`                                                                                                     |
 | `plan`    | `whiteboard/` plans and `human/` entries                                                                                               |
 | `tests`   | tests and fixtures, when the tests themselves are the work                                                                             |
 
@@ -98,6 +99,12 @@ offering a **disciplined interface**.
 
 * **Runtime dependencies** (`dependencies`, `peerDependencies`) ship to every app that installs
   us. Propose one in chat, with what it replaces and how widely it is used, before adding it.
+* **Small utilities are where this discipline earns its keep.** Serialization, comparison,
+  cloning, memoizing, debouncing: each looks like a dozen obvious lines, and each has a boring,
+  battle-tested package (often with millions of weekly downloads) whose edge cases are already
+  somebody else's scar tissue. "Too small to be worth a dependency" is the moment to search npm,
+  not the moment to skip it; propose the package you find, and hand-roll only if the Coach turns
+  it down.
 * **Development dependencies** that are plainly the boring answer may simply be installed: say so
   afterwards.
 * Version numbers and release status drift. Before pinning anything, check the current release;
