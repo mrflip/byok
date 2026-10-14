@@ -89,8 +89,17 @@ The Coach releases; agents never tag, publish, or change a version number unaske
   notes say how.
 * A release is a PR that bumps `version` in `package.json`, merged; then a GitHub release tagged
   `v<version>`. Publishing the release runs `.github/workflows/release.yml`, which checks the tag
-  against the version, runs `pnpm justify`, and publishes to npm with provenance. A prerelease
-  version (`0.3.0-beta.1`) goes out under the `next` dist-tag.
+  against the version, runs `pnpm justify`, and stages the package on npm with provenance. A
+  prerelease version (`0.3.0-beta.1`) goes out under the `next` dist-tag.
+* **Staged, not published.** The workflow's npm trusted publisher may only `npm stage publish`.
+  The version goes public when the Coach approves it with 2FA, on npmjs.com or with
+  `npm stage approve <stage-id>` (`npm stage list` shows the ids); CI cannot approve its own
+  staging. A staged version nobody wants is `npm stage reject`ed.
+* **`pnpm bump`** changes the version, and only that: it rewrites `version` in the root
+  `package.json` and does not commit, tag or push. `pnpm bump` asks which part to bump;
+  `pnpm bump minor` (or `patch`, `major`, an exact `1.2.3`) says so, and
+  `pnpm bump prerelease --preid beta` steps `0.3.0-beta.1` to `0.3.0-beta.2`. The companion
+  packages under `packages/` are not bumped with it.
 
 ## Dependencies
 

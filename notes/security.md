@@ -7,10 +7,15 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
-* 2026-10-14: the package is published to npm by `.github/workflows/release.yml`, run when a
+* 2026-10-14: the package is staged on npm by `.github/workflows/release.yml`, run when a
   GitHub release is published, authenticating by npm's trusted publishing (OIDC, no stored
   token) from the `npm` environment, with provenance. `prepublishOnly` runs lint, typecheck,
-  tests and the build in that same job.
+  tests and the build in that same job. A maintainer's 2FA approval makes the staged version
+  public; CI cannot give it.
+* 2026-10-14: the npm trusted publisher allows `npm stage publish` and `npm dist-tag`, and not
+  `npm publish`. A run of the release workflow can therefore repoint a dist-tag (`latest`,
+  `next`) at any version already public, with no 2FA approval; the workflow does not run
+  `npm dist-tag` today.
 * 2026-10-14: `pnpm-workspace.yaml` allows one dependency's install script to run:
   `unrs-resolver` (a native module resolver, pulled in by `eslint-import-resolver-typescript`, a
   development dependency only).

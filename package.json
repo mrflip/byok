@@ -41,6 +41,7 @@
     "test:coverage": "vitest run --coverage",
     "justify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "demo:react": "pnpm build && pnpm --filter safebyok-demo-react dev",
+    "bump": "bumpp --no-commit --no-tag --no-push",
     "prepublishOnly": "pnpm justify",
     "newb": "scripts/newb"
   },
