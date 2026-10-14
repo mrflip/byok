@@ -35,6 +35,12 @@ Tree-shakability: an app that imports one thing from safebyok bundles only what 
 
 Use stable jsonify
 
+Understand npm publishing better, on the first real release: does a staged version keep the `--tag`
+it was staged with when you approve it? Is the provenance statement still attached after approval?
+The trusted publisher's dist-tag permission is on, but nothing uses it (the release workflow now
+installs npm 12.2.0, which can). Does a rejected stage use up its version number? Details in
+`human/20261014-staged_publish.md`.
+
 export a treeshakeable safebyok/utils, with a function
 `mask(whisper, { head = 2, tail = 4, minStars: 6, maxLen: 15 })`: it replaces all but the first `actualHead` and last `actualTail` characters with '*'; if length is less than minStars + tail + head, remove stars (first from head, then from tail). above maxLen, it will insert `'***...***'` between head and tail. Decide if the interface should be maxLen or maxStars. mask should, first, remove all control characters (including newline, cr or tab)
 

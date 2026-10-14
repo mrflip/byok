@@ -10,9 +10,10 @@ version. What is left needs a real release or the npm side:
   approval.
 * **The trusted publisher's first publish must happen within 2 days** of saving its configuration,
   and npm does not validate the configuration when it is saved.
-* **"Allow npm dist-tag" is on, but nothing uses it.** The runner's bundled npm (11.19.0) is older
-  than the 11.21.0 that dist-tag over OIDC needs. If we ever want the workflow to run
-  `npm dist-tag`, the workflow has to upgrade npm first.
+* **"Allow npm dist-tag" is on, but nothing uses it.** The npm bundled with Node 24.21.0 (11.19.0)
+  is older than the 11.21.0 that dist-tag over OIDC needs, so the release workflow now installs
+  npm 12.2.0, the current release (it also has `npm stage`, and supports Node 24.21). The pin is
+  exact and Dependabot will not move it. This is untested until a real release.
 * **Unknown:** whether a rejected stage uses up its version number.
 
 Answered since the PR was opened: the GitHub `npm` environment's required reviewers are off, so
