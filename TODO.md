@@ -10,9 +10,12 @@ whisper it holds (an API key from a PEM). Padding goes inside the encryption, by
 scheme (PADMÉ, from the PURBs paper, or power-of-two buckets), not one of our own, with a 64-byte
 minimum. Above that minimum, check where the lengths of standard payloads land, so that no common
 kind sits alone in a size that names it: API keys, OAuth tokens, service-account JSON, RSA keys
-(PKCS#8 PEM is 1704, 3272 and 6392 bytes at 2048, 4096 and 8192 bits). To decide: does it need a
-stored-format change, or can the padding be trailing JSON whitespace, which every existing reader
-already ignores?
+(PKCS#8 PEM is 1704, 3272 and 6392 bytes at 2048, 4096 and 8192 bits). The size limits are
+bucket watermarks too: `MaxWhisperBytes` (40_444, a vault's `maxWhisperBytes`) and half of each
+adapter's `maxRecordBytes`. The top bucket ends at the vault's limit, so padding never pushes a
+whisper that passed the cap over it. To decide: does the cap measure the padded size or the
+unpadded one? And does padding need a stored-format change, or can it be trailing JSON
+whitespace, which every existing reader already ignores?
 
 A pluggable stringifier: how a whisper becomes bytes and back (today `stableJsonify` and
 `JSON.parse`), so a host can store values JSON cannot carry.
