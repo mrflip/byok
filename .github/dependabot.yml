@@ -1,0 +1,31 @@
+# Weekly update pull requests, grouped so they arrive as a few PRs rather than dozens. Security
+# updates come as they are published, whatever this schedule says.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+    ignore:
+      # typescript-eslint caps the TypeScript it supports: TypeScript moves when it does.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major', 'version-update:semver-minor']
+      # @types/node follows the Node major in .tool-versions.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+    groups:
+      actions:
+        patterns: ['*']

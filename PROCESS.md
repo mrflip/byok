@@ -76,7 +76,8 @@ code in the PR -- then ask in chat first.
 
 CI runs on every PR: `lint-typecheck` (lint, typecheck, no merge commits) and `test-build` (tests
 with coverage, then the build with its package checks) must pass; `node-compat` runs the tests on
-the other Node majors and reports.
+the other Node majors and reports. CodeQL scans the code and the workflows, and a finding shows
+on the PR. Dependabot opens grouped `deps:` PRs weekly; they get the same review as any other.
 
 ## Releases
 
