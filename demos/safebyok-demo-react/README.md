@@ -36,7 +36,7 @@ fake auth's scaffolding rows sit in localStorage.
 
 | Layer | Where |
 |---|---|
-| the library | the `safebyok` workspace package (repo root `src/`) |
+| the library | the `safebyok` workspace package (`packages/safebyok/src/`) |
 | React plumbing | the `safebyok-react` workspace package (provider, hooks, passphrase dialog) |
 | app scaffolding a host replaces | [src/lib/auth.ts](src/lib/auth.ts) (fake sign-in; a real app brings its own auth and passes `userId` to the provider), [src/lib/stores.ts](src/lib/stores.ts) (this browser's IndexedDB standing in for a backend) |
 | the app itself | [src/components/](src/components/), [src/lib/anthropic.ts](src/lib/anthropic.ts) |

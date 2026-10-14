@@ -11,8 +11,8 @@ You'll need the Node and pnpm versions in `.tool-versions`.
 
 ```sh
 pnpm install
-pnpm justify        # lint, typecheck, test and build: what CI runs
-pnpm test:watch
+pnpm justify                        # lint, typecheck, test and build, every package: what CI runs
+pnpm --filter safebyok test:watch   # one package's tests, as you edit
 ```
 
 ## What a pull request needs

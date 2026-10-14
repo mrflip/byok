@@ -1,0 +1,46 @@
+{
+  "name": "safebyok-workspace",
+  "private": true,
+  "description": "The safebyok workspace: the safebyok package, its companion packages under packages/, and the demos under demos/. Never published.",
+  "license": "Apache-2.0",
+  "author": "Philip (flip) Kromer <flip@mrflip.com>",
+  "homepage": "https://github.com/mrflip/safebyok#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrflip/safebyok.git"
+  },
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@12.4.2",
+  "scripts": {
+    "lint": "pnpm lint:root && pnpm -r --stream lint",
+    "lint:root": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
+    "typecheck": "pnpm typecheck:root && pnpm -r --stream typecheck",
+    "typecheck:root": "tsc --noEmit",
+    "test": "pnpm test:root && pnpm -r --stream test",
+    "test:root": "vitest run",
+    "test:coverage": "pnpm test:root && pnpm -r --stream test:coverage",
+    "build": "pnpm -r --stream build",
+    "justify": "pnpm lint:root && pnpm typecheck:root && pnpm test:root && pnpm -r --stream justify",
+    "demo:react": "pnpm --filter 'safebyok-demo-react^...' build && pnpm --filter safebyok-demo-react dev",
+    "bump": "cd packages/safebyok && bumpp --no-commit --no-tag --no-push",
+    "newb": "scripts/newb"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^24.19.2",
+    "@vitest/eslint-plugin": "^1.6.27",
+    "bumpp": "^12.3.0",
+    "es-toolkit": "^1.52.0",
+    "eslint": "^10.12.0",
+    "eslint-plugin-chai-friendly": "^1.2.1",
+    "eslint-plugin-sonarjs": "^4.2.2",
+    "eslint-plugin-unicorn": "^78.0.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.4"
+  }
+}

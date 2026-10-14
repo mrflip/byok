@@ -17,7 +17,8 @@
   "homepage": "https://github.com/mrflip/safebyok#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mrflip/safebyok.git"
+    "url": "git+https://github.com/mrflip/safebyok.git",
+    "directory": "packages/safebyok"
   },
   "bugs": {
     "url": "https://github.com/mrflip/safebyok/issues"
@@ -30,20 +31,16 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@12.4.2",
   "scripts": {
     "build": "tsdown",
     "build:watch": "tsdown --watch",
     "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run && pnpm -r test",
+    "test": "vitest run",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage && pnpm -r --if-present test:coverage",
+    "test:coverage": "vitest run --coverage",
     "justify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "demo:react": "pnpm --filter 'safebyok-demo-react^...' build && pnpm --filter safebyok-demo-react dev",
-    "bump": "bumpp --no-commit --no-tag --no-push",
-    "prepublishOnly": "pnpm justify",
-    "newb": "scripts/newb"
+    "prepublishOnly": "pnpm justify"
   },
   "devDependencies": {
     "@arethetypeswrong/core": "^0.18.5",
@@ -52,8 +49,6 @@
     "@types/node": "^24.19.2",
     "@vitest/coverage-v8": "^5.0.4",
     "@vitest/eslint-plugin": "^1.6.27",
-    "bumpp": "^12.3.0",
-    "es-toolkit": "^1.52.0",
     "eslint": "^10.12.0",
     "eslint-import-resolver-typescript": "^4.4.5",
     "eslint-plugin-chai-expect": "^4.1.1",

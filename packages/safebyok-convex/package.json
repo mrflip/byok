@@ -5,7 +5,7 @@
   "description": "Convex storage for safebyok: a Convex component holding vault bundles and lockboxes as ciphertext, and the VaultDB adapter that speaks to it. Workspace package in design; not yet published.",
   "type": "module",
   "scripts": {
-    "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
+    "lint": "eslint --no-error-on-unmatched-pattern --cache --cache-strategy content --cache-location .eslintcache .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
