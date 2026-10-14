@@ -96,7 +96,8 @@ and the security reviewer reading the code.
 ```sh
 pnpm install
 pnpm justify         # lint, typecheck, test, build: green before every commit
-pnpm test            # vitest; pnpm test:watch, pnpm test:coverage
+pnpm test            # vitest, then every workspace package's tests; pnpm test:watch, pnpm test:coverage
+pnpm --filter safebyok-react test   # one package alone (builds the packages it needs first)
 pnpm lint            # eslint
 pnpm typecheck       # tsc --noEmit
 pnpm build           # tsdown: ESM + CJS + declarations into dist/, checked by publint and attw
@@ -109,7 +110,8 @@ pnpm build           # tsdown: ESM + CJS + declarations into dist/, checked by p
 * `tests/` mirrors `src/` path for path: `src/foo/bar.ts` is tested in `tests/foo/bar.test.ts`.
   `fixtures/` holds sample data, when there is some.
 * `packages/` -- companion workspace packages (`safebyok-react`, the React binding). Each lints,
-  typechecks and tests itself (`pnpm justify` inside it); the root justify does not cover them.
+  typechecks and tests itself (`pnpm justify` inside it); the root `pnpm test` runs their tests but the
+  root justify does not lint or build them, and CI runs the React package's justify.
 * `demos/` -- private playground apps exercising the packages; never published.
 * `dist/` is built, never committed.
 * `whiteboard/` -- work threads in progress, under a `YYYYMMDD-threadname` directory.
