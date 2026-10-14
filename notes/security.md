@@ -14,3 +14,6 @@ security expert who knows what questions to ask.
 * 2026-10-14: `pnpm-workspace.yaml` allows one dependency's install script to run:
   `unrs-resolver` (a native module resolver, pulled in by `eslint-import-resolver-typescript`, a
   development dependency only).
+* 2026-10-14: every action in `.github/workflows/` is pinned to a full commit SHA, with the
+  release it was resolved from in a trailing comment (`@3d3c42e... # v7.0.1`). Dependabot's weekly
+  `github-actions` group proposes new SHAs, and rewrites the comment with them.
