@@ -1,0 +1,80 @@
+/**
+ * The smallest storage the stub adapters need: strings by string ckey, with change notification
+ * so the vault and the demo's inspector can watch it. The browser demo backs one with
+ * localStorage; the tests back one with a Map.
+ */
+export type StringStore = {
+  /** The stored text under `ckey`, or null when there is none. */
+  read(ckey: string): string | null
+  write(ckey: string, text: string): void
+  erase(ckey: string): void
+  /** Every ckey currently stored, in no particular order. */
+  ckeys(): string[]
+  /** Calls `listener` after any write or erase; returns the unsubscribe. */
+  subscribe(listener: () => void): () => void
+}
+
+/** Listener bookkeeping shared by both stores. */
+const makeBell = () => {
+  const listeners = new Set<() => void>()
+  return {
+    ring: () => { listeners.forEach((listener) => { listener() }) },
+    subscribe: (listener: () => void) => {
+      listeners.add(listener)
+      return () => { listeners.delete(listener) }
+    },
+  }
+}
+
+/**
+ * In-memory StringStore over a Map: what the tests use, and a fallback anywhere localStorage
+ * is missing.
+ *
+ * @example
+ *   const store = memoryStore()
+ *   store.write('greeting', 'hi'); store.read('greeting')  // 'hi'
+ */
+export const memoryStore = (): StringStore => {
+  const bag = new Map<string, string>()
+  const bell = makeBell()
+  return {
+    read:  (ckey) => bag.get(ckey) ?? null,
+    write: (ckey, text) => { bag.set(ckey, text); bell.ring() },
+    erase: (ckey) => { bag.delete(ckey); bell.ring() },
+    ckeys: () => [...bag.keys()],
+    subscribe: bell.subscribe,
+  }
+}
+
+/**
+ * StringStore over a DOM Storage object (localStorage), confined to one prefix: each store sees
+ * only its own entries, so the demo can keep a pretend-remote database and a device cache in the
+ * same localStorage while showing them as the distinct places they stand in for.
+ *
+ * Change notification covers this tab's own writes (DOM `storage` events only fire in *other*
+ * tabs, which the demo does not chase).
+ *
+ * @param webStorage - The Storage to write through, usually `window.localStorage`.
+ * @param prefix - Namespace for this store's entries, e.g. 'byok-demo:db:'.
+ *
+ * @example
+ *   const dbStore = domStore(localStorage, 'byok-demo:db:')
+ *   dbStore.write('vault:acme:u1:main', text)   // lands at 'byok-demo:db:vault:acme:u1:main'
+ */
+export const domStore = (webStorage: Storage, prefix: string): StringStore => {
+  const bell = makeBell()
+  return {
+    read:  (ckey) => webStorage.getItem(prefix + ckey),
+    write: (ckey, text) => { webStorage.setItem(prefix + ckey, text); bell.ring() },
+    erase: (ckey) => { webStorage.removeItem(prefix + ckey); bell.ring() },
+    ckeys: () => {
+      const found: string[] = []
+      for (let ii = 0; ii < webStorage.length; ii += 1) {
+        const fullCkey = webStorage.key(ii)
+        if (fullCkey?.startsWith(prefix)) { found.push(fullCkey.slice(prefix.length)) }
+      }
+      return found
+    },
+    subscribe: bell.subscribe,
+  }
+}

@@ -1,2 +1,7 @@
+# The package itself lives at the root; demos/ holds private playground apps that
+# exercise it (or sketches of it) and are never published.
+packages:
+  - demos/*
+
 allowBuilds:
   unrs-resolver: true

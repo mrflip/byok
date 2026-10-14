@@ -17,3 +17,7 @@ security expert who knows what questions to ask.
 * 2026-10-14: every action in `.github/workflows/` is pinned to a full commit SHA, with the
   release it was resolved from in a trailing comment (`@3d3c42e... # v7.0.1`). Dependabot's weekly
   `github-actions` group proposes new SHAs, and rewrites the comment with them.
+* 2026-10-14: `demos/byok-react/src/byok/` is a stub of the package that stores whispers and
+  passphrases in plaintext localStorage (prefixes `byok-demo:db:` / `byok-demo:device:`), for
+  interface prototyping; its files, README and inspector UI say so. Nothing from it graduates to
+  `src/` without the cryptography underneath.

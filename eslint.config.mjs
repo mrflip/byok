@@ -56,6 +56,9 @@ export default defineConfig([
     // Agents' worktrees: another checkout's code, linted there if anywhere.
     '.claude/worktrees/**',
     '**/*.generated.*',
+    // Demo apps are their own workspace packages with their own eslint config:
+    // their dependencies and TS projects are theirs, not the package's.
+    'demos/**',
   ]),
 
   // == [1. Stock defaults] ==
