@@ -86,9 +86,8 @@ jobs:
       - run: pnpm test
 
   # The React binding's own justify: lint, typecheck, tests and the build with its package checks
-  # (it builds the core first, by itself). Not required by the ruleset yet. Filtered by name, not
-  # `./packages/*`: `safebyok-convex` has no source yet, and its lint would fail on no files. The
-  # glob returns when it can.
+  # (it builds the core first, by itself). Filtered by name, not `./packages/*`, since
+  # `safebyok-convex` has no source yet and its lint would fail on no files.
   packages:
     runs-on: ubuntu-latest
     steps:

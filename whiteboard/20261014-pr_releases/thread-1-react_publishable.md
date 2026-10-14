@@ -1,6 +1,6 @@
 # Thread 1: safebyok-react, publishable (2026-10-14)
 
-Branch `20261014-react_publishable`, PR not yet filed. Justify: root green (12 core files / 174 tests, 7 binding tests, 24 demo tests, build); `packages/safebyok-react` justify green with publint and attw clean.
+Branch `20261014-react_publishable`, PR PRNUM, based on origin/main (no stack). Justify: root green (12 core files / 174 tests, 7 binding tests, 24 demo tests, build); `packages/safebyok-react` justify green with publint and attw clean.
 
 * **Built**: `safebyok-react` builds with tsdown (ESM + CJS, declarations, source maps, `exports: true`, publint warning / attw strict) from `packages/safebyok-react/tsdown.config.ts` (`platform: 'browser'`, commented). `package.json` has `files`, `sideEffects`, license, author, homepage, bugs, repository with `directory`, keywords, and the entry points tsdown wrote. `safebyok` is a peer (`workspace:^`) plus a dev dependency (`workspace:*`); `react` stays a peer. LICENSE copied in; README has the install line and a Development section. `react` and `react/jsx-runtime` and `safebyok` stay external in `dist/`. Coverage added to its vitest (`@vitest/coverage-v8`). `pnpm pack` lists only `dist/**` (6 files), `LICENSE`, `package.json`, `README.md`; the packed `package.json` has no `workspace:` left (peer `^0.0.0`, dev `0.0.0`).
 * **Tests from a clean install**: `pretest`, `pretest:coverage`, `pretypecheck` and `prebuild` run `build:deps` = `pnpm --filter 'safebyok-react^...' build` (every dependency of the package, by name, so it survives the core moving to `packages/safebyok`). The demo has the same hooks. About 1.5 s per run. `pnpm --filter <pkg> test`, `typecheck`, `build`, `justify` all work after `rm -rf dist`.
@@ -26,6 +26,9 @@ Branch `20261014-react_publishable`, PR not yet filed. Justify: root green (12 c
 * `pnpm pack` does not run `prepublishOnly` (thread 3: a staged tarball is not justified or rebuilt unless the script does it). The packed `package.json` keeps the dev scripts (`pretest` etc.) but drops `prepublishOnly`.
 * `pnpm peers check` warns that eslint 10 is unmet by `eslint-plugin-jsx-a11y` and `eslint-plugin-react`; pre-existing.
 * `pnpm -r` skips the root package (include-workspace-root is false); that is why the root `test` runs its own vitest first.
+
+* **For thread 3, the peer range**: with the core at `0.0.0`, pnpm packs `workspace:^` as `^0.0.0`, which for 0.x semver means exactly `0.0.0` (caret on `0.0.x` pins the patch). Once lockstep versions move (say to `0.1.0`) pnpm rewrites it to `^0.1.0`, and a binding at `0.1.1` still needs core `0.1.x` only. Check that the range it writes at release time lets the host install matching lockstep versions, and decide whether the peer should be loosened (e.g. `workspace:>=0.0.0`-style or a hand-written range).
+* **CI caveats moved here from ci.yml**: the `packages` job is required by nothing yet (the ruleset names `lint-typecheck` and `test-build`); the `./packages/*` filter glob returns once `safebyok-convex` has source and passes its own lint.
 
 ## For the Coach
 
