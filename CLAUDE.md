@@ -56,9 +56,11 @@ and the security reviewer reading the code.
 * **Few runtime dependencies.** Each is a supply-chain decision for every app that installs us.
   Adding one needs a Coach's yes; prefer a peer dependency for anything the host app likely
   already has. Validation is plain Zod, no kit on top of it.
-* **Runs everywhere the host app does**: browsers, Node, Bun, React Native, and the frameworks on
+* **Runs everywhere the host app does**: browsers, Node, Bun, and the frameworks on
   them (PROCESS.md, *Dependencies*). No Node built-ins in `src/`. The tests run under Node, where
   WebCrypto is the same global as in a browser.
+* **Security First**: if the stronger security measure (eg Argon) is not available on every platform,
+  we nonetheless implement it first, and make it pluggable second
 * **What is exported is a contract.** `src/index.ts` (and each entry point beside it) is the
   public surface, versioned by semver. **A stored vault is a contract too**: a change to the
   shape of what is written to storage must still read every vault already written, and says how.
