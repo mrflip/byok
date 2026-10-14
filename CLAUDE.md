@@ -122,6 +122,8 @@ pnpm build           # tsdown: ESM + CJS + declarations into dist/, checked by p
 
 * `PROCESS.md` -- threads, branches, commits, PRs, releases, dependencies. **Read before any git
   operation beyond a commit, and before adding a dependency.**
+* `VOCABULARY.md` -- the cast: whisper, lockbox, vault, passphrase, each key by role, and their
+  encrypted forms. Its names are the only names for those things, in code, docs and stored fields.
 * `STYLE.md` -- the naming vocabulary (`val`, `ckey`, `bag`, `kind`, and what `key` means here),
   braces, quotes, doc blocks, and how tests are written. These conventions are specific and
   unguessable. **Read before naming anything new or writing a test.**
@@ -137,7 +139,7 @@ Enough to keep you out of trouble on a small edit. STYLE.md is the real source.
 * Opening brace at end of line; cuddle `} else if (...) {` and `} catch (err) {`.
 * No single-letter names. Never bare `name`, `value`, `node`, `query`. Use `err`, never `error`.
   `type` only for an actual datatype; for "variety of", `kind` or `flavor`.
-* Never a bare `key`: a cryptographic key is named for its role (`vaultKey`, `dek`, `kek`); a
+* Never a bare `key`: a cryptographic key is named for its role (`vaultKey`, `lockboxKey`); a
   map key is a `ckey`. The linter refuses `key`, `name`, `value`, `node`, `error` and `query` as
   a variable or parameter.
 * `const` by default; when necessary, `let`; never `var`. Functional style is strongly preferred.
