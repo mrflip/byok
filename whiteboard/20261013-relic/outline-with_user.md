@@ -1,4 +1,4 @@
-Not explicitly. The prior interface has a `vaultLabel`, and relies on `VaultDB` authorization to scope that label to the authenticated application user, but it does not model the authenticated user as part of the vault’s local identity.
+Not explicitly. The prior interface has a `vaultlabel`, and relies on `VaultDB` authorization to scope that label to the authenticated application user, but it does not model the authenticated user as part of the vault’s local identity.
 
 That is sufficient for a carefully written `ConvexVaultDB`, but it is not sufficient to safely manage browser-local remembered unlocks across login/logout/account-switch flows.
 
@@ -8,11 +8,11 @@ You should add an explicit **vault owner / principal scope** to the interface.
 
 - **Principal**: the currently authenticated application identity. Usually your stable Convex/Auth user subject, not an email address.
 - **Principal ID**: stable opaque identifier for that identity, such as Clerk subject or Convex user ID.
-- **Vault scope**: `(principalId, vaultLabel)`.
+- **Vault scope**: `(principalId, vaultlabel)`.
 - **Local vault cache**: device-local remembered-unlock material for one vault scope.
 - **Remote vault**: encrypted bundle and lockboxes stored through `VaultDB`.
 
-A `vaultLabel` such as `"default"` is not globally unique. It is only meaningful within a principal scope:
+A `vaultlabel` such as `"default"` is not globally unique. It is only meaningful within a principal scope:
 
 ```text
 (user_A, "default") → User A's encrypted vault
@@ -48,7 +48,7 @@ The factory becomes conceptually:
 ```ts
 BYOKVault.findOrCreate({
   principal,
-  vaultLabel,
+  vaultlabel,
   dependencies,
   options,
 });
@@ -57,15 +57,15 @@ BYOKVault.findOrCreate({
 The vault’s effective identity is then:
 
 ```text
-VaultScope = principalId + vaultLabel
+VaultScope = principalId + vaultlabel
 ```
 
 This scope should be used by:
 
 - `VaultDB` authorization and record lookup
-- `DeviceDB` keys
+- `DeviceDB` ckeys
 - remembered-unlock cache records
-- AEAD associated data
+- cipherAdditionalData
 - subscription registration
 - diagnostics and telemetry correlation, if any
 
@@ -82,29 +82,29 @@ const DeviceVaultCacheSchema = z.object({
    */
   principalId: PrincipalIdSchema,
 
-  vaultLabel: VaultLabelSchema,
+  vaultlabel: VaultLabelSchema,
   vaultId: VaultIdSchema,
-  epoch: z.number().int().positive(),
+  passphrase_epoch: z.number().int().positive(),
 
-  vaultKey: DeviceVaultKeyEnvelopeSchema,
+  vault_key_local_wrapped: VaultKeyLocalWrappedSchema,
 
   createdAt: IsoTimestampSchema,
   expiresAt: IsoTimestampSchema,
 });
 ```
 
-Similarly, `DeviceDB` should not be keyed only by `vaultLabel`.
+Similarly, `DeviceDB` should not be keyed only by `vaultlabel`.
 
-Its conceptual lookup key should be:
+Its conceptual lookup ckey should be:
 
 ```text
-(principalId, vaultLabel)
+(principalId, vaultlabel)
 ```
 
 not:
 
 ```text
-(vaultLabel)
+(vaultlabel)
 ```
 
 Otherwise this sequence is unsafe:
@@ -114,38 +114,38 @@ Otherwise this sequence is unsafe:
 3. Alice logs out.
 4. Bob logs in on the same browser.
 5. Bob opens a vault also called `"default"`.
-6. The application accidentally finds Alice’s local remembered VaultKey.
+6. The application accidentally finds Alice’s local remembered vaultKey.
 
 Even if Bob cannot fetch Alice’s remote encrypted data, retaining Alice’s unlock material on a shared browser is not desirable.
 
-### 3. Bind identity into AEAD associated data
+### 3. Bind identity into cipherAdditionalData
 
-Associated data should include the immutable vault owner identity as well as vault identifiers.
+The cipherAdditionalData should include the immutable vault owner identity as well as vault identifiers.
 
-For example, the logical AAD context should include:
+For example, the logical cipherAdditionalData should include:
 
 ```text
 format version
 principalId
 vaultId
-vaultLabel
-boxLabel
-keyId
-epoch
+vaultlabel
+boxlabel
+revisionId
+passphraseEpoch
 purpose
 ```
 
 For example:
 
 ```text
-byok-vault-v1 | principalId | vaultId | epoch | "passphrase-vault-key"
-byok-lockbox-v1 | principalId | vaultId | boxLabel | keyId | "wrapped-dek"
-byok-lockbox-v1 | principalId | vaultId | boxLabel | keyId | "contents"
+byok-vault-v1 | principalId | vaultId | passphraseEpoch | "vault-key-passphrase-wrapped"
+byok-lockbox-v1 | principalId | vaultId | boxlabel | revisionId | "lockbox-key-wrapped"
+byok-lockbox-v1 | principalId | vaultId | boxlabel | revisionId | "whisper"
 ```
 
 This makes copied ciphertext fail authentication if it is moved between users, vaults, box labels, or revisions.
 
-The `principalId` is not secret. It is a binding value, not encrypted content.
+The `principalId` is not secret. It is a binding value, not an encrypted whisper.
 
 ---
 
@@ -169,7 +169,7 @@ await vaultManager.handleSignedOut();
 That operation should:
 
 - lock the current in-memory vault;
-- release in-memory `VaultKey` and DEK handles;
+- release in-memory `vaultKey` and lockboxKey handles;
 - unsubscribe from Convex/reactive listeners;
 - clear the active vault session;
 - delete remembered-unlock cache entries for the signed-out principal, according to your chosen policy.
@@ -215,8 +215,8 @@ This handles a browser session where React state resets imperfectly, authenticat
 
 On an account switch, automatically clear:
 
-- remembered VaultKey cache records;
-- browser-local device keys for the old principal;
+- remembered vaultKey cache records;
+- browser-local localUnlockKeys for the old principal;
 - active in-memory vault handles;
 - subscription handles;
 - local lockbox list caches, if you keep any.
@@ -235,26 +235,26 @@ interface DeviceDB {
 
   setActivePrincipal(principalId: PrincipalId): Promise<void>;
 
-  getDeviceKey(
+  getLocalUnlockKey(
     principalId: PrincipalId,
-    vaultLabel: VaultLabel,
+    vaultlabel: VaultLabel,
   ): Promise<CryptoKey | null>;
 
-  ensureDeviceKey(
+  ensureLocalUnlockKey(
     principalId: PrincipalId,
-    vaultLabel: VaultLabel,
+    vaultlabel: VaultLabel,
   ): Promise<CryptoKey>;
 
   getVaultCache(
     principalId: PrincipalId,
-    vaultLabel: VaultLabel,
+    vaultlabel: VaultLabel,
   ): Promise<DeviceVaultCache | null>;
 
   putVaultCache(cache: DeviceVaultCache): Promise<void>;
 
   clearVault(
     principalId: PrincipalId,
-    vaultLabel: VaultLabel,
+    vaultlabel: VaultLabel,
   ): Promise<void>;
 
   /**
@@ -269,14 +269,14 @@ interface DeviceDB {
 }
 ```
 
-For an IndexedDB implementation, use a key structure such as:
+For an IndexedDB implementation, use a ckey structure such as:
 
 ```text
-device-key:{principalId}:{vaultLabel}
-vault-cache:{principalId}:{vaultLabel}
+local-unlock-key:{principalId}:{vaultlabel}
+vault-cache:{principalId}:{vaultlabel}
 ```
 
-Do not use a global key like:
+Do not use a global ckey like:
 
 ```text
 vault-cache:default
@@ -292,13 +292,13 @@ Your `VaultDB` adapter should receive the principal scope as an explicit paramet
 interface VaultDB {
   getVaultBundle(
     principal: VaultPrincipal,
-    vaultLabel: VaultLabel,
+    vaultlabel: VaultLabel,
   ): Promise<VaultBundle | null>;
 
   putVaultBundle(
     principal: VaultPrincipal,
     bundle: VaultBundle,
-    expectedEpoch: number | null,
+    expectedPassphraseEpoch: number | null,
   ): Promise<void>;
 
   // Same pattern for lockbox operations.
@@ -310,7 +310,7 @@ For `ConvexVaultDB`, the server should independently derive the principal from `
 The client-side `principalId` is useful for:
 
 - local DeviceDB partitioning;
-- AAD binding;
+- cipherAdditionalData binding;
 - checking that the returned bundle belongs to the expected account;
 - React lifecycle cleanup.
 
@@ -330,13 +330,13 @@ authenticated ctx.auth subject == requested vault record owner
 |---|---|
 | Expired local remembered-unlock cache | Remove local cache; show locked state |
 | Invalid/malformed local cache record | Remove local cache; fall back to passphrase unlock |
-| Local device key missing | Remove local cache; fall back to passphrase unlock |
+| localUnlockKey missing | Remove local cache; fall back to passphrase unlock |
 | Remote bundle schema invalid | Mark vault `corrupted`; do not overwrite or delete remotely automatically |
 | AES-GCM verification failure for bundle or lockbox | Mark vault `integrityFailure`; do not auto-delete |
 | Wrong passphrase | Return `WrongPassphrase`; preserve all data |
 | Missing remote vault bundle | Return `absent` |
 | Argon2id unavailable | Return capability-unavailable locked state; preserve data |
-| Old local cache epoch after passphrase change | Delete local cache; transition to stale/locked |
+| Old local cache passphraseEpoch after passphrase change | Delete local cache; transition to stale/locked |
 | Current user does not match local cache principal | Delete that local cache; do not attempt unlock |
 
 ## Why remote corruption should not be auto-deleted
@@ -364,7 +364,7 @@ type VaultStatus =
   | { state: "stale"; ... }
   | {
       state: "corrupted";
-      vaultLabel: VaultLabel;
+      vaultlabel: VaultLabel;
       principalId: PrincipalId;
       reason: "bundle-schema" | "integrity" | "unsupported-format";
       recoverable: boolean;
@@ -420,7 +420,7 @@ In a React app, this usually belongs near the same provider boundary that owns C
 
 For your use case, I would use this policy:
 
-- A vault is scoped to a stable authenticated user ID plus `vaultLabel`.
+- A vault is scoped to a stable authenticated user ID plus `vaultlabel`.
 - Local remembered unlocks are scoped to the same pair.
 - Sign-out clears that principal’s browser-local vault data.
 - Switching users clears the prior principal’s browser-local vault data automatically.

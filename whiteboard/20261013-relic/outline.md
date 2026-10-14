@@ -20,57 +20,57 @@ Alterations:
 
 ## Relic Starts here
 
-Below is an interface-oriented design for a client-side BYOK vault using one pinned cryptographic profile:
+Below is an interface-oriented design for a client-side BYOK vault using one pinned keyDeriverSpec:
 
-- **Passphrase KDF:** `hash-wasm` Argon2id, run in a Web Worker
+- **Key deriver:** `hash-wasm` Argon2id, run in a Web Worker
 - **Encryption and key wrapping:** browser `crypto.subtle`, AES-256-GCM
 - **Persistent device cache:** IndexedDB, e.g. through `idb-keyval`
 - **Validation:** Zod
 - **Optional recovery mnemonic:** `@scure/bip39`
 
-The vault stores only encrypted records in `VaultDB`. The passphrase derives a key that unwraps a random vault key; that vault key wraps per-lockbox DEKs.
+The vault stores only encrypted records in `VaultDB`. The passphrase derives the passphraseKey, which unwraps a random vaultKey; that vaultKey wraps per-lockbox lockboxKeys.
 
-This extra vault-key layer is useful:
+This extra vaultKey layer is useful:
 
 ```text
 passphrase
   │
-  └─ Argon2id ──> Passphrase KEK
+  └─ Argon2id ──> passphraseKey
                      │
-                     └─ AES-GCM unwrap ──> VaultKey
+                     └─ AES-GCM unwrap ──> vaultKey
                                                │
-                                               ├─ unwrap DEK for "anthropic-prod"
-                                               │      └─ decrypt JSON contents
+                                               ├─ unwrap lockboxKey for "anthropic-prod"
+                                               │      └─ decrypt whisper
                                                │
-                                               └─ unwrap DEK for "openai-dev"
-                                                      └─ decrypt JSON contents
+                                               └─ unwrap lockboxKey for "openai-dev"
+                                                      └─ decrypt whisper
 ```
 
-Changing the passphrase re-wraps the small `VaultKey`; it does not require rewriting every lockbox.
+Changing the passphrase re-wraps the small `vaultKey`; it does not require rewriting every lockbox.
 
 ---
 
-## Pinned cryptographic profile
+## Pinned keyDeriverSpec
 
 ```ts
 import { z } from "zod";
 
 /**
- * The sole passphrase KDF profile supported by this vault format.
+ * The sole keyDeriverSpec supported by this vault format.
  *
  * m: 64 MiB of Argon2 memory, expressed in KiB.
  * t: three Argon2 passes.
  * p: one lane, which is appropriate for a browser worker.
  *
- * The profile is stored in vault records so that the stored format is
+ * The keyDeriverSpec is stored in vault records so that the stored format is
  * self-describing and can be recognized by future versions of the library.
  */
-export const Argon2idWebV1Schema = z.object({
+export const KeyDeriverSpecSchema = z.object({
   algorithm: z.literal("argon2id"),
-  profile: z.literal("argon2id-web-v1"),
+  key_deriver_label: z.literal("argon2id_web_v1"),
 
   /** Argon2 memory cost, in KiB: 64 MiB. */
-  memoryKiB: z.literal(65_536),
+  memory_kib: z.literal(65_536),
 
   /** Argon2 iteration/time cost. */
   iterations: z.literal(3),
@@ -78,27 +78,27 @@ export const Argon2idWebV1Schema = z.object({
   /** Argon2 parallelism/lane count. */
   parallelism: z.literal(1),
 
-  /** Random salt size used for passphrase derivation. */
-  saltBytes: z.literal(16),
+  /** Random passphraseSalt size used for passphrase derivation. */
+  salt_bytes: z.literal(16),
 
   /** Derived key material length. */
-  outputBytes: z.literal(32),
+  output_bytes: z.literal(32),
 });
 
-export type Argon2idWebV1 = z.infer<typeof Argon2idWebV1Schema>;
+export type KeyDeriverSpec = z.infer<typeof KeyDeriverSpecSchema>;
 
-export const ARGON2ID_WEB_V1: Argon2idWebV1 = {
+export const Argon2idWebV1: KeyDeriverSpec = {
   algorithm: "argon2id",
-  profile: "argon2id-web-v1",
-  memoryKiB: 65_536,
+  key_deriver_label: "argon2id_web_v1",
+  memory_kib: 65_536,
   iterations: 3,
   parallelism: 1,
-  saltBytes: 16,
-  outputBytes: 32,
+  salt_bytes: 16,
+  output_bytes: 32,
 };
 ```
 
-There is no caller-selected KDF algorithm or parameter set. A device which cannot run the profile, such as one where WebAssembly is blocked, can inspect public metadata but cannot perform a passphrase unlock.
+There is no caller-selected key deriver algorithm or parameter set. A device which cannot run the keyDeriverSpec, such as one where WebAssembly is blocked, can inspect public metadata but cannot perform a passphrase unlock.
 
 ---
 
@@ -108,7 +108,7 @@ There is no caller-selected KDF algorithm or parameter set. A device which canno
 
 ```ts
 /**
- * Binary data held by the vault format.
+ * Binary values held by the vault format.
  *
  * A VaultDB adapter may serialize this as Convex `v.bytes()`, ArrayBuffer,
  * base64url, or another transport representation. The vault-facing adapter
@@ -116,15 +116,15 @@ There is no caller-selected KDF algorithm or parameter set. A device which canno
  */
 export const BytesSchema = z.instanceof(Uint8Array);
 
-/** A 96-bit AES-GCM nonce. */
-export const AesGcmIvSchema = BytesSchema.refine(
-  (value) => value.byteLength === 12,
-  "AES-GCM IV must contain exactly 12 bytes",
+/** A 96-bit AES-GCM cipherIv. */
+export const CipherIvSchema = BytesSchema.refine(
+  (bytes) => bytes.byteLength === 12,
+  "cipherIv must contain exactly 12 bytes",
 );
 
 /** A 256-bit symmetric-key value when represented transiently as bytes. */
 export const KeyBytesSchema = BytesSchema.refine(
-  (value) => value.byteLength === 32,
+  (bytes) => bytes.byteLength === 32,
   "Expected a 32-byte key",
 );
 
@@ -163,7 +163,7 @@ export type BoxLabel = z.infer<typeof BoxLabelSchema>;
 /**
  * Opaque stable identifier generated for the vault.
  *
- * Unlike VaultLabel, this is immutable. It is used in AEAD associated data
+ * Unlike VaultLabel, this is immutable. It is used in cipherAdditionalData
  * so renaming a display label does not require re-encrypting every item.
  */
 export const VaultIdSchema = z
@@ -177,16 +177,16 @@ export type VaultId = z.infer<typeof VaultIdSchema>;
 /**
  * Opaque identifier for a particular lockbox revision.
  *
- * A new keyId is generated when store() replaces a lockbox or when
+ * A new revisionId is generated when store() replaces a lockbox or when
  * rotateLockbox() is called. It also acts as the optimistic-concurrency token.
  */
-export const KeyIdSchema = z
+export const RevisionIdSchema = z
   .string()
   .min(16)
   .max(128)
-  .brand<"KeyId">();
+  .brand<"RevisionId">();
 
-export type KeyId = z.infer<typeof KeyIdSchema>;
+export type RevisionId = z.infer<typeof RevisionIdSchema>;
 
 export const IsoTimestampSchema = z.string().datetime({ offset: true });
 ```
@@ -200,43 +200,43 @@ export const IsoTimestampSchema = z.string().datetime({ offset: true });
  * AES-GCM encrypted bytes.
  *
  * The authentication tag is included in ciphertext, as returned by WebCrypto.
- * The AAD is reconstructed from the record context and is not stored here.
+ * The cipherAdditionalData is reconstructed from the record context and is not stored here.
  */
 export const AesGcmEnvelopeSchema = z.object({
-  iv: AesGcmIvSchema,
+  cipher_iv: CipherIvSchema,
   ciphertext: BytesSchema,
 });
 
 export type AesGcmEnvelope = z.infer<typeof AesGcmEnvelopeSchema>;
 
 /**
- * The passphrase-derived KEK encrypts the random VaultKey.
+ * The passphraseKey encrypts the random vaultKey.
  *
  * Decrypting this envelope successfully proves that the supplied passphrase
- * derived the correct KEK. A separate passphrase-verifier field is therefore
+ * derived the correct passphraseKey. A separate passphrase-verifier field is therefore
  * not required.
  */
-export const PassphraseVaultKeyEnvelopeSchema = AesGcmEnvelopeSchema;
+export const VaultKeyPassphraseWrappedSchema = AesGcmEnvelopeSchema;
 
-export type PassphraseVaultKeyEnvelope = z.infer<
-  typeof PassphraseVaultKeyEnvelopeSchema
+export type VaultKeyPassphraseWrapped = z.infer<
+  typeof VaultKeyPassphraseWrappedSchema
 >;
 
 /**
- * Each lockbox has its own random 256-bit DEK. The VaultKey encrypts that DEK.
+ * Each lockbox has its own random 256-bit lockboxKey. The vaultKey encrypts that lockboxKey.
  */
-export const WrappedDekSchema = AesGcmEnvelopeSchema;
+export const LockboxKeyWrappedSchema = AesGcmEnvelopeSchema;
 
-export type WrappedDek = z.infer<typeof WrappedDekSchema>;
+export type LockboxKeyWrapped = z.infer<typeof LockboxKeyWrappedSchema>;
 
 /**
- * A remembered device stores the VaultKey encrypted under a browser-generated,
- * non-extractable DeviceKey held in IndexedDB.
+ * A remembered device stores the vaultKey encrypted under a browser-generated,
+ * non-extractable localUnlockKey held in IndexedDB.
  */
-export const DeviceVaultKeyEnvelopeSchema = AesGcmEnvelopeSchema;
+export const VaultKeyLocalWrappedSchema = AesGcmEnvelopeSchema;
 
-export type DeviceVaultKeyEnvelope = z.infer<
-  typeof DeviceVaultKeyEnvelopeSchema
+export type VaultKeyLocalWrapped = z.infer<
+  typeof VaultKeyLocalWrappedSchema
 >;
 ```
 
@@ -249,55 +249,55 @@ export type DeviceVaultKeyEnvelope = z.infer<
  * Public and encrypted metadata required to unlock one vault.
  *
  * This record belongs in VaultDB. It does not contain the passphrase,
- * VaultKey, a lockbox DEK, or unencrypted lockbox content.
+ * vaultKey, a lockboxKey, or an unciphered whisper.
  */
 export const VaultBundleSchema = z.object({
   format: z.literal("byok-vault-v1"),
 
-  vaultLabel: VaultLabelSchema,
+  vaultlabel: VaultLabelSchema,
   vaultId: VaultIdSchema,
 
   /**
    * Increments when the passphrase envelope changes:
-   * - passphrase rotation
-   * - passphrase-derived key re-derivation
+   * - passphrase change
+   * - passphraseKey re-derivation
    * - recovery-based passphrase reset
    *
-   * Device caches record the epoch they were created against. A mismatch
+   * Device caches record the passphraseEpoch they were created against. A mismatch
    * prompts the client to discard its remembered-unlock cache.
    */
-  epoch: z.number().int().positive(),
+  passphrase_epoch: z.number().int().positive(),
 
   /**
-   * The fixed, pinned Argon2id profile for this vault format.
+   * The fixed, pinned Argon2id keyDeriverSpec for this vault format.
    */
-  kdfProfile: Argon2idWebV1Schema,
+  key_deriver_spec: KeyDeriverSpecSchema,
 
   /**
-   * Random Argon2 salt for the current passphrase.
+   * Random passphraseSalt for the current passphrase.
    */
-  salt: BytesSchema.refine(
-    (value) => value.byteLength === ARGON2ID_WEB_V1.saltBytes,
-    "Unexpected Argon2 salt length",
+  passphrase_salt: BytesSchema.refine(
+    (bytes) => bytes.byteLength === Argon2idWebV1.salt_bytes,
+    "Unexpected passphraseSalt length",
   ),
 
   /**
-   * Random VaultKey encrypted under:
-   * Argon2id(passphrase, salt, ARGON2ID_WEB_V1).
+   * Random vaultKey encrypted under:
+   * Argon2id(passphrase, passphraseSalt, Argon2idWebV1).
    */
-  passphraseVaultKey: PassphraseVaultKeyEnvelopeSchema,
+  vault_key_passphrase_wrapped: VaultKeyPassphraseWrappedSchema,
 
   /**
-   * Optional recovery route. It encrypts the same VaultKey as
-   * passphraseVaultKey, under a key derived from a recovery mnemonic.
+   * Optional recovery route. It encrypts the same vaultKey as
+   * vault_key_passphrase_wrapped, under a key derived from a recovery mnemonic.
    *
    * The phrase itself is not stored in VaultDB.
    */
   recovery: z
     .object({
-      format: z.literal("bip39-argon2id-web-v1"),
+      format: z.literal("bip39_argon2id_web_v1"),
       salt: BytesSchema.refine(
-        (value) => value.byteLength === ARGON2ID_WEB_V1.saltBytes,
+        (bytes) => bytes.byteLength === Argon2idWebV1.salt_bytes,
         "Unexpected recovery salt length",
       ),
       vaultKey: AesGcmEnvelopeSchema,
@@ -335,12 +335,6 @@ export const LockboxMetaSchema = z.object({
    */
   hint: z.string().min(1).max(256).optional(),
 
-  /**
-   * Optional non-sensitive display suffix, e.g. the last four characters
-   * of an API key. Applications may omit this entirely.
-   */
-  last4: z.string().min(1).max(16).optional(),
-
   createdAt: IsoTimestampSchema,
   updatedAt: IsoTimestampSchema,
 });
@@ -348,39 +342,39 @@ export const LockboxMetaSchema = z.object({
 export type LockboxMeta = z.infer<typeof LockboxMetaSchema>;
 
 /**
- * An encrypted JSON value plus the per-record DEK envelope.
+ * An encrypted whisper plus the per-record lockboxKey envelope.
  *
- * One fresh DEK is generated for each store() operation. Replacing the
- * contents creates a new keyId, a new DEK, a new wrappedDEK, and a new data IV.
+ * One fresh lockboxKey is generated for each store() operation. Replacing the
+ * whisper creates a new revisionId, a new lockboxKey, a new lockbox_key_wrapped, and a new whisper cipherIv.
  */
 export const LockboxRecordSchema = z.object({
   format: z.literal("byok-lockbox-v1"),
 
-  vaultLabel: VaultLabelSchema,
+  vaultlabel: VaultLabelSchema,
   vaultId: VaultIdSchema,
-  boxLabel: BoxLabelSchema,
+  boxlabel: BoxLabelSchema,
 
   /**
    * Current revision and compare-and-swap token.
    */
-  keyId: KeyIdSchema,
+  revision_id: RevisionIdSchema,
 
   /**
-   * Random record DEK encrypted under the vault's VaultKey.
+   * Random record lockboxKey encrypted under the vault's vaultKey.
    */
-  wrappedDEK: WrappedDekSchema,
+  lockbox_key_wrapped: LockboxKeyWrappedSchema,
 
   /**
-   * JSON-encoded user contents encrypted under this record's DEK.
+   * JSON-encoded whisper encrypted under this record's lockboxKey.
    */
-  data: AesGcmEnvelopeSchema,
+  whisper_ciphered: AesGcmEnvelopeSchema,
 
   /**
-   * Application-controlled format version for decrypted JSON contents.
+   * Application-controlled format version for the decrypted whisper.
    *
    * This can be useful if the schema for a given box evolves over time.
    */
-  contentVersion: z.number().int().positive().default(1),
+  whisper_schema_version: z.number().int().positive().default(1),
 
   meta: LockboxMetaSchema,
 });
@@ -391,8 +385,8 @@ export type LockboxRecord = z.infer<typeof LockboxRecordSchema>;
  * The non-secret subset returned by listLockboxes().
  */
 export const LockboxSummarySchema = z.object({
-  boxLabel: BoxLabelSchema,
-  keyId: KeyIdSchema,
+  boxlabel: BoxLabelSchema,
+  revision_id: RevisionIdSchema,
   meta: LockboxMetaSchema,
 });
 
@@ -407,28 +401,28 @@ export type LockboxSummary = z.infer<typeof LockboxSummarySchema>;
 /**
  * Local metadata for a remembered unlock.
  *
- * DeviceDB persists this beside a browser-generated non-extractable DeviceKey.
- * The DeviceKey is intentionally represented as an opaque browser handle,
+ * DeviceDB persists this beside a browser-generated non-extractable localUnlockKey.
+ * The localUnlockKey is intentionally represented as an opaque browser handle,
  * rather than as serializable key bytes.
  */
 export const DeviceVaultCacheSchema = z.object({
   format: z.literal("byok-device-cache-v1"),
 
-  vaultLabel: VaultLabelSchema,
+  vaultlabel: VaultLabelSchema,
   vaultId: VaultIdSchema,
 
   /**
-   * The VaultBundle epoch at the time this cache was created.
+   * The VaultBundle passphraseEpoch at the time this cache was created.
    *
-   * A remote passphrase rotation advances the bundle epoch and invalidates
+   * A remote passphrase change advances the bundle passphraseEpoch and invalidates
    * this remembered-unlock record on the next refresh or subscription update.
    */
-  epoch: z.number().int().positive(),
+  passphrase_epoch: z.number().int().positive(),
 
   /**
-   * The VaultKey encrypted under the local device key.
+   * The vaultKey encrypted under the localUnlockKey.
    */
-  vaultKey: DeviceVaultKeyEnvelopeSchema,
+  vault_key_local_wrapped: VaultKeyLocalWrappedSchema,
 
   createdAt: IsoTimestampSchema,
   expiresAt: IsoTimestampSchema,
@@ -452,17 +446,17 @@ export type KnownBoxLabel<R extends VaultSchemaRegistry> =
 /**
  * Example application registry.
  *
- * The actual API-token shape is up to the application. Keeping the token
+ * The actual API-key shape is up to the application. Keeping the API key
  * under a named field makes it less likely that generic JSON is accidentally
  * used where an API credential is expected.
  */
 export const ExampleVaultSchemas = {
   "anthropic:personal": z.object({
-    apiToken: z.string().min(1),
+    apiKey: z.string().min(1),
   }),
 
   "anthropic:work": z.object({
-    apiToken: z.string().min(1),
+    apiKey: z.string().min(1),
   }),
 } satisfies VaultSchemaRegistry;
 ```
@@ -492,57 +486,57 @@ export interface VaultDB {
    *
    * Returns null when the vault has not been initialized.
    */
-  getVaultBundle(vaultLabel: VaultLabel): Promise<VaultBundle | null>;
+  getVaultBundle(vaultlabel: VaultLabel): Promise<VaultBundle | null>;
 
   /**
-   * Create or replace the bundle using epoch-based compare-and-swap.
+   * Create or replace the bundle using passphraseEpoch-based compare-and-swap.
    *
-   * expectedEpoch:
+   * expectedPassphraseEpoch:
    * - null: creation; succeeds only if no bundle exists
-   * - number: update; succeeds only if the persisted epoch matches
+   * - number: update; succeeds only if the persisted passphraseEpoch matches
    *
    * Implementations should report a VaultConflict-style error when the
    * compare-and-swap condition does not hold.
    */
   putVaultBundle(
     bundle: VaultBundle,
-    expectedEpoch: number | null,
+    expectedPassphraseEpoch: number | null,
   ): Promise<void>;
 
   /**
    * Fetch one encrypted lockbox.
    */
   getLockbox(
-    vaultLabel: VaultLabel,
-    boxLabel: BoxLabel,
+    vaultlabel: VaultLabel,
+    boxlabel: BoxLabel,
   ): Promise<LockboxRecord | null>;
 
   /**
-   * Create or replace one encrypted lockbox using keyId compare-and-swap.
+   * Create or replace one encrypted lockbox using revisionId compare-and-swap.
    *
-   * expectedKeyId:
+   * expectedRevisionId:
    * - null: creation; succeeds only if no lockbox exists
-   * - keyId: replacement; succeeds only if the current record has that keyId
+   * - revisionId: replacement; succeeds only if the current record has that revisionId
    */
   putLockbox(
     record: LockboxRecord,
-    expectedKeyId: KeyId | null,
+    expectedRevisionId: RevisionId | null,
   ): Promise<void>;
 
   /**
    * Return public metadata needed to render a locked-vault UI.
    *
-   * This intentionally excludes encrypted payload bytes.
+   * This intentionally excludes each whisperCiphered.
    */
-  listLockboxes(vaultLabel: VaultLabel): Promise<LockboxSummary[]>;
+  listLockboxes(vaultlabel: VaultLabel): Promise<LockboxSummary[]>;
 
   /**
    * Delete a lockbox if it still has the expected revision.
    */
   deleteLockbox(
-    vaultLabel: VaultLabel,
-    boxLabel: BoxLabel,
-    expectedKeyId: KeyId,
+    vaultlabel: VaultLabel,
+    boxlabel: BoxLabel,
+    expectedRevisionId: RevisionId,
   ): Promise<void>;
 
   /**
@@ -552,7 +546,7 @@ export interface VaultDB {
    * full record; BYOKVault will re-fetch and validate it through getVaultBundle.
    */
   subscribeToVaultBundle?(
-    vaultLabel: VaultLabel,
+    vaultlabel: VaultLabel,
     onChange: () => void,
   ): () => void;
 
@@ -560,7 +554,7 @@ export interface VaultDB {
    * Optional reactive integration for lockbox-list changes.
    */
   subscribeToLockboxes?(
-    vaultLabel: VaultLabel,
+    vaultlabel: VaultLabel,
     onChange: () => void,
   ): () => void;
 }
@@ -575,48 +569,48 @@ export interface VaultDB {
  * Local device storage used for "remember this device for N days."
  *
  * A browser implementation commonly uses IndexedDB:
- * - a non-extractable AES-GCM CryptoKey is stored as the DeviceKey;
+ * - a non-extractable AES-GCM CryptoKey is stored as the localUnlockKey;
  * - DeviceVaultCache is stored beside it;
- * - the raw DeviceKey bytes are not exported into application storage.
+ * - the raw localUnlockKey bytes are not exported into application storage.
  */
 export interface DeviceDB {
   /**
-   * Return the browser-local DeviceKey, if one exists.
+   * Return the browser-local localUnlockKey, if one exists.
    *
-   * The key should be non-extractable and suitable for AES-GCM encryption.
+   * The localUnlockKey should be non-extractable and suitable for AES-GCM encryption.
    */
-  getDeviceKey(vaultLabel: VaultLabel): Promise<CryptoKey | null>;
+  getLocalUnlockKey(vaultlabel: VaultLabel): Promise<CryptoKey | null>;
 
   /**
-   * Return an existing DeviceKey or create one.
+   * Return an existing localUnlockKey or create one.
    *
    * This is called only when a caller asks to remember an unlocked vault.
    */
-  ensureDeviceKey(vaultLabel: VaultLabel): Promise<CryptoKey>;
+  ensureLocalUnlockKey(vaultlabel: VaultLabel): Promise<CryptoKey>;
 
   /**
-   * Read a remembered VaultKey cache.
+   * Read a remembered vaultKey cache.
    */
-  getVaultCache(vaultLabel: VaultLabel): Promise<DeviceVaultCache | null>;
+  getVaultCache(vaultlabel: VaultLabel): Promise<DeviceVaultCache | null>;
 
   /**
-   * Persist a remembered VaultKey cache.
+   * Persist a remembered vaultKey cache.
    */
   putVaultCache(cache: DeviceVaultCache): Promise<void>;
 
   /**
-   * Remove the remembered cache while retaining the DeviceKey.
+   * Remove the remembered cache while retaining the localUnlockKey.
    *
    * This is useful for lock({ forgetDevice: false }) behavior.
    */
-  clearVaultCache(vaultLabel: VaultLabel): Promise<void>;
+  clearVaultCache(vaultlabel: VaultLabel): Promise<void>;
 
   /**
-   * Remove both the cache and the browser-local DeviceKey for this vault.
+   * Remove both the cache and the browser-local localUnlockKey for this vault.
    *
    * This backs “forget this device” behavior.
    */
-  clearVault(vaultLabel: VaultLabel): Promise<void>;
+  clearVault(vaultlabel: VaultLabel): Promise<void>;
 
   /**
    * Remove local cache entries for all vaults, generally during sign-out.
@@ -631,7 +625,7 @@ export interface DeviceDB {
    * can decide whether to disable remembered unlocks.
    */
   readonly capabilities: {
-    nonExtractableDeviceKeys: boolean;
+    nonExtractableLocalUnlockKeys: boolean;
   };
 }
 ```
@@ -650,7 +644,7 @@ export interface DeviceDB {
  */
 export declare const PassphraseKeyBrand: unique symbol;
 export declare const VaultKeyBrand: unique symbol;
-export declare const DataKeyBrand: unique symbol;
+export declare const LockboxKeyBrand: unique symbol;
 
 export type PassphraseKeyHandle = {
   readonly [PassphraseKeyBrand]: true;
@@ -660,8 +654,8 @@ export type VaultKeyHandle = {
   readonly [VaultKeyBrand]: true;
 };
 
-export type DataKeyHandle = {
-  readonly [DataKeyBrand]: true;
+export type LockboxKeyHandle = {
+  readonly [LockboxKeyBrand]: true;
 };
 
 /**
@@ -674,7 +668,7 @@ export type DataKeyHandle = {
  */
 export interface CryptoProvider {
   /**
-   * Indicates whether this runtime can execute argon2id-web-v1.
+   * Indicates whether this runtime can execute argon2id_web_v1.
    *
    * An environment with blocked WebAssembly can still display public vault
    * metadata, but passphrase-based initialization and unlock will fail with
@@ -687,30 +681,30 @@ export interface CryptoProvider {
   };
 
   /**
-   * Derive a passphrase KEK using the pinned Argon2id profile.
+   * Derive the passphraseKey using the pinned keyDeriverSpec.
    *
    * signal may cancel an in-progress worker operation when the caller closes
    * an unlock screen or navigates away.
    */
   derivePassphraseKey(
     passphrase: string,
-    salt: Uint8Array,
-    profile: Argon2idWebV1,
+    passphraseSalt: Uint8Array,
+    keyDeriverSpec: KeyDeriverSpec,
     signal?: AbortSignal,
   ): Promise<PassphraseKeyHandle>;
 
   /**
-   * Generate a fresh random 256-bit VaultKey.
+   * Generate a fresh random 256-bit vaultKey.
    *
-   * VaultKey is stable across normal passphrase rotation and is used to wrap
-   * per-lockbox DEKs.
+   * vaultKey is stable across normal passphrase change and is used to wrap
+   * per-lockbox lockboxKeys.
    */
   generateVaultKey(): Promise<VaultKeyHandle>;
 
   /**
-   * Generate a fresh random 256-bit per-lockbox DEK.
+   * Generate a fresh random 256-bit per-lockbox lockboxKey.
    */
-  generateDataKey(): Promise<DataKeyHandle>;
+  generateLockboxKey(): Promise<LockboxKeyHandle>;
 
   /**
    * Produce cryptographically secure random bytes.
@@ -718,79 +712,79 @@ export interface CryptoProvider {
   randomBytes(length: number): Uint8Array;
 
   /**
-   * Encrypt arbitrary JSON bytes under a per-lockbox DataKey.
+   * Cipher whisper bytes under a per-lockbox lockboxKey.
    */
-  sealData(
-    key: DataKeyHandle,
-    plaintext: Uint8Array,
-    aad: Uint8Array,
+  cipherWhisper(
+    lockboxKey: LockboxKeyHandle,
+    whisperBytes: Uint8Array,
+    cipherAdditionalData: Uint8Array,
   ): Promise<AesGcmEnvelope>;
 
   /**
-   * Decrypt JSON bytes under a per-lockbox DataKey.
+   * Decipher whisper bytes under a per-lockbox lockboxKey.
    */
-  openData(
-    key: DataKeyHandle,
+  decipherWhisper(
+    lockboxKey: LockboxKeyHandle,
     envelope: AesGcmEnvelope,
-    aad: Uint8Array,
+    cipherAdditionalData: Uint8Array,
   ): Promise<Uint8Array>;
 
   /**
-   * Encrypt a lockbox DEK under the vault-level VaultKey.
+   * Encrypt a lockboxKey under the vaultKey.
    */
-  wrapDataKey(
+  wrapLockboxKey(
     vaultKey: VaultKeyHandle,
-    dataKey: DataKeyHandle,
-    aad: Uint8Array,
-  ): Promise<WrappedDek>;
+    lockboxKey: LockboxKeyHandle,
+    cipherAdditionalData: Uint8Array,
+  ): Promise<LockboxKeyWrapped>;
 
   /**
-   * Recover a lockbox DEK from its VaultKey envelope.
+   * Recover a lockboxKey from its vaultKey envelope.
    */
-  unwrapDataKey(
+  unwrapLockboxKey(
     vaultKey: VaultKeyHandle,
-    wrappedDataKey: WrappedDek,
-    aad: Uint8Array,
-  ): Promise<DataKeyHandle>;
+    lockboxKeyWrapped: LockboxKeyWrapped,
+    cipherAdditionalData: Uint8Array,
+  ): Promise<LockboxKeyHandle>;
 
   /**
-   * Encrypt the VaultKey under the Argon2id-derived passphrase key.
+   * Encrypt the vaultKey under the passphraseKey.
    */
   wrapVaultKeyWithPassphrase(
     passphraseKey: PassphraseKeyHandle,
     vaultKey: VaultKeyHandle,
-    aad: Uint8Array,
-  ): Promise<PassphraseVaultKeyEnvelope>;
+    cipherAdditionalData: Uint8Array,
+  ): Promise<VaultKeyPassphraseWrapped>;
 
   /**
-   * Recover the VaultKey from the passphrase envelope.
+   * Recover the vaultKey from the passphrase envelope.
    *
    * An AES-GCM authentication failure maps to WrongPassphrase unless the
-   * application has already established that the key is correct through a
+   * application has already established that the passphraseKey is correct through a
    * separate trusted path.
    */
   unwrapVaultKeyWithPassphrase(
     passphraseKey: PassphraseKeyHandle,
-    envelope: PassphraseVaultKeyEnvelope,
-    aad: Uint8Array,
+    envelope: VaultKeyPassphraseWrapped,
+    cipherAdditionalData: Uint8Array,
   ): Promise<VaultKeyHandle>;
 
   /**
-   * Encrypt the VaultKey under a browser-local non-extractable DeviceKey.
+   * Encrypt the vaultKey under a browser-local non-extractable localUnlockKey.
    */
-  wrapVaultKeyForDevice(
-    deviceKey: CryptoKey,
+  wrapVaultKeyLocally(
+    localUnlockKey: CryptoKey,
     vaultKey: VaultKeyHandle,
-    aad: Uint8Array,
-  ): Promise<DeviceVaultKeyEnvelope>;
+    cipherAdditionalData: Uint8Array,
+  ): Promise<VaultKeyLocalWrapped>;
 
   /**
-   * Recover a remembered VaultKey using a browser-local DeviceKey.
+   * Recover a remembered vaultKey using a browser-local localUnlockKey.
    */
-  unwrapVaultKeyForDevice(
-    deviceKey: CryptoKey,
-    envelope: DeviceVaultKeyEnvelope,
-    aad: Uint8Array,
+  unwrapVaultKeyLocally(
+    localUnlockKey: CryptoKey,
+    envelope: VaultKeyLocalWrapped,
+    cipherAdditionalData: Uint8Array,
   ): Promise<VaultKeyHandle>;
 }
 ```
@@ -810,36 +804,36 @@ export type VaultUnlockOrigin =
 export type VaultStatus =
   | {
       state: "absent";
-      vaultLabel: VaultLabel;
-      canUsePinnedKdf: boolean;
+      vaultlabel: VaultLabel;
+      canUseKeyDeriverSpec: boolean;
     }
   | {
       state: "locked";
-      vaultLabel: VaultLabel;
+      vaultlabel: VaultLabel;
       vaultId: VaultId;
-      epoch: number;
-      canUsePinnedKdf: boolean;
+      passphraseEpoch: number;
+      canUseKeyDeriverSpec: boolean;
       hasRecoveryKit: boolean;
     }
   | {
       state: "unlocked";
-      vaultLabel: VaultLabel;
+      vaultlabel: VaultLabel;
       vaultId: VaultId;
-      epoch: number;
+      passphraseEpoch: number;
       origin: VaultUnlockOrigin;
       expiresAt?: string;
     }
   | {
       /**
-       * A remote passphrase rotation or recovery reset advanced the epoch.
+       * A remote passphrase change or recovery reset advanced the passphraseEpoch.
        *
-       * The local in-memory and remembered-device keys should be discarded.
+       * The local in-memory vaultKey and remembered-unlock material should be discarded.
        */
       state: "stale";
-      vaultLabel: VaultLabel;
+      vaultlabel: VaultLabel;
       vaultId: VaultId;
-      localEpoch: number;
-      remoteEpoch: number;
+      localPassphraseEpoch: number;
+      remotePassphraseEpoch: number;
     }
   | {
       state: "destroyed";
@@ -910,9 +904,9 @@ export interface StoreOptions {
   meta: Omit<LockboxMeta, "createdAt" | "updatedAt">;
 
   /**
-   * Application-defined JSON content version.
+   * Application-defined whisper schema version.
    */
-  contentVersion?: number;
+  whisperSchemaVersion?: number;
 }
 
 export interface UnlockOptions {
@@ -932,7 +926,7 @@ export interface UnlockOptions {
   signal?: AbortSignal;
 }
 
-export interface RotationProgress {
+export interface PassphraseChangeProgress {
   phase: "derive-old-passphrase" | "derive-new-passphrase" | "commit";
 }
 
@@ -947,15 +941,15 @@ export interface RecoveryKit {
    * Identifies the recovery format presented to the user or stored in a
    * recovery-kit export flow. VaultBundle.recovery holds the actual envelope.
    */
-  format: "bip39-argon2id-web-v1";
+  format: "bip39_argon2id_web_v1";
 }
 
 /**
- * Client-side encrypted vault for user-provided API tokens and other small
+ * Client-side encrypted vault for user-provided API keys and other small
  * JSON secrets.
  *
  * BYOKVault is deliberately not a request proxy. Application code decrypts
- * the required token inside use() and makes the external API request directly
+ * the required API key inside use() and makes the external API request directly
  * from the user’s device.
  */
 export interface BYOKVault<R extends VaultSchemaRegistry> {
@@ -970,10 +964,10 @@ export interface BYOKVault<R extends VaultSchemaRegistry> {
    * Initialize a previously absent vault.
    *
    * This creates:
-   * - a random VaultKey;
-   * - a random Argon2 salt;
-   * - a passphrase envelope around the VaultKey;
-   * - an epoch-1 VaultBundle.
+   * - a random vaultKey;
+   * - a random passphraseSalt;
+   * - a passphrase envelope around the vaultKey;
+   * - a VaultBundle with passphraseEpoch 1.
    *
    * A concurrent initialization by another device produces VaultAlreadyExists
    * or VaultConflict, depending on the VaultDB adapter.
@@ -981,35 +975,35 @@ export interface BYOKVault<R extends VaultSchemaRegistry> {
   initialize(
     passphrase: string,
     options?: Pick<UnlockOptions, "remember" | "rememberDurationMs" | "signal">,
-  ): Promise<{ epoch: number; expiresAt?: string }>;
+  ): Promise<{ passphraseEpoch: number; expiresAt?: string }>;
 
   /**
    * Unlock an existing vault using its passphrase.
    *
-   * The operation derives the pinned Argon2id key and decrypts the VaultKey.
-   * If remember is selected, the VaultKey is additionally encrypted under a
-   * device-local key and stored through DeviceDB.
+   * The operation derives the passphraseKey with the pinned keyDeriverSpec and decrypts the vaultKey.
+   * If remember is selected, the vaultKey is additionally encrypted under a
+   * localUnlockKey and stored through DeviceDB.
    */
   unlock(
     passphrase: string,
     options?: UnlockOptions,
-  ): Promise<{ epoch: number; expiresAt?: string }>;
+  ): Promise<{ passphraseEpoch: number; expiresAt?: string }>;
 
   /**
-   * Discard the in-memory VaultKey and any transient unwrapped DEKs.
+   * Discard the in-memory vaultKey and any transient unwrapped lockboxKeys.
    *
    * forgetDevice additionally removes the local remembered-unlock cache and
-   * device key for this vault.
+   * localUnlockKey for this vault.
    */
   lock(options?: { forgetDevice?: boolean }): Promise<void>;
 
   /**
    * Fetch current vault metadata and reconcile local state.
    *
-   * If the epoch is unchanged, newly-created lockboxes from other devices can
-   * be read using the currently unlocked VaultKey.
+   * If the passphraseEpoch is unchanged, newly-created lockboxes from other devices can
+   * be read using the currently unlocked vaultKey.
    *
-   * If the epoch changed, the instance enters "stale" state and drops local
+   * If the passphraseEpoch changed, the instance enters "stale" state and drops local
    * remembered-unlock material. The caller can then unlock with the new
    * passphrase.
    */
@@ -1021,17 +1015,17 @@ export interface BYOKVault<R extends VaultSchemaRegistry> {
   list(): Promise<LockboxSummary[]>;
 
   /**
-   * Validate and JSON-encode contents, then encrypt them into a lockbox.
+   * Validate and JSON-encode a whisper, then encrypt it into a lockbox.
    *
-   * Each call creates a new per-lockbox DEK, data encryption envelope, and
-   * keyId. If the box already exists, the write uses the current keyId as its
+   * Each call creates a new per-lockbox lockboxKey, whisper envelope, and
+   * revisionId. If the box already exists, the write uses the current revisionId as its
    * compare-and-swap token.
    */
   store<K extends KnownBoxLabel<R>>(
-    boxLabel: K,
-    contents: z.output<R[K]>,
+    boxlabel: K,
+    whisper: z.output<R[K]>,
     options: StoreOptions,
-  ): Promise<{ keyId: KeyId }>;
+  ): Promise<{ revisionId: RevisionId }>;
 
   /**
    * Dynamic-box form of store().
@@ -1040,14 +1034,14 @@ export interface BYOKVault<R extends VaultSchemaRegistry> {
    * the static schema registry.
    */
   storeDynamic<T>(
-    boxLabel: BoxLabel,
-    contents: T,
+    boxlabel: BoxLabel,
+    whisper: T,
     schema: z.ZodType<T>,
     options: StoreOptions,
-  ): Promise<{ keyId: KeyId }>;
+  ): Promise<{ revisionId: RevisionId }>;
 
   /**
-   * Decrypt one lockbox and make its parsed contents available only for the
+   * Decrypt one lockbox and make its parsed whisper available only for the
    * duration of callback execution.
    *
    * This shape discourages retaining secrets in React state, global stores,
@@ -1055,9 +1049,9 @@ export interface BYOKVault<R extends VaultSchemaRegistry> {
    * JavaScript, so callers should avoid logging or retaining its input.
    */
   use<K extends KnownBoxLabel<R>, Result>(
-    boxLabel: K,
+    boxlabel: K,
     callback: (
-      contents: z.output<R[K]>,
+      whisper: z.output<R[K]>,
     ) => Result | Promise<Result>,
   ): Promise<Result>;
 
@@ -1065,52 +1059,52 @@ export interface BYOKVault<R extends VaultSchemaRegistry> {
    * Dynamic-box form of use().
    */
   useDynamic<T, Result>(
-    boxLabel: BoxLabel,
+    boxlabel: BoxLabel,
     schema: z.ZodType<T>,
-    callback: (contents: T) => Result | Promise<Result>,
+    callback: (whisper: T) => Result | Promise<Result>,
   ): Promise<Result>;
 
   /**
    * Delete a lockbox with optimistic concurrency protection.
    */
-  remove(boxLabel: BoxLabel): Promise<void>;
+  remove(boxlabel: BoxLabel): Promise<void>;
 
   /**
-   * Re-encrypt a lockbox under a fresh DEK without changing its JSON contents.
+   * Re-encrypt a lockbox under a fresh lockboxKey without changing its whisper.
    *
    * This can be used when rotating the external credential itself or as part
    * of a maintenance operation.
    */
-  rotateLockbox(boxLabel: BoxLabel): Promise<{ keyId: KeyId }>;
+  rotateLockbox(boxlabel: BoxLabel): Promise<{ revisionId: RevisionId }>;
 
   /**
    * Change the vault passphrase.
    *
-   * The VaultKey remains the same. The operation derives a new passphrase KEK
-   * with a newly generated salt, re-encrypts the VaultKey, increments epoch,
+   * The vaultKey remains the same. The operation derives a new passphraseKey
+   * with a newly generated passphraseSalt, re-encrypts the vaultKey, increments passphraseEpoch,
    * and compare-and-swap writes the VaultBundle.
    *
-   * Existing lockboxes do not need to be rewritten because their DEKs remain
-   * wrapped by the unchanged VaultKey.
+   * Existing lockboxes do not need to be rewritten because their lockboxKeys remain
+   * wrapped by the unchanged vaultKey.
    */
-  rotate(
+  changePassphrase(
     oldPassphrase: string,
     newPassphrase: string,
     options?: {
       signal?: AbortSignal;
-      onProgress?: (progress: RotationProgress) => void;
+      onProgress?: (progress: PassphraseChangeProgress) => void;
     },
-  ): Promise<{ epoch: number }>;
+  ): Promise<{ passphraseEpoch: number }>;
 
   /**
    * Create a mnemonic-based recovery route.
    *
    * The recovery mnemonic derives a separate key that encrypts the existing
-   * VaultKey. It allows recovery from a forgotten passphrase without
+   * vaultKey. It allows recovery from a forgotten passphrase without
    * re-encrypting lockboxes.
    *
-   * The recovery path uses the same pinned Argon2id profile, so it requires an
-   * environment capable of running argon2id-web-v1.
+   * The recovery path uses the same pinned keyDeriverSpec, so it requires an
+   * environment capable of running argon2id_web_v1.
    */
   createRecoveryKit(
     passphrase: string,
@@ -1120,13 +1114,13 @@ export interface BYOKVault<R extends VaultSchemaRegistry> {
   /**
    * Unlock with a recovery phrase.
    *
-   * A successful recovery unlock is normally followed by rotate(), which
-   * establishes a replacement passphrase and advances the vault epoch.
+   * A successful recovery unlock is normally followed by changePassphrase(), which
+   * establishes a replacement passphrase and advances the passphraseEpoch.
    */
   unlockWithRecovery(
     phrase: string,
     options?: Pick<UnlockOptions, "remember" | "rememberDurationMs" | "signal">,
-  ): Promise<{ epoch: number; expiresAt?: string }>;
+  ): Promise<{ passphraseEpoch: number; expiresAt?: string }>;
 
   /**
    * Remove the mnemonic-based recovery envelope from the VaultBundle.
@@ -1141,7 +1135,7 @@ export interface BYOKVault<R extends VaultSchemaRegistry> {
   /**
    * Subscribe to local state changes.
    *
-   * If VaultDB provides reactive subscriptions, this includes remote epoch and
+   * If VaultDB provides reactive subscriptions, this includes remote passphraseEpoch and
    * lockbox-list updates discovered through those subscriptions.
    */
   subscribe(listener: (status: VaultStatus) => void): () => void;
@@ -1178,7 +1172,7 @@ export interface BYOKVaultDependencies {
  * This operation:
  * - fetches and validates the VaultBundle, if present;
  * - checks whether a valid remembered-device cache exists;
- * - attempts silent device unlock when the cache epoch matches;
+ * - attempts silent device unlock when the cache passphraseEpoch matches;
  * - does not prompt for a passphrase;
  * - does not initialize an absent vault automatically.
  *
@@ -1186,7 +1180,7 @@ export interface BYOKVaultDependencies {
  */
 export interface BYOKVaultFactory {
   findOrCreate<R extends VaultSchemaRegistry>(
-    vaultLabel: VaultLabel,
+    vaultlabel: VaultLabel,
     dependencies: BYOKVaultDependencies,
     options: BYOKVaultOptions<R>,
   ): Promise<BYOKVault<R>>;
@@ -1203,10 +1197,10 @@ export interface BYOKVaultFactory {
 | Existing vault on a new device | `findOrCreate()` → `locked`; call `unlock(passphrase)` |
 | Returning on remembered device before expiry | `findOrCreate()` → `unlocked`, origin `"device"` |
 | Device cache expired or cleared | `locked`; call `unlock(passphrase)` |
-| New lockbox created on another device | `refresh()` retains unlocked state if bundle epoch is unchanged |
-| Passphrase rotated elsewhere | `refresh()` transitions to `stale`; call `unlock(newPassphrase)` |
+| New lockbox created on another device | `refresh()` retains unlocked state if bundle passphraseEpoch is unchanged |
+| Passphrase changed elsewhere | `refresh()` transitions to `stale`; call `unlock(newPassphrase)` |
 | Browser cannot run Argon2id WASM | Locked metadata remains available; `initialize`, `unlock`, and recovery unlock report `CapabilityUnavailable` |
-| User forgot passphrase with a recovery kit | `unlockWithRecovery(phrase)`, then establish a new passphrase with `rotate()` |
+| User forgot passphrase with a recovery kit | `unlockWithRecovery(phrase)`, then establish a new passphrase with `changePassphrase()` |
 | User signs out | `lock({ forgetDevice: true })`, then optionally `deviceDB.clearAll()` |
 
-This format keeps the remote database limited to salts, public metadata, encrypted VaultKey envelopes, encrypted DEKs, encrypted JSON content, and concurrency identifiers.
+This format keeps the remote database limited to passphraseSalts, public metadata, encrypted vaultKey envelopes, encrypted lockboxKeys, ciphered whispers, and concurrency identifiers.

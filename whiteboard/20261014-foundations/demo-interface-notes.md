@@ -38,12 +38,12 @@ refused. Worth a second look.
 
 ## Departures from the relic sketch
 
-* Dropped for now (not rejected): epochs/compare-and-swap, recovery kits, passphrase rotation,
+* Dropped for now (not rejected): passphrase epochs/compare-and-swap, recovery kits, passphrase change,
   `rotateLockbox`, capability flags, schema registry with typed per-box schemas. The stub stays
   at the surface a first release must get right; these come back with the crypto.
 * Flattened `meta: {...}` + `StoreOptions` into a single optional `note` -- enough to demonstrate
-  public-while-locked metadata. The real shape (service, hint, last4...) is still to design.
-* `status()` became the snapshot itself; `stale`/`corrupted` states deferred with the epoch
+  public-while-locked metadata. The real shape (service, hint...) is still to design.
+* `status()` became the snapshot itself; `stale`/`corrupted` states deferred with the passphraseEpoch
   machinery.
 
 ## Observations from building the demo
