@@ -71,7 +71,7 @@ storage, out of storage, across the public API) **and is trusted otherwise**. Op
 exist only because a field arrives late should be resolved at the boundary, not carried.
 First candidates: `Lockbox.note`, the new `whisper_schema_version`, `DeviceUnlock`'s shape.
 
-## Expiry (the Coach's model, converging)
+## Expiry (ruled 2026-10-14; build off these)
 
 Two timestamps, no bouncer between, and nothing in flight is ever killed:
 
@@ -83,11 +83,19 @@ Two timestamps, no bouncer between, and nothing in flight is ever killed:
   fires: the key is nulled and the snapshot flips. In-flight work holding the key in a local
   still finishes -- locking gates entries, it does not revoke handles.
 
-Proposed and liked: **`softlock(graceSeconds = 5.0)`** -- advance `staleVaultTS` to now and
-`shutVaultTS` to now + graceSeconds: "no new secrets from this instant; finish what is in hand;
-the key dies shortly." The natural callee for the screen-lock recipe and sign-out flows. Open:
-whether softlock also forgets the device-remember record at shut (agent leans yes -- it is a
-polite lock, not a different state), and the name (`lockSoon`?).
+The ruled numbers and names:
+
+* **Shutting forgets both**: at shut -- timer or explicit -- the in-memory key is nulled AND the
+  device-remember record is erased. A lock is a lock; none of them leaves "remember me" standing.
+* **`lockSoon(graceSeconds = 5.0)`** (ruled name): advance `staleVaultTS` to now and
+  `shutVaultTS` to now + graceSeconds -- "no new secrets from this instant; finish what is in
+  hand; the key dies shortly." The natural callee for the screen-lock recipe and sign-out flows.
+* **Natural expiry's grace is 60 seconds**: `shutVaultTS = staleVaultTS + 60s`, a library
+  constant, not a knob.
+* **`staleVaultTS` is fixed from unlock, static, never sliding**: unlock time plus the
+  `forcePassphraseReentryHours` the app passed to `openVault`. Per-open means per-device: two
+  devices on one vault may carry different windows, which is fine and is noted in
+  notes/security.md -- the window is client-side politeness, not a vault-wide synced policy.
 
 Decoding today's `expiresAt` (it does double duty): the in-memory unlock is closure state in one
 tab (the non-extractable vaultKey handle + `expiresAt`, gating entries); the device-remember

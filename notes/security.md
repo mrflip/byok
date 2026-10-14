@@ -67,3 +67,8 @@ security expert who knows what questions to ask.
   recreated or re-passphrased elsewhere relocks instead of writing into the successor. This is
   check-then-write, not atomic, until `versionedUpdate` carries the `vault_id` expectation to
   the backend.
+* 2026-10-14: the unlock window (today `rememberForMs`, becoming `forcePassphraseReentryHours`)
+  is chosen by the app at each `openVault`, so two devices on one vault may hold different
+  windows. It is client-side politeness, not a vault-wide synced policy: nothing stored enforces
+  it across devices, and a modified client could choose any window it likes. The real bounds
+  stay the passphrase and the device-bound localUnlockKey.
