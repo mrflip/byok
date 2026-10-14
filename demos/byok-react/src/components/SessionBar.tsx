@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { useSession, useVault } from '../scaffold/vault-context'
-import type { Auth } from '../scaffold/auth'
+import { useVault } from 'byok-react'
+import { useSession } from '../hooks/useSession'
+import type { Auth } from '../lib/auth'
 
 /**
- * DEMO JANK: the "app"'s sign-in strip. Typing a username signs you in (or up); there is no
- * password, because the demo's point is that the vault passphrase is a separate thing from
- * signing in.
+ * The app's sign-in strip. Typing a username signs you in (or up); there is no password, because
+ * the demo's point is that the vault passphrase is a separate thing from signing in. Signing out
+ * locks the vault: the remembered unlock on this device ends with the session.
  */
 export const SessionBar = ({ auth }: { auth: Auth }) => {
   const session = useSession(auth)
@@ -21,6 +22,11 @@ export const SessionBar = ({ auth }: { auth: Auth }) => {
     } catch (err) {
       setGripe(err instanceof Error ? err.message : 'Could not sign in.')
     }
+  }
+
+  const signOut = async () => {
+    await vault?.lock()
+    auth.signOut()
   }
 
   const deleteAccount = async () => {
@@ -47,7 +53,7 @@ export const SessionBar = ({ auth }: { auth: Auth }) => {
   return (
     <div className="session-bar">
       <span>Signed in as <strong>{session.userlabel}</strong> <code className="quiet">({session.userId})</code></span>
-      <button onClick={() => { auth.signOut() }}>Sign out</button>
+      <button onClick={() => { void signOut() }}>Sign out</button>
       <button className="danger" onClick={() => { void deleteAccount() }}>Delete account</button>
     </div>
   )

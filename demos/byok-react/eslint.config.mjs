@@ -32,11 +32,11 @@ export default defineConfig([
     },
   },
 
-  // src/byok/ sketches the future library, so it keeps the library's discipline: a stray debug
-  // line is how a whisper ends up in someone's log drain.
+  // The demo handles whispers too: a stray debug line is how a key ends up in someone's console
+  // history, so nothing in src/ writes to the console.
   {
     name: 'byok-demo/secret-keeping',
-    files: ['src/byok/**'],
+    files: ['src/**'],
     rules: {
       'no-console':  'error',
       'no-eval':     'error',

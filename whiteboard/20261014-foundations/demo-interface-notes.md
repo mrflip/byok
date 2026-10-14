@@ -52,13 +52,28 @@ refused. Worth a second look.
 * A `view` facility means the whisper does land in React state in practice. The README's "never
   put secrets in state" guidance needs to say something honest about reveal-to-user features.
 
-## Policy questions for the Coach
+## Coach rulings (2026-10-14, second pass)
 
-1. **Sign-out and the remembered unlock.** The demo keeps a user's 7-day unlock across sign-out
-   (scoped per user, so another sign-in can't reach it). The conservative policy -- sign-out ends
-   the remembered unlock -- is probably right for the real package. Which default?
-2. **Labels**: is refusing `-` in labels (STYLE's `\w`-only rule) acceptable for boxlabels that
-   users type? `ANTHROPIC_API_KEY` style works; `anthropic:prod` style does not.
-3. **Whisper strictness**: the stub refuses what JSON would mangle (Date, Map, undefined) rather
-   than silently flattening. Right call?
-4. Commit prefix: these commits use a new `demos:` prefix, absent from PROCESS.md's table.
+1. **Sign-out locks the vault.** Done: the demo's sign-out calls `vault.lock()` (which erases the
+   remembered unlock) before ending the session.
+2. **Labels**: `/^[a-z](_?[a-z0-9])+$/`, max 40 -- lowercase identifier rules, single underscores.
+   `anthropic_api_key` yes; `ANTHROPIC_API_KEY` no.
+3. `demos:` prefix added to PROCESS.md.
+4. **The library lives in the root `src/`** (still plaintext, loudly marked), exported as the
+   package surface; the demo imports the `byok` workspace package. **React plumbing lives in
+   `packages/byok-react`** (provider, hooks, passphrase dialog), source-exported while the
+   interface settles.
+5. `TODO.md`: "use stable jsonify" -- done as `src/stable-jsonify.ts` (hand-rolled, 12 lines),
+   used for snapshot change detection.
+
+## Open questions, second round
+
+1. **zod placement**: now a regular `dependency` of byok (CLAUDE.md names Zod as the validation
+   choice). Prefer it as a peer instead?
+2. **Whisper strictness** (carried over): refusing what JSON would mangle (Date, Map, undefined)
+   rather than silently flattening. Right call?
+3. **byok-react packaging**: currently `private: true` with `exports` pointing at TS source;
+   gets a tsdown build + publint/attw when it heads to npm. Commit prefix used for it: `api`
+   (no better row in PROCESS.md's table -- bless or rename).
+4. **Demo needs `pnpm build` at the root first** (it imports byok's dist). Acceptable dev loop
+   (`pnpm build:watch`), or should the demo alias byok to `src/` instead?

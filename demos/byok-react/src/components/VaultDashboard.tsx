@@ -1,38 +1,20 @@
 import { useState } from 'react'
-import { useVault, useVaultSnapshot } from '../scaffold/vault-context'
-import { PsstModal } from './psst-modal'
-import type { Whisper } from '../byok'
+import { useVault, useVaultSnapshot } from 'byok-react'
+import { editableWhisper, parseWhisperText, showWhisper } from '../lib/whisper-text'
+import { PsstModal } from './PsstModal'
+import type { Whisper } from 'byok'
 
 /**
- * DEMO JANK: the "app"'s lockbox manager. The lines that matter -- the effortless mechanics a
- * real app would write -- are the one-liners inside each handler: `vault.store(...)`,
- * `vault.read(...)`, `vault.use(...)`, `vault.erase(...)`, each wrapped in `guard()` so a locked
- * vault summons the passphrase dialog and retries. Everything else here is table furniture.
+ * Direct manipulation of the vault's lockboxes: add, view, edit, delete, use. The lines that
+ * matter are the one-liners inside each handler -- `vault.store(...)`, `vault.read(...)`,
+ * `vault.use(...)`, `vault.erase(...)`, each wrapped in `guard()` so a locked vault summons the
+ * passphrase dialog and retries. Everything else is table furniture.
  */
-
-/** A whisper as the demo prints it: strings bare, everything else as JSON. */
-const showWhisper = (whisper: Whisper): string => (
-  typeof whisper === 'string' ? whisper : JSON.stringify(whisper)
-)
-
-/** A whisper as the edit box holds it. */
-const editableWhisper = (whisper: Whisper): string => (
-  typeof whisper === 'string' ? whisper : JSON.stringify(whisper, null, 2)
-)
-
-/** The edit box, read back: valid JSON keeps its type, anything else is a string. */
-const parseWhisperText = (text: string): Whisper => {
-  try {
-    return JSON.parse(text) as Whisper
-  } catch {
-    return text
-  }
-}
 
 type FormState = { editing: string | null, boxlabelText: string, whisperText: string, noteText: string }
 const blankForm: FormState = { editing: null, boxlabelText: '', whisperText: '', noteText: '' }
 
-export const LockboxPanel = () => {
+export const VaultDashboard = () => {
   const { vault, guard } = useVault()
   const snapshot = useVaultSnapshot()
   const [form, setForm] = useState<FormState | null>(null)
@@ -42,8 +24,8 @@ export const LockboxPanel = () => {
 
   if (vault === null) { return <p className="quiet">Opening vault…</p> }
 
-  // guard() returns null when the user dismisses the passphrase dialog; the box below
-  // distinguishes that from a legitimately-null whisper.
+  // guard() returns null when the user dismisses the passphrase dialog; the wrapping object
+  // below distinguishes that from a legitimately-null whisper.
   const view = (boxlabel: string) => guard(async () => ({ whisper: await vault.read(boxlabel) }))
     .then((got) => { if (got !== null) { setShown((prev) => ({ ...prev, [boxlabel]: got.whisper })) } })
 
@@ -79,13 +61,13 @@ export const LockboxPanel = () => {
   }
 
   return (
-    <div className="lockbox-panel">
+    <section className="vault-dashboard">
       <div className="row spread">
-        <h2>Lockboxes <span className="quiet">vault “{snapshot.scope.vaultlabel}”</span></h2>
+        <h2>Vault dashboard <span className="quiet">vault “{snapshot.scope.vaultlabel}”</span></h2>
         <LockChip state={snapshot.state} expiresAt={snapshot.expiresAt} onLock={() => { void vault.lock() }} />
       </div>
 
-      {snapshot.boxes.length === 0 && <p className="quiet">No lockboxes yet. Secrets you add live encrypted in the database (in this stub: plaintext, see below) and open only on your device.</p>}
+      {snapshot.boxes.length === 0 && <p className="quiet">No lockboxes yet. Whispers you add live encrypted in the database (in this stub: plaintext, see below) and open only on your device.</p>}
 
       {snapshot.boxes.length > 0 && (
         <table>
@@ -122,7 +104,7 @@ export const LockboxPanel = () => {
             <label>
               label
               <input
-                placeholder="ANTHROPIC_API_KEY"
+                placeholder="anthropic_api_key"
                 value={form.boxlabelText}
                 disabled={form.editing !== null}
                 onChange={(evt) => { setForm({ ...form, boxlabelText: evt.target.value }) }}
@@ -153,7 +135,7 @@ export const LockboxPanel = () => {
         )}
 
       {psst !== null && <PsstModal boxlabel={psst.boxlabel} whisperShown={showWhisper(psst.whisper)} onClose={() => { setPsst(null) }} />}
-    </div>
+    </section>
   )
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { memoryStore } from '../../src/byok/string-store'
-import { createAuth } from '../../src/scaffold/auth'
+import { memoryStore } from 'byok'
+import { createAuth } from '../../src/lib/auth'
 
 const makeWorld = () => {
   const dbStore = memoryStore()

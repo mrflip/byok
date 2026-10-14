@@ -1,4 +1,4 @@
-import { Label, type StringStore } from '../byok'
+import { Label, type StringStore } from 'byok'
 
 /**
  * SCAFFOLDING a real host application replaces with its own auth (Google sign-in, Clerk, Convex

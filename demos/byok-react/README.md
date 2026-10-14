@@ -1,42 +1,46 @@
 # byok-react-demo
 
-A single-page React playground for designing the byok interface. It is a workspace package that
-is never published and never grows into its own repository.
+A single-page React playground for the byok interface: a workspace package that is never
+published and never grows into its own repository.
 
 ```sh
-pnpm install     # from the repo root
-pnpm dev         # from demos/byok-react; opens the playground
-pnpm justify     # lint, typecheck, test (vitest, no browser automation)
+pnpm install && pnpm build   # from the repo root: the demo imports byok's built dist/
+pnpm dev                     # from demos/byok-react; opens the playground
+pnpm justify                 # lint, typecheck, test (vitest, no browser automation)
 ```
 
-## ⚠️ Nothing here is encrypted
+## ⚠️ Nothing here is encrypted yet
 
-The `src/byok/` stub stores whispers and passphrases in **plaintext** so the inspector can show
-where every piece of data lives. It sketches the real package's interface -- the method names,
-the error kinds, the locked/unlocked flow, the storage seams -- with none of its cryptography.
-Nothing in this demo may graduate into the root `src/` without the crypto underneath.
-
-## Vocabulary
-
-* **whisper** -- the data kept secret: any JSON value.
-* **lockbox** -- a whisper, the label that names it, and its public metadata (`note`, timestamps).
-* **vault** -- a user's collection of lockboxes, scoped by app label, user id, and vault label.
+byok is at its stub stage: it stores whispers and passphrases in **plaintext** so the inspection
+panels can show where every piece of data lives. The interface is real; the cryptography is not
+yet underneath it.
 
 ## The page
 
-The top half is "the app": sign in by typing a username (you are signed up on first sight), then
-add, view, edit, delete, or *use* lockboxes. Whisper-touching actions summon the passphrase
-dialog only when the vault is actually locked; an unlock is remembered on the device for seven
-days. The bottom half is the inspector: the raw rows of the pretend-backend store and the
-device-local store, rendered straight from storage by machinery that never talks to the vault.
+* **The Knock-Knock Machine** ([src/components/KnockKnock.tsx](src/components/KnockKnock.tsx)) --
+  the "app". Save your Anthropic API key once (it goes into the vault as the lockbox
+  `anthropic_api_key`), type who's there, and hit *(( … Who? ))*: the key is decrypted on-device
+  inside `vault.use(...)` and sent browser-to-Anthropic (Claude Haiku, the cheapest model) for a
+  punchline. No server of ours ever sees the key.
+* **Vault dashboard** ([src/components/VaultDashboard.tsx](src/components/VaultDashboard.tsx)) --
+  direct manipulation of the vault: add, view, edit, delete and *use* lockboxes. Whisper-touching
+  actions summon the passphrase dialog only when the vault is actually locked; an unlock is
+  remembered on the device for seven days. Signing out locks the vault.
+* **Inspection panels** ([src/components/inspection/](src/components/inspection/)) -- the raw
+  rows of the pretend-backend store and the device-local store, rendered straight from storage by
+  machinery that never talks to the vault. **To delete them:** remove the two tagged lines (and
+  imports) in [src/App.tsx](src/App.tsx), then delete `src/components/inspection/`. What remains
+  is the app as a host would actually build it.
 
-## Three layers, deliberately separated
+## Where the layers live
 
-| Layer | Where | What it is |
-|---|---|---|
-| the library | `src/byok/` | The interface being designed: `openVault`, lock state, `store`/`read`/`use`/`erase`, storage adapters (`VaultDB`, `DeviceDB`), error kinds. Imported only via `src/byok/index.ts`, its pretend public surface. |
-| scaffolding | `src/scaffold/` | What a host app adapts rather than copies: a fake auth whose Session is the shape auth must supply, the vault-follows-session provider, the `guard()` ask-on-demand flow, the passphrase dialog. |
-| demo jank | `src/demo/` | What only this page needs: localStorage wiring, the lockbox table, the "Pssst" modal, the inspector. |
+| Layer | Where |
+|---|---|
+| the library | the `byok` workspace package (repo root `src/`) |
+| React plumbing | the `byok-react` workspace package (provider, hooks, passphrase dialog) |
+| app scaffolding a host replaces | [src/lib/auth.ts](src/lib/auth.ts) (fake sign-in; a real app brings its own auth and passes `userId` to the provider), [src/lib/stores.ts](src/lib/stores.ts) (localStorage standing in for a backend) |
+| the app itself | [src/components/](src/components/), [src/lib/anthropic.ts](src/lib/anthropic.ts) |
 
-Tests live in `tests/`, mirroring `src/` path for path, and cover the machinery (stub vault,
-stores, adapters, auth scaffold) -- not the React furniture.
+Tests live in `tests/`, mirroring `src/`, and cover the demo's machinery (auth scaffold, whisper
+text handling, the Anthropic request shape via an injected fetch) -- not the React furniture. The
+vault and provider are tested in their own packages.

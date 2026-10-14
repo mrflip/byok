@@ -13,9 +13,11 @@
     "justify": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "byok": "workspace:*",
+    "byok-react": "workspace:*",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "zod": "^4.6.7"
+    "react-dom": "^19.3.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

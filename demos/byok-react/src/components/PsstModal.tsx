@@ -1,6 +1,7 @@
 /**
- * DEMO JANK: what "using" a whisper looks like here. A real app would hand the whisper to an API
- * client inside `vault.use(...)`'s callback; the demo just whispers it back at you.
+ * What the dashboard's "use" button does with a whisper: a real app hands it to an API client
+ * inside `vault.use(...)`'s callback (as the knock-knock machine does); this just whispers it
+ * back at you.
  */
 export const PsstModal = ({ boxlabel, whisperShown, onClose }: { boxlabel: string, whisperShown: string, onClose: () => void }) => (
   <div className="modal-scrim" onClick={onClose}>

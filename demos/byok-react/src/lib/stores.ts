@@ -1,4 +1,4 @@
-import { domStore, localDeviceDB, localVaultDB, memoryStore, type StringStore } from '../byok'
+import { domStore, localDeviceDB, localVaultDB, memoryStore, type StringStore } from 'byok'
 
 /**
  * DEMO JANK: concrete storage wiring. Both "places" live in this browser's localStorage, under
