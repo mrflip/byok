@@ -47,7 +47,7 @@ ruled so the next thread starts from here, not from memory.
 
 * `whisper_schema_version` is an **integer** (ruled). Wider ruling: the VaultDB contract requires
   a backend to store integers up to `Number.MAX_SAFE_INTEGER` (2^53 - 1 -- microseconds since
-  epoch reach it in the year 2255), and byok never asks for more: no 64-bit fields, no BigInt, no
+  epoch reach it in the year 2255), and safebyok never asks for more: no 64-bit fields, no BigInt, no
   polyfill. This covers every numeric field in a record: `passphrase_epoch`,
   `whisper_schema_version`, `expires_at`, future timestamps.
 
@@ -55,12 +55,12 @@ ruled so the next thread starts from here, not from memory.
 
 * **`rememberForMs` is renamed `forcePassphraseReentryHours`** (ruled): the knob's practical
   meaning is "time between makings of the user type their passphrase", so the name says that.
-  Hours, fractions accepted. TODO: the rename (public surface: OpenVaultOpts, byok-react prop,
+  Hours, fractions accepted. TODO: the rename (public surface: OpenVaultOpts, safebyok-react prop,
   demo, tests) rides the expiry thread.
 * Screen-lock locking: the hook already exists -- `vault.lock()` -- and `src/` cannot own DOM
   listeners (it runs where there is no `document`). The recipe is one host line on
   `visibilitychange` (or Chromium's permission-gated Idle Detection API, the only true
-  screen-lock signal). TODO: document the recipe. TODO(not yet, ruled): byok-react grows an
+  screen-lock signal). TODO: document the recipe. TODO(not yet, ruled): safebyok-react grows an
   opt-in `lockWhenHidden` prop, since the client package may touch the DOM.
 
 ## The boundary pattern (repo-wide TODO)

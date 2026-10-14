@@ -1,4 +1,4 @@
-# 2026-10-14: Round two done -- library in src/, byok-react package, knock-knock demo. PR filed.
+# 2026-10-14: Round two done -- library in src/, safebyok-react package, knock-knock demo. PR filed.
 
 All five rulings applied:
 
@@ -8,7 +8,7 @@ All five rulings applied:
 * **Library moved to the root `src/`** and exported from `src/index.ts` -- still the plaintext
   stub, loudly marked in doc blocks and `notes/security.md`. zod came aboard as a regular
   dependency (CLAUDE.md names Zod as the validation choice -- flag if you want it peer).
-* **`packages/byok-react`**: provider (now takes `userId` from the host's auth, no coupling to
+* **`packages/safebyok-react`**: provider (now takes `userId` from the host's auth, no coupling to
   the demo's fake auth), `useVault`/`useVaultSnapshot`, `guard()`, passphrase dialog. Tested with
   testing-library under jsdom (6 tests incl. the unlock-retry and dismissal flows). Source-
   exported, `private: true` until it earns a build. Commit prefix used: `api` -- nothing in the
@@ -21,7 +21,7 @@ All five rulings applied:
   browser-direct (SDK with `dangerouslyAllowBrowser`, by design).
 
 Open questions in `whiteboard/20261014-foundations/demo-interface-notes.md` (zod peer-vs-dep,
-byok-react packaging/prefix, demo's build-first dev loop, whisper strictness).
+safebyok-react packaging/prefix, demo's build-first dev loop, whisper strictness).
 
-Counts: byok 105 tests, byok-react 6, demo 24; root `pnpm justify` and both package justifies
+Counts: safebyok 105 tests, safebyok-react 6, demo 24; root `pnpm justify` and both package justifies
 green.

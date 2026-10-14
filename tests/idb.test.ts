@@ -6,7 +6,7 @@ import { idbDeviceDB, idbVaultDB, inspectIdb } from '../src/idb'
 import { boxOf, bundleOf, scopeOf, unlockOf } from './helpers'
 
 // Each world gets its own database so tests never see each other's rows.
-const freshDbName = () => `byok_test_${crypto.randomUUID().slice(0, 8)}`
+const freshDbName = () => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
 
 describe("idbVaultDB", () => {
   it("declares no per-record limit: IndexedDB has none", () => {

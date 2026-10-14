@@ -4,8 +4,8 @@ Design agreed in chat with the Coach, 2026-10-14. Intent, not yet code.
 
 ## Decisions
 
-* **A Convex component, in its own workspace package**, `packages/byok-convex` (like
-  byok-react). It ships `convex.config` with its own isolated tables, a server class whose
+* **A Convex component, in its own workspace package**, `packages/safebyok-convex` (like
+  safebyok-react). It ships `convex.config` with its own isolated tables, a server class whose
   `.api({ getUserId })` returns the functions the host re-exports from its `convex/` directory,
   and the client `convexVaultDB(client, api)`. `convex` is a peer dependency.
 * **Typed schema columns** that mirror the Zod records field for field, not an opaque blob. A new
@@ -30,9 +30,9 @@ Design agreed in chat with the Coach, 2026-10-14. Intent, not yet code.
 
 ## Tables
 
-`byok_bundles`: the VaultBundle record as-is. Index `by_scope: [user_id, applabel, vaultlabel]`.
+`safebyok_bundles`: the VaultBundle record as-is. Index `by_scope: [user_id, applabel, vaultlabel]`.
 
-`byok_lockboxes`: scope columns (`applabel`, `user_id`, `vaultlabel`) added on write and stripped
+`safebyok_lockboxes`: scope columns (`applabel`, `user_id`, `vaultlabel`) added on write and stripped
 on read, plus the Lockbox record as-is. Index `by_box: [user_id, applabel, vaultlabel, boxlabel]`
 serves both one box (all four) and the vault's boxes (the first three). `note` is omitted, never
 written as `undefined`, which Convex refuses.

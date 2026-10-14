@@ -57,11 +57,11 @@ export const memoryStore = (): StringStore => {
  * tabs, which the demo does not chase).
  *
  * @param webStorage - The Storage to write through, usually `window.localStorage`.
- * @param prefix - Namespace for this store's entries, e.g. 'byok-demo:db:'.
+ * @param prefix - Namespace for this store's entries, e.g. 'safebyok-demo:db:'.
  *
  * @example
- *   const dbStore = domStore(localStorage, 'byok-demo:db:')
- *   dbStore.write('vault:acme:u1:main', text)   // lands at 'byok-demo:db:vault:acme:u1:main'
+ *   const dbStore = domStore(localStorage, 'safebyok-demo:db:')
+ *   dbStore.write('vault:acme:u1:main', text)   // lands at 'safebyok-demo:db:vault:acme:u1:main'
  */
 export const domStore = (webStorage: Storage, prefix: string): StringStore => {
   const bell = makeBell()

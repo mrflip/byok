@@ -1,6 +1,6 @@
-# 2026-10-14: byok-react demo up -- interface sketched, four questions
+# 2026-10-14: safebyok-react demo up -- interface sketched, four questions
 
-Built `demos/byok-react/`: a private workspace package with a single-page playground for the
+Built `demos/safebyok-react/`: a private workspace package with a single-page playground for the
 interface. Stub vault (plaintext, loudly marked), fake sign-in, lockbox CRUD + "use" with
 ask-for-passphrase-on-demand (remembered 7 days), and an inspector showing the pretend-backend
 rows and device rows as distinct stores. 86 vitest tests on the machinery; no playwright.

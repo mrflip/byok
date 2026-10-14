@@ -1,13 +1,13 @@
 # 2026-10-14: Convex adapter designed; whisper cap in PR #7 -- nothing waiting on you
 
 Two PRs, stacked: #7 (`20261014-whisper-cap`) on #6, then #8 (`20261014-convex`) on #7. Each was
-built in its own worktree (`/workspace/byok-whisper-cap`, `/workspace/byok-convex`), so the
-agent in `/workspace/byok` was undisturbed.
+built in its own worktree (`/workspace/safebyok-whisper-cap`, `/workspace/safebyok-convex`), so the
+agent in `/workspace/safebyok` was undisturbed.
 
 * **#7**: `openVault({ maxWhisperBytes })`, default `MaxWhisperBytes = 40_444`, checked on write
   only; every VaultDB declares `maxRecordBytes`, and openVault refuses a `maxWhisperBytes` over half
   of it; `VaultProvider` passes every openVault option through as given.
-* **#8**: the Convex design (`whiteboard/20261014-convex/design.md`), the `byok-convex` package
+* **#8**: the Convex design (`whiteboard/20261014-convex/design.md`), the `safebyok-convex` package
   scaffold (dependencies only), and TODOs.
 
 ## Settled in chat

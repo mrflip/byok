@@ -96,7 +96,7 @@ const cryptoKeyHandle = Z.custom<CryptoKey>((val) => val instanceof CryptoKey, '
  * plain JSON -- any backend that can hold text can hold it.
  */
 export const Lockbox = Z.object({
-  format:              Z.literal('byok-lockbox-v1'),
+  format:              Z.literal('safebyok-lockbox-v1'),
   boxlabel:            Label,
   revision_id:         Z.string().min(1),
   /** This lockbox's lockboxKey, wrapped under the vaultKey. */
@@ -127,7 +127,7 @@ export type LockboxSummary = Z.infer<typeof LockboxSummary>
  * unlocks know to ask again.
  */
 export const VaultBundle = Z.object({
-  format:              Z.literal('byok-vault-v1'),
+  format:              Z.literal('safebyok-vault-v1'),
   applabel:            Label,
   user_id:             Z.string().min(1),
   vaultlabel:          Label,
@@ -151,7 +151,7 @@ export type VaultBundle = Z.infer<typeof VaultBundle>
  * it has no JSON form, and nothing in it ever goes to the backend.
  */
 export const DeviceUnlock = Z.object({
-  format:           Z.literal('byok-unlock-v1'),
+  format:           Z.literal('safebyok-unlock-v1'),
   applabel:         Label,
   user_id:          Z.string().min(1),
   vaultlabel:       Label,

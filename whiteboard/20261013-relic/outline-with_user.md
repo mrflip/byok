@@ -1,4 +1,4 @@
-# byok and the signed-in user
+# safebyok and the signed-in user
 
 Rewritten (2026-10-14, crypto thread). The original was a chat answer to the question *"is the
 vault tied well enough to the authentication of the user?"* — the answer was no, and its one
@@ -17,7 +17,7 @@ What the scope touches, everywhere:
   database. The user_id is a binding value, not a secret.
 * **The backend still authorizes.** An adapter is expected to let a signed-in user reach only
   their own rows, deriving identity server-side (Convex: `ctx.auth`), never trusting a
-  client-supplied user_id. byok's encryption protects contents; the backend's authorization
+  client-supplied user_id. safebyok's encryption protects contents; the backend's authorization
   decides who can fetch or overwrite rows at all.
 
 Sign-out and account switches are the host's call, with the pieces provided: `vault.lock()`

@@ -1,6 +1,6 @@
 # Security Policy
 
-byok holds people's secrets, so we treat a report about it as the most important thing in the
+safebyok holds people's secrets, so we treat a report about it as the most important thing in the
 queue. Thank you for taking the time.
 
 ## Reporting a vulnerability
@@ -13,7 +13,7 @@ Include what you can of:
 
 * what an attacker can learn or do, and what they need first (access to the database? to the
   page? to the device?);
-* the version of byok, and the platform (browser, Node, React Native) where you saw it;
+* the version of safebyok, and the platform (browser, Node, React Native) where you saw it;
 * steps or a proof of concept. Please use made-up secrets, never a real API key.
 
 We aim to acknowledge a report within a week, and to agree on a disclosure date with you once we
@@ -25,7 +25,7 @@ Until 1.0, only the latest published version receives security fixes.
 
 ## What we consider in scope
 
-byok's promise is that **whoever holds the application's database, server code and environment
+safebyok's promise is that **whoever holds the application's database, server code and environment
 cannot read a user's secrets**, and cannot alter them without the change being detected. Anything
 that breaks that promise is in scope, for example:
 
@@ -38,11 +38,11 @@ that breaks that promise is in scope, for example:
 * weak or predictable randomness, or a key derivation weaker than the published keyDeriverSpec;
 * a published package whose contents do not match this repository's source.
 
-## What is outside byok's protection
+## What is outside safebyok's protection
 
 These are real risks, but no library running inside the page can defend against them:
 
-* **Code running in the same page or app as byok** -- a cross-site scripting hole in the host
+* **Code running in the same page or app as safebyok** -- a cross-site scripting hole in the host
   application, a malicious browser extension, a compromised dependency of the host app -- can
   read secrets once a vault is unlocked.
 * **A compromised device** (malware, a keylogger capturing the passphrase).

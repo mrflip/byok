@@ -1,9 +1,9 @@
 {
-  "name": "byok",
+  "name": "safebyok",
   "version": "0.0.0",
   "description": "Bring-your-own-key vault: end-to-end encrypted, browser-side storage for API keys and other small secrets, over a pluggable database layer",
   "keywords": [
-    "byok",
+    "safebyok",
     "vault",
     "e2ee",
     "end-to-end-encryption",
@@ -14,13 +14,13 @@
   ],
   "license": "Apache-2.0",
   "author": "Philip (flip) Kromer <flip@mrflip.com>",
-  "homepage": "https://github.com/mrflip/byok#readme",
+  "homepage": "https://github.com/mrflip/safebyok#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mrflip/byok.git"
+    "url": "git+https://github.com/mrflip/safebyok.git"
   },
   "bugs": {
-    "url": "https://github.com/mrflip/byok/issues"
+    "url": "https://github.com/mrflip/safebyok/issues"
   },
   "type": "module",
   "sideEffects": false,
@@ -40,7 +40,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "justify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "demo:react": "pnpm build && pnpm --filter byok-demo-react dev",
+    "demo:react": "pnpm build && pnpm --filter safebyok-demo-react dev",
     "prepublishOnly": "pnpm justify",
     "newb": "scripts/newb"
   },

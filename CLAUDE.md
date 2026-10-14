@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project status
 
-**byok** is a standalone npm package, written in TypeScript: an end-to-end encrypted vault for
+**safebyok** is a standalone npm package, written in TypeScript: an end-to-end encrypted vault for
 API keys and other small secrets that users bring to a browser app. Secrets are encrypted on the
 user's device under keys that never leave it, and are synchronized between devices through a
 storage layer the host application plugs in. The backend only ever holds ciphertext.
@@ -26,7 +26,7 @@ If a guardrail looks wrong for the case at hand, say so and propose the alternat
 quietly route around it, and do not treat a convention you find inconvenient as optional.
 
 When you report on a PR, branch or commit in chat or in `human/`, link it in full the first time
-each message names it (`[#12](https://github.com/mrflip/byok/pull/12)`): the Coach often reads
+each message names it (`[#12](https://github.com/mrflip/safebyok/pull/12)`): the Coach often reads
 from a phone, where a bare `#12` goes nowhere.
 
 ## Philosophy and Values
@@ -108,7 +108,7 @@ pnpm build           # tsdown: ESM + CJS + declarations into dist/, checked by p
   consumer unless it is its own entry in `tsdown.config.ts`.
 * `tests/` mirrors `src/` path for path: `src/foo/bar.ts` is tested in `tests/foo/bar.test.ts`.
   `fixtures/` holds sample data, when there is some.
-* `packages/` -- companion workspace packages (`byok-react`, the React binding). Each lints,
+* `packages/` -- companion workspace packages (`safebyok-react`, the React binding). Each lints,
   typechecks and tests itself (`pnpm justify` inside it); the root justify does not cover them.
 * `demos/` -- private playground apps exercising the packages; never published.
 * `dist/` is built, never committed.

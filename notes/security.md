@@ -33,7 +33,7 @@ security expert who knows what questions to ask.
 * 2026-10-14: a wrong passphrase is learned from the vaultKey envelope's AEAD failure, never a
   comparison; there is no separate passphrase verifier field.
 * 2026-10-14: the localUnlockKey is a non-extractable WebCrypto key persisted only by structured
-  clone (IndexedDB, `byok/idb`); the vaultKey handle a vault holds between operations is also
+  clone (IndexedDB, `safebyok/idb`); the vaultKey handle a vault holds between operations is also
   non-extractable. The operations that must wrap the vaultKey (device-remember at unlock, the
   re-wrap in changePassphrase) unwrap a separate extractable transient from the same envelope and
   drop it on return; the remembered-unlock path makes no extractable handle at all.
@@ -46,7 +46,7 @@ security expert who knows what questions to ask.
 * 2026-10-14: `safe-stable-stringify` is a runtime dependency: `stableJsonify`
   (`src/stable-jsonify.ts`) is a thin alias of it, backing snapshot change detection.
 * 2026-10-14: `zod` moved from a regular dependency to a peer dependency (`^4.0.0`): the host app
-  supplies it, so byok validates with whatever zod instance that app ships.
+  supplies it, so safebyok validates with whatever zod instance that app ships.
 * 2026-10-14: storage writes are last-writer-wins: a concurrent write to the same lockbox or
   bundle silently buries the earlier one. A `versionedUpdate` (save only if the standing
   `revision_id` / `passphrase_epoch` is the one the writer read) is planned; until the IndexedDB
@@ -57,7 +57,7 @@ security expert who knows what questions to ask.
   `openVault` option defaulting to `MaxWhisperBytes` (40444), checked on write only.
 * 2026-10-14: `changePassphrase` re-wraps the vaultKey under the new passphrase but does not
   rotate it, so a superseded bundle plus its old passphrase still yields the current vaultKey,
-  with no expiry. The Convex adapter (`packages/byok-convex`) keeps no bundle history, but
+  with no expiry. The Convex adapter (`packages/safebyok-convex`) keeps no bundle history, but
   Convex's own backups and snapshot exports retain superseded bundles for as long as they are
   kept.
 * 2026-10-14: `pnpm-workspace.yaml` denies `esbuild`'s install script (`esbuild: false`); esbuild
@@ -72,3 +72,8 @@ security expert who knows what questions to ask.
   windows. It is client-side politeness, not a vault-wide synced policy: nothing stored enforces
   it across devices, and a modified client could choose any window it likes. The real bounds
   stay the passphrase and the device-bound localUnlockKey.
+* 2026-10-14: the package was renamed `byok` → `safebyok` before any release, and its stored
+  format tags with it (`safebyok-vault-v1`, `safebyok-lockbox-v1`, `safebyok-unlock-v1`). The
+  tags are also the first element of every encryption's additional data, so a record written
+  under a `byok-*-v1` tag would neither validate nor decrypt. No reader for the old tags is
+  kept: they existed only in development and demo storage, never in a published version.

@@ -1,6 +1,6 @@
-# 2026-10-14: byok-react demo -- interface decisions and open questions
+# 2026-10-14: safebyok-react demo -- interface decisions and open questions
 
-The demo at `demos/byok-demo-react/` exists to settle the package's interface. This note records what
+The demo at `demos/safebyok-demo-react/` exists to settle the package's interface. This note records what
 it proposes, where it deliberately departs from the 20261013-relic sketch, and what remains open.
 
 ## Vocabulary adopted
@@ -16,14 +16,14 @@ it proposes, where it deliberately departs from the 20261013-relic sketch, and w
 2-64 chars. Note that rule refuses hyphens -- `anthropic-prod` from the relic sketch would be
 refused. Worth a second look.
 
-## Interface proposed by the stub (`demos/byok-react/src/byok/`)
+## Interface proposed by the stub (`demos/safebyok-react/src/safebyok/`)
 
 * `openVault(opts) -> Vault`: settles into `absent | locked | unlocked` without prompting.
   Prompting is the host's job, and only when a whisper is actually wanted.
 * React-friendliness per CLAUDE.md: `subscribe(listener) -> unsubscribe`, `getSnapshot()` with
   identity kept until something changes. No React import anywhere in the library layer.
 * Whisper ops: `store`, `read`, `use(boxlabel, callback)`, `erase`; all require unlocked and
-  throw `VaultError` kind `vault_locked` otherwise. The host wraps them in byok-react's
+  throw `VaultError` kind `vault_locked` otherwise. The host wraps them in safebyok-react's
   `withUnlockedVault()` (né `guard()`), which prompts and retries.
 * First `unlock()` on an absent vault creates it. The UI knows to say "choose a passphrase"
   because the snapshot said `absent`.
@@ -62,19 +62,19 @@ refused. Worth a second look.
    `anthropic_api_key` yes; `ANTHROPIC_API_KEY` no.
 3. `demos:` prefix added to PROCESS.md.
 4. **The library lives in the root `src/`** (still plaintext, loudly marked), exported as the
-   package surface; the demo imports the `byok` workspace package. **React plumbing lives in
-   `packages/byok-react`** (provider, hooks, passphrase dialog), source-exported while the
+   package surface; the demo imports the `safebyok` workspace package. **React plumbing lives in
+   `packages/safebyok-react`** (provider, hooks, passphrase dialog), source-exported while the
    interface settles.
 5. `TODO.md`: "use stable jsonify" -- done as `src/stable-jsonify.ts` (hand-rolled, 12 lines),
    used for snapshot change detection.
 
 ## Open questions, second round
 
-1. **zod placement**: now a regular `dependency` of byok (CLAUDE.md names Zod as the validation
+1. **zod placement**: now a regular `dependency` of safebyok (CLAUDE.md names Zod as the validation
    choice). Prefer it as a peer instead?
 2. **Whisper strictness** (carried over): refusing what JSON would mangle (Date, Map, undefined)
    rather than silently flattening. Right call?
-3. **byok-react packaging**: currently `private: true` with `exports` pointing at TS source;
+3. **safebyok-react packaging**: currently `private: true` with `exports` pointing at TS source;
    gets a tsdown build + publint/attw when it heads to npm. Commit prefix used for it: `api`
    (no better row in PROCESS.md's table -- bless or rename).
 4. ~~Demo needs `pnpm build` at the root first~~ -- answered third pass: yes, build first, and
@@ -87,11 +87,11 @@ refused. Worth a second look.
    utilities get an npm search and a named candidate first, every time; "it's only a dozen
    lines" argues *for* the proven package. The hand-roll is gone -- `stableJsonify` is now a
    thin alias of `safe-stable-stringify` (runtime dependency, named by the Coach).
-2. **Demo renamed `byok-demo-react`** (`demos/byok-demo-react/`); its edits take the `demo:`
+2. **Demo renamed `safebyok-demo-react`** (`demos/safebyok-demo-react/`); its edits take the `demo:`
    commit prefix (PROCESS.md row renamed from `demos`).
-3. **`pnpm demo:react`** at the root builds byok, then starts the demo.
+3. **`pnpm demo:react`** at the root builds safebyok, then starts the demo.
 4. **React lint stack** installed where JSX lives: react, react-hooks and jsx-a11y in the demo
-   (plus react-refresh, it being a Vite app) and in `packages/byok-react`; every finding
+   (plus react-refresh, it being a Vite app) and in `packages/safebyok-react`; every finding
    corrected.
 5. **History rewritten** into logical commits (docs / api / api / demo) and force-pushed with
    lease to PR #3.
@@ -107,7 +107,7 @@ refused. Worth a second look.
 ## Coach rulings (2026-10-14, fourth pass)
 
 1. **`withUnlockedVault`**, né `guard` ("Yes!" to the agent's recommendation over
-   `vaultUnlockingHandler`): renamed across byok-react, its tests, the demo, and these notes.
+   `vaultUnlockingHandler`): renamed across safebyok-react, its tests, the demo, and these notes.
 2. **A whisper is never a bare `null`.** `Whisper` is now `Exclude<WhisperJson, null>` (the
    recursive JSON type is exported as `WhisperJson`; null stays legal inside structures), the
    validator refuses a top-level null, and `bad_whisper` says so. Simplifications collected:
@@ -116,7 +116,7 @@ refused. Worth a second look.
 3. **Null-as-sentinel audit** (Coach: prefer `Symbol.for` where null does double duty; React's
    null-means-dismissed is standard practice and stays). Findings:
    * `vault.ts`'s `bundle` used `null` for both "backend not read yet" and "backend says no
-     bundle" -- the one real double duty. Now `Symbol.for('byok.unread_bundle')` marks the
+     bundle" -- the one real double duty. Now `Symbol.for('safebyok.unread_bundle')` marks the
      unread state, and `vaultState()` derives `'opening'` instead of a hand-built first
      snapshot. `Symbol.for` rather than `Symbol` so the ESM and CJS builds share the value.
    * The storage reads (`readBundle`, `readBox`, `readUnlock`, `StringStore.read`) keep

@@ -1,7 +1,7 @@
 /**
- * byok's public surface: an end-to-end encrypted vault for API keys and other small secrets.
+ * safebyok's public surface: an end-to-end encrypted vault for API keys and other small secrets.
  * Whispers are encrypted on the user's device under keys that never leave it; the storage layer
- * holds ciphertext only. The IndexedDB adapters live in their own entry point, `byok/idb`.
+ * holds ciphertext only. The IndexedDB adapters live in their own entry point, `safebyok/idb`.
  */
 export { Argon2idWebV1, argon2idWebV1Deriver } from './key-deriver'
 export type { KeyDeriver, KeyDeriverSpec } from './key-deriver'

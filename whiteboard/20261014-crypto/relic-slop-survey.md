@@ -44,7 +44,7 @@ rewrite landed.
     DeviceUnlock record, scope-keyed.
 15. Invented `vaultManager.handleSignedOut()` / `destroyRemoteVault({ confirmation })` APIs →
     sign-out is `lock()` + `deviceDB.eraseAll()`; destruction is `destroy()`.
-16. Install section taught apps to install byok's internals directly, under a wrong package name.
+16. Install section taught apps to install safebyok's internals directly, under a wrong package name.
 
 ## Low — redundancy and padding
 
@@ -57,7 +57,7 @@ rewrite landed.
     limitations and the two real CSP facts kept.
 22. Unused machinery (KeyBytesSchema; `allowExtractableDeviceCache`, whose name contradicted its
     own doc) cut.
-23. "BYOKVault" naming throughout → byok / `Vault` / `openVault`. (The root README still says
+23. "BYOKVault" naming throughout → safebyok / `Vault` / `openVault`. (The root README still says
     BYOKVault — fixed this thread.)
 24. `isVaultError` was used but never defined → real helper documented.
 

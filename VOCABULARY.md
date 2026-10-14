@@ -1,22 +1,22 @@
 # Vocabulary
 
-byok names each thing once, in plain words, and uses that one name in its API, its docs, its
+safebyok names each thing once, in plain words, and uses that one name in its API, its docs, its
 stored records and its code. This page is the cast. You don't need to know any cryptography to
-use byok; if you do, the last column of each table gives the usual term.
+use safebyok; if you do, the last column of each table gives the usual term.
 
 ## What you handle
 
 | Name           | What it is                                                                                                                                                                                     |
 | -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **whisper**    | The secret you store: any JSON value (a string, number, boolean, array or plain object), such as an API key or `{ apiKey, orgId }`. byok never looks inside it.                                |
+| **whisper**    | The secret you store: any JSON value (a string, number, boolean, array or plain object), such as an API key or `{ apiKey, orgId }`. safebyok never looks inside it.                                |
 | **lockbox**    | Holds one whisper, encrypted, together with its `boxlabel` and a public note your UI may show while the vault is locked.                                                                       |
 | **vault**      | One user's set of lockboxes, named by your app's `applabel`, the signed-in user, and its own `vaultlabel`.                                                                                     |
-| **passphrase** | What the user types to unlock their vault. It is not their login password, and byok never stores it or sends it anywhere.                                                                      |
-| **mask**       | A function from `byok/utils` that hides all but a few characters of a string, so your UI can show which API key a lockbox holds without revealing it. Its result is public: show it, never trust it to hide more than it does. byok offers a careful one and a stars-only one, or you can plug in your own. |
+| **passphrase** | What the user types to unlock their vault. It is not their login password, and safebyok never stores it or sends it anywhere.                                                                      |
+| **mask**       | A function from `safebyok/utils` that hides all but a few characters of a string, so your UI can show which API key a lockbox holds without revealing it. Its result is public: show it, never trust it to hide more than it does. safebyok offers a careful one and a stars-only one, or you can plug in your own. |
 
 ## Keys
 
-byok has four keys. Each is a 256-bit AES-GCM key, named for whose it is, and none ever leaves the
+safebyok has four keys. Each is a 256-bit AES-GCM key, named for whose it is, and none ever leaves the
 user's device unencrypted. There are no public or private keys: everything is symmetric.
 
 | Name               | What it is                                                                                                                                                         | Standard term                       |
@@ -40,7 +40,7 @@ lockboxKey      ciphers  whisper     →  whisperCiphered             one per lo
 ## Encrypted forms
 
 A key that has been encrypted is **Wrapped**; a whisper that has been encrypted is **Ciphered**.
-Each is a pair: its cipherIv and its ciphertext. byok exports the pair's one shape as the
+Each is a pair: its cipherIv and its ciphertext. safebyok exports the pair's one shape as the
 **`Ciphered`** type -- `{ cipher_iv_b64, ciphertext_b64 }`, each half base64url text (the `_b64`
 suffix) -- so every encrypted field in a stored record is plain JSON any storage layer can hold
 as-is.
@@ -74,16 +74,16 @@ wrong or has been tampered with, decryption fails.
 
 | Name             | What it is                                                                                                              |
 | ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| **API key**      | A user's credential for some other service, and the usual thing a whisper holds. byok never names or inspects it.      |
+| **API key**      | A user's credential for some other service, and the usual thing a whisper holds. safebyok never names or inspects it.      |
 | **access token** | Your app's own login credential, which your storage adapter may send to your backend. It never goes into a vault.       |
 
-## Words byok does not use
+## Words safebyok does not use
 
 * **key, alone.** A key is always one of the four above, by name. An entry's name in a map or a
   storage address is a `ckey`.
 * **data, contents, payload.** The secret is a whisper; encrypted, it is a whisperCiphered.
 * **device key.** The key behind "remember this device" is the localUnlockKey.
-* **KEK, DEK, KDF, AAD.** They appear above only so a security reviewer can map byok's names onto
-  the usual ones. Nothing in byok's API asks you to learn them.
+* **KEK, DEK, KDF, AAD.** They appear above only so a security reviewer can map safebyok's names onto
+  the usual ones. Nothing in safebyok's API asks you to learn them.
 
 Stored records spell every name in underbar_case: `whisper_ciphered`, `key_deriver_label`.

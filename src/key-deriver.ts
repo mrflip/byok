@@ -26,7 +26,7 @@ export const Argon2idWebV1 = Object.freeze({
 export type KeyDeriverSpec = typeof Argon2idWebV1
 
 /**
- * What turns a passphrase into passphraseKey bytes. The one byok ships -- and the one to use --
+ * What turns a passphrase into passphraseKey bytes. The one safebyok ships -- and the one to use --
  * is {@link argon2idWebV1Deriver}; the seam exists so tests can substitute a cheap deriver, and
  * so a host on a platform with a stronger native implementation can plug it in without waiting
  * on this package.

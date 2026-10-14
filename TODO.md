@@ -3,7 +3,7 @@
 ## Soonish
 
 Add the convex skill to the appropriate place, **scoped** to only that directory
-(`packages/byok-convex/`), and with only the files likely to be relevant.
+(`packages/safebyok-convex/`), and with only the files likely to be relevant.
 
 A pad/unpad helper, so a lockbox's ciphertext length stops telling the backend what kind of
 whisper it holds (an API key from a PEM). Padding goes inside the encryption, by a published
@@ -19,7 +19,7 @@ whitespace, which every existing reader already ignores?
 
 Two families of VaultError, told apart by kind, so each reaches the right person. **Misuse** is
 the developer's to fix and should be loud: `bad_option`, `bad_whisper`, `vault_closed`,
-`unknown_key_deriver`, and `bad_label` for the labels the app chooses. byok-react rethrows it
+`unknown_key_deriver`, and `bad_label` for the labels the app chooses. safebyok-react rethrows it
 during render, so an error boundary and the dev overlay show it (today `VaultProvider` drops an
 `openVault` rejection on the floor). **Conditions** are the app's to handle and may reach the user:
 `vault_locked`, `wrong_passphrase`, `absent_box`, `stale_write`, storage trouble, and
@@ -30,19 +30,19 @@ caller and a condition in another (a boxlabel the user typed).
 A pluggable stringifier: how a whisper becomes bytes and back (today `stableJsonify` and
 `JSON.parse`), so a host can store values JSON cannot carry.
 
-Tree-shakability: an app that imports one thing from byok bundles only what that thing uses.
+Tree-shakability: an app that imports one thing from safebyok bundles only what that thing uses.
 `sideEffects: false`, no work at module top level, and a check in CI that keeps it so.
 
 Use stable jsonify
 
-export a treeshakeable byok/utils, with a function
+export a treeshakeable safebyok/utils, with a function
 `mask(whisper, { head = 2, tail = 4, minStars: 6, maxLen: 15 })`: it replaces all but the first `actualHead` and last `actualTail` characters with '*'; if length is less than minStars + tail + head, remove stars (first from head, then from tail). above maxLen, it will insert `'***...***'` between head and tail. Decide if the interface should be maxLen or maxStars. mask should, first, remove all control characters (including newline, cr or tab)
 
 ## NOT YET
 Reasonable tasks that we do not plan to do in the near term. Do not anticipate them in your implementation.
 
 * Recovery keys
-* A blob helper, for secrets too large to be a whisper: a lockbox holds the key, and byok's own
+* A blob helper, for secrets too large to be a whisper: a lockbox holds the key, and safebyok's own
   vetted, context-bound encryption seals the blob into a separate pluggable blob store (its own
   interface beside VaultDB), so no host app hand-rolls encryption with a key taken out of a vault.
 

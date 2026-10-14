@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in byok. It is a small library that holds people's secrets, so it moves
+Thanks for your interest in safebyok. It is a small library that holds people's secrets, so it moves
 carefully: please open an issue to talk over anything larger than a fix before you write it.
 
 **Found a security problem?** Don't open an issue: see [SECURITY.md](SECURITY.md).
@@ -24,7 +24,7 @@ pnpm test:watch
 * **A doc block** on everything exported, written for the developer calling it.
 * **A branch rebased onto `main`**, with no merge commits in it: CI refuses them.
 * **No new runtime dependency** without discussing it first: every one ships to every app that
-  installs byok.
+  installs safebyok.
 
 How we write the code -- names, braces, quotes, doc blocks, tests -- is in
 [STYLE.md](STYLE.md); how work is organized, committed and released is in
@@ -33,5 +33,5 @@ How we write the code -- names, braces, quotes, doc blocks, tests -- is in
 
 ## License
 
-byok is licensed under the [Apache License 2.0](LICENSE). By contributing, you agree that your
+safebyok is licensed under the [Apache License 2.0](LICENSE). By contributing, you agree that your
 contribution is licensed under it too.
