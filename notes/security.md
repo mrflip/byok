@@ -45,3 +45,8 @@ security expert who knows what questions to ask.
   (`src/stable-jsonify.ts`) is a thin alias of it, backing snapshot change detection.
 * 2026-10-14: `zod` moved from a regular dependency to a peer dependency (`^4.0.0`): the host app
   supplies it, so byok validates with whatever zod instance that app ships.
+* 2026-10-14: storage writes are last-writer-wins: a concurrent write to the same lockbox or
+  bundle silently buries the earlier one. A `versionedUpdate` (save only if the standing
+  `revision_id` / `passphrase_epoch` is the one the writer read) is planned; until the IndexedDB
+  adapter performs it inside a single IndexedDB transaction, its check-then-save has a small
+  window in which the race survives.
