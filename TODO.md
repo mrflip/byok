@@ -2,6 +2,9 @@
 
 ## Soonish
 
+Add the convex skill to the appropriate place, **scoped** to only that directory
+(`packages/byok-convex/`), and with only the files likely to be relevant.
+
 Use stable jsonify
 
 export a treeshakeable byok/utils, with a function

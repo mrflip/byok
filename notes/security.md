@@ -55,3 +55,10 @@ security expert who knows what questions to ask.
 * 2026-10-14: a lockbox's ciphertext length reveals its whisper's length to the backend: there is
   no padding yet (TODO). `store()` refuses a whisper over `maxWhisperBytes` of JSON, an
   `openVault` option defaulting to `MaxWhisperBytes` (40444), checked on write only.
+* 2026-10-14: `changePassphrase` re-wraps the vaultKey under the new passphrase but does not
+  rotate it, so a superseded bundle plus its old passphrase still yields the current vaultKey,
+  with no expiry. The Convex adapter (`packages/byok-convex`) keeps no bundle history, but
+  Convex's own backups and snapshot exports retain superseded bundles for as long as they are
+  kept.
+* 2026-10-14: `pnpm-workspace.yaml` denies `esbuild`'s install script (`esbuild: false`); esbuild
+  arrives with `convex` and vite, and runs from its platform binary package without it.
