@@ -147,3 +147,10 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Claude Code: agents' worktrees and per-person settings
+.claude/worktrees/
+.claude/settings.local.json
+
+# macOS
+.DS_Store
