@@ -1,11 +1,5 @@
 import * as Z from 'zod'
-
-/**
- * ⚠️ The package is at the STUB stage, for interface design: vaults store whispers and
- * passphrases in PLAINTEXT so the demo app's inspector can show where each piece of data lives.
- * The finished package encrypts on-device and hands its storage layer ciphertext only. Nothing
- * here ships to npm before the cryptography lands underneath this interface.
- */
+import { Ciphered } from './crypto'
 
 /**
  * The JSON a whisper is made of. `null` is legal here -- inside an array or object -- because
@@ -87,58 +81,89 @@ export const VaultScope = Z.object({
 })
 export type VaultScope = Z.infer<typeof VaultScope>
 
+/** A WebCrypto key handle, as a record holds one. Never bytes: a handle, and nothing but. */
+const cryptoKeyHandle = Z.custom<CryptoKey>((val) => val instanceof CryptoKey, 'a CryptoKey handle')
+
 /**
- * One secret and its public shell: the whisper, the label that names it, and metadata the UI may
- * show while the vault is locked. Everything here but `whisper` is public.
+ * One lockbox as the storage layer holds it: the whisper ciphered under its own lockboxKey, that
+ * lockboxKey wrapped under the vaultKey, and the public shell -- boxlabel, note, timestamps --
+ * a locked vault may show. Nothing in this record opens without the vaultKey.
  *
- * Stored fields are underbar_case: this record is written to the storage layer as-is.
+ * `revision_id` is minted fresh on every write and bound into both encryptions, so ciphertext
+ * moved between revisions (or boxes, or vaults) refuses to open.
+ *
+ * Stored fields are underbar_case: this record is written to the storage layer as-is, and it is
+ * plain JSON -- any backend that can hold text can hold it.
  */
 export const Lockbox = Z.object({
-  boxlabel:   Label,
-  /** ⚠️ Stored in plaintext by this stub; ciphertext in the real package. */
-  whisper:    Whisper,
+  format:              Z.literal('byok-lockbox-v1'),
+  boxlabel:            Label,
+  revision_id:         Z.string().min(1),
+  /** This lockbox's lockboxKey, wrapped under the vaultKey. */
+  lockbox_key_wrapped: Ciphered,
+  /** The whisper, ciphered under this lockbox's lockboxKey. */
+  whisper_ciphered:    Ciphered,
   /** Public note shown beside the lockbox while locked. Never put secret material here. */
-  note:       Z.string().max(256).optional(),
-  created_at: Z.string(),
-  updated_at: Z.string(),
+  note:                Z.string().max(256).optional(),
+  created_at:          Z.string(),
+  updated_at:          Z.string(),
 })
 export type Lockbox = Z.infer<typeof Lockbox>
 
 /**
- * The public face of a lockbox: everything but the whisper. This is what `list()` returns and
- * what a locked vault may show.
+ * The public face of a lockbox: everything but its two encrypted fields. This is what `list()`
+ * returns and what a locked vault may show.
  */
-export const LockboxSummary = Lockbox.omit({ whisper: true })
+export const LockboxSummary = Lockbox.omit({ format: true, lockbox_key_wrapped: true, whisper_ciphered: true })
 export type LockboxSummary = Z.infer<typeof LockboxSummary>
 
 /**
- * The per-vault record the storage layer holds so a device can unlock the vault. In the real
- * package this carries the passphraseSalt and the vaultKeyPassphraseWrapped;
- * here it carries the passphrase itself, in the open, so the inspector can show the slot.
+ * The per-vault record the storage layer holds so any device can unlock the vault: the
+ * passphraseSalt, the keyDeriverLabel saying how the passphraseKey is made, and the vaultKey
+ * wrapped under that passphraseKey. All of it is safe in the open; none of it opens without
+ * the passphrase.
+ *
+ * `passphrase_epoch` goes up by one on every passphrase change, so other devices and remembered
+ * unlocks know to ask again.
  */
 export const VaultBundle = Z.object({
-  format:          Z.literal('byok-stub-vault-v0'),
-  applabel:        Label,
-  user_id:         Z.string().min(1),
-  vaultlabel:      Label,
-  /** ⚠️ STUB ONLY: the real package stores a passphraseSalt and a vaultKeyPassphraseWrapped, never this. */
-  stub_passphrase: Z.string(),
-  created_at:      Z.string(),
+  format:              Z.literal('byok-vault-v1'),
+  applabel:            Label,
+  user_id:             Z.string().min(1),
+  vaultlabel:          Label,
+  /** Random id minted when the vault is made, and never changed; bound into every encryption. */
+  vault_id:            Z.string().min(1),
+  passphrase_epoch:    Z.number().int().positive(),
+  /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, as stored vaults self-describe. */
+  key_deriver_label:   Z.string().min(1),
+  passphrase_salt_b64: Z.string().min(1),
+  /** The vaultKey, wrapped under the passphraseKey: decrypting this IS the passphrase check. */
+  vault_key_passphrase_wrapped: Ciphered,
+  created_at:          Z.string(),
+  updated_at:          Z.string(),
 })
 export type VaultBundle = Z.infer<typeof VaultBundle>
 
 /**
- * The device-local record of a remembered unlock. In the real package this carries the
- * vaultKeyLocalWrapped: the vaultKey, wrapped under this browser's localUnlockKey. In the stub
- * there is no key material at all, only the expiry.
+ * The device-local record of a remembered unlock: this browser's localUnlockKey (a
+ * non-extractable handle -- it cannot leave the device even through the code that made it) and
+ * the vaultKey wrapped under it. Held only by structured-clone storage (IndexedDB) or memory;
+ * it has no JSON form, and nothing in it ever goes to the backend.
  */
 export const DeviceUnlock = Z.object({
-  format:     Z.literal('byok-stub-unlock-v0'),
-  applabel:   Label,
-  user_id:    Z.string().min(1),
-  vaultlabel: Label,
+  format:           Z.literal('byok-unlock-v1'),
+  applabel:         Label,
+  user_id:          Z.string().min(1),
+  vaultlabel:       Label,
+  vault_id:         Z.string().min(1),
+  /** The bundle's passphrase_epoch when this unlock was remembered; a mismatch voids it. */
+  passphrase_epoch: Z.number().int().positive(),
+  /** This browser's localUnlockKey: non-extractable, usable only to unwrap what it wrapped. */
+  local_unlock_key: cryptoKeyHandle,
+  /** The vaultKey, wrapped under the localUnlockKey. */
+  vault_key_local_wrapped: Ciphered,
   /** Epoch milliseconds after which the remembered unlock no longer counts. */
-  expires_at: Z.number(),
+  expires_at:       Z.number(),
 })
 export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 

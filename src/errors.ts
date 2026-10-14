@@ -1,11 +1,14 @@
 /** Every way a vault call can refuse, as a caller branches on them. */
 export const VaultErrorKindVals = [
-  'vault_locked',     // a whisper was asked for before the vault was unlocked
-  'wrong_passphrase', // the passphrase given did not unlock the vault
-  'absent_box',       // no lockbox under that label
-  'bad_label',        // a label that does not meet the Label rules
-  'bad_whisper',      // a whisper JSON cannot carry (undefined, a function, a class instance)
-  'vault_closed',     // the vault handle was closed and cannot be used again
+  'vault_locked',        // a whisper was asked for before the vault was unlocked
+  'wrong_passphrase',    // the passphrase given did not unlock the vault
+  'absent_box',          // no lockbox under that label
+  'absent_vault',        // the vault has never been created, and this call will not create it
+  'bad_label',           // a label that does not meet the Label rules
+  'bad_whisper',         // a whisper JSON cannot carry (undefined, a function, a class instance)
+  'vault_closed',        // the vault handle was closed and cannot be used again
+  'corrupt_record',      // a stored record failed validation or decryption verification
+  'unknown_key_deriver', // the vault names a key deriver this handle was not built with
 ] as const
 export type VaultErrorKind = typeof VaultErrorKindVals[number]
 
