@@ -118,6 +118,14 @@ export type Vault = {
 const UnreadBundle = Symbol.for('byok.unread_bundle')
 
 /**
+ * The vaultKey's two lives after an unwrap. `transientKey` is extractable, because only an
+ * extractable key can be wrapped (for the device record, or under a new passphraseKey); the
+ * operation that needed it drops it on return. `sessionKey` is the handle the vault keeps
+ * between operations: non-extractable, so the platform itself refuses to export its bytes.
+ */
+type VaultKeyPair = { transientKey: CryptoKey, sessionKey: CryptoKey }
+
+/**
  * Open a handle on one user's vault. Reads the bundle and the device's remembered unlock, then
  * settles into `absent`, `locked`, or (when a remembered unlock is still fresh) `unlocked` --
  * never prompting: asking for a passphrase is the host's job, and only when a whisper is
@@ -207,30 +215,33 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
 
   /** The vaultKey out of a bundle's passphrase envelope; its refusal IS the passphrase check. */
-  const unwrapWithPassphrase = async (standing: VaultBundle, passphrase: string): Promise<CryptoKey> => {
+  const unwrapWithPassphrase = async (standing: VaultBundle, passphrase: string): Promise<VaultKeyPair> => {
     if (standing.key_deriver_label !== keyDeriver.key_deriver_label) {
       throw new VaultError('unknown_key_deriver', 'This vault was made with a key deriver this package does not carry: update byok, or open the vault where it was made.')
     }
     const passphraseKeyBytes = await keyDeriver.deriveKeyBytes(passphrase, fromB64(standing.passphrase_salt_b64))
     const passphraseKey = await importWrappingKeyBytes(passphraseKeyBytes)
+    const binding = bundleBinding(standing.vault_id, standing.passphrase_epoch, 'vault_key_passphrase_wrapped')
     try {
-      return await unwrapKeyUnder(
-        passphraseKey,
-        standing.vault_key_passphrase_wrapped,
-        bundleBinding(standing.vault_id, standing.passphrase_epoch, 'vault_key_passphrase_wrapped'),
-        { extractable: true, usage: ['wrapKey', 'unwrapKey'] },
-      )
+      // The transient is only ever the wrapped argument of a wrap; WebCrypto refuses an empty
+      // usage list, so it carries the narrowest one.
+      const transientKey = await unwrapKeyUnder(passphraseKey, standing.vault_key_passphrase_wrapped, binding, { extractable: true, usage: ['wrapKey'] })
+      const sessionKey = await unwrapKeyUnder(passphraseKey, standing.vault_key_passphrase_wrapped, binding, { extractable: false, usage: ['wrapKey', 'unwrapKey'] })
+      return { transientKey, sessionKey }
     } catch {
       throw new VaultError('wrong_passphrase', "That passphrase didn't unlock the vault. Check for typos and try again.")
     }
   }
 
   /** A brand-new bundle around a brand-new vaultKey, wrapped under `passphrase`. */
-  const draftBundle = async (passphrase: string): Promise<{ draft: VaultBundle, freshKey: CryptoKey }> => {
+  const draftBundle = async (passphrase: string): Promise<{ draft: VaultBundle } & VaultKeyPair> => {
     const vaultId = randomId()
     const saltBytes = randomBytes(keyDeriver.salt_bytes)
     const freshKey = await makeVaultKey()
     const passphraseKey = await importWrappingKeyBytes(await keyDeriver.deriveKeyBytes(passphrase, saltBytes))
+    const binding = bundleBinding(vaultId, 1, 'vault_key_passphrase_wrapped')
+    const envelope = await wrapKeyUnder(passphraseKey, freshKey, binding)
+    const sessionKey = await unwrapKeyUnder(passphraseKey, envelope, binding, { extractable: false, usage: ['wrapKey', 'unwrapKey'] })
     const now = new Date(clock.now()).toISOString()
     const draft: VaultBundle = {
       format:              'byok-vault-v1',
@@ -239,11 +250,25 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       passphrase_epoch:    1,
       key_deriver_label:   keyDeriver.key_deriver_label,
       passphrase_salt_b64: toB64(saltBytes),
-      vault_key_passphrase_wrapped: await wrapKeyUnder(passphraseKey, freshKey, bundleBinding(vaultId, 1, 'vault_key_passphrase_wrapped')),
+      vault_key_passphrase_wrapped: envelope,
       created_at:          now,
       updated_at:          now,
     }
-    return { draft, freshKey }
+    return { draft, transientKey: freshKey, sessionKey }
+  }
+
+  /** The vaultKey for an unlock: creating the vault when absent, proving the passphrase when not. */
+  const settleUnlock = async (passphrase: string): Promise<VaultKeyPair> => {
+    if (bundle === null || bundle === UnreadBundle) {
+      const { draft, transientKey, sessionKey } = await draftBundle(passphrase)
+      const settled = await vaultDB.createBundle(draft)
+      bundle = settled
+      if (settled.vault_id === draft.vault_id) { return { transientKey, sessionKey } }
+      // Another device created the vault between our look and our write: the settled bundle is
+      // theirs, and this passphrase must prove itself against it like any other.
+      return await unwrapWithPassphrase(settled, passphrase)
+    }
+    return await unwrapWithPassphrase(bundle, passphrase)
   }
 
   /** Mint a fresh localUnlockKey, wrap the vaultKey under it, and remember the unlock on this device. */
@@ -274,11 +299,13 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       return
     }
     try {
+      // Nothing on the remembered path ever re-wraps the vaultKey, so no extractable handle
+      // exists on it at all.
       vaultKey = await unwrapKeyUnder(
         remembered.local_unlock_key,
         remembered.vault_key_local_wrapped,
         bundleBinding(bundle.vault_id, bundle.passphrase_epoch, 'vault_key_local_wrapped'),
-        { extractable: true, usage: ['wrapKey', 'unwrapKey'] },
+        { extractable: false, usage: ['wrapKey', 'unwrapKey'] },
       )
       expiresAt = remembered.expires_at
     } catch {
@@ -328,18 +355,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     unlock: async (passphrase) => {
       ensureOpen()
       if (! passphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
-      if (bundle === null || bundle === UnreadBundle) {
-        const { draft, freshKey } = await draftBundle(passphrase)
-        const settled = await vaultDB.createBundle(draft)
-        bundle = settled
-        // Another device may have created the vault between our look and our write: the settled
-        // bundle is theirs, and this passphrase must prove itself against it like any other.
-        vaultKey = settled.vault_id === draft.vault_id ? freshKey : await unwrapWithPassphrase(settled, passphrase)
-      } else {
-        vaultKey = await unwrapWithPassphrase(bundle, passphrase)
-      }
+      const unlocked = await settleUnlock(passphrase)
       expiresAt = clock.now() + rememberForMs
-      await rememberDevice(vaultKey, currentBundle(), expiresAt)
+      // The transient's last act: wrapped into this device's remembered unlock, then dropped.
+      await rememberDevice(unlocked.transientKey, currentBundle(), expiresAt)
+      vaultKey = unlocked.sessionKey
       bump()
     },
 
@@ -355,7 +375,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       ensureOpen()
       if (! newPassphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
       const standing = currentBundle()
-      const provenKey = await unwrapWithPassphrase(standing, oldPassphrase)
+      const proven = await unwrapWithPassphrase(standing, oldPassphrase)
       const saltBytes = randomBytes(keyDeriver.salt_bytes)
       const epoch = standing.passphrase_epoch + 1
       const passphraseKey = await importWrappingKeyBytes(await keyDeriver.deriveKeyBytes(newPassphrase, saltBytes))
@@ -363,14 +383,14 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         ...standing,
         passphrase_epoch:    epoch,
         passphrase_salt_b64: toB64(saltBytes),
-        vault_key_passphrase_wrapped: await wrapKeyUnder(passphraseKey, provenKey, bundleBinding(standing.vault_id, epoch, 'vault_key_passphrase_wrapped')),
+        vault_key_passphrase_wrapped: await wrapKeyUnder(passphraseKey, proven.transientKey, bundleBinding(standing.vault_id, epoch, 'vault_key_passphrase_wrapped')),
         updated_at:          new Date(clock.now()).toISOString(),
       }
       await vaultDB.writeBundle(next)
       bundle = next
-      vaultKey = provenKey
       expiresAt = clock.now() + rememberForMs
-      await rememberDevice(provenKey, next, expiresAt)
+      await rememberDevice(proven.transientKey, next, expiresAt)
+      vaultKey = proven.sessionKey
       bump()
     },
 

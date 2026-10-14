@@ -51,9 +51,10 @@ export const cipherBinding = (...parts: readonly (string | number)[]): Uint8Arra
 )
 
 /**
- * A fresh random 256-bit AES-GCM key for wrapping and unwrapping other keys: a vaultKey.
- * Extractable, because its whole job is to be wrapped (under the passphraseKey, under the
- * localUnlockKey) and travel in wrapped form.
+ * A fresh random 256-bit AES-GCM key for wrapping and unwrapping other keys: a brand-new
+ * vaultKey. Extractable, because a key must be to be wrapped (under the passphraseKey, under the
+ * localUnlockKey) -- so this handle lives only inside the operation doing that wrapping, and the
+ * handle a vault holds between operations is a separate non-extractable unwrap of the envelope.
  */
 export const makeVaultKey = (): Promise<CryptoKey> => (
   crypto.subtle.generateKey(AesGcm, true, ['wrapKey', 'unwrapKey'])
@@ -131,8 +132,9 @@ export const wrapKeyUnder = async (wrappingKey: CryptoKey, wrappedKey: CryptoKey
  * DOMException) on a wrong wrappingKey, a different binding, or altered ciphertext: for the
  * passphrase envelope that rejection IS how a wrong passphrase is learned -- never a comparison.
  *
- * @param usages - What the recovered key may do; also sets extractability: a vaultKey comes back
- *   extractable (it gets re-wrapped for this device), a lockboxKey does not.
+ * @param usages - What the recovered key may do; also sets extractability. Non-extractable is
+ *   the default posture (a lockboxKey, the vaultKey handle a vault holds); an extractable unwrap
+ *   exists only inside an operation about to re-wrap the key, and is dropped when it returns.
  */
 export const unwrapKeyUnder = async (
   wrappingKey: CryptoKey,
