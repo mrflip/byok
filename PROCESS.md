@@ -14,6 +14,28 @@ Within a thread you have standing permission to commit, push its branch, and ope
 asking. Commit at natural milestones: a set of related changes, with `pnpm justify` green. Not
 mid-refactor, not on a timer.
 
+### A worktree per thread
+
+Other agents share the main checkout, so a thread is built in a worktree of its own beside it,
+`../byok-<label>`. From the main checkout:
+
+```sh
+git fetch origin
+git worktree add --no-track -b YYYYMMDD-<label> ../byok-<label> origin/main
+git -C ../byok-<label> config branch.YYYYMMDD-<label>.remote origin
+git -C ../byok-<label> config branch.YYYYMMDD-<label>.merge refs/heads/YYYYMMDD-<label>
+cd ../byok-<label> && pnpm install
+```
+
+`--no-track` matters: the container's git pushes a branch to its upstream, and a branch cut
+tracking `origin/main` would push to main. A thread built on another's unmerged work is cut from
+that branch's tip instead of `origin/main`, and its PR says "Stacked on #N". Push with
+`git -c credential.helper= -c credential.helper='!gh auth git-credential' push`. Once the PR is
+filed, `git worktree remove ../byok-<label>`; the branch stays for the PR.
+
+An ordered series of threads issued at once is a **sprint**, run by `/sprint`
+(`.claude/skills/sprint/SKILL.md`) through `thread-worker` and `thread-reviewer` agents.
+
 ## The history we keep
 
 * **History on main is semi-linear.** Every PR branch is rebased onto the tip of `main` and lands
