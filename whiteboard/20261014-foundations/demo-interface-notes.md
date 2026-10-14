@@ -5,7 +5,9 @@ it proposes, where it deliberately departs from the 20261013-relic sketch, and w
 
 ## Vocabulary adopted
 
-* **whisper** -- the secret: any JSON value (string, number, boolean, null, array, plain object).
+* **whisper** -- the secret: a JSON value (string, number, boolean, array, plain object). Never
+  `undefined` anywhere, never a bare `null` as the whole whisper (null inside a structure is
+  fine: real JSON carries it).
 * **lockbox** -- whisper + `boxlabel` + public metadata (`note`, `created_at`, `updated_at`).
 * **vault** -- many lockboxes, scoped by `(applabel, user_id, vaultlabel)`.
 
@@ -21,8 +23,8 @@ refused. Worth a second look.
 * React-friendliness per CLAUDE.md: `subscribe(listener) -> unsubscribe`, `getSnapshot()` with
   identity kept until something changes. No React import anywhere in the library layer.
 * Whisper ops: `store`, `read`, `use(boxlabel, callback)`, `erase`; all require unlocked and
-  throw `VaultError` kind `vault_locked` otherwise. The host wraps them in a `guard()` that
-  prompts and retries (see `src/scaffold/vault-context.tsx`).
+  throw `VaultError` kind `vault_locked` otherwise. The host wraps them in byok-react's
+  `withUnlockedVault()` (né `guard()`), which prompts and retries.
 * First `unlock()` on an absent vault creates it. The UI knows to say "choose a passphrase"
   because the snapshot said `absent`.
 * `destroy()` works without unlock: an authenticated owner can always delete their own
@@ -46,9 +48,9 @@ refused. Worth a second look.
 
 ## Observations from building the demo
 
-* `guard()` returning `null` for "user dismissed the dialog" is ambiguous with a whisper that is
-  legitimately `null`: the demo wraps reads in `{ whisper }` to tell them apart. The library
-  should not export a helper with that flaw; `use()`'s callback shape avoids it naturally.
+* ~~`guard()` returning `null` for "user dismissed the dialog" is ambiguous with a whisper that
+  is legitimately `null`~~ -- dissolved by the fourth-pass ruling refusing a bare-null whisper:
+  a dismissed read is now unambiguous, and the demo's `{ whisper }` wrapping is gone.
 * A `view` facility means the whisper does land in React state in practice. The README's "never
   put secrets in state" guidance needs to say something honest about reveal-to-user features.
 
@@ -99,12 +101,25 @@ refused. Worth a second look.
 
 ## Open questions, third round
 
-1. **Rename `guard`?** Coach floated `vaultUnlockingHandler`. Agent's counter: "handler" names a
-   callback you hand to someone else, but this is a wrapper you call, and unlocking is its
-   side-quest, not its job -- it runs an action, unlocking on demand. A verb phrase says that:
-   `withUnlockedVault(action)` is the agent's recommendation, with `unlockAndRun` second.
-2. **Store a top-level `null` whisper at all?** Today `store(boxlabel, null)` is legal (null is
-   JSON). Agent's take: refuse it. Nobody's secret is a bare null; it reads as "clear this box"
-   (which `erase` owns, as the undefined message now says); and with top-level null gone,
-   "`null` from a guarded read means dismissed" loses its ambiguity. Null *inside* a structure
-   must stay legal -- real JSON payloads carry it.
+1. ~~**Rename `guard`?**~~ -- ruled fourth pass: `withUnlockedVault`.
+2. ~~**Store a top-level `null` whisper at all?**~~ -- ruled fourth pass: refused.
+
+## Coach rulings (2026-10-14, fourth pass)
+
+1. **`withUnlockedVault`**, né `guard` ("Yes!" to the agent's recommendation over
+   `vaultUnlockingHandler`): renamed across byok-react, its tests, the demo, and these notes.
+2. **A whisper is never a bare `null`.** `Whisper` is now `Exclude<WhisperJson, null>` (the
+   recursive JSON type is exported as `WhisperJson`; null stays legal inside structures), the
+   validator refuses a top-level null, and `bad_whisper` says so. Simplifications collected:
+   the demo's `{ whisper }` wrapping around guarded reads is gone, `withUnlockedVault`'s doc
+   block stops warning about the ambiguity, and the dashboard's `?? null` fallback died.
+3. **Null-as-sentinel audit** (Coach: prefer `Symbol.for` where null does double duty; React's
+   null-means-dismissed is standard practice and stays). Findings:
+   * `vault.ts`'s `bundle` used `null` for both "backend not read yet" and "backend says no
+     bundle" -- the one real double duty. Now `Symbol.for('byok.unread_bundle')` marks the
+     unread state, and `vaultState()` derives `'opening'` instead of a hand-built first
+     snapshot. `Symbol.for` rather than `Symbol` so the ESM and CJS builds share the value.
+   * The storage reads (`readBundle`, `readBox`, `readUnlock`, `StringStore.read`) keep
+     `| null`: there null is the answer ("no such record"), never colliding with a legal row,
+     and it is the contract adapter authors expect.
+   * React state nulls (dismissed dialog, no session, no joke yet) stay, per the ruling.
