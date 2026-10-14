@@ -90,6 +90,7 @@ describe("localVaultDB", () => {
  * the compound verbs below come from the base class.
  */
 class MapVaultDB extends VaultDB {
+  readonly maxRecordBytes = Infinity
   readonly bundles = new Map<string, VaultBundle>()
   readonly lockboxes = new Map<string, Lockbox>()
   private path(scope: VaultScope) { return `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}` }

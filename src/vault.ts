@@ -52,7 +52,8 @@ export type OpenVaultOpts = {
   keyDeriver?: KeyDeriver
   /**
    * The largest whisper `store()` accepts, in bytes of its JSON. Default: {@link MaxWhisperBytes},
-   * 40444. Checked on write only, so lowering it never strands a whisper already stored.
+   * 40444. Checked on write only, so lowering it never strands a whisper already stored. At most
+   * half the vaultDB's `maxRecordBytes`: openVault refuses more with kind 'bad_option'.
    */
   maxWhisperBytes?: number
 }
@@ -154,6 +155,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const clock = opts.clock ?? wallClock
   const keyDeriver = opts.keyDeriver ?? argon2idWebV1Deriver
   const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
+  if (whisperByteLimit > vaultDB.maxRecordBytes * WhisperShareOfRecord) {
+    throw new VaultError('bad_option', `maxWhisperBytes is over half of the ${String(vaultDB.maxRecordBytes)} bytes this storage adapter holds in one record, so a whisper that large might not store: pass a smaller maxWhisperBytes.`)
+  }
 
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
   let boxes: readonly LockboxSummary[] = []
@@ -489,6 +493,13 @@ const parseLabel = (candidate: string): string => {
   }
   return checked.data
 }
+
+/**
+ * The share of an adapter's maxRecordBytes a whisper may claim. Stored, a whisper's ciphertext is
+ * base64, a third larger than the whisper; the record's other fields, and each backend's own way
+ * of counting bytes, need the rest.
+ */
+const WhisperShareOfRecord = 0.5
 
 const maxWhisperBytes = Z.number().int().positive().default(MaxWhisperBytes)
 

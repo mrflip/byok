@@ -25,6 +25,13 @@ import type { StringStore } from './string-store'
  * list, a push subscription) overrides that one method and leaves the rest.
  */
 export abstract class VaultDB {
+  /**
+   * The most this backend holds in one record, in bytes: a plain fact about the backend, or
+   * `Infinity` when it sets no per-record limit. A vault refuses to open with a `maxWhisperBytes`
+   * over half of it, leaving room for encoding and the record's other fields.
+   */
+  abstract readonly maxRecordBytes: number
+
   // ------------------------------------------------------------------ the primitives you write
 
   /** The stored bundle record for `scope`, exactly as saved, or null when there is none. */
@@ -174,6 +181,10 @@ const soon = async <ValT>(fn: () => ValT | Promise<ValT>): Promise<ValT> => awai
 export const localVaultDB = (store: StringStore): VaultDB => new StringStoreVaultDB(store)
 
 class StringStoreVaultDB extends VaultDB {
+  // localStorage holds about five megabytes per origin, in all: a mebibyte is this stand-in's
+  // most for any one record.
+  readonly maxRecordBytes = 1024 * 1024
+
   constructor(private readonly store: StringStore) { super() }
 
   // Work is deferred into the promise even though the store is synchronous: a storage fault must

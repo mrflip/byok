@@ -221,6 +221,14 @@ describe("store and read", () => {
     await expectRefusal(tight.store('the_box', 'x'.repeat(100)), 'whisper_too_large')
   })
 
+  it("refuses a maxWhisperBytes over half of what the adapter holds in one record", async () => {
+    const world = makeWorld()
+    const halfAMebibyte = world.vaultDB.maxRecordBytes / 2
+    expect(halfAMebibyte).to.eq(524_288)
+    await world.open({ maxWhisperBytes: halfAMebibyte })
+    await expectRefusal(world.open({ maxWhisperBytes: halfAMebibyte + 1 }), 'bad_option')
+  })
+
   it("refuses a maxWhisperBytes that is not a whole number of bytes above zero", async () => {
     const world = makeWorld()
     for (const nonsense of [0, -1, 1.5, NaN]) {

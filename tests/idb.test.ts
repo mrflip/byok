@@ -9,6 +9,10 @@ import { boxOf, bundleOf, scopeOf, unlockOf } from './helpers'
 const freshDbName = () => `byok_test_${crypto.randomUUID().slice(0, 8)}`
 
 describe("idbVaultDB", () => {
+  it("declares no per-record limit: IndexedDB has none", () => {
+    expect(idbVaultDB().maxRecordBytes).to.eq(Infinity)
+  })
+
   it("round-trips a bundle and a lockbox through real IndexedDB semantics", async () => {
     const vaultDB = idbVaultDB({ dbName: freshDbName() })
     expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
