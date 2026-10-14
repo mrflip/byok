@@ -15,8 +15,7 @@ this document disagree, the linter wins and this document is a bug.
 * No barrel files beyond the package's entry points: import from the file that defines the thing.
 * **A module of related functions around one concern is imported whole**, under its Startcase
   name: `import * as Envelope from './envelope'`, then `Envelope.swak(...)`. Its functions are
-  vigorous verbs without the module's name tacked on: `swak`, not `envelopeSwak`. Importing loose
-  verbs puts everyone in one global namespace.
+  vigorous verbs: `swak`, not `envelopeSwak`.
 * **A module with one primary noun** is imported by name, its friends riding along:
   `import { Lockbox, LockboxKinds } from './lockbox'`.
 * When a list of type imports grows cumbersome, import the types whole under a short name ending
@@ -33,7 +32,9 @@ for the ii'th time through a block: a `for` loop's own counter, or the index a `
 handed. An index that arrives from outside, as a parameter or a field, is an `idx` or a `fooIdx`.
 
 **Never bare `name`, `value`, `node`, `error` or `query` as a variable name.** There is almost
-always a salient prefix: `vaultlabel`, `profilename`.
+always a salient prefix: `vaultlabel`, `profilename`. The linter refuses these, and `key`, as a
+variable, parameter or destructured name; a property spelled that way (`{ name: 'AES-GCM' }`)
+is someone else's interface, and fine.
 
 **Never bare `key`.** In this package a key is cryptographic until proven otherwise, so:
 

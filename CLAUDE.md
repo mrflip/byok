@@ -55,9 +55,10 @@ and the security reviewer reading the code.
   does not use Convex never installs it.
 * **Few runtime dependencies.** Each is a supply-chain decision for every app that installs us.
   Adding one needs a Coach's yes; prefer a peer dependency for anything the host app likely
-  already has (Zod).
-* **Browser-first, isomorphic where it costs nothing.** No Node built-ins in `src/`; WebCrypto is
-  the same global under Node, which is how the tests run.
+  already has. Validation is plain Zod, no kit on top of it.
+* **Runs everywhere the host app does**: browsers, Node, Bun, React Native, and the frameworks on
+  them (PROCESS.md, *Dependencies*). No Node built-ins in `src/`. The tests run under Node, where
+  WebCrypto is the same global as in a browser.
 * **What is exported is a contract.** `src/index.ts` (and each entry point beside it) is the
   public surface, versioned by semver. **A stored vault is a contract too**: a change to the
   shape of what is written to storage must still read every vault already written, and says how.
@@ -127,7 +128,8 @@ Enough to keep you out of trouble on a small edit. STYLE.md is the real source.
 * No single-letter names. Never bare `name`, `value`, `node`, `query`. Use `err`, never `error`.
   `type` only for an actual datatype; for "variety of", `kind` or `flavor`.
 * Never a bare `key`: a cryptographic key is named for its role (`vaultKey`, `dek`, `kek`); a
-  map key is a `ckey`.
+  map key is a `ckey`. The linter refuses `key`, `name`, `value`, `node`, `error` and `query` as
+  a variable or parameter.
 * `const` by default; when necessary, `let`; never `var`. Functional style is strongly preferred.
 * Parenthesize and space every negation: `if (! approved) { ... }`
 * Stored fields are underbar_case (`salt_bytes`); everything else camelCase.

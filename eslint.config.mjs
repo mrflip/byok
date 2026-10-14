@@ -229,6 +229,26 @@ export default defineConfig([
     },
   },
 
+  // STYLE.md, *Naming*: these say nothing about what they hold. Only bindings are refused -- a
+  // variable, a parameter, a destructured name -- never a property, so `{ name: 'AES-GCM' }`, as
+  // WebCrypto spells its algorithms, stays legal.
+  {
+    name: 'byok/forbidden-names',
+    files: SourceFiles,
+    rules: {
+      'no-restricted-syntax': ['error', ...[
+        'VariableDeclarator > Identifier.id',
+        ':function > Identifier.params',
+        ':function > AssignmentPattern.params > Identifier.left',
+        'ObjectPattern > Property > Identifier.value',
+        'ArrayPattern > Identifier.elements',
+      ].map((binding) => ({
+        selector: `${binding}[name=/^(key|name|value|node|error|query)$/]`,
+        message:  'Name it for what it holds (STYLE.md, Naming): a cryptographic key by its role (vaultKey, dek), a map key `ckey`, `err` for an error, `vaultlabel` over `name`.',
+      }))],
+    },
+  },
+
   // A config file's whole job is the call it exports. The package itself is `sideEffects: false`,
   // so the rule stays on everywhere else.
   {
