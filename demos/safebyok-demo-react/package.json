@@ -1,14 +1,17 @@
 {
   "name": "safebyok-demo-react",
-  "private": false,
+  "private": true,
   "version": "0.0.0",
   "description": "Single-page React playground for the safebyok interface: a stub vault, a fake sign-in, and an inspector showing what lands where. Never published.",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
+    "build:deps": "pnpm --filter 'safebyok-demo-react^...' build",
     "typecheck": "tsc --noEmit",
+    "pretypecheck": "pnpm build:deps",
     "test": "vitest run",
+    "pretest": "pnpm build:deps",
     "test:watch": "vitest",
     "justify": "pnpm lint && pnpm typecheck && pnpm test"
   },
