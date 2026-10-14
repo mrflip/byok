@@ -100,6 +100,15 @@ describe("wrap and unwrap", () => {
     await expect(unwrapKeyUnder(vaultKey, wrapped, cipherBinding('wrong'), { extractable: false, usage: ['decrypt'] })).rejects.toThrow()
   })
 
+  it("a non-extractable unwrap refuses exportKey: the platform keeps the bytes", async () => {
+    const vaultKey = await makeVaultKey()
+    const lockboxKey = await makeLockboxKey()
+    const binding = cipherBinding('lockbox_key_wrapped')
+    const wrapped = await wrapKeyUnder(vaultKey, lockboxKey, binding)
+    const recovered = await unwrapKeyUnder(vaultKey, wrapped, binding, { extractable: false, usage: ['decrypt'] })
+    await expect(crypto.subtle.exportKey('raw', recovered)).rejects.toThrow()
+  })
+
   it("a localUnlockKey is born non-extractable, and still wraps and unwraps", async () => {
     const localUnlockKey = await makeLocalUnlockKey()
     expect(localUnlockKey.extractable).to.be.false

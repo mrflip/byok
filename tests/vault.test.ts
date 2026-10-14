@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { SevenDaysMs, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB } from '../src/device-db'
@@ -492,5 +492,64 @@ describe("close", () => {
     const again = await world.open()
     expect(again.getSnapshot().state).to.eq('unlocked')
     expect(await again.read('anthropic')).to.eq('sk-fake')
+  })
+})
+
+// The handle a vault keeps between operations must refuse subtle.exportKey; an extractable
+// handle may exist only inside an operation about to wrap the vaultKey, dropped on return.
+// The closure hides the handle itself, so the suite below watches what each flow asks WebCrypto
+// to unwrap: `extractable` is unwrapKey's sixth argument.
+const watchUnwraps = () => vi.spyOn(crypto.subtle, 'unwrapKey')
+const extractableUnwraps = (spied: ReturnType<typeof watchUnwraps>) => (
+  spied.mock.calls.filter((callArgs) => callArgs[5])
+)
+
+describe("the session vaultKey is non-extractable", () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it("creating a vault unwraps only the session handle, never an extractable one", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    const spied = watchUnwraps()
+    await vault.unlock('pw one')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(spied.mock.calls).to.have.lengthOf(1)
+    expect(extractableUnwraps(spied)).to.have.lengthOf(0)
+  })
+
+  it("a passphrase unlock asks for exactly one extractable transient, for the device wrap", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lock()
+    const spied = watchUnwraps()
+    await vault.unlock('pw one')
+    // The non-extractable handle it kept still does the whole job.
+    await vault.store('anthropic', 'sk-ant-fake')
+    expect(await vault.read('anthropic')).to.eq('sk-ant-fake')
+    expect(extractableUnwraps(spied)).to.have.lengthOf(1)
+  })
+
+  it("a remembered unlock never makes an extractable handle at all", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.store('anthropic', 'sk-ant-fake')
+    const spied = watchUnwraps()
+    const later = await world.open()
+    expect(later.getSnapshot().state).to.eq('unlocked')
+    expect(await later.read('anthropic')).to.eq('sk-ant-fake')
+    expect(extractableUnwraps(spied)).to.have.lengthOf(0)
+  })
+
+  it("changePassphrase asks for exactly one extractable transient, for the new wraps", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.store('anthropic', 'sk-ant-fake')
+    const spied = watchUnwraps()
+    await vault.changePassphrase('pw one', 'pw two')
+    expect(await vault.read('anthropic')).to.eq('sk-ant-fake')
+    expect(extractableUnwraps(spied)).to.have.lengthOf(1)
   })
 })

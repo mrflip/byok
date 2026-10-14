@@ -33,8 +33,10 @@ security expert who knows what questions to ask.
 * 2026-10-14: a wrong passphrase is learned from the vaultKey envelope's AEAD failure, never a
   comparison; there is no separate passphrase verifier field.
 * 2026-10-14: the localUnlockKey is a non-extractable WebCrypto key persisted only by structured
-  clone (IndexedDB, `byok/idb`); the in-memory vaultKey is extractable, because unlock re-wraps
-  it for the device and changePassphrase re-wraps it for the bundle.
+  clone (IndexedDB, `byok/idb`); the vaultKey handle a vault holds between operations is also
+  non-extractable. The operations that must wrap the vaultKey (device-remember at unlock, the
+  re-wrap in changePassphrase) unwrap a separate extractable transient from the same envelope and
+  drop it on return; the remembered-unlock path makes no extractable handle at all.
 * 2026-10-14: a stored record that fails validation or AEAD verification is refused with kind
   `corrupt_record` and left in place -- remote data is never auto-deleted. A device-local
   remembered unlock that fails is the one exception: it is dropped, and the user asks again.
