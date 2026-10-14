@@ -1,6 +1,7 @@
-# The package itself lives at the root; demos/ holds private playground apps that
-# exercise it (or sketches of it) and are never published.
+# The byok package itself lives at the root. packages/ holds its companion packages (the React
+# binding); demos/ holds private playground apps that exercise them and are never published.
 packages:
+  - packages/*
   - demos/*
 
 allowBuilds:
