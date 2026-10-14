@@ -7,7 +7,7 @@
   "scripts": {
     "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "test:watch": "vitest",
     "justify": "pnpm lint && pnpm typecheck && pnpm test"
   },

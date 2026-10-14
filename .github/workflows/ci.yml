@@ -84,3 +84,19 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+
+  # The React binding's own justify: lint, typecheck, tests and the build with its package checks
+  # (it builds the core first, by itself). Not required by the ruleset yet. Filtered by name, not
+  # `./packages/*`: `safebyok-convex` has no source yet, and its lint would fail on no files. The
+  # glob returns when it can.
+  packages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter safebyok-react justify
