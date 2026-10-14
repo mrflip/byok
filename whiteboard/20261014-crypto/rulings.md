@@ -23,6 +23,10 @@ ruled so the next thread starts from here, not from memory.
 * **Erase wins.** An erase is a clear, idempotent intent on a different path from update: no
   version expectation. TODO(with the retry work): a conflict-handler hook where a host could
   hear about erase-vs-update collisions.
+* The stale-session hole the other thread found (a box written by a device holding a destroyed
+  vault lands in its reborn successor, because "no box here yet" is a valid expectation) is
+  closed interim by look-before-write in vault.ts; the durable close is `versionedUpdate`
+  carrying the `vault_id` expectation to the backend. TODO: fold vault_id into versionedUpdate.
 * TODO(not yet): the IndexedDB adapter's `versionedUpdate` done truly atomically, inside a
   single IndexedDB transaction (idb-keyval's `update()`; synchronous updater, throw-to-abort
   mapped to `stale_write`). Until then it is check-then-save with a small window --
@@ -56,8 +60,8 @@ ruled so the next thread starts from here, not from memory.
 * Screen-lock locking: the hook already exists -- `vault.lock()` -- and `src/` cannot own DOM
   listeners (it runs where there is no `document`). The recipe is one host line on
   `visibilitychange` (or Chromium's permission-gated Idle Detection API, the only true
-  screen-lock signal). TODO: document the recipe; byok-react may later grow an opt-in
-  `lockWhenHidden` prop, since the client package may touch the DOM.
+  screen-lock signal). TODO: document the recipe. TODO(not yet, ruled): byok-react grows an
+  opt-in `lockWhenHidden` prop, since the client package may touch the DOM.
 
 ## The boundary pattern (repo-wide TODO)
 
@@ -67,11 +71,35 @@ storage, out of storage, across the public API) **and is trusted otherwise**. Op
 exist only because a field arrives late should be resolved at the boundary, not carried.
 First candidates: `Lockbox.note`, the new `whisper_schema_version`, `DeviceUnlock`'s shape.
 
-## Expiry (under discussion)
+## Expiry (ruled 2026-10-14; build off these)
 
-The model converging in chat: **two deadlines with different jurisdictions, no bouncer between**.
-At T1, any operation arriving from then on is refused as locked (re-prompt) -- which is exactly
-the at-entry check built today. At T2, operations still in flight from before T1 fail: the key is
-nulled and byok's own pending work aborts (what T2 cannot do is claw back a whisper already
-handed to a `use()` callback). The grace T2 - T1 is the library's own constant, not a knob. The
-policy fork still open: fixed-from-unlock versus sliding-on-use for T1.
+Two timestamps, no bouncer between, and nothing in flight is ever killed:
+
+* After `staleVaultTS`, any operation that would fail if the vault locked mid-flight refuses to
+  **start** until the vault is fresh again (an unlock). This is the entry gate built today.
+* An operation already going is never clawed back: if the vault locks and unlocks again before
+  the operation notices, nothing changed and it completes.
+* The vault locks when (a) the app invokes `lock()`, or (b) a timer watching `shutVaultTS`
+  fires: the key is nulled and the snapshot flips. In-flight work holding the key in a local
+  still finishes -- locking gates entries, it does not revoke handles.
+
+The ruled numbers and names:
+
+* **Shutting forgets both**: at shut -- timer or explicit -- the in-memory key is nulled AND the
+  device-remember record is erased. A lock is a lock; none of them leaves "remember me" standing.
+* **`lockSoon(graceSeconds = 5.0)`** (ruled name): advance `staleVaultTS` to now and
+  `shutVaultTS` to now + graceSeconds -- "no new secrets from this instant; finish what is in
+  hand; the key dies shortly." The natural callee for the screen-lock recipe and sign-out flows.
+* **Natural expiry's grace is 60 seconds**: `shutVaultTS = staleVaultTS + 60s`, a library
+  constant, not a knob.
+* **`staleVaultTS` is fixed from unlock, static, never sliding**: unlock time plus the
+  `forcePassphraseReentryHours` the app passed to `openVault`. Per-open means per-device: two
+  devices on one vault may carry different windows, which is fine and is noted in
+  notes/security.md -- the window is client-side politeness, not a vault-wide synced policy.
+
+Decoding today's `expiresAt` (it does double duty): the in-memory unlock is closure state in one
+tab (the non-extractable vaultKey handle + `expiresAt`, gating entries); the device-remember
+record is a DeviceUnlock in the deviceDB (IndexedDB) holding the localUnlockKey and the wrapped
+vaultKey with its own `expires_at`, honored at the next open. The split assigns the stale/shut
+pair to the in-memory side; the device record's deadline maps to `staleVaultTS` (a remembered
+unlock past it re-prompts), with shut being in-memory grace only.
