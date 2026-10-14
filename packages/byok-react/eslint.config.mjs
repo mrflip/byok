@@ -16,6 +16,13 @@ export default defineConfig([
   js.configs.recommended,
   ...tseslint.configs.recommended,
 
+  // In a monorepo the parser sees several candidate tsconfig roots and refuses to guess; this
+  // package's own directory is the answer.
+  {
+    name: 'byok-react/ts-project',
+    languageOptions: { parserOptions: { tsconfigRootDir: import.meta.dirname } },
+  },
+
   // The React layer: hooks correctness first, then JSX hygiene and accessibility, scoped to the
   // files that hold components and hooks.
   {
