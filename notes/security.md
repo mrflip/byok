@@ -149,3 +149,11 @@ security expert who knows what questions to ask.
   are refused `not_permitted` from then on, and its failing `watchVault` subscription is ignored,
   but the unlocked vaultKey stays in memory until the vault locks, expires or is closed. The
   README tells apps to close the vault on sign-out; nothing enforces it.
+* 2026-10-14: releases run from `.github/workflows/release.yml` on every push to main, in jobs
+  that each hold only what they need. Only `publish` (in the `npm` environment) may mint an npm
+  OIDC token, and it runs no package's scripts (`pnpm install --ignore-scripts`): it stages the
+  tarballs the `pack` job built, linted and tested without that token. The trusted publisher
+  allows `npm stage publish` only, so every version still waits for the Coach's 2FA approval.
+  `scripts/release.ts` refuses a tarball whose `package.json` still holds a `workspace:` range,
+  and quotes only npm's error code and summary, never the rest of what npm printed. No release
+  job caches dependencies or persists git credentials.

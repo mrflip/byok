@@ -1,54 +1,142 @@
 name: Release
 
-# Publishing a GitHub release whose tag is `v<version>`, the version in
-# packages/safebyok/package.json, stages that version of the core on npm.
-# It becomes public only when a maintainer approves it with 2FA, on npmjs.com or with
-# `npm stage approve <stage-id>`; this workflow cannot approve its own staging. npm's trusted
-# publishing authenticates this workflow by OIDC: there is no npm token in the repository's
-# secrets, the trusted publisher is configured to allow `npm stage publish` and not `npm publish`,
-# and npm attaches a provenance statement naming this repository and run.
+# Every push to main runs this, and changesets decides which of three things it does
+# (PROCESS.md, Releases):
+#
+# * version -- changesets are waiting on main. `version` turns them into version bumps and
+#   CHANGELOG entries on the branch changeset-release/main, rebuilt from main's tip each time, and
+#   opens or updates the Version PR from it. Merging that PR is the release.
+# * publish -- no changesets wait, and a public package's version is not yet on npm: the Version
+#   PR has just been merged. `pack` checks the lockstep group, lints, typechecks, tests and builds
+#   every package, and packs each package to release with pnpm (which writes real ranges in place
+#   of `workspace:`). `publish` stages each tarball on npm (scripts/release.ts); the changesets
+#   action then tags each package staged (`safebyok@0.2.0`) and writes its GitHub release from its
+#   CHANGELOG.md.
+# * none -- nothing to do.
+#
+# Two people stand between a changeset and npm: the Coach merges the Version PR, and approves each
+# staged version with 2FA, on npmjs.com or with `npm stage approve <stage-id>`. CI cannot approve
+# its own staging: npm's trusted publishing authenticates `publish` by OIDC, there is no npm token
+# in the repository's secrets, and the trusted publisher allows `npm stage publish` and not
+# `npm publish`. It is bound to this file's name and to the `npm` environment, so both stay.
+#
+# The GITHUB_TOKEN this workflow writes with starts no other workflow: CI does not run by itself
+# on the Version PR (PROCESS.md says how to start it), and a tag or GitHub release made here
+# triggers nothing, which is why staging happens here rather than on a `release: published` event.
+#
+# Each job holds only the permissions it needs. Only `publish` can mint an npm token, and it runs
+# no package's scripts: it stages the tarballs `pack` built. A failed `publish` is mended by
+# re-running it, since scripts/release.ts skips what is already done. No job caches dependencies,
+# so nothing a pull request's run wrote can reach a release.
 on:
-  release:
-    types: [published]
+  push:
+    branches: [main]
 
-permissions:
-  contents: read
-  id-token: write
+permissions: {}
+
+# Two releases must never interleave: one waits for the other, and neither is cancelled.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  select-mode:
     runs-on: ubuntu-latest
-    environment: npm
+    permissions:
+      contents: read
+    outputs:
+      mode: ${{ steps.select.outputs.mode }}
+      publish-plan-artifact-id: ${{ steps.select.outputs.publish-plan-artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .tool-versions
-          cache: pnpm
-          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
-      - name: Check the tag names the package's version
-        env:
-          TAG: ${{ github.event.release.tag_name }}
-        run: |
-          version=$(node -p "require('./packages/safebyok/package.json').version")
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error::Release tag $TAG does not match packages/safebyok/package.json's version, $version"
-            exit 1
-          fi
+      - id: select
+        uses: changesets/action/select-mode@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+
+  version:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'version'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+      - run: pnpm install --frozen-lockfile
+      - uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          script: pnpm release:version
+          commit-message: 'rel: version the packages for release'
+          pr-title: Version the packages for release
+
+  pack:
+    needs: select-mode
+    if: needs.select-mode.outputs.mode == 'publish'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      pack-dir-artifact-id: ${{ steps.pack.outputs.pack-dir-artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+      - run: pnpm install --frozen-lockfile
+      - name: Check every public package is in the lockstep group, at one version
+        run: pnpm release:check
+      # What each package's `prepublishOnly` would run: `pnpm pack` runs no lifecycle script.
+      - name: Lint, typecheck, test and build every package
+        run: pnpm justify
+      - id: pack
+        uses: changesets/action/pack@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          publish-plan-artifact-id: ${{ needs.select-mode.outputs.publish-plan-artifact-id }}
+
+  publish:
+    needs: pack
+    runs-on: ubuntu-latest
+    environment: npm
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .tool-versions
+          registry-url: https://registry.npmjs.org
+      # The changesets action needs its CLI installed; nothing here runs a package's own scripts.
+      - run: pnpm install --frozen-lockfile --ignore-scripts
       # The npm bundled with the pinned Node (11.19.0 with Node 24.21.0) predates the 11.21.0 that
-      # `npm dist-tag` over OIDC needs; npm 12.2.0 is the current release and supports Node 24.
+      # `npm dist-tag` over OIDC needs; npm 12.2.0 is the current release, has `npm stage`, and
+      # supports Node 24.
       - name: Install the pinned npm
         run: npm install --global npm@12.2.0
-      # A prerelease version (`1.2.0-beta.1`) goes out under the `next` dist-tag, so that a plain
-      # `npm install safebyok` never picks it up. `prepublishOnly` runs the core's `pnpm justify` first.
-      - name: Stage for approval
-        working-directory: packages/safebyok
-        run: |
-          version=$(node -p "require('./package.json').version")
-          case "$version" in
-            *-*) disttag=next ;;
-            *)   disttag=latest ;;
-          esac
-          npm stage publish --access public --tag "$disttag"
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.pack.outputs.pack-dir-artifact-id }}
+          path: ${{ runner.temp }}/changeset-pack
+      # A prerelease version (`0.3.0-beta.1`) is staged under the `next` dist-tag, everything else
+      # under `latest`. The action then pushes the tags the script reports, and writes the releases.
+      - uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+        with:
+          script: pnpm release:stage ${{ runner.temp }}/changeset-pack

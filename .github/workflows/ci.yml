@@ -21,7 +21,8 @@ permissions:
 # (`pnpm -r`), so a package added under packages/ or demos/ is covered with no edit here.
 jobs:
   # Lint first, as the likelier of the two to fail for a reason worth reading, then typecheck, then
-  # keep a pull request's history semi-linear (PROCESS.md): its branch may hold no merge commit.
+  # keep a pull request's history semi-linear (PROCESS.md): its branch may hold no merge commit;
+  # last, a pull request's changeset.
   lint-typecheck:
     runs-on: ubuntu-latest
     steps:
@@ -50,6 +51,17 @@ jobs:
             git log --oneline --no-walk $merges
             exit 1
           fi
+      # A pull request that changes a public package carries a changeset saying what its release
+      # would say; one that needs no release carries an empty one (PROCESS.md, Releases). Dependabot
+      # cannot write one, and the Version PR is where changesets are used up, so neither is asked.
+      - name: Require a changeset
+        if: >-
+          ${{ !cancelled() && steps.install.outcome == 'success' && github.event_name == 'pull_request'
+          && github.event.pull_request.user.login != 'dependabot[bot]'
+          && !startsWith(github.head_ref, 'changeset-release/') }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: pnpm changeset status --since="$BASE_SHA"
 
   # The unit tests with coverage, then the build. Under CI a build fails on any warning, and checks
   # each package as a consumer would see it (publint, arethetypeswrong: each tsdown.config.ts).
