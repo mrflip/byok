@@ -39,6 +39,26 @@ ruled so the next thread starts from here, not from memory.
   "stored < current, migrate" -- strings invite '1.10' < '1.2' bugs; `passphrase_epoch` is the
   in-house precedent; VOCABULARY already says "version number"). Awaiting the word.
 
+## Numbers in the storage contract
+
+* `whisper_schema_version` is an **integer** (ruled). Wider ruling: the VaultDB contract requires
+  a backend to store integers up to `Number.MAX_SAFE_INTEGER` (2^53 - 1 -- microseconds since
+  epoch reach it in the year 2255), and byok never asks for more: no 64-bit fields, no BigInt, no
+  polyfill. This covers every numeric field in a record: `passphrase_epoch`,
+  `whisper_schema_version`, `expires_at`, future timestamps.
+
+## The unlock window
+
+* **`rememberForMs` is renamed `forcePassphraseReentryHours`** (ruled): the knob's practical
+  meaning is "time between makings of the user type their passphrase", so the name says that.
+  Hours, fractions accepted. TODO: the rename (public surface: OpenVaultOpts, byok-react prop,
+  demo, tests) rides the expiry thread.
+* Screen-lock locking: the hook already exists -- `vault.lock()` -- and `src/` cannot own DOM
+  listeners (it runs where there is no `document`). The recipe is one host line on
+  `visibilitychange` (or Chromium's permission-gated Idle Detection API, the only true
+  screen-lock signal). TODO: document the recipe; byok-react may later grow an opt-in
+  `lockWhenHidden` prop, since the client package may touch the DOM.
+
 ## The boundary pattern (repo-wide TODO)
 
 TODO: audit everywhere a record has "late" optional fields. The pattern the Coach named: a value
@@ -49,8 +69,9 @@ First candidates: `Lockbox.note`, the new `whisper_schema_version`, `DeviceUnloc
 
 ## Expiry (under discussion)
 
-The Coach floats (naive, treat carefully): a **stale window and an expires window** -- the
-bartender shouting last call versus calling the cops, with deliberately no bouncer in between.
-Agent's read: stale must change nothing mechanically (purely a snapshot signal the host may
-prompt on); expired stays the hard stop. The one real policy fork: fixed-from-unlock versus
-sliding-on-use expiry. Discussion continues in chat.
+The model converging in chat: **two deadlines with different jurisdictions, no bouncer between**.
+At T1, any operation arriving from then on is refused as locked (re-prompt) -- which is exactly
+the at-entry check built today. At T2, operations still in flight from before T1 fail: the key is
+nulled and byok's own pending work aborts (what T2 cannot do is claw back a whisper already
+handed to a `use()` callback). The grace T2 - T1 is the library's own constant, not a knob. The
+policy fork still open: fixed-from-unlock versus sliding-on-use for T1.
