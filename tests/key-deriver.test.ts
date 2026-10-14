@@ -37,7 +37,8 @@ describe("argon2idWebV1Deriver", () => {
     expect(argon2idWebV1Deriver.salt_bytes).to.eq(Argon2idWebV1.salt_bytes)
   })
 
-  it("derives 32 deterministic bytes, and a different salt lands somewhere else entirely", async () => {
+  // Three full derivations; a slow CI runner takes several times the local half-second apiece.
+  it("derives 32 deterministic bytes, and a different salt lands somewhere else entirely", { timeout: 60_000 }, async () => {
     const saltBytes = new Uint8Array(16).fill(7)
     const otherSalt = new Uint8Array(16).fill(8)
     const once = await argon2idWebV1Deriver.deriveKeyBytes('correct horse battery staple', saltBytes)
