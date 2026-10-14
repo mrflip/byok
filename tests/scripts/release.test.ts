@@ -139,7 +139,9 @@ describe("packedManifest", () => {
 })
 
 // A runner standing in for npm, git and tar: npm answers per package, origin holds the tags
-// given, and every tarball's package.json is clean unless a manifest is given for it.
+// given (each naming a commit), HEAD is `HeadSha`, and every tarball's package.json is clean
+// unless a manifest is given for it.
+const HeadSha = 'headd00d0000000000000000000000000000000'
 interface FakeT {
   run:   Release.Runner
   calls: string[][]
@@ -152,7 +154,7 @@ const npmFailure = (code: string, summary: string, detail = ''): Release.RunResu
   stderr:   'npm error a long log, its request headers included: Authorization: Bearer npm_FAKETOKEN',
 })
 
-const makeFake = (npmFor: Record<string, Release.RunResult>, opts: { tags?: string[], manifests?: Record<string, object> } = {}): FakeT => {
+const makeFake = (npmFor: Record<string, Release.RunResult>, opts: { tags?: Record<string, string>, manifests?: Record<string, object> } = {}): FakeT => {
   const calls: string[][] = []
   const run: Release.Runner = (command, args) => {
     calls.push([command, ...args])
@@ -160,9 +162,12 @@ const makeFake = (npmFor: Record<string, Release.RunResult>, opts: { tags?: stri
       const tarball = args[1] ?? ''
       return Promise.resolve(ok(JSON.stringify(opts.manifests?.[tarball] ?? { name: 'x', peerDependencies: { safebyok: '^0.1.0' } })))
     }
+    if (command === 'git' && args[0] === 'rev-parse') { return Promise.resolve(ok(`${HeadSha}\n`)) }
     if (command === 'git') {
-      const ref = args.at(-1) ?? ''
-      return Promise.resolve(ok((opts.tags ?? []).some((tag) => ref === `refs/tags/${tag}`) ? `abc123\t${ref}\n` : ''))
+      const listing = Object.entries(opts.tags ?? {})
+        .filter(([tag]) => args.includes(`refs/tags/${tag}`))
+        .map(([tag, sha]) => `${sha}\trefs/tags/${tag}\n`)
+      return Promise.resolve(ok(listing.join('')))
     }
     const pkgname = path.basename(args[2] ?? '', '.tgz').replace(/-\d.*$/, '')
     return Promise.resolve(npmFor[pkgname] ?? ok(JSON.stringify({ [pkgname]: { stageId: `stage-${pkgname}` } })))
@@ -208,10 +213,20 @@ describe("stage", () => {
   it("does nothing more for a release already staged and tagged: a re-run is safe", async () => {
     const fake = makeFake(
       { 'safebyok': npmFailure('E403', 'You cannot publish over the previously published versions: 0.1.0.') },
-      { tags: ['safebyok@0.1.0'] },
+      { tags: { 'safebyok@0.1.0': HeadSha } },
     )
     const outcomes = await Release.stage([releaseOf('safebyok')], { run: fake.run, dryRun: false, tagfile })
     expect(outcomes.map((outcome) => [outcome.kind, outcome.tagged])).to.deep.equal([['already', undefined]])
+    expect(reported()).to.deep.equal([])
+  })
+
+  it("leaves alone a version its tag says was released from another commit, without asking npm", async () => {
+    const fake = makeFake({}, { tags: { 'safebyok@0.1.0': 'e1de0000000000000000000000000000000000' } })
+    const outcomes = await Release.stage([releaseOf('safebyok')], { run: fake.run, dryRun: false, tagfile })
+    expect(outcomes.map((outcome) => [outcome.kind, outcome.detail, outcome.tagged])).to.deep.equal([
+      ['already', 'released from e1de00000000, which its tag names', undefined],
+    ])
+    expect(fake.calls.map(([command]) => command)).not.to.include('npm')
     expect(reported()).to.deep.equal([])
   })
 
@@ -240,7 +255,7 @@ describe("stage", () => {
     const fake = makeFake({})
     const outcomes = await Release.stage([releaseOf('safebyok-react', '0.0.0')], { run: fake.run, dryRun: false, tagfile })
     expect(outcomes.map((outcome) => outcome.kind)).to.deep.equal(['placeholder'])
-    expect(fake.calls).to.deep.equal([])
+    expect(fake.calls.map(([command]) => command)).to.deep.equal(['git'])
   })
 
   it("refuses a tarball whose package.json still holds a workspace: range", async () => {
@@ -249,7 +264,7 @@ describe("stage", () => {
     const outcomes = await Release.stage([releaseOf('safebyok-react')], { run: fake.run, dryRun: false, tagfile })
     expect(outcomes.map((outcome) => outcome.kind)).to.deep.equal(['failed'])
     expect(outcomes[0]?.detail).to.include('safebyok: workspace:^')
-    expect(fake.calls.map(([command]) => command)).to.deep.equal(['tar'])
+    expect(fake.calls.map(([command]) => command)).to.deep.equal(['git', 'git', 'tar'])
   })
 
   it("stages a prerelease under next", async () => {
@@ -267,9 +282,10 @@ describe("stage", () => {
     expect(outcomes.map((outcome) => Release.describeOutcome(outcome, true))).to.deep.equal(['(dry run) safebyok@0.1.0: staged (stage id stage-safebyok)'])
   })
 
-  it("reports nothing to stage as no outcomes", async () => {
+  it("reports nothing to stage as no outcomes, and asks nothing of anyone", async () => {
     const fake = makeFake({})
     expect(await Release.stage([], { run: fake.run, dryRun: false, tagfile })).to.deep.equal([])
+    expect(fake.calls).to.deep.equal([])
   })
 })
 
