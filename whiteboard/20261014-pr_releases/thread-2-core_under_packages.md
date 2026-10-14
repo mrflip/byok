@@ -84,3 +84,15 @@ green.
   `-w` for root tooling only.
 * A vite dev server from thread 1's worktree (`/workspace/byok-react_publishable`, port 5199, pids
   281403/281454) is still running; not mine to stop.
+
+## Open items
+
+* **Dependabot**: if its next run skips `packages/*` or `demos/*`, the fallback is
+  `directories: ['/', '/packages/*', '/demos/*']` in place of `directory: /` in
+  `.github/dependabot.yml`.
+* **Stale agent lines**: the `.claude/agents/` sentences above, for whoever next edits those
+  definitions.
+* **Flaky tests**: `tests/crypto.test.ts` and `tests/vault.test.ts` each alter ciphertext by
+  writing an `A` that may already be there; one thread of their own should fix both.
+* **Review**: clean at `medium`, no commits added. The reviewer's two minor points were not passed
+  on to this thread, so they are not recorded here; the orchestrator holds them.
