@@ -29,7 +29,7 @@ mid-refactor, not on a timer.
 * **Never merge a PR or enable auto-merge. The Coach merges.**
 * Before a command that throws work away (`reset --hard`, `restore`, `clean`, `branch -D`), make
   what it would discard reachable first: commit it or put a branch on it. If you can't tell what
-  it would discard, stop and ask. Anything that touches `main` directly: stop and ask.
+  it would discard, stop and ask.
 
 ### Rebase conflicts
 
@@ -37,7 +37,7 @@ Fix the straightforward ones yourself and carry on: the lockfile (take the base'
 `pnpm install`), edits side by side that don't contradict, docs and import lists, tests the base
 broke mechanically. Stop and ask when both sides changed the same logic, when the base changed
 something the thread depends on, or when resolving would drop a change from either side. Before a
-hairy rebase, tag the tip (`git tag prerebase/<branch> <branch>`, kept local) so there is a named
+hairy rebase, tag the tip (`git tag <branch>-prerebase <branch>`, kept local) so there is a named
 place to rewind to.
 
 ## Commit messages
@@ -46,23 +46,20 @@ One prefix, lowercase, a colon, a space, and a plain-language sentence saying wh
 prefix names the part of the package the commit is about, never the kind of change (no `feat:`,
 `fix:`, `chore:`), and never two.
 
-| Prefix | What it covers |
-| --- | --- |
-| `crypto` | key derivation, encryption, key wrapping, randomness: anything a cryptographer would review. Takes precedence over every other prefix. |
-| `format` | the shape of what is stored, and reading what older versions stored. Beats everything but `crypto`. |
-| `vault` | the vault's lifecycle and state: create, unlock, lock, refresh, rotate, subscribe |
-| `storage` | the storage interfaces and their adapters |
-| `api` | the public surface: exports, entry points, exported types, errors |
-| `tools` | build, lint, test and TypeScript configuration, CI and release workflows |
-| `deps` | adding, removing or bumping a dependency, and the lockfile |
-| `agent` | `CLAUDE.md` and other directives to agents |
-| `docs` | `README.md`, `PROCESS.md`, `STYLE.md`, `notes/` |
-| `plan` | `whiteboard/` plans and `human/` entries |
-| `tests` | tests and fixtures, when the tests themselves are the work |
 
-Tests and notes that ride along with a change take its prefix. When two areas change in one
-commit, that is a sign to split it. A small change is usually one commit: don't split a
-twelve-line fix into three to look diligent.
+| Prefix    | What it covers                                                                                                                         |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `crypto`  | key derivation, encryption, key wrapping, randomness: anything a cryptographer would review. Takes precedence over every other prefix. |
+| `vault`   | the vault's lifecycle and state: create, unlock, lock, refresh, rotate, subscribe                                                      |
+| `storage` | the storage interfaces and their adapters                                                                                              |
+| `api`     | the public surface: exports, entry points, exported types, errors                                                                      |
+| `tools`   | build, lint, test and TypeScript configuration, CI and release workflows                                                               |
+| `deps`    | adding, removing or bumping a dependency, and the lockfile. Where reasonable, commit the package change independently |
+| `docs`    | `README.md`, `PROCESS.md`, `STYLE.md`, `notes/`, `CLAUDE.md` and other directives to agents   |
+| `plan`    | `whiteboard/` plans and `human/` entries                                                                                               |
+| `tests`   | tests and fixtures, when the tests themselves are the work                                                                             |
+
+Tests and notes that ride along with a change take its prefix
 
 ## Pull requests
 
@@ -96,8 +93,7 @@ The Coach releases; agents never tag, publish, or change a version number unaske
 
 Everything we build with is chosen against the same test: **boring** (proven, widely adopted),
 **agent-friendly** (old enough to be in an agent's training), **ergonomic**, **zero-ops**, and
-offering a **disciplined interface**. Nothing still being proven; but we move with the front of
-the crowd once it is clear where the long-term relevance lies.
+offering a **disciplined interface**.
 
 * **Runtime dependencies** (`dependencies`, `peerDependencies`) ship to every app that installs
   us. Propose one in chat, with what it replaces and how widely it is used, before adding it.
@@ -105,10 +101,9 @@ the crowd once it is clear where the long-term relevance lies.
   afterwards.
 * Version numbers and release status drift. Before pinning anything, check the current release;
   don't trust a recalled version number, including one recalled by an agent.
+* **Runs everywhere**: accessible from React Native, React, Next.js, Nuxt, node, bun.
 
-The toolchain: TypeScript (pinned exact: typescript-eslint caps the version it supports), Vitest,
-ESLint with typescript-eslint, unicorn, sonarjs, import-x and @stylistic, and tsdown for the
-build, with publint and arethetypeswrong checking the package it makes.
+The toolchain: TypeScript, Vitest, ESLint, tsdown.
 
 ## Where things are written
 

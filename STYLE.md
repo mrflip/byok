@@ -14,8 +14,8 @@ this document disagree, the linter wins and this document is a bug.
   them, as the wider ecosystem does.
 * No barrel files beyond the package's entry points: import from the file that defines the thing.
 * **A module of related functions around one concern is imported whole**, under its Startcase
-  name: `import * as Envelope from './envelope'`, then `Envelope.seal(...)`. Its functions are
-  vigorous verbs without the module's name tacked on: `seal`, not `envelopeSeal`. Importing loose
+  name: `import * as Envelope from './envelope'`, then `Envelope.swak(...)`. Its functions are
+  vigorous verbs without the module's name tacked on: `swak`, not `envelopeSwak`. Importing loose
   verbs puts everyone in one global namespace.
 * **A module with one primary noun** is imported by name, its friends riding along:
   `import { Lockbox, LockboxKinds } from './lockbox'`.
