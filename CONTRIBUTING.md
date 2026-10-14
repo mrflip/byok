@@ -23,6 +23,9 @@ pnpm --filter safebyok test:watch   # one package's tests, as you edit
   malformed record is refused, and that no error carries the secret.
 * **A doc block** on everything exported, written for the developer calling it.
 * **A branch rebased onto `main`**, with no merge commits in it: CI refuses them.
+* **A changeset**, if it changes a published package: `pnpm changeset` asks which packages, how
+  big a bump, and a sentence for the CHANGELOG. A change that needs no release (tests, tooling,
+  docs) adds an empty one, `pnpm changeset --empty`. CI asks for one or the other.
 * **No new runtime dependency** without discussing it first: every one ships to every app that
   installs safebyok.
 

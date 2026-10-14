@@ -105,6 +105,7 @@ pnpm build           # tsdown: ESM + CJS + declarations into each dist/, checked
 pnpm --filter safebyok test        # one package, any script (or `pnpm test` in its directory);
                                    # it builds the packages it depends on first
 pnpm --filter safebyok add <dep>   # a package's dependency; `pnpm add -w` is for root tooling only
+pnpm changeset                     # a PR's release note; `--empty` when it needs none (PROCESS.md)
 ```
 
 ## Layout

@@ -91,9 +91,9 @@ only through the objects and refs every checkout shares. Hence:
    A finding you leave goes in your report and the PR comment, as *minor* (a note for the
    record) or *significant* (below). One that does not hold up against the worktree is dropped,
    with a line in your report.
-3. **Prove it.** `pnpm justify` in the worktree, and inside each package under `packages/` your
-   fixes touch. A fix that turns it red and whose repair is not obvious is undone, not repaired:
-   note it. Never commit red. Stop only processes you started, by PID.
+3. **Prove it.** `pnpm justify` in the worktree: it runs every package's. A fix that turns it
+   red and whose repair is not obvious is undone, not repaired: note it. Never commit red. Stop
+   only processes you started, by PID.
 4. **Commit**, one commit per independent fix, in PROCESS.md's *Commit messages* style: the
    prefix of the part it mends (never `fix:`), and a sentence saying what was wrong. The branch is
    yours to append to, never to rewrite: no rebase, no amend. Nothing is pushed: the worker files
