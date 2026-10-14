@@ -602,3 +602,48 @@ describe("the session vaultKey is non-extractable", () => {
     expect(extractableUnwraps(spied)).to.have.lengthOf(1)
   })
 })
+
+// localVaultDB rings no change bells, so vaultOne genuinely does not notice vaultTwo's doings
+// until it next touches the backend: the stale-device scenario, miniaturized. The reborn
+// vault has a new vault_id and its own passphrase.
+const rebornWorld = async () => {
+  const world = makeWorld()
+  const vaultOne = await world.open()
+  await vaultOne.unlock('pw one')
+  await vaultOne.store('anthropic', 'sk-ant-fake-old')
+  const vaultTwo = await world.open()
+  await vaultTwo.destroy()
+  await vaultTwo.unlock('pw two')
+  await vaultTwo.store('anthropic', 'sk-ant-fake-new')
+  return { world, vaultOne, vaultTwo }
+}
+
+describe("a stale session cannot reach into a vault reborn elsewhere", () => {
+  it("store() refuses and relocks instead of landing the write in the reborn vault", async () => {
+    const { vaultOne, vaultTwo } = await rebornWorld()
+    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'vault_locked')
+    expect(vaultOne.getSnapshot().state).to.eq('locked')
+    expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
+  })
+
+  it("erase() refuses the same way: the reborn vault keeps its box", async () => {
+    const { vaultOne, vaultTwo } = await rebornWorld()
+    await expectRefusal(vaultOne.erase('anthropic'), 'vault_locked')
+    expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
+  })
+
+  it("changePassphrase() proves against the standing bundle, never burying the reborn one", async () => {
+    const { vaultOne, vaultTwo } = await rebornWorld()
+    await expectRefusal(vaultOne.changePassphrase('pw one', 'pw three'), 'wrong_passphrase')
+    await vaultTwo.lock()
+    await vaultTwo.unlock('pw two')
+    expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
+  })
+
+  it("unlock() syncs first: the reborn vault's own passphrase opens it from the stale handle", async () => {
+    const { vaultOne } = await rebornWorld()
+    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'vault_locked')
+    await vaultOne.unlock('pw two')
+    expect(await vaultOne.read('anthropic')).to.eq('sk-ant-fake-new')
+  })
+})

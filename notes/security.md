@@ -62,3 +62,8 @@ security expert who knows what questions to ask.
   kept.
 * 2026-10-14: `pnpm-workspace.yaml` denies `esbuild`'s install script (`esbuild: false`); esbuild
   arrives with `convex` and vite, and runs from its platform binary package without it.
+* 2026-10-14: every mutating path (`store`, `erase`, `changePassphrase`, `unlock`) re-reads the
+  bundle from the backend before acting: a session holding keys for a vault since destroyed,
+  recreated or re-passphrased elsewhere relocks instead of writing into the successor. This is
+  check-then-write, not atomic, until `versionedUpdate` carries the `vault_id` expectation to
+  the backend.
