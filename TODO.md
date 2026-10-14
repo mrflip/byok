@@ -5,6 +5,12 @@
 Add the convex skill to the appropriate place, **scoped** to only that directory
 (`packages/byok-convex/`), and with only the files likely to be relevant.
 
+A pad/unpad helper, so a lockbox's ciphertext length stops telling the backend what kind of
+whisper it holds (an API key from a PEM). Padding goes inside the encryption, by a published
+scheme (PADMÉ, from the PURBs paper, or power-of-two buckets), not one of our own. To decide: does
+it need a stored-format change, or can the padding be trailing JSON whitespace, which every
+existing reader already ignores?
+
 Use stable jsonify
 
 export a treeshakeable byok/utils, with a function
