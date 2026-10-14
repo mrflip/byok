@@ -1,16 +1,21 @@
 # Sprint pr_releases: progress
 
-**Status**: thread 1 in review.
+**Status**: thread 1 filed; thread 2 underway.
 
 ## Status
 
 | # | Thread | Model | Base | Status |
 | - | ------ | ----- | ---- | ------ |
-| 1 | `20261014-react_publishable` | sonnet | `origin/main` | in review |
-| 2 | `20261014-core_under_packages` | opus | thread 1's tip | pending |
+| 1 | `20261014-react_publishable` | sonnet | `origin/main` | filed [#15](https://github.com/mrflip/safebyok/pull/15) |
+| 2 | `20261014-core_under_packages` | opus | thread 1's tip (#15) | underway |
 | 3 | `20261014-changeset_releases` | opus | thread 2's tip | pending |
 
 ## What the threads have taught
+
+*Review of thread 1:* clean at medium; no fixes. Minor notes left: peer range `^0.0.0` matches only 0.0.0
+(for 0.x semver; thread 3 must check lockstep installs work for hosts: see below); root `test` now runs
+package tests so the flaky core test can fail `test-build`; `pnpm pack` skips `prepublishOnly`. Not checked:
+the `packages` job on GitHub, Node 22/26, demo click-through.
 
 *Orchestrator, after thread 1 `ready`:*
 

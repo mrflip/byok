@@ -3,7 +3,7 @@
 * **Date**: 2026-10-14. **Mode**: normal. **Review level**: `medium`. **Concurrency**: 3 allowed, but
   the three threads form one stack (below), so they run one at a time.
 * **Issued by**: flip (Coach), via `/sprint`.
-* **Status**: thread 1 in review.
+* **Status**: thread 1 filed (#15); thread 2 underway.
 
 ## Read first
 
