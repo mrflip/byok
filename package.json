@@ -59,6 +59,7 @@
     "eslint-plugin-import-x": "^4.17.1",
     "eslint-plugin-sonarjs": "^4.2.2",
     "eslint-plugin-unicorn": "^78.0.0",
+    "fake-indexeddb": "^6.2.5",
     "publint": "^0.3.25",
     "tsdown": "^0.23.1",
     "typescript": "6.0.3",
@@ -76,6 +77,9 @@
     "./package.json": "./package.json"
   },
   "dependencies": {
+    "@noble/hashes": "^2.4.0",
+    "@scure/base": "^2.4.0",
+    "idb-keyval": "^6.3.0",
     "safe-stable-stringify": "^2.5.0",
     "zod": "^4.6.7"
   }
