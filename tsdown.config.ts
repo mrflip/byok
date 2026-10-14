@@ -4,7 +4,7 @@ import { defineConfig } from 'tsdown'
 // entry points from what was built, so they never drift from the files; publint and attw then read
 // the package as a consumer would, and fail the build on anything they find.
 export default defineConfig({
-  entry:      ['src/index.ts'],
+  entry:      ['src/index.ts', 'src/idb.ts'],
   format:     ['esm', 'cjs'],
   // Browser first, but nothing here is browser-only: WebCrypto is the same global under Node.
   platform:   'neutral',

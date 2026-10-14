@@ -8,11 +8,12 @@ pnpm demo:react              # from the repo root: builds byok, then opens the p
 pnpm justify                 # from demos/byok-demo-react: lint, typecheck, test (vitest only)
 ```
 
-## ⚠️ Nothing here is encrypted yet
+## Encrypted for real
 
-byok is at its stub stage: it stores whispers and passphrases in **plaintext** so the inspection
-panels can show where every piece of data lives. The interface is real; the cryptography is not
-yet underneath it.
+Whispers are encrypted on this device before anything reaches storage: the inspection panels show
+the ciphertext rows a backend would hold, and the remembered unlock around a key handle the
+browser will not export. The vault's records live in IndexedDB (through `byok/idb`); only the
+fake auth's scaffolding rows sit in localStorage.
 
 ## The page
 
@@ -37,7 +38,7 @@ yet underneath it.
 |---|---|
 | the library | the `byok` workspace package (repo root `src/`) |
 | React plumbing | the `byok-react` workspace package (provider, hooks, passphrase dialog) |
-| app scaffolding a host replaces | [src/lib/auth.ts](src/lib/auth.ts) (fake sign-in; a real app brings its own auth and passes `userId` to the provider), [src/lib/stores.ts](src/lib/stores.ts) (localStorage standing in for a backend) |
+| app scaffolding a host replaces | [src/lib/auth.ts](src/lib/auth.ts) (fake sign-in; a real app brings its own auth and passes `userId` to the provider), [src/lib/stores.ts](src/lib/stores.ts) (this browser's IndexedDB standing in for a backend) |
 | the app itself | [src/components/](src/components/), [src/lib/anthropic.ts](src/lib/anthropic.ts) |
 
 Tests live in `tests/`, mirroring `src/`, and cover the demo's machinery (auth scaffold, whisper

@@ -1,0 +1,93 @@
+// fake-indexeddb installs a Node-side indexedDB global before the adapters load: these tests
+// exercise real IndexedDB semantics (structured clone included) without a browser.
+import 'fake-indexeddb/auto'
+import { describe, expect, it, vi } from 'vitest'
+import { idbDeviceDB, idbVaultDB, inspectIdb } from '../src/idb'
+import { boxOf, bundleOf, scopeOf, unlockOf } from './helpers'
+
+// Each world gets its own database so tests never see each other's rows.
+const freshDbName = () => `byok_test_${crypto.randomUUID().slice(0, 8)}`
+
+describe("idbVaultDB", () => {
+  it("declares no per-record limit: IndexedDB has none", () => {
+    expect(idbVaultDB().maxRecordBytes).to.eq(Infinity)
+  })
+
+  it("round-trips a bundle and a lockbox through real IndexedDB semantics", async () => {
+    const vaultDB = idbVaultDB({ dbName: freshDbName() })
+    expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
+    await vaultDB.writeBundle(bundleOf('u1'))
+    expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
+    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
+    expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(boxOf('anthropic', 'one'))
+  })
+
+  it("lists summaries and erases the vault whole, through the base class compounds", async () => {
+    const vaultDB = idbVaultDB({ dbName: freshDbName() })
+    await vaultDB.writeBundle(bundleOf('u1'))
+    await vaultDB.writeBox(scopeOf('u1'), boxOf('openai', 'two'))
+    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
+    const summaries = await vaultDB.listBoxes(scopeOf('u1'))
+    expect(summaries.map((box) => box.boxlabel)).to.deep.equal(['anthropic', 'openai'])
+    await vaultDB.eraseVault(scopeOf('u1'))
+    expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
+    expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
+  })
+
+  it("rings its subscribers on a write, and unsubscribing silences it", async () => {
+    const vaultDB = idbVaultDB({ dbName: freshDbName() })
+    let heardCount = 0
+    const unsubscribe = vaultDB.subscribe(scopeOf('u1'), () => { heardCount += 1 })
+    await vaultDB.writeBundle(bundleOf('u1'))
+    await vi.waitFor(() => { expect(heardCount).to.be.greaterThan(0) })
+    const heardBefore = heardCount
+    unsubscribe()
+    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
+    expect(heardCount).to.eq(heardBefore)
+  })
+})
+
+describe("idbDeviceDB", () => {
+  it("keeps a DeviceUnlock by structured clone, non-extractable localUnlockKey and all", async () => {
+    const deviceDB = idbDeviceDB({ dbName: freshDbName() })
+    expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+    const unlock = await unlockOf('u1')
+    await deviceDB.writeUnlock(unlock)
+    const kept = await deviceDB.readUnlock(scopeOf('u1'))
+    expect(kept?.vault_id).to.eq('vault-id-u1')
+    expect(kept?.local_unlock_key).to.be.instanceOf(CryptoKey)
+    expect(kept?.local_unlock_key.extractable).to.be.false
+  })
+
+  it("erases one unlock, and eraseAll forgets every one", async () => {
+    const deviceDB = idbDeviceDB({ dbName: freshDbName() })
+    await deviceDB.writeUnlock(await unlockOf('u1'))
+    await deviceDB.writeUnlock(await unlockOf('u2'))
+    await deviceDB.eraseUnlock(scopeOf('u1'))
+    expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+    expect(await deviceDB.readUnlock(scopeOf('u2'))).to.not.be.null
+    await deviceDB.eraseAll()
+    expect(await deviceDB.readUnlock(scopeOf('u2'))).to.be.null
+  })
+})
+
+describe("inspectIdb", () => {
+  it("shows the raw rows of a shelf, hears writes, and wipes it clean", async () => {
+    const dbName = freshDbName()
+    const vaultDB = idbVaultDB({ dbName })
+    const inspector = inspectIdb({ dbName, shelf: 'vault_db' })
+    let heardCount = 0
+    const unsubscribe = inspector.subscribe(() => { heardCount += 1 })
+
+    await vaultDB.writeBundle(bundleOf('u1'))
+    const rows = await inspector.rows()
+    expect(rows).to.have.lengthOf(1)
+    expect(rows[0]?.ckey).to.eq('vault:acme:u1:main')
+    await vi.waitFor(() => { expect(heardCount).to.be.greaterThan(0) })
+
+    await inspector.wipe()
+    expect(await inspector.rows()).to.have.lengthOf(0)
+    expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
+    unsubscribe()
+  })
+})

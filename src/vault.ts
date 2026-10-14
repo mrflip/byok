@@ -1,5 +1,11 @@
-import { Label, LockboxSummary, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import * as Z from 'zod'
+import { Label, LockboxSummary, MaxWhisperBytes, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError } from './errors'
+import { argon2idWebV1Deriver, type KeyDeriver } from './key-deriver'
+import {
+  cipherBinding, cipherBytes, decipherBytes, fromB64, importWrappingKeyBytes,
+  makeLocalUnlockKey, makeLockboxKey, makeVaultKey, randomBytes, randomId, toB64, wrapKeyUnder, unwrapKeyUnder,
+} from './crypto'
 import { stableJsonify } from './stable-jsonify'
 import type { DeviceDB } from './device-db'
 import type { VaultDB } from './vault-db'
@@ -7,7 +13,7 @@ import type { VaultDB } from './vault-db'
 /**
  * Where the vault stands, as the UI branches on it:
  *  * `opening`  -- still reading the bundle and device cache; show nothing yet
- *  * `absent`   -- never initialized; the first unlock() will choose its passphrase
+ *  * `absent`   -- never created; the first unlock() will choose its passphrase
  *  * `locked`   -- exists, summaries readable, whispers not; unlock() opens it
  *  * `unlocked` -- whispers readable until expiresAt or lock()
  */
@@ -39,6 +45,17 @@ export type OpenVaultOpts = {
   rememberForMs?: number
   /** Time source for expiry; tests inject one. Default: the wall clock. */
   clock?: Clock
+  /**
+   * What turns a passphrase into passphraseKey bytes. Default -- and the right answer -- is the
+   * pinned Argon2id deriver; see {@link KeyDeriver} for the narrow reasons to substitute.
+   */
+  keyDeriver?: KeyDeriver
+  /**
+   * The largest whisper `store()` accepts, in bytes of its JSON. Default: {@link MaxWhisperBytes},
+   * 40444. Checked on write only, so lowering it never strands a whisper already stored. At most
+   * half the vaultDB's `maxRecordBytes`: openVault refuses more with kind 'bad_option'.
+   */
+  maxWhisperBytes?: number
 }
 
 /**
@@ -58,13 +75,28 @@ export type Vault = {
   /**
    * Open the vault with its passphrase, remembering the unlock on this device for
    * `rememberForMs`. On an `absent` vault this first unlock creates it, with this passphrase.
-   * A wrong passphrase throws kind 'wrong_passphrase' and changes nothing.
+   * A wrong passphrase throws kind 'wrong_passphrase' and changes nothing -- learned from the
+   * vaultKey envelope refusing to decrypt, never from a comparison.
    */
   unlock(passphrase: string): Promise<void>
   /** Forget the unlock, in memory and on this device: back to `locked`. */
   lock(): Promise<void>
 
-  /** Write a whisper into the lockbox `boxlabel`, creating or replacing it. Requires unlocked. */
+  /**
+   * Re-wrap the vaultKey under a new passphrase. Lockboxes are untouched -- their lockboxKeys
+   * stay wrapped under the unchanged vaultKey -- so this is cheap no matter how many there are.
+   * Every other device's unlock (remembered or in hand) lapses: the bundle's passphraseEpoch
+   * moves, and they fall back to `locked` on their next look.
+   *
+   * Works locked or unlocked, since the old passphrase is proof enough. A wrong `oldPassphrase`
+   * throws kind 'wrong_passphrase' and changes nothing.
+   */
+  changePassphrase(oldPassphrase: string, newPassphrase: string): Promise<void>
+
+  /**
+   * Write a whisper into the lockbox `boxlabel`, creating or replacing it. Requires unlocked; kind
+   * 'whisper_too_large' when its JSON is over the vault's `maxWhisperBytes`.
+   */
   store(boxlabel: string, whisper: Whisper, opts?: { note?: string }): Promise<void>
   /** The whisper in `boxlabel`. Requires unlocked; kind 'absent_box' when there is none. */
   read(boxlabel: string): Promise<Whisper>
@@ -72,7 +104,7 @@ export type Vault = {
    * Hand the whisper to `callback` and return its result: the shape that discourages parking a
    * secret in state. Requires unlocked.
    *
-   * @example await vault.use('ANTHROPIC_API_KEY', (whisper) => callAnthropic(whisper))
+   * @example await vault.use('anthropic_api_key', (whisper) => callAnthropic(whisper))
    */
   use<ResultT>(boxlabel: string, callback: (whisper: Whisper) => ResultT | Promise<ResultT>): Promise<ResultT>
   /** Remove the lockbox `boxlabel` entirely. Requires unlocked; kind 'absent_box' when absent. */
@@ -89,6 +121,21 @@ export type Vault = {
 }
 
 /**
+ * What `bundle` holds before the backend's first answer arrives: distinct from null, which is the
+ * backend's own answer ("no bundle: this vault was never created"). Symbol.for, not Symbol, so
+ * the sentinel stays one value even when the ESM and CJS builds load side by side.
+ */
+const UnreadBundle = Symbol.for('byok.unread_bundle')
+
+/**
+ * The vaultKey's two lives after an unwrap. `transientKey` is extractable, because only an
+ * extractable key can be wrapped (for the device record, or under a new passphraseKey); the
+ * operation that needed it drops it on return. `sessionKey` is the handle the vault keeps
+ * between operations: non-extractable, so the platform itself refuses to export its bytes.
+ */
+type VaultKeyPair = { transientKey: CryptoKey, sessionKey: CryptoKey }
+
+/**
  * Open a handle on one user's vault. Reads the bundle and the device's remembered unlock, then
  * settles into `absent`, `locked`, or (when a remembered unlock is still fresh) `unlocked` --
  * never prompting: asking for a passphrase is the host's job, and only when a whisper is
@@ -98,13 +145,6 @@ export type Vault = {
  *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, deviceDB })
  *   vault.getSnapshot().state  // 'absent' | 'locked' | 'unlocked'
  */
-/**
- * What `bundle` holds before the backend's first answer arrives: distinct from null, which is the
- * backend's own answer ("no bundle: this vault was never initialized"). Symbol.for, not Symbol,
- * so the sentinel stays one value even when the ESM and CJS builds load side by side.
- */
-const UnreadBundle = Symbol.for('byok.unread_bundle')
-
 export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const applabel   = parseLabel(opts.applabel)
   const vaultlabel = parseLabel(opts.vaultlabel)
@@ -113,17 +153,23 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const { vaultDB, deviceDB } = opts
   const rememberForMs = opts.rememberForMs ?? SevenDaysMs
   const clock = opts.clock ?? wallClock
+  const keyDeriver = opts.keyDeriver ?? argon2idWebV1Deriver
+  const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
+  if (whisperByteLimit > vaultDB.maxRecordBytes * WhisperShareOfRecord) {
+    throw new VaultError('bad_option', `maxWhisperBytes is over half of the ${String(vaultDB.maxRecordBytes)} bytes this storage adapter holds in one record, so a whisper that large might not store: pass a smaller maxWhisperBytes.`)
+  }
 
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
   let boxes: readonly LockboxSummary[] = []
   let expiresAt: number | null = null
+  let vaultKey: CryptoKey | null = null
   let closed = false
 
   const listeners = new Set<() => void>()
   const vaultState = (): VaultState => {
     if (bundle === UnreadBundle) { return 'opening' }
     if (bundle === null) { return 'absent' }
-    if (expiresAt !== null && expiresAt > clock.now()) { return 'unlocked' }
+    if (vaultKey !== null && expiresAt !== null && expiresAt > clock.now()) { return 'unlocked' }
     return 'locked'
   }
   let snapshot: VaultSnapshot = { state: vaultState(), scope, boxes, expiresAt }
@@ -137,9 +183,27 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     listeners.forEach((listener) => { listener() })
   }
 
+  // The context each encryption is bound to; see VOCABULARY.md on cipherAdditionalData.
+  const bundleBinding = (vaultId: string, epoch: number, purpose: 'vault_key_passphrase_wrapped' | 'vault_key_local_wrapped') => (
+    cipherBinding('byok-vault-v1', applabel, scope.user_id, vaultlabel, vaultId, epoch, purpose)
+  )
+  const boxBinding = (vaultId: string, boxlabel: string, revisionId: string, purpose: 'lockbox_key_wrapped' | 'whisper_ciphered') => (
+    cipherBinding('byok-lockbox-v1', applabel, scope.user_id, vaultlabel, vaultId, boxlabel, revisionId, purpose)
+  )
+
   const refresh = async () => {
-    bundle = await vaultDB.readBundle(scope)
-    boxes = await vaultDB.listBoxes(scope)
+    const fresh = await vaultDB.readBundle(scope)
+    // A passphrase change elsewhere (new epoch) or a deletion ends this device's unlock: the
+    // vaultKey in hand still works on old rows, but pretending to be current invites confusion.
+    const outlived = vaultKey !== null && bundle !== UnreadBundle && bundle !== null
+      && (fresh?.passphrase_epoch !== bundle.passphrase_epoch || fresh.vault_id !== bundle.vault_id)
+    if (outlived) {
+      vaultKey = null
+      expiresAt = null
+      await deviceDB.eraseUnlock(scope)
+    }
+    bundle = fresh
+    boxes = fresh === null ? [] : await vaultDB.listBoxes(scope)
     bump()
   }
 
@@ -148,18 +212,150 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const ensureOpen = () => {
     if (closed) { throw new VaultError('vault_closed', 'This vault handle was closed: open the vault again.') }
   }
-  const ensureUnlocked = () => {
+  const ensureUnlocked = (): CryptoKey => {
     ensureOpen()
-    if (expiresAt !== null && expiresAt > clock.now()) { return }
+    if (vaultKey !== null && expiresAt !== null && expiresAt > clock.now()) { return vaultKey }
+    vaultKey = null
     expiresAt = null
     bump()
     throw new VaultError('vault_locked', 'The vault is locked: ask the user for their passphrase and call unlock().')
+  }
+
+  const currentBundle = (): VaultBundle => {
+    if (bundle === UnreadBundle || bundle === null) {
+      throw new VaultError('absent_vault', 'This vault has not been created yet: the first unlock() creates it.')
+    }
+    return bundle
+  }
+
+  /** The vaultKey out of a bundle's passphrase envelope; its refusal IS the passphrase check. */
+  const unwrapWithPassphrase = async (standing: VaultBundle, passphrase: string): Promise<VaultKeyPair> => {
+    if (standing.key_deriver_label !== keyDeriver.key_deriver_label) {
+      throw new VaultError('unknown_key_deriver', 'This vault was made with a key deriver this package does not carry: update byok, or open the vault where it was made.')
+    }
+    const passphraseKeyBytes = await keyDeriver.deriveKeyBytes(passphrase, fromB64(standing.passphrase_salt_b64))
+    const passphraseKey = await importWrappingKeyBytes(passphraseKeyBytes)
+    const binding = bundleBinding(standing.vault_id, standing.passphrase_epoch, 'vault_key_passphrase_wrapped')
+    try {
+      // The transient is only ever the wrapped argument of a wrap; WebCrypto refuses an empty
+      // usage list, so it carries the narrowest one.
+      const transientKey = await unwrapKeyUnder(passphraseKey, standing.vault_key_passphrase_wrapped, binding, { extractable: true, usage: ['wrapKey'] })
+      const sessionKey = await unwrapKeyUnder(passphraseKey, standing.vault_key_passphrase_wrapped, binding, { extractable: false, usage: ['wrapKey', 'unwrapKey'] })
+      return { transientKey, sessionKey }
+    } catch {
+      throw new VaultError('wrong_passphrase', "That passphrase didn't unlock the vault. Check for typos and try again.")
+    }
+  }
+
+  /** A brand-new bundle around a brand-new vaultKey, wrapped under `passphrase`. */
+  const draftBundle = async (passphrase: string): Promise<{ draft: VaultBundle } & VaultKeyPair> => {
+    const vaultId = randomId()
+    const saltBytes = randomBytes(keyDeriver.salt_bytes)
+    const freshKey = await makeVaultKey()
+    const passphraseKey = await importWrappingKeyBytes(await keyDeriver.deriveKeyBytes(passphrase, saltBytes))
+    const binding = bundleBinding(vaultId, 1, 'vault_key_passphrase_wrapped')
+    const envelope = await wrapKeyUnder(passphraseKey, freshKey, binding)
+    const sessionKey = await unwrapKeyUnder(passphraseKey, envelope, binding, { extractable: false, usage: ['wrapKey', 'unwrapKey'] })
+    const now = new Date(clock.now()).toISOString()
+    const draft: VaultBundle = {
+      format:              'byok-vault-v1',
+      ...scope,
+      vault_id:            vaultId,
+      passphrase_epoch:    1,
+      key_deriver_label:   keyDeriver.key_deriver_label,
+      passphrase_salt_b64: toB64(saltBytes),
+      vault_key_passphrase_wrapped: envelope,
+      created_at:          now,
+      updated_at:          now,
+    }
+    return { draft, transientKey: freshKey, sessionKey }
+  }
+
+  /** The vaultKey for an unlock: creating the vault when absent, proving the passphrase when not. */
+  const settleUnlock = async (passphrase: string): Promise<VaultKeyPair> => {
+    if (bundle === null || bundle === UnreadBundle) {
+      const { draft, transientKey, sessionKey } = await draftBundle(passphrase)
+      const settled = await vaultDB.createBundle(draft)
+      bundle = settled
+      if (settled.vault_id === draft.vault_id) { return { transientKey, sessionKey } }
+      // Another device created the vault between our look and our write: the settled bundle is
+      // theirs, and this passphrase must prove itself against it like any other.
+      return await unwrapWithPassphrase(settled, passphrase)
+    }
+    return await unwrapWithPassphrase(bundle, passphrase)
+  }
+
+  /** Mint a fresh localUnlockKey, wrap the vaultKey under it, and remember the unlock on this device. */
+  const rememberDevice = async (unlockedKey: CryptoKey, standing: VaultBundle, until: number) => {
+    const localUnlockKey = await makeLocalUnlockKey()
+    const wrapped = await wrapKeyUnder(localUnlockKey, unlockedKey, bundleBinding(standing.vault_id, standing.passphrase_epoch, 'vault_key_local_wrapped'))
+    await deviceDB.writeUnlock({
+      format:                  'byok-unlock-v1',
+      ...scope,
+      vault_id:                standing.vault_id,
+      passphrase_epoch:        standing.passphrase_epoch,
+      local_unlock_key:        localUnlockKey,
+      vault_key_local_wrapped: wrapped,
+      expires_at:              until,
+    })
+  }
+
+  /** Pick up a remembered unlock, if this device holds one that still fits and still opens. */
+  const rememberedUnlock = async () => {
+    if (bundle === UnreadBundle || bundle === null) { return }
+    const remembered = await deviceDB.readUnlock(scope)
+    if (remembered === null) { return }
+    const fits = remembered.vault_id === bundle.vault_id
+      && remembered.passphrase_epoch === bundle.passphrase_epoch
+      && remembered.expires_at > clock.now()
+    if (! fits) {
+      await deviceDB.eraseUnlock(scope)
+      return
+    }
+    try {
+      // Nothing on the remembered path ever re-wraps the vaultKey, so no extractable handle
+      // exists on it at all.
+      vaultKey = await unwrapKeyUnder(
+        remembered.local_unlock_key,
+        remembered.vault_key_local_wrapped,
+        bundleBinding(bundle.vault_id, bundle.passphrase_epoch, 'vault_key_local_wrapped'),
+        { extractable: false, usage: ['wrapKey', 'unwrapKey'] },
+      )
+      expiresAt = remembered.expires_at
+    } catch {
+      // A record that no longer opens reads as "no remembered unlock": the safe failure.
+      await deviceDB.eraseUnlock(scope)
+    }
   }
 
   const readBoxOrThrow = async (boxlabel: string) => {
     const lockbox = await vaultDB.readBox(scope, parseLabel(boxlabel))
     if (lockbox === null) { throw new VaultError('absent_box', `No lockbox is labelled '${boxlabel}' in this vault.`) }
     return lockbox
+  }
+
+  /** Unwrap a lockbox's lockboxKey, decipher its whisper, and hand it back validated. */
+  const openBox = async (boxlabel: string): Promise<Whisper> => {
+    const unlockedKey = ensureUnlocked()
+    const lockbox = await readBoxOrThrow(boxlabel)
+    const vaultId = currentBundle().vault_id
+    let whisperBytes: Uint8Array
+    try {
+      const lockboxKey = await unwrapKeyUnder(
+        unlockedKey,
+        lockbox.lockbox_key_wrapped,
+        boxBinding(vaultId, lockbox.boxlabel, lockbox.revision_id, 'lockbox_key_wrapped'),
+        { extractable: false, usage: ['decrypt'] },
+      )
+      whisperBytes = await decipherBytes(lockboxKey, lockbox.whisper_ciphered, boxBinding(vaultId, lockbox.boxlabel, lockbox.revision_id, 'whisper_ciphered'))
+    } catch {
+      throw new VaultError('corrupt_record', 'The lockbox would not open: its stored record failed verification, as if damaged or moved from somewhere else. It was left as it is.')
+    }
+    const checked = Whisper.safeParse(parseJsonOrNull(new TextDecoder().decode(whisperBytes)))
+    if (! checked.success) {
+      throw new VaultError('corrupt_record', 'The lockbox opened, but what was inside is not a whisper this package knows. It was left as it is.')
+    }
+    return checked.data
   }
 
   const vault: Vault = {
@@ -173,61 +369,79 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     unlock: async (passphrase) => {
       ensureOpen()
       if (! passphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
-      // The UnreadBundle arm is for the type: unlock() can only run on a returned handle, and
-      // openVault resolves only after the first refresh has read the bundle.
-      if (bundle === null || bundle === UnreadBundle) {
-        bundle = {
-          format:          'byok-stub-vault-v0',
-          ...scope,
-          stub_passphrase: passphrase,
-          created_at:      new Date(clock.now()).toISOString(),
-        }
-        await vaultDB.writeBundle(bundle)
-      } else if (bundle.stub_passphrase !== passphrase) {
-        // The real package learns this from an AEAD unwrap failure, never from a comparison.
-        throw new VaultError('wrong_passphrase', "That passphrase didn't unlock the vault. Check for typos and try again.")
-      }
+      const unlocked = await settleUnlock(passphrase)
       expiresAt = clock.now() + rememberForMs
-      await deviceDB.writeUnlock({ format: 'byok-stub-unlock-v0', ...scope, expires_at: expiresAt })
+      // The transient's last act: wrapped into this device's remembered unlock, then dropped.
+      await rememberDevice(unlocked.transientKey, currentBundle(), expiresAt)
+      vaultKey = unlocked.sessionKey
       bump()
     },
 
     lock: async () => {
       ensureOpen()
+      vaultKey = null
       expiresAt = null
       await deviceDB.eraseUnlock(scope)
       bump()
     },
 
+    changePassphrase: async (oldPassphrase, newPassphrase) => {
+      ensureOpen()
+      if (! newPassphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
+      const standing = currentBundle()
+      const proven = await unwrapWithPassphrase(standing, oldPassphrase)
+      const saltBytes = randomBytes(keyDeriver.salt_bytes)
+      const epoch = standing.passphrase_epoch + 1
+      const passphraseKey = await importWrappingKeyBytes(await keyDeriver.deriveKeyBytes(newPassphrase, saltBytes))
+      const next: VaultBundle = {
+        ...standing,
+        passphrase_epoch:    epoch,
+        passphrase_salt_b64: toB64(saltBytes),
+        vault_key_passphrase_wrapped: await wrapKeyUnder(passphraseKey, proven.transientKey, bundleBinding(standing.vault_id, epoch, 'vault_key_passphrase_wrapped')),
+        updated_at:          new Date(clock.now()).toISOString(),
+      }
+      await vaultDB.writeBundle(next)
+      bundle = next
+      expiresAt = clock.now() + rememberForMs
+      await rememberDevice(proven.transientKey, next, expiresAt)
+      vaultKey = proven.sessionKey
+      bump()
+    },
+
     store: async (boxlabel, whisper, storeOpts) => {
-      ensureUnlocked()
+      const unlockedKey = ensureUnlocked()
       const label = parseLabel(boxlabel)
       const checked = Whisper.safeParse(whisper)
       // The refusal never quotes its input: a whisper stays out of error messages.
       if (! checked.success) {
         throw new VaultError('bad_whisper', 'A whisper must be a JSON value: a string, number, boolean, array, or plain object. A bare null or undefined cannot be stored -- to empty a lockbox, erase it. (null inside an array or object is fine.)')
       }
+      const whisperBytes = new TextEncoder().encode(stableJsonify(checked.data))
+      if (whisperBytes.length > whisperByteLimit) {
+        throw new VaultError('whisper_too_large', `That whisper is over this vault's limit of ${String(whisperByteLimit)} bytes of JSON: check that the right value is being stored. If it really is meant to be this large, pass a larger maxWhisperBytes to openVault.`)
+      }
+      const vaultId = currentBundle().vault_id
+      const revisionId = randomId()
+      const lockboxKey = await makeLockboxKey()
       const now = new Date(clock.now()).toISOString()
       const prev = await vaultDB.readBox(scope, label)
       await vaultDB.writeBox(scope, {
-        boxlabel:   label,
-        whisper:    checked.data,
-        note:       storeOpts?.note ?? prev?.note,
-        created_at: prev?.created_at ?? now,
-        updated_at: now,
+        format:              'byok-lockbox-v1',
+        boxlabel:            label,
+        revision_id:         revisionId,
+        lockbox_key_wrapped: await wrapKeyUnder(unlockedKey, lockboxKey, boxBinding(vaultId, label, revisionId, 'lockbox_key_wrapped')),
+        whisper_ciphered:    await cipherBytes(lockboxKey, whisperBytes, boxBinding(vaultId, label, revisionId, 'whisper_ciphered')),
+        note:                storeOpts?.note ?? prev?.note,
+        created_at:          prev?.created_at ?? now,
+        updated_at:          now,
       })
       await refresh()
     },
 
-    read: async (boxlabel) => {
-      ensureUnlocked()
-      const { whisper } = await readBoxOrThrow(boxlabel)
-      return whisper
-    },
+    read: async (boxlabel) => await openBox(boxlabel),
 
     use: async (boxlabel, callback) => {
-      ensureUnlocked()
-      const { whisper } = await readBoxOrThrow(boxlabel)
+      const whisper = await openBox(boxlabel)
       return await callback(whisper)
     },
 
@@ -240,6 +454,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
     destroy: async () => {
       ensureOpen()
+      vaultKey = null
       expiresAt = null
       await deviceDB.eraseUnlock(scope)
       await vaultDB.eraseVault(scope)
@@ -254,12 +469,20 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
 
   // Watch the backend so lockboxes written elsewhere (another tab, the inspector's reset button)
-  // show up without a manual refresh.
-  const unsubscribeDB = vaultDB.subscribe(scope, () => { void refresh() })
+  // show up without a manual refresh. A failing background refresh has nobody to throw to, so it
+  // leaves the snapshot standing; the next foreground operation surfaces the trouble itself.
+  const quietRefresh = async () => {
+    try {
+      await refresh()
+    } catch {
+      // nobody to throw to: see above
+    }
+  }
+  const unsubscribeDB = vaultDB.subscribe(scope, () => { void quietRefresh() })
 
-  const remembered = await deviceDB.readUnlock(scope)
-  if (remembered !== null && remembered.expires_at > clock.now()) { expiresAt = remembered.expires_at }
   await refresh()
+  await rememberedUnlock()
+  bump()
   return vault
 }
 
@@ -269,4 +492,30 @@ const parseLabel = (candidate: string): string => {
     throw new VaultError('bad_label', 'A label is 2-40 lowercase letters and digits, words joined by single underscores, starting with a letter.')
   }
   return checked.data
+}
+
+/**
+ * The share of an adapter's maxRecordBytes a whisper may claim. Stored, a whisper's ciphertext is
+ * base64, a third larger than the whisper; the record's other fields, and each backend's own way
+ * of counting bytes, need the rest.
+ */
+const WhisperShareOfRecord = 0.5
+
+const maxWhisperBytes = Z.number().int().positive().default(MaxWhisperBytes)
+
+const parseMaxWhisperBytes = (candidate: number | undefined): number => {
+  const checked = maxWhisperBytes.safeParse(candidate)
+  if (! checked.success) {
+    throw new VaultError('bad_option', 'maxWhisperBytes is a whole number of bytes, greater than zero.')
+  }
+  return checked.data
+}
+
+/** JSON text parsed, or null on text that is not JSON -- which Whisper's validator then refuses. */
+const parseJsonOrNull = (text: string): unknown => {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return null
+  }
 }

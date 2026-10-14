@@ -1,24 +1,28 @@
-import { describe, expect, it } from 'vitest'
-import { SevenDaysMs, type Whisper } from '../src/types'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { MaxWhisperBytes, SevenDaysMs, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
-import { localDeviceDB } from '../src/device-db'
+import { memoryDeviceDB } from '../src/device-db'
 import { localVaultDB } from '../src/vault-db'
 import { memoryStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts } from '../src/vault'
+import { testDeriver } from './helpers'
 
-/** A fresh in-memory world: both stores, both adapters, a steerable clock, and an opener. */
+/**
+ * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, and an
+ * opener. Unlocks derive through the cheap testDeriver, so the suite is not a benchmark of
+ * Argon2id; the real deriver has its own tests in key-deriver.test.ts.
+ */
 const makeWorld = () => {
   const dbStore = memoryStore()
-  const deviceStore = memoryStore()
   const vaultDB = localVaultDB(dbStore)
-  const deviceDB = localDeviceDB(deviceStore)
+  const deviceDB = memoryDeviceDB()
   let nowMs = Date.parse('2026-10-14T12:00:00Z')
   const clock = { now: () => nowMs }
   const advance = (byMs: number) => { nowMs += byMs }
   const open = (overrides?: Partial<OpenVaultOpts>) => (
-    openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB, clock, ...overrides })
+    openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB, clock, keyDeriver: testDeriver, ...overrides })
   )
-  return { dbStore, deviceStore, vaultDB, deviceDB, clock, advance, open }
+  return { dbStore, vaultDB, deviceDB, clock, advance, open }
 }
 
 /** Expect `operation` to reject with a VaultError of `kind`; hands the error back for a closer look. */
@@ -183,6 +187,55 @@ describe("store and read", () => {
     expect(vault.getSnapshot().boxes).to.have.lengthOf(0)
   })
 
+  it("stores a whisper of exactly MaxWhisperBytes, and refuses one byte more, quoting none of it", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    // A JSON string is its characters plus two quotes.
+    const atLimit = 'x'.repeat(MaxWhisperBytes - 2)
+    await vault.store('the_box', atLimit)
+    expect(await vault.read('the_box')).to.eq(atLimit)
+    const oneOver = `${'x'.repeat(MaxWhisperBytes - 7)}SECRET`
+    const err = await expectRefusal(vault.store('the_box', oneOver), 'whisper_too_large')
+    expect(err.message).to.not.include('SECRET')
+    expect(await vault.read('the_box')).to.eq(atLimit)
+  })
+
+  it("counts the limit in bytes, not characters", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ maxWhisperBytes: 10 })
+    await vault.unlock('pw')
+    await vault.store('the_box', 'éééé')
+    await expectRefusal(vault.store('other_box', 'ééééé'), 'whisper_too_large')
+    expect(vault.getSnapshot().boxes.map((summary) => summary.boxlabel)).to.deep.equal(['the_box'])
+  })
+
+  it("checks the limit on write only, so lowering it strands nothing already stored", async () => {
+    const world = makeWorld()
+    const roomy = await world.open()
+    await roomy.unlock('pw')
+    await roomy.store('the_box', 'x'.repeat(100))
+    roomy.close()
+    const tight = await world.open({ maxWhisperBytes: 16 })
+    expect(await tight.read('the_box')).to.eq('x'.repeat(100))
+    await expectRefusal(tight.store('the_box', 'x'.repeat(100)), 'whisper_too_large')
+  })
+
+  it("refuses a maxWhisperBytes over half of what the adapter holds in one record", async () => {
+    const world = makeWorld()
+    const halfAMebibyte = world.vaultDB.maxRecordBytes / 2
+    expect(halfAMebibyte).to.eq(524_288)
+    await world.open({ maxWhisperBytes: halfAMebibyte })
+    await expectRefusal(world.open({ maxWhisperBytes: halfAMebibyte + 1 }), 'bad_option')
+  })
+
+  it("refuses a maxWhisperBytes that is not a whole number of bytes above zero", async () => {
+    const world = makeWorld()
+    for (const nonsense of [0, -1, 1.5, NaN]) {
+      await expectRefusal(world.open({ maxWhisperBytes: nonsense }), 'bad_option')
+    }
+  })
+
   it("refuses a malformed boxlabel before touching storage", async () => {
     const world = makeWorld()
     const vault = await world.open()
@@ -333,9 +386,139 @@ describe("the snapshot and its subscribers", () => {
     await here.unlock('pw')
     const there = await world.open()
     await there.store('anthropic', 'written elsewhere')
-    await Promise.resolve()  // let the subscription's refresh settle
-    await Promise.resolve()
-    expect(here.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
+    await vi.waitFor(() => { expect(here.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic']) })
+  })
+})
+
+describe("what the backend sees", () => {
+  it("stores no whisper and no passphrase in the clear, anywhere", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('a very memorable passphrase')
+    await vault.store('anthropic', 'sk-ant-api03-fake-but-secret', { note: 'notes are public' })
+    const everything = world.dbStore.ckeys().map((ckey) => world.dbStore.read(ckey)).join('\n')
+    expect(everything).to.not.include('sk-ant-api03-fake-but-secret')
+    expect(everything).to.not.include('a very memorable passphrase')
+    expect(everything).to.include('notes are public')  // the note is public by design
+    expect(everything).to.include('whisper_ciphered')
+  })
+
+  it("two stores of the same whisper write different ciphertext: fresh key and iv every time", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('one_box', 'the same whisper')
+    await vault.store('two_box', 'the same whisper')
+    const rows = world.dbStore.ckeys().filter((ckey) => ckey.startsWith('box:')).map((ckey) => world.dbStore.read(ckey))
+    const [oneRow, twoRow] = rows.map((text) => JSON.parse(text ?? '{}') as { whisper_ciphered: { ciphertext_b64: string } })
+    expect(oneRow?.whisper_ciphered.ciphertext_b64).to.not.eq(twoRow?.whisper_ciphered.ciphertext_b64)
+  })
+})
+
+describe("tampering", () => {
+  it("a lockbox with altered ciphertext refuses to open, and is left as it is", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    const ckey = world.dbStore.ckeys().find((candidate) => candidate.startsWith('box:'))
+    const row = JSON.parse(world.dbStore.read(ckey ?? '') ?? '{}') as { whisper_ciphered: { ciphertext_b64: string } }
+    row.whisper_ciphered.ciphertext_b64 = `A${row.whisper_ciphered.ciphertext_b64.slice(1)}`
+    world.dbStore.write(ckey ?? '', JSON.stringify(row))
+    const err = await expectRefusal(vault.read('anthropic'), 'corrupt_record')
+    expect(err.message).to.not.include('sk-fake')
+    expect(world.dbStore.read(ckey ?? '')).to.not.be.null  // preserved for forensics, never auto-deleted
+  })
+
+  it("a lockbox row moved under another label refuses to open", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('victim_box', 'sk-fake')
+    const fromCkey = world.dbStore.ckeys().find((candidate) => candidate.includes('victim_box'))
+    world.dbStore.write('box:acme:u1:main:other_box', world.dbStore.read(fromCkey ?? '') ?? '')
+    await expectRefusal(vault.read('other_box'), 'corrupt_record')
+  })
+
+  it("a bundle that does not parse makes the open itself refuse, deleting nothing", async () => {
+    const world = makeWorld()
+    world.dbStore.write('vault:acme:u1:main', '{"format":"not-a-vault"}')
+    await expectRefusal(world.open(), 'corrupt_record')
+    expect(world.dbStore.read('vault:acme:u1:main')).to.eq('{"format":"not-a-vault"}')
+  })
+})
+
+describe("changePassphrase", () => {
+  it("retires the old passphrase, admits the new, and keeps every lockbox readable", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('old passphrase')
+    await vault.store('anthropic', 'sk-fake')
+    await vault.changePassphrase('old passphrase', 'new passphrase')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(await vault.read('anthropic')).to.eq('sk-fake')
+
+    const fresh = await world.open({ deviceDB: memoryDeviceDB() })  // a new device: no remembered unlock
+    await expectRefusal(fresh.unlock('old passphrase'), 'wrong_passphrase')
+    await fresh.unlock('new passphrase')
+    expect(await fresh.read('anthropic')).to.eq('sk-fake')
+  })
+
+  it("works on a locked vault: the old passphrase is proof enough", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('old passphrase')
+    await vault.lock()
+    await vault.changePassphrase('old passphrase', 'new passphrase')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("a wrong old passphrase is refused and changes nothing", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('the real passphrase')
+    await expectRefusal(vault.changePassphrase('not the passphrase', 'whatever'), 'wrong_passphrase')
+    const fresh = await world.open({ deviceDB: memoryDeviceDB() })
+    await fresh.unlock('the real passphrase')
+    expect(fresh.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("a new passphrase of only whitespace is refused outright", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await expectRefusal(vault.changePassphrase('pw', ' '.repeat(3)), 'wrong_passphrase')
+  })
+
+  it("refuses on a vault that does not exist yet", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await expectRefusal(vault.changePassphrase('old', 'new'), 'absent_vault')
+  })
+
+  it("ends every other device's unlock: theirs lapses on the next look", async () => {
+    const world = makeWorld()
+    const here = await world.open()
+    await here.unlock('old passphrase')
+    const thereDeviceDB = memoryDeviceDB()
+    const there = await world.open({ deviceDB: thereDeviceDB })
+    await there.unlock('old passphrase')
+    expect(there.getSnapshot().state).to.eq('unlocked')
+
+    await here.changePassphrase('old passphrase', 'new passphrase')
+    await vi.waitFor(() => { expect(there.getSnapshot().state).to.eq('locked') })
+    expect(await thereDeviceDB.readUnlock({ applabel: 'acme', user_id: 'u1', vaultlabel: 'main' })).to.be.null
+  })
+})
+
+describe("the key deriver seam", () => {
+  it("a vault made under one deriver refuses to unlock under another, by label", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    const alienDeriver = { ...testDeriver, key_deriver_label: 'someone_elses_deriver_v9' }
+    const alien = await world.open({ deviceDB: memoryDeviceDB(), keyDeriver: alienDeriver })
+    await expectRefusal(alien.unlock('pw'), 'unknown_key_deriver')
   })
 })
 
@@ -358,5 +541,64 @@ describe("close", () => {
     const again = await world.open()
     expect(again.getSnapshot().state).to.eq('unlocked')
     expect(await again.read('anthropic')).to.eq('sk-fake')
+  })
+})
+
+// The handle a vault keeps between operations must refuse subtle.exportKey; an extractable
+// handle may exist only inside an operation about to wrap the vaultKey, dropped on return.
+// The closure hides the handle itself, so the suite below watches what each flow asks WebCrypto
+// to unwrap: `extractable` is unwrapKey's sixth argument.
+const watchUnwraps = () => vi.spyOn(crypto.subtle, 'unwrapKey')
+const extractableUnwraps = (spied: ReturnType<typeof watchUnwraps>) => (
+  spied.mock.calls.filter((callArgs) => callArgs[5])
+)
+
+describe("the session vaultKey is non-extractable", () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it("creating a vault unwraps only the session handle, never an extractable one", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    const spied = watchUnwraps()
+    await vault.unlock('pw one')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(spied.mock.calls).to.have.lengthOf(1)
+    expect(extractableUnwraps(spied)).to.have.lengthOf(0)
+  })
+
+  it("a passphrase unlock asks for exactly one extractable transient, for the device wrap", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lock()
+    const spied = watchUnwraps()
+    await vault.unlock('pw one')
+    // The non-extractable handle it kept still does the whole job.
+    await vault.store('anthropic', 'sk-ant-fake')
+    expect(await vault.read('anthropic')).to.eq('sk-ant-fake')
+    expect(extractableUnwraps(spied)).to.have.lengthOf(1)
+  })
+
+  it("a remembered unlock never makes an extractable handle at all", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.store('anthropic', 'sk-ant-fake')
+    const spied = watchUnwraps()
+    const later = await world.open()
+    expect(later.getSnapshot().state).to.eq('unlocked')
+    expect(await later.read('anthropic')).to.eq('sk-ant-fake')
+    expect(extractableUnwraps(spied)).to.have.lengthOf(0)
+  })
+
+  it("changePassphrase asks for exactly one extractable transient, for the new wraps", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.store('anthropic', 'sk-ant-fake')
+    const spied = watchUnwraps()
+    await vault.changePassphrase('pw one', 'pw two')
+    expect(await vault.read('anthropic')).to.eq('sk-ant-fake')
+    expect(extractableUnwraps(spied)).to.have.lengthOf(1)
   })
 })

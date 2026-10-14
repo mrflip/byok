@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { isVaultError, openVault, type DeviceDB, type Vault, type VaultDB, type VaultSnapshot } from 'byok'
+import { isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultSnapshot } from 'byok'
 import { PassphraseModal } from './passphrase-modal'
 
 /**
@@ -47,14 +47,14 @@ export const useVaultSnapshot = (): VaultSnapshot => {
   )
 }
 
-export type VaultProviderProps = {
-  applabel:   string
-  vaultlabel: string
+/**
+ * Every openVault option, passed through as given (an option left out gets openVault's default),
+ * except that `userId` may be null.
+ */
+export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
   /** The signed-in user from the host's auth, or null when nobody is: then there is no vault. */
-  userId:     string | null
-  vaultDB:    VaultDB
-  deviceDB:   DeviceDB
-  children:   ReactNode
+  userId:   string | null
+  children: ReactNode
 }
 
 /**
@@ -69,7 +69,8 @@ export type VaultProviderProps = {
  *     <App />
  *   </VaultProvider>
  */
-export const VaultProvider = ({ applabel, vaultlabel, userId, vaultDB, deviceDB, children }: VaultProviderProps) => {
+export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps) => {
+  const { applabel, vaultlabel, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes } = opts
   const [vault, setVault] = useState<Vault | null>(null)
   const [asking, setAsking] = useState<{ settle: (unlocked: boolean) => void } | null>(null)
 
@@ -77,7 +78,10 @@ export const VaultProvider = ({ applabel, vaultlabel, userId, vaultDB, deviceDB,
     if (userId === null) { return undefined }
     let handle: Vault | null = null
     let gone = false
-    void openVault({ applabel, vaultlabel, userId, vaultDB, deviceDB }).then((opened) => {
+    // Listed one by one so the effect re-runs on each; `satisfies` fails the build if an openVault
+    // option is ever added and not passed through.
+    const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes } satisfies Record<keyof OpenVaultOpts, unknown>
+    void openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
       setVault(opened)
@@ -87,7 +91,7 @@ export const VaultProvider = ({ applabel, vaultlabel, userId, vaultDB, deviceDB,
       handle?.close()
       setVault(null)
     }
-  }, [userId, applabel, vaultlabel, vaultDB, deviceDB])
+  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes])
 
   const withUnlockedVault = useCallback(async <ResultT,>(action: () => Promise<ResultT>): Promise<ResultT | null> => {
     try {

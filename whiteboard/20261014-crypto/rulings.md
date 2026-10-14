@@ -1,0 +1,77 @@
+# Post-PR rulings (2026-10-14, Coach in chat)
+
+The Coach's decisions on this thread's open questions and the next thread's shape, recorded as
+ruled so the next thread starts from here, not from memory.
+
+## The storage interface: versionedUpdate
+
+* **The name is `versionedUpdate`** (not "CAS" or "compare-and-swap" -- jargon stays out).
+  A versioned update saves a lockbox only if the standing record still carries the `revision_id`
+  the writer read (or there is none), and saves a bundle only if the standing `passphrase_epoch`
+  is the one proven against. A failed expectation refuses with a new error kind (`stale_write`).
+* **Only call and only implement the smart verbs.** The Coach reversed the dumb-primitives
+  layer: adapters implement the smart verbs directly, rather than seven fetch/save/trash
+  primitives with compositions on top. Every realistic production backend does conditional
+  writes natively (Convex mutations, SQL `UPDATE ... WHERE`, Firestore/Mongo transactions,
+  DynamoDB conditional puts, S3 If-Match); the targets that lack them (memory, localStorage)
+  are single-threaded enough that a synchronous check-then-save is atomic within a tab anyway.
+  The base class keeps validation (shape, scope and label refusals) wrapped around the
+  adapter's verbs, so an adapter author cannot forget it.
+* **`store()` surfaces `stale_write` on first failure** -- the least-code option, right for the
+  LEGO-set surface. TODO(soonish): a retry-up-to-a-limit politeness for the batteries-included
+  surface.
+* **Erase wins.** An erase is a clear, idempotent intent on a different path from update: no
+  version expectation. TODO(with the retry work): a conflict-handler hook where a host could
+  hear about erase-vs-update collisions.
+* TODO(not yet): the IndexedDB adapter's `versionedUpdate` done truly atomically, inside a
+  single IndexedDB transaction (idb-keyval's `update()`; synchronous updater, throw-to-abort
+  mapped to `stale_write`). Until then it is check-then-save with a small window --
+  `notes/security.md` says so.
+
+## whisper_schema_version
+
+* **Yes, and in public metadata** (beside `note`): the host app sets it at `store()`, reads it
+  on the summary, and migrates after reading. Anyone worried that it leaks their data-shape
+  generation can leave it at 1 forever and version inside the whisper themselves.
+* **Not optional in the stored record**: zod fills it (default 1) at the first reasonable
+  opportunity, so every stored lockbox carries a concrete value.
+* Number vs string: Coach asked; agent recommends **integer** (ordering is the whole job:
+  "stored < current, migrate" -- strings invite '1.10' < '1.2' bugs; `passphrase_epoch` is the
+  in-house precedent; VOCABULARY already says "version number"). Awaiting the word.
+
+## Numbers in the storage contract
+
+* `whisper_schema_version` is an **integer** (ruled). Wider ruling: the VaultDB contract requires
+  a backend to store integers up to `Number.MAX_SAFE_INTEGER` (2^53 - 1 -- microseconds since
+  epoch reach it in the year 2255), and byok never asks for more: no 64-bit fields, no BigInt, no
+  polyfill. This covers every numeric field in a record: `passphrase_epoch`,
+  `whisper_schema_version`, `expires_at`, future timestamps.
+
+## The unlock window
+
+* **`rememberForMs` is renamed `forcePassphraseReentryHours`** (ruled): the knob's practical
+  meaning is "time between makings of the user type their passphrase", so the name says that.
+  Hours, fractions accepted. TODO: the rename (public surface: OpenVaultOpts, byok-react prop,
+  demo, tests) rides the expiry thread.
+* Screen-lock locking: the hook already exists -- `vault.lock()` -- and `src/` cannot own DOM
+  listeners (it runs where there is no `document`). The recipe is one host line on
+  `visibilitychange` (or Chromium's permission-gated Idle Detection API, the only true
+  screen-lock signal). TODO: document the recipe; byok-react may later grow an opt-in
+  `lockWhenHidden` prop, since the client package may touch the DOM.
+
+## The boundary pattern (repo-wide TODO)
+
+TODO: audit everywhere a record has "late" optional fields. The pattern the Coach named: a value
+becomes **fully nulled, defaulted and validated when it crosses a critical boundary** (into
+storage, out of storage, across the public API) **and is trusted otherwise**. Optionals that
+exist only because a field arrives late should be resolved at the boundary, not carried.
+First candidates: `Lockbox.note`, the new `whisper_schema_version`, `DeviceUnlock`'s shape.
+
+## Expiry (under discussion)
+
+The model converging in chat: **two deadlines with different jurisdictions, no bouncer between**.
+At T1, any operation arriving from then on is refused as locked (re-prompt) -- which is exactly
+the at-entry check built today. At T2, operations still in flight from before T1 fail: the key is
+nulled and byok's own pending work aborts (what T2 cannot do is claw back a whisper already
+handed to a `use()` callback). The grace T2 - T1 is the library's own constant, not a knob. The
+policy fork still open: fixed-from-unlock versus sliding-on-use for T1.

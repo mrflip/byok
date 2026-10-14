@@ -5,4 +5,5 @@ packages:
   - demos/*
 
 allowBuilds:
+  esbuild: false
   unrs-resolver: true
