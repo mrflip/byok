@@ -1,6 +1,6 @@
 # Sprint pr_releases: progress
 
-**Status**: threads 1, 2 filed; thread 3 underway.
+**Status**: threads 1, 2 filed; thread 3 in review.
 
 ## Status
 
@@ -8,7 +8,7 @@
 | - | ------ | ----- | ---- | ------ |
 | 1 | `20261014-react_publishable` | sonnet | `origin/main` | filed [#15](https://github.com/mrflip/safebyok/pull/15) |
 | 2 | `20261014-core_under_packages` | opus | thread 1's tip (#15) | filed [#16](https://github.com/mrflip/safebyok/pull/16) |
-| 3 | `20261014-changeset_releases` | opus | thread 2's tip (#16) | underway |
+| 3 | `20261014-changeset_releases` | opus | thread 2's tip (#16) | in review |
 
 ## What the threads have taught
 
@@ -61,3 +61,10 @@ unverified (fallback `directories: ['/', '/packages/*', '/demos/*']`). Not check
   replaces first base64 char with `A`; ~1/64). Not in this sprint; the Coach should give it its own thread.
 * **Stray process**: a vite dev server from thread 1's (removed) worktree still runs on port 5199
   (pids 281403/281454); not ours to kill without the Coach's word, but harmless.
+
+*Orchestrator, after thread 3 `ready`:* it departs from the preplan in three visible ways: changesets'
+own `publish-plan` / `pack` do the discovery and packing, `scripts/release.ts` (TypeScript) only stages
+tarballs; **each package gets its own tag (`safebyok@0.1.0`), not one `v<version>`** (needs the tag ruleset
+widened); the workflow is four jobs (select-mode, version, pack, publish) with only `publish` able to get an
+npm token. The Coach has switches to flip before the first release: allow Actions to create PRs; write the
+first changeset; widen the tag ruleset; decide on a token for the Version PR so its CI runs.
