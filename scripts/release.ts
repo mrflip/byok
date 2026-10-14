@@ -12,8 +12,9 @@
  * `stage` stages each tarball that `changeset pack` wrote into `<pack-dir>`, in dependency order,
  * and reports a git tag for each package now staged (to the file named by `CHANGESETS_OUTPUT`,
  * which the changesets action reads). It skips a version already staged or published, so a failed
- * run is mended by running it again; it attempts every package before it exits non-zero for any
- * that failed. `--dry-run` passes `--dry-run` to npm and reports no tags.
+ * run is mended by running it again, and a version whose tag names an earlier commit, so a later
+ * push to main never restages it; it attempts every package before it exits non-zero for any that
+ * failed. `--dry-run` passes `--dry-run` to npm and reports no tags.
  *
  *   node scripts/release.ts check
  *   node scripts/release.ts stage <pack-dir> [--dry-run]
@@ -254,27 +255,46 @@ export interface StageOpts {
  * Stages each release on npm, in order, and reports its git tag for the changesets action.
  *
  * A release at the placeholder version, or whose tarball still holds a `workspace:` range, is
- * never staged. One npm refuses as already published (or already staged) counts as done. A
- * staged or done release whose tag is not yet on origin has it reported; a dry run reports none.
- * Every release is attempted, whatever happened to the one before.
+ * never staged. One whose tag already names another commit was released from that commit, and is
+ * left alone without asking npm: a later push to main never restages it. One npm refuses as
+ * already published (or already staged) counts as done. A release staged or done whose tag is not
+ * yet on origin has it reported, to name this commit; a dry run reports none. Every release is
+ * attempted, whatever happened to the one before.
  *
  * @param releases - From `readPackDir`, in order.
  * @param opts     - The runner, dry run, and tag file.
  * @returns One outcome per release, in order.
  */
 export async function stage(releases: readonly Release[], opts: StageOpts): Promise<StageOutcome[]> {
+  if (releases.length === 0) { return [] }
+  const headOut = await runGit(opts.run, ['rev-parse', 'HEAD'])
+  const head = headOut.trim()
   const outcomes: StageOutcome[] = []
   for (const release of releases) {
-    const outcome = await stageOne(release, opts)
-    outcomes.push(await reportTag(outcome, opts))
+    outcomes.push(await stageOne(release, head, opts))
   }
   return outcomes
 }
 
-async function stageOne(release: Release, opts: StageOpts): Promise<StageOutcome> {
+async function stageOne(release: Release, head: string, opts: StageOpts): Promise<StageOutcome> {
   if (release.version === PlaceholderVersion) {
     return { release, kind: 'placeholder', detail: `${PlaceholderVersion} is the placeholder version, never released` }
   }
+  const tag = gitTag(release)
+  const taggedAt = await tagCommit(opts.run, tag)
+  if (taggedAt && taggedAt !== head) {
+    return { release, kind: 'already', detail: `released from ${taggedAt.slice(0, 12)}, which its tag names` }
+  }
+  const outcome = await stageTarball(release, opts)
+  const done = outcome.kind === 'staged' || outcome.kind === 'already'
+  if (taggedAt || ! done || opts.dryRun) { return outcome }
+  if (opts.tagfile) {
+    appendFileSync(opts.tagfile, `${JSON.stringify({ type: 'git-tag', tag, packageName: release.name })}\n`)
+  }
+  return { ...outcome, tagged: tag }
+}
+
+async function stageTarball(release: Release, opts: StageOpts): Promise<StageOutcome> {
   const leftover = workspaceRanges(await packedManifest(opts.run, release.tarball))
   if (leftover.length > 0) {
     return { release, kind: 'failed', detail: `its packed package.json still holds ${leftover.join(', ')}: pack it with pnpm` }
@@ -292,16 +312,20 @@ async function stageOne(release: Release, opts: StageOpts): Promise<StageOutcome
   return { release, kind: 'failed', detail: `npm ${npmError.code}: ${npmError.summary}` }
 }
 
-async function reportTag(outcome: StageOutcome, opts: StageOpts): Promise<StageOutcome> {
-  if (opts.dryRun || (outcome.kind !== 'staged' && outcome.kind !== 'already')) { return outcome }
-  const tag = gitTag(outcome.release)
-  const remote = await opts.run('git', ['ls-remote', '--tags', 'origin', `refs/tags/${tag}`])
-  if (remote.exitCode !== 0) { throw new Error(`git ls-remote failed (exit ${String(remote.exitCode)}): cannot tell whether ${tag} exists`) }
-  if (remote.stdout.trim() !== '') { return outcome }
-  if (opts.tagfile) {
-    appendFileSync(opts.tagfile, `${JSON.stringify({ type: 'git-tag', tag, packageName: outcome.release.name })}\n`)
-  }
-  return { ...outcome, tagged: tag }
+/** The commit a tag on origin names, peeled through an annotated tag; undefined when there is no such tag */
+async function tagCommit(run: Runner, tag: string): Promise<string | undefined> {
+  const listing = await runGit(run, ['ls-remote', '--tags', 'origin', `refs/tags/${tag}`, `refs/tags/${tag}^{}`])
+  const refs = new Map(listing.split('\n').filter(Boolean).map((line) => {
+    const [sha = '', ref = ''] = line.split('\t', 2)
+    return [ref, sha] as const
+  }))
+  return refs.get(`refs/tags/${tag}^{}`) ?? refs.get(`refs/tags/${tag}`)
+}
+
+async function runGit(run: Runner, args: readonly string[]): Promise<string> {
+  const result = await run('git', args)
+  if (result.exitCode !== 0) { throw new Error(`git ${args.join(' ')} failed (exit ${String(result.exitCode)}): ${firstLine(result.stderr)}`) }
+  return result.stdout
 }
 
 /**
