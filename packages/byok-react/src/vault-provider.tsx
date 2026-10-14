@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { isVaultError, openVault, type DeviceDB, type Vault, type VaultDB, type VaultSnapshot } from 'byok'
+import { isVaultError, openVault, type DeviceDB, type KeyDeriver, type Vault, type VaultDB, type VaultSnapshot } from 'byok'
 import { PassphraseModal } from './passphrase-modal'
 
 /**
@@ -54,6 +54,8 @@ export type VaultProviderProps = {
   userId:     string | null
   vaultDB:    VaultDB
   deviceDB:   DeviceDB
+  /** Passed through to openVault; the default -- and the right answer -- is the pinned Argon2id deriver. */
+  keyDeriver?: KeyDeriver
   children:   ReactNode
 }
 
@@ -69,7 +71,7 @@ export type VaultProviderProps = {
  *     <App />
  *   </VaultProvider>
  */
-export const VaultProvider = ({ applabel, vaultlabel, userId, vaultDB, deviceDB, children }: VaultProviderProps) => {
+export const VaultProvider = ({ applabel, vaultlabel, userId, vaultDB, deviceDB, keyDeriver, children }: VaultProviderProps) => {
   const [vault, setVault] = useState<Vault | null>(null)
   const [asking, setAsking] = useState<{ settle: (unlocked: boolean) => void } | null>(null)
 
@@ -77,7 +79,7 @@ export const VaultProvider = ({ applabel, vaultlabel, userId, vaultDB, deviceDB,
     if (userId === null) { return undefined }
     let handle: Vault | null = null
     let gone = false
-    void openVault({ applabel, vaultlabel, userId, vaultDB, deviceDB }).then((opened) => {
+    void openVault({ applabel, vaultlabel, userId, vaultDB, deviceDB, keyDeriver }).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
       setVault(opened)
@@ -87,7 +89,7 @@ export const VaultProvider = ({ applabel, vaultlabel, userId, vaultDB, deviceDB,
       handle?.close()
       setVault(null)
     }
-  }, [userId, applabel, vaultlabel, vaultDB, deviceDB])
+  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, keyDeriver])
 
   const withUnlockedVault = useCallback(async <ResultT,>(action: () => Promise<ResultT>): Promise<ResultT | null> => {
     try {
