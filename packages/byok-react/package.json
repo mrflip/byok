@@ -1,6 +1,6 @@
 {
   "name": "byok-react",
-  "private": true,
+  "private": false,
   "version": "0.0.0",
   "description": "React binding for byok: a provider that follows the signed-in user, snapshot hooks, and the ask-for-the-passphrase-on-demand guard. Source-exported workspace package while the interface settles; not yet published.",
   "type": "module",
