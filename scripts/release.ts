@@ -1,0 +1,365 @@
+/**
+ * The two steps of a release that changesets leaves to us, run by .github/workflows/release.yml.
+ * Changesets plans the release (which public packages have a version not yet on npm), packs each
+ * with `pnpm pack` (which rewrites `workspace:` ranges into real ones), and its GitHub action
+ * pushes the git tags and writes the GitHub releases. What it cannot do is stage: it publishes
+ * with `pnpm publish`, and our npm trusted publisher allows only `npm stage publish`.
+ *
+ * `check` refuses a workspace whose release would go wrong: a demo that is not private, a public
+ * package missing from the lockstep `fixed` group in .changeset/config.json (or a name there that
+ * is not a public package), or public packages whose versions disagree.
+ *
+ * `stage` stages each tarball that `changeset pack` wrote into `<pack-dir>`, in dependency order,
+ * and reports a git tag for each package now staged (to the file named by `CHANGESETS_OUTPUT`,
+ * which the changesets action reads). It skips a version already staged or published, so a failed
+ * run is mended by running it again; it attempts every package before it exits non-zero for any
+ * that failed. `--dry-run` passes `--dry-run` to npm and reports no tags.
+ *
+ *   node scripts/release.ts check
+ *   node scripts/release.ts stage <pack-dir> [--dry-run]
+ */
+import { execFile } from 'node:child_process'
+import { appendFileSync, readFileSync } from 'node:fs'
+import path from 'node:path'
+
+/** One workspace package, as `pnpm ls --recursive --json` describes it */
+export interface WorkspacePackage {
+  name:     string
+  version?: string
+  path:     string
+  private:  boolean
+}
+
+/** One package's release, from the publish plan `changeset pack` writes */
+export interface Release {
+  name:    string
+  version: string
+  /** The packed tarball, as an absolute path */
+  tarball: string
+}
+
+/** What `stage` did with one release */
+export type StageKind = 'staged' | 'already' | 'placeholder' | 'failed'
+
+/** One release's outcome, and whether its git tag is still to be pushed */
+export interface StageOutcome {
+  release: Release
+  kind:    StageKind
+  /** What happened, in a few words: a stage id, or why it failed */
+  detail:  string
+  /** The git tag reported for the changesets action to push, if any */
+  tagged?: string
+}
+
+/** A command's result: its exit code and what it printed */
+export interface RunResult {
+  exitCode: number
+  stdout:   string
+  stderr:   string
+}
+
+/** Runs a command without a shell; resolves with its exit code rather than throwing on failure */
+export type Runner = (command: string, args: readonly string[]) => Promise<RunResult>
+
+/** The version every package starts at: a placeholder, never released */
+export const PlaceholderVersion = '0.0.0'
+
+/**
+ * A runner over child_process: no shell, output captured, never rejecting on a non-zero exit.
+ *
+ * @param cwd - Directory the commands run in.
+ * @returns A Runner.
+ */
+export function processRunner(cwd: string): Runner {
+  return (command, args) => new Promise((resolve) => {
+    execFile(command, args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }, (err, stdout, stderr) => {
+      resolve({ exitCode: exitCodeOf(err), stdout, stderr })
+    })
+  })
+}
+
+function exitCodeOf(err: { code?: unknown } | null): number {
+  if (! err) { return 0 }
+  return typeof err.code === 'number' ? err.code : 1
+}
+
+/**
+ * Every package in the workspace, the root included, by asking pnpm.
+ *
+ * @param run - Runs `pnpm`.
+ * @returns The packages, as pnpm lists them.
+ */
+export async function listWorkspace(run: Runner): Promise<WorkspacePackage[]> {
+  const result = await run('pnpm', ['ls', '--recursive', '--depth', '-1', '--json'])
+  if (result.exitCode !== 0) { throw new Error(`pnpm ls failed (exit ${String(result.exitCode)}): ${result.stderr.trim()}`) }
+  return JSON.parse(result.stdout) as WorkspacePackage[]
+}
+
+/**
+ * The packages a release publishes: not private, and not under demos/.
+ *
+ * @param packages - The workspace's packages.
+ * @param rootDir  - The workspace root.
+ * @returns The public packages, in the order given.
+ *
+ * @example publicPackages(packages, '/repo').map((pkg) => pkg.name)  // => ['safebyok', 'safebyok-react']
+ */
+export function publicPackages(packages: readonly WorkspacePackage[], rootDir: string): WorkspacePackage[] {
+  return packages.filter((pkg) => ! pkg.private && ! isDemo(pkg, rootDir))
+}
+
+function isDemo(pkg: WorkspacePackage, rootDir: string): boolean {
+  return path.relative(rootDir, pkg.path).split(path.sep)[0] === 'demos'
+}
+
+/**
+ * The `fixed` groups of a changesets config.
+ *
+ * @param configPath - Path to .changeset/config.json.
+ * @returns Its `fixed` groups, or none.
+ */
+export function readFixedGroups(configPath: string): string[][] {
+  const config = JSON.parse(readFileSync(configPath, 'utf8')) as { fixed?: string[][] }
+  return config.fixed ?? []
+}
+
+/**
+ * Everything that would make a release go wrong, each as a sentence saying what to do about it.
+ * A release stages every public package in lockstep: one `fixed` group holding exactly the
+ * public packages, by name, all at one version. A package still at the placeholder `0.0.0` has
+ * never been released and joins the group's version at its next release, so it may differ.
+ *
+ * @param packages - The workspace's packages.
+ * @param rootDir  - The workspace root.
+ * @param fixed    - The `fixed` groups of .changeset/config.json.
+ * @returns The problems found; none when the release would go as intended.
+ *
+ * @example releaseProblems(packages, '/repo', [['safebyok', 'safebyok-react']])  // => []
+ */
+export function releaseProblems(packages: readonly WorkspacePackage[], rootDir: string, fixed: readonly (readonly string[])[]): string[] {
+  const publicNames = publicPackages(packages, rootDir).map((pkg) => pkg.name)
+  const group = fixed.flat()
+  const demoProblems = packages
+    .filter((pkg) => isDemo(pkg, rootDir) && ! pkg.private)
+    .map((pkg) => `${pkg.name} is under demos/ but not private: a demo is never released, so give it "private": true.`)
+  const groupProblems = fixed.length > 1
+    ? [`.changeset/config.json has ${String(fixed.length)} fixed groups: the public packages release in lockstep, as one group.`]
+    : []
+  const missing = publicNames
+    .filter((pkgname) => ! group.includes(pkgname))
+    .map((pkgname) => `${pkgname} is public but not in .changeset/config.json's fixed group: add it, so it releases in lockstep with the rest.`)
+  const extra = group
+    .filter((pkgname) => ! publicNames.includes(pkgname))
+    .map((pkgname) => `${pkgname} is in .changeset/config.json's fixed group but is not a public workspace package: remove it, or make it public.`)
+  return [...demoProblems, ...groupProblems, ...missing, ...extra, ...versionProblems(publicPackages(packages, rootDir))]
+}
+
+function versionProblems(pkgs: readonly WorkspacePackage[]): string[] {
+  const released = pkgs.filter((pkg) => pkg.version !== PlaceholderVersion)
+  const versions = new Set(released.map((pkg) => pkg.version))
+  if (versions.size <= 1) { return [] }
+  const listing = released.map((pkg) => `${pkg.name} ${pkg.version ?? '(none)'}`).join(', ')
+  return [`The public packages disagree on their version (${listing}): they release in lockstep, so a changeset should bump them together.`]
+}
+
+/**
+ * The npm dist-tag a version goes out under: a prerelease (`0.3.0-beta.1`) under `next`, so a
+ * plain `npm install` never picks it up; everything else under `latest`.
+ *
+ * @param version - A semver version.
+ * @returns `'next'` or `'latest'`.
+ *
+ * @example distTag('0.3.0-beta.1')  // => 'next'
+ * @example distTag('0.3.0')         // => 'latest'
+ */
+export function distTag(version: string): 'next' | 'latest' {
+  return version.includes('-') ? 'next' : 'latest'
+}
+
+/**
+ * The git tag of one package's release, as changesets names it in a monorepo.
+ *
+ * @param release - The package's name and version.
+ * @returns `<name>@<version>`.
+ *
+ * @example gitTag({ name: 'safebyok', version: '0.1.0' })  // => 'safebyok@0.1.0'
+ */
+export function gitTag(release: Pick<Release, 'name' | 'version'>): string {
+  return `${release.name}@${release.version}`
+}
+
+/**
+ * The releases in a directory `changeset pack` wrote, in the order they should be published (a
+ * package before those that depend on it).
+ *
+ * @param packDir - The pack directory, holding publish-plan.json and the tarballs.
+ * @returns Each release, its tarball as an absolute path.
+ */
+export function readPackDir(packDir: string): Release[] {
+  const planfile = JSON.parse(readFileSync(path.join(packDir, 'publish-plan.json'), 'utf8')) as PlanFileT
+  if (planfile.version !== 1 || ! Array.isArray(planfile.plan)) {
+    throw new Error(`${packDir}/publish-plan.json is not a changesets publish plan this script knows (version 1)`)
+  }
+  return planfile.plan.flat()
+    .filter((entry) => entry.kind === 'publish')
+    .map((entry) => {
+      if (! entry.tarball) { throw new Error(`The publish plan has no tarball for ${entry.name}@${entry.version}: was it written by changeset pack?`) }
+      return { name: entry.name, version: entry.version, tarball: path.resolve(packDir, entry.tarball.path) }
+    })
+}
+
+interface PlanFileT {
+  version: number
+  plan:    { kind: string, name: string, version: string, tarball?: { path: string } }[][]
+}
+
+/**
+ * The dependency ranges in a packed package.json that still use the `workspace:` protocol: none,
+ * when pnpm packed it. npm would publish them as written, and no consumer could install them.
+ *
+ * @param manifest - A package.json, as read from the tarball.
+ * @returns `<dependency>: <range>` for each one left.
+ *
+ * @example workspaceRanges({ peerDependencies: { safebyok: 'workspace:^' } })  // => ['safebyok: workspace:^']
+ */
+export function workspaceRanges(manifest: Record<string, unknown>): string[] {
+  return ['dependencies', 'peerDependencies', 'optionalDependencies', 'devDependencies']
+    .flatMap((field) => Object.entries((manifest[field] ?? {}) as Record<string, string>))
+    .filter(([_dep, range]) => range.startsWith('workspace:'))
+    .map(([dep, range]) => `${dep}: ${range}`)
+}
+
+/**
+ * The package.json inside a packed tarball.
+ *
+ * @param run     - Runs `tar`.
+ * @param tarball - Path to the .tgz.
+ * @returns The manifest, parsed.
+ */
+export async function packedManifest(run: Runner, tarball: string): Promise<Record<string, unknown>> {
+  const result = await run('tar', ['-xzOf', tarball, 'package/package.json'])
+  if (result.exitCode !== 0) { throw new Error(`Could not read package/package.json from ${tarball}`) }
+  return JSON.parse(result.stdout) as Record<string, unknown>
+}
+
+/** How `stage` runs: its commands, and whether it may change anything */
+export interface StageOpts {
+  run:     Runner
+  dryRun:  boolean
+  /** Where the git tags to push are reported, one JSON line each; none when unset */
+  tagfile: string | undefined
+}
+
+/**
+ * Stages each release on npm, in order, and reports its git tag for the changesets action.
+ *
+ * A release at the placeholder version, or whose tarball still holds a `workspace:` range, is
+ * never staged. One npm refuses as already published (or already staged) counts as done. A
+ * staged or done release whose tag is not yet on origin has it reported; a dry run reports none.
+ * Every release is attempted, whatever happened to the one before.
+ *
+ * @param releases - From `readPackDir`, in order.
+ * @param opts     - The runner, dry run, and tag file.
+ * @returns One outcome per release, in order.
+ */
+export async function stage(releases: readonly Release[], opts: StageOpts): Promise<StageOutcome[]> {
+  const outcomes: StageOutcome[] = []
+  for (const release of releases) {
+    const outcome = await stageOne(release, opts)
+    outcomes.push(await reportTag(outcome, opts))
+  }
+  return outcomes
+}
+
+async function stageOne(release: Release, opts: StageOpts): Promise<StageOutcome> {
+  if (release.version === PlaceholderVersion) {
+    return { release, kind: 'placeholder', detail: `${PlaceholderVersion} is the placeholder version, never released` }
+  }
+  const leftover = workspaceRanges(await packedManifest(opts.run, release.tarball))
+  if (leftover.length > 0) {
+    return { release, kind: 'failed', detail: `its packed package.json still holds ${leftover.join(', ')}: pack it with pnpm` }
+  }
+  const args = ['stage', 'publish', release.tarball, '--access', 'public', '--tag', distTag(release.version), '--json']
+  const result = await opts.run('npm', opts.dryRun ? [...args, '--dry-run'] : args)
+  if (result.exitCode === 0) {
+    const stageId = /"stageId":\s*"([^"]+)"/.exec(result.stdout)?.[1]
+    return { release, kind: 'staged', detail: stageId ? `stage id ${stageId}` : `under ${distTag(release.version)}` }
+  }
+  const npmError = npmErrorOf(result)
+  if (/previously published/i.test(npmError.summary)) {
+    return { release, kind: 'already', detail: 'npm already holds this version, staged or published' }
+  }
+  return { release, kind: 'failed', detail: `npm ${npmError.code}: ${npmError.summary}` }
+}
+
+async function reportTag(outcome: StageOutcome, opts: StageOpts): Promise<StageOutcome> {
+  if (opts.dryRun || (outcome.kind !== 'staged' && outcome.kind !== 'already')) { return outcome }
+  const tag = gitTag(outcome.release)
+  const remote = await opts.run('git', ['ls-remote', '--tags', 'origin', `refs/tags/${tag}`])
+  if (remote.exitCode !== 0) { throw new Error(`git ls-remote failed (exit ${String(remote.exitCode)}): cannot tell whether ${tag} exists`) }
+  if (remote.stdout.trim() !== '') { return outcome }
+  if (opts.tagfile) {
+    appendFileSync(opts.tagfile, `${JSON.stringify({ type: 'git-tag', tag, packageName: outcome.release.name })}\n`)
+  }
+  return { ...outcome, tagged: tag }
+}
+
+/**
+ * npm's error code and summary, from the JSON it prints under `--json`, and nothing else of what
+ * it printed: that much says what went wrong without echoing a request or its headers.
+ */
+function npmErrorOf(result: RunResult): { code: string, summary: string } {
+  const exitNote = `exit ${String(result.exitCode)}`
+  const jsonText = result.stdout.slice(result.stdout.indexOf('{'), result.stdout.lastIndexOf('}') + 1)
+  try {
+    const parsed = JSON.parse(jsonText) as { error?: { code?: string, summary?: string } }
+    return { code: parsed.error?.code ?? exitNote, summary: firstLine(parsed.error?.summary ?? '') }
+  } catch {
+    return { code: exitNote, summary: '(no error summary from npm)' }
+  }
+}
+
+function firstLine(str: string): string {
+  return (str.split('\n', 1)[0] ?? '').trim().slice(0, 300)
+}
+
+/**
+ * One line saying what happened to a release.
+ *
+ * @param outcome - What `stage` did.
+ * @param dryRun  - Whether it was a dry run.
+ * @returns The line, without a newline.
+ *
+ * @example describeOutcome(outcome, false)  // => 'safebyok@0.1.0: staged (stage id 42); tag safebyok@0.1.0 to push'
+ */
+export function describeOutcome(outcome: StageOutcome, dryRun: boolean): string {
+  const prefix = dryRun ? '(dry run) ' : ''
+  const tagNote = outcome.tagged ? `; tag ${outcome.tagged} to push` : ''
+  return `${prefix}${gitTag(outcome.release)}: ${outcome.kind} (${outcome.detail})${tagNote}`
+}
+
+async function main(argv: readonly string[]): Promise<number> {
+  const [command, ...rest] = argv
+  const rootDir = path.resolve(import.meta.dirname, '..')
+  const run = processRunner(rootDir)
+  if (command === 'check') {
+    const problems = releaseProblems(await listWorkspace(run), rootDir, readFixedGroups(path.join(rootDir, '.changeset', 'config.json')))
+    for (const problem of problems) { process.stderr.write(`release check: ${problem}\n`) }
+    if (problems.length === 0) { process.stdout.write('release check: the public packages and the fixed group agree.\n') }
+    return problems.length === 0 ? 0 : 1
+  }
+  const packDir = rest.find((arg) => ! arg.startsWith('--'))
+  if (command === 'stage' && packDir) {
+    const dryRun = rest.includes('--dry-run')
+    const outcomes = await stage(readPackDir(path.resolve(packDir)), { run, dryRun, tagfile: process.env.CHANGESETS_OUTPUT })
+    for (const outcome of outcomes) { process.stdout.write(`${describeOutcome(outcome, dryRun)}\n`) }
+    if (outcomes.length === 0) { process.stdout.write('Nothing to stage.\n') }
+    return outcomes.some((outcome) => outcome.kind === 'failed') ? 1 : 0
+  }
+  process.stderr.write('Usage: node scripts/release.ts check | stage <pack-dir> [--dry-run]\n')
+  return 2
+}
+
+if (import.meta.main) {
+  process.exitCode = await main(process.argv.slice(2))
+}
