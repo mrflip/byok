@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SevenDaysMs, type Whisper } from '../src/types'
+import { MaxWhisperBytes, SevenDaysMs, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB } from '../src/device-db'
 import { localVaultDB } from '../src/vault-db'
@@ -185,6 +185,47 @@ describe("store and read", () => {
     await expectRefusal(vault.store('the_box', undefined as unknown as Whisper), 'bad_whisper')
     await expectRefusal(vault.store('the_box', null as unknown as Whisper), 'bad_whisper')
     expect(vault.getSnapshot().boxes).to.have.lengthOf(0)
+  })
+
+  it("stores a whisper of exactly MaxWhisperBytes, and refuses one byte more, quoting none of it", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    // A JSON string is its characters plus two quotes.
+    const atLimit = 'x'.repeat(MaxWhisperBytes - 2)
+    await vault.store('the_box', atLimit)
+    expect(await vault.read('the_box')).to.eq(atLimit)
+    const oneOver = `${'x'.repeat(MaxWhisperBytes - 7)}SECRET`
+    const err = await expectRefusal(vault.store('the_box', oneOver), 'whisper_too_large')
+    expect(err.message).to.not.include('SECRET')
+    expect(await vault.read('the_box')).to.eq(atLimit)
+  })
+
+  it("counts the limit in bytes, not characters", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ maxWhisperBytes: 10 })
+    await vault.unlock('pw')
+    await vault.store('the_box', 'éééé')
+    await expectRefusal(vault.store('other_box', 'ééééé'), 'whisper_too_large')
+    expect(vault.getSnapshot().boxes.map((summary) => summary.boxlabel)).to.deep.equal(['the_box'])
+  })
+
+  it("checks the limit on write only, so lowering it strands nothing already stored", async () => {
+    const world = makeWorld()
+    const roomy = await world.open()
+    await roomy.unlock('pw')
+    await roomy.store('the_box', 'x'.repeat(100))
+    roomy.close()
+    const tight = await world.open({ maxWhisperBytes: 16 })
+    expect(await tight.read('the_box')).to.eq('x'.repeat(100))
+    await expectRefusal(tight.store('the_box', 'x'.repeat(100)), 'whisper_too_large')
+  })
+
+  it("refuses a maxWhisperBytes that is not a whole number of bytes above zero", async () => {
+    const world = makeWorld()
+    for (const nonsense of [0, -1, 1.5, NaN]) {
+      await expectRefusal(world.open({ maxWhisperBytes: nonsense }), 'bad_option')
+    }
   })
 
   it("refuses a malformed boxlabel before touching storage", async () => {

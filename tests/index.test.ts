@@ -6,7 +6,7 @@ describe("the package's entry point", () => {
     expect(Object.keys(Byok)).to.have.members([
       'Argon2idWebV1', 'argon2idWebV1Deriver',
       'openVault',
-      'Ciphered', 'Label', 'Lockbox', 'LockboxSummary', 'SevenDaysMs', 'Whisper', 'wallClock',
+      'Ciphered', 'Label', 'Lockbox', 'LockboxSummary', 'MaxWhisperBytes', 'SevenDaysMs', 'Whisper', 'wallClock',
       'VaultError', 'VaultErrorKindVals', 'isVaultError',
       'VaultDB', 'localVaultDB', 'memoryDeviceDB',
       'domStore', 'memoryStore',

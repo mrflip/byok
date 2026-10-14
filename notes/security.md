@@ -52,3 +52,6 @@ security expert who knows what questions to ask.
   `revision_id` / `passphrase_epoch` is the one the writer read) is planned; until the IndexedDB
   adapter performs it inside a single IndexedDB transaction, its check-then-save has a small
   window in which the race survives.
+* 2026-10-14: a lockbox's ciphertext length reveals its whisper's length to the backend: there is
+  no padding yet (TODO). `store()` refuses a whisper over `maxWhisperBytes` of JSON, an
+  `openVault` option defaulting to `MaxWhisperBytes` (40444), checked on write only.
