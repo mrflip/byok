@@ -1,14 +1,14 @@
 # Sprint pr_releases: progress
 
-**Status**: thread 1 filed; thread 2 in review.
+**Status**: threads 1, 2 filed; thread 3 underway.
 
 ## Status
 
 | # | Thread | Model | Base | Status |
 | - | ------ | ----- | ---- | ------ |
 | 1 | `20261014-react_publishable` | sonnet | `origin/main` | filed [#15](https://github.com/mrflip/safebyok/pull/15) |
-| 2 | `20261014-core_under_packages` | opus | thread 1's tip (#15) | in review |
-| 3 | `20261014-changeset_releases` | opus | thread 2's tip | pending |
+| 2 | `20261014-core_under_packages` | opus | thread 1's tip (#15) | filed [#16](https://github.com/mrflip/safebyok/pull/16) |
+| 3 | `20261014-changeset_releases` | opus | thread 2's tip (#16) | underway |
 
 ## What the threads have taught
 
@@ -35,6 +35,13 @@ the `packages` job on GitHub, Node 22/26, demo click-through.
 * **Known flake, not ours**: `tests/vault.test.ts` "altered ciphertext" fails ~1/64 runs (prepends `A`).
   Mentioned in the PR; fix is its own thread.
 * Passphrase-dialog click-through of the demo was not done (no browser in the sandbox): Coach to check.
+
+*Review of thread 2:* clean at medium; no fixes. Verified: planted failures in the demo make every root
+script exit 1; no prebuild needed after deleting every `dist/`; published tarball identical (21 files, same
+sha256 but `package.json`). Minor, left: root scripts chain with `&&`; core rebuilt several times by pre-hooks
+and serial `pnpm -r`; convex `--no-error-on-unmatched-pattern`; demo coverage has no `include`; some
+comment lines >100 cols (two React eslint configs, PROCESS.md, release.yml); dependabot `directory: /`
+unverified (fallback `directories: ['/', '/packages/*', '/demos/*']`). Not checked: CI, release, `pnpm bump`.
 
 *Orchestrator, after thread 2 `ready`:*
 
