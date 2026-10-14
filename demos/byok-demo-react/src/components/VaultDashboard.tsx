@@ -69,7 +69,7 @@ export const VaultDashboard = () => {
         <LockChip state={snapshot.state} expiresAt={snapshot.expiresAt} onLock={() => { void vault.lock() }} />
       </div>
 
-      {snapshot.boxes.length === 0 && <p className="quiet">No lockboxes yet. Whispers you add live encrypted in the database (in this stub: plaintext, see below) and open only on your device.</p>}
+      {snapshot.boxes.length === 0 && <p className="quiet">No lockboxes yet. Whispers you add live encrypted in the database (watch the inspector below) and open only on your device.</p>}
 
       {snapshot.boxes.length > 0 && (
         <table>
