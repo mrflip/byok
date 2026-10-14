@@ -1,4 +1,5 @@
-import { Label, LockboxSummary, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import * as Z from 'zod'
+import { Label, LockboxSummary, MaxWhisperBytes, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError } from './errors'
 import { argon2idWebV1Deriver, type KeyDeriver } from './key-deriver'
 import {
@@ -49,6 +50,11 @@ export type OpenVaultOpts = {
    * pinned Argon2id deriver; see {@link KeyDeriver} for the narrow reasons to substitute.
    */
   keyDeriver?: KeyDeriver
+  /**
+   * The largest whisper `store()` accepts, in bytes of its JSON. Default: {@link MaxWhisperBytes},
+   * 40444. Checked on write only, so lowering it never strands a whisper already stored.
+   */
+  maxWhisperBytes?: number
 }
 
 /**
@@ -86,7 +92,10 @@ export type Vault = {
    */
   changePassphrase(oldPassphrase: string, newPassphrase: string): Promise<void>
 
-  /** Write a whisper into the lockbox `boxlabel`, creating or replacing it. Requires unlocked. */
+  /**
+   * Write a whisper into the lockbox `boxlabel`, creating or replacing it. Requires unlocked; kind
+   * 'whisper_too_large' when its JSON is over the vault's `maxWhisperBytes`.
+   */
   store(boxlabel: string, whisper: Whisper, opts?: { note?: string }): Promise<void>
   /** The whisper in `boxlabel`. Requires unlocked; kind 'absent_box' when there is none. */
   read(boxlabel: string): Promise<Whisper>
@@ -144,6 +153,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const rememberForMs = opts.rememberForMs ?? SevenDaysMs
   const clock = opts.clock ?? wallClock
   const keyDeriver = opts.keyDeriver ?? argon2idWebV1Deriver
+  const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
 
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
   let boxes: readonly LockboxSummary[] = []
@@ -402,10 +412,13 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       if (! checked.success) {
         throw new VaultError('bad_whisper', 'A whisper must be a JSON value: a string, number, boolean, array, or plain object. A bare null or undefined cannot be stored -- to empty a lockbox, erase it. (null inside an array or object is fine.)')
       }
+      const whisperBytes = new TextEncoder().encode(stableJsonify(checked.data))
+      if (whisperBytes.length > whisperByteLimit) {
+        throw new VaultError('whisper_too_large', `That whisper is over this vault's limit of ${String(whisperByteLimit)} bytes of JSON: check that the right value is being stored. If it really is meant to be this large, pass a larger maxWhisperBytes to openVault.`)
+      }
       const vaultId = currentBundle().vault_id
       const revisionId = randomId()
       const lockboxKey = await makeLockboxKey()
-      const whisperBytes = new TextEncoder().encode(stableJsonify(checked.data))
       const now = new Date(clock.now()).toISOString()
       const prev = await vaultDB.readBox(scope, label)
       await vaultDB.writeBox(scope, {
@@ -473,6 +486,16 @@ const parseLabel = (candidate: string): string => {
   const checked = Label.safeParse(candidate)
   if (! checked.success) {
     throw new VaultError('bad_label', 'A label is 2-40 lowercase letters and digits, words joined by single underscores, starting with a letter.')
+  }
+  return checked.data
+}
+
+const maxWhisperBytes = Z.number().int().positive().default(MaxWhisperBytes)
+
+const parseMaxWhisperBytes = (candidate: number | undefined): number => {
+  const checked = maxWhisperBytes.safeParse(candidate)
+  if (! checked.success) {
+    throw new VaultError('bad_option', 'maxWhisperBytes is a whole number of bytes, greater than zero.')
   }
   return checked.data
 }

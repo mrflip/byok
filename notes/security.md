@@ -47,3 +47,6 @@ security expert who knows what questions to ask.
   (`src/stable-jsonify.ts`) is a thin alias of it, backing snapshot change detection.
 * 2026-10-14: `zod` moved from a regular dependency to a peer dependency (`^4.0.0`): the host app
   supplies it, so byok validates with whatever zod instance that app ships.
+* 2026-10-14: a lockbox's ciphertext length reveals its whisper's length to the backend: there is
+  no padding yet (TODO). `store()` refuses a whisper over `maxWhisperBytes` of JSON, an
+  `openVault` option defaulting to `MaxWhisperBytes` (40444), checked on write only.

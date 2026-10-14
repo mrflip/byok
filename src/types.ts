@@ -170,6 +170,14 @@ export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 /** How long an entered passphrase is remembered on the device, unless the caller says otherwise. */
 export const SevenDaysMs = 7 * 24 * 60 * 60 * 1000
 
+/**
+ * The largest whisper a vault stores unless the caller says otherwise, in bytes of its JSON:
+ * several times the beefiest credential (an RSA-8192 private key as PEM is about 6.4 KB), and
+ * well inside what every storage backend can hold. A larger whisper is usually a sign that the
+ * wrong value is being stored.
+ */
+export const MaxWhisperBytes = 40444 // eslint-disable-line unicorn/numeric-separators-style -- unseparated, so it greps the same as error messages print it
+
 /** Injected time source, so expiry is testable; defaults to the wall clock. */
 export type Clock = { now(): number }
 
