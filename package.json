@@ -73,5 +73,9 @@
       "require": "./dist/index.cjs"
     },
     "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "safe-stable-stringify": "^2.5.0",
+    "zod": "^4.6.7"
   }
 }
