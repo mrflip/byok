@@ -6,6 +6,8 @@ or an existing vault has to do about it.
 
 **What changed**:
 
+**Changeset**: <!-- its sentence, or "(empty: tooling/docs/tests only)" -->
+
 **Tests**: <!-- what ran, and the counts: `pnpm justify` -- 12 files, 140 tests -->
 
 <!-- Stacked on #N, if the branch stands on an unmerged PR -->
