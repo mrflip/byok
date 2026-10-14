@@ -103,6 +103,9 @@ pnpm build           # tsdown: ESM + CJS + declarations into dist/, checked by p
   consumer unless it is its own entry in `tsdown.config.ts`.
 * `tests/` mirrors `src/` path for path: `src/foo/bar.ts` is tested in `tests/foo/bar.test.ts`.
   `fixtures/` holds sample data, when there is some.
+* `packages/` -- companion workspace packages (`byok-react`, the React binding). Each lints,
+  typechecks and tests itself (`pnpm justify` inside it); the root justify does not cover them.
+* `demos/` -- private playground apps exercising the packages; never published.
 * `dist/` is built, never committed.
 * `whiteboard/` -- work threads in progress, under a `YYYYMMDD-threadname` directory.
 * `human/` -- **from agents, to Coaches.** A scratchpad, not a record: write to it, don't read it

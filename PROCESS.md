@@ -56,6 +56,7 @@ prefix names the part of the package the commit is about, never the kind of chan
 | `tools`   | build, lint, test and TypeScript configuration, CI and release workflows                                                               |
 | `deps`    | adding, removing or bumping a dependency, and the lockfile. Where reasonable, commit the package change independently |
 | `docs`    | `README.md`, `PROCESS.md`, `STYLE.md`, `notes/`, `CLAUDE.md` and other directives to agents   |
+| `demos`   | the playground apps under `demos/`                                                                                                     |
 | `plan`    | `whiteboard/` plans and `human/` entries                                                                                               |
 | `tests`   | tests and fixtures, when the tests themselves are the work                                                                             |
 
