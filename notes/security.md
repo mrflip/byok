@@ -82,3 +82,11 @@ security expert who knows what questions to ask.
   tags are also the first element of every encryption's additional data, so a record written
   under a `byok-*-v1` tag would neither validate nor decrypt. No reader for the old tags is
   kept: they existed only in development and demo storage, never in a published version.
+* 2026-10-14: releases run from `.github/workflows/release.yml` on every push to main, in jobs
+  that each hold only what they need. Only `publish` (in the `npm` environment) may mint an npm
+  OIDC token, and it runs no package's scripts (`pnpm install --ignore-scripts`): it stages the
+  tarballs the `pack` job built, linted and tested without that token. The trusted publisher
+  allows `npm stage publish` only, so every version still waits for the Coach's 2FA approval.
+  `scripts/release.ts` refuses a tarball whose `package.json` still holds a `workspace:` range,
+  and quotes only npm's error code and summary, never the rest of what npm printed. No release
+  job caches dependencies or persists git credentials.
