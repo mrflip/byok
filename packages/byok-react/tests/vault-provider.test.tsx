@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver } from 'byok'
-import { useState } from 'react'
+import { isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'byok'
+import { useEffect, useState } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot } from '../src/vault-provider'
 
 /** A cheap deriver (one SHA-256) so the suite is not a benchmark of Argon2id. */
@@ -138,5 +138,29 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('dismissed') })
     expect(screen.getByTestId('state').textContent).to.eq('absent')
     expect(screen.getByTestId('boxcount').textContent).to.eq('0')
+  })
+
+  it("passes every openVault option through, as given", async () => {
+    const seen: { vault: Vault | null } = { vault: null }
+    const Grab = () => {
+      const { vault } = useVault()
+      useEffect(() => { seen.vault = vault }, [vault])
+      return null
+    }
+    render(
+      <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())} deviceDB={memoryDeviceDB()}
+        keyDeriver={testDeriver} clock={{ now: () => 1000 }} rememberForMs={60_000} maxWhisperBytes={8}>
+        <Grab />
+      </VaultProvider>,
+    )
+    await waitFor(() => { expect(seen.vault).to.not.be.null })
+    const vault = seen.vault
+    if (vault === null) { throw new Error('the provider opened no vault') }
+
+    await vault.unlock('correct horse battery staple')
+    expect(vault.getSnapshot().expiresAt).to.eq(61_000)
+    // 'sk-fake' is nine bytes of JSON, one over the limit given.
+    const refusal = await vault.store('anthropic_api_key', 'sk-fake').catch((err: unknown) => err)
+    expect(isVaultError(refusal, 'whisper_too_large')).to.be.true
   })
 })
