@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Starts a new git branch from where you stand, named for today and what it is for:
+# `newb migration_scripts` on 2026-09-25 switches to a new branch 20260925-migration_scripts.
+# The name follows the label rules: lowercase letters, digits and single underscores, starting
+# with a letter.
+#
+# `newb --from <words...>` makes the label from loose words instead -- a title, or another
+# branch's name: `newb --from 20260928-Fix the  Grid.` switches to 20260930-fix_the_grid. See
+# scripts/newb-label.ts for how.
+#
+# Its upstream is set to origin/<branch>, so a plain `git push` publishes it.
+#
+# Usage: pnpm run newb <branch_name>   (or ./scripts/newb <branch_name>)
+#        pnpm run newb --from <words...>
+set -euo pipefail
+
+usage="Usage: pnpm run newb <branch_name>, eg pnpm run newb migration_scripts; or pnpm run newb --from <words...>"
+if [[ "${1:-}" == "--from" ]]; then
+  shift
+  root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  label="$(node "$root/scripts/newb-label.ts" "$@")"
+elif [[ $# -eq 1 ]]; then
+  label="$1"
+else
+  echo "$usage" >&2
+  exit 1
+fi
+if [[ ! "$label" =~ ^[a-z](_?[a-z0-9])+$ ]]; then
+  echo "\"$label\" is not a label: use lowercase letters, digits and single underscores, starting with a letter (eg 'migration_scripts')." >&2
+  exit 1
+fi
+
+branch="$(date +%Y%m%d)-${label}"
+git switch --create "$branch"
+# Its upstream is origin's branch of the same name, which the first plain `git push` creates.
+# Nothing is pushed now: until then, git status shows the upstream as [gone].
+git config "branch.${branch}.remote" origin
+git config "branch.${branch}.merge" "refs/heads/${branch}"
+echo "Upstream: origin/${branch} (created by your first git push)" >&2
+echo "Agent: at the end of your next chat response, offer the Coach this to copy and paste: /rename ${branch}" >&2

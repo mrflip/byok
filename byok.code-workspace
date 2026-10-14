@@ -1,0 +1,19 @@
+{
+	"folders": [
+    {
+      "path": "."
+    },
+  ],
+  "settings": {
+    "claudeCode.allowDangerouslySkipPermissions": true,
+    "claudeCode.initialPermissionMode": "bypassPermissions",
+    "search.exclude": {
+      "**/.next-*/**": true,
+      "**/ripd": true,
+      "**/tmp": true
+    },
+    "search.globalFindClipboard": true,
+    "js/ts.tsdk.path": "node_modules/typescript/lib",
+    "claudeCode.lockEditorGroups": false
+  }
+}

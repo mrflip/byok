@@ -17,3 +17,12 @@ security expert who knows what questions to ask.
 * 2026-10-14: every action in `.github/workflows/` is pinned to a full commit SHA, with the
   release it was resolved from in a trailing comment (`@3d3c42e... # v7.0.1`). Dependabot's weekly
   `github-actions` group proposes new SHAs, and rewrites the comment with them.
+* 2026-10-14: the package itself (`src/`, exported from `src/index.ts`) is at a stub stage that
+  stores whispers and passphrases in plaintext through its storage adapters, for interface
+  design; its doc blocks, the README of the demo, and the demo's inspection panels say so. It
+  must not be published to npm before the cryptography lands underneath the interface.
+* 2026-10-14: the demo app calls Anthropic directly from the browser with the user's own key
+  (`dangerouslyAllowBrowser: true` on the SDK client), by design: the key is decrypted on-device
+  inside `vault.use(...)` and sent only to `api.anthropic.com`.
+* 2026-10-14: `safe-stable-stringify` is a runtime dependency (alongside zod): `stableJsonify`
+  (`src/stable-jsonify.ts`) is a thin alias of it, backing snapshot change detection.

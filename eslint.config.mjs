@@ -56,6 +56,10 @@ export default defineConfig([
     // Agents' worktrees: another checkout's code, linted there if anywhere.
     '.claude/worktrees/**',
     '**/*.generated.*',
+    // Companion packages and demo apps are their own workspace packages with their own eslint
+    // configs: their dependencies and TS projects are theirs, not this package's.
+    'packages/**',
+    'demos/**',
   ]),
 
   // == [1. Stock defaults] ==
@@ -290,9 +294,10 @@ export default defineConfig([
       'vitest/no-focused-tests': 'warn',
       // A type-level test asserts with `expectTypeOf` and has no runtime to check. Without
       // this the only way to satisfy the rule is to pad it with a token runtime assertion,
-      // which tells the reader nothing about what the test is for.
+      // which tells the reader nothing about what the test is for. `expectRefusal` is the
+      // tests' own helper (tests/vault.test.ts): it asserts on the rejection it is handed.
       'vitest/expect-expect': ['error', {
-        assertFunctionNames: ['expect', 'expectTypeOf'],
+        assertFunctionNames: ['expect', 'expectTypeOf', 'expectRefusal'],
       }],
       // A bulk example list indexes a namespace by a name from its table, which this rule cannot
       // follow. tsc checks the same thing properly, and does.

@@ -56,9 +56,11 @@ and the security reviewer reading the code.
 * **Few runtime dependencies.** Each is a supply-chain decision for every app that installs us.
   Adding one needs a Coach's yes; prefer a peer dependency for anything the host app likely
   already has. Validation is plain Zod, no kit on top of it.
-* **Runs everywhere the host app does**: browsers, Node, Bun, React Native, and the frameworks on
+* **Runs everywhere the host app does**: browsers, Node, Bun, and the frameworks on
   them (PROCESS.md, *Dependencies*). No Node built-ins in `src/`. The tests run under Node, where
   WebCrypto is the same global as in a browser.
+* **Security First**: if the stronger security measure (eg Argon) is not available on every platform,
+  we nonetheless implement it first, and make it pluggable second
 * **What is exported is a contract.** `src/index.ts` (and each entry point beside it) is the
   public surface, versioned by semver. **A stored vault is a contract too**: a change to the
   shape of what is written to storage must still read every vault already written, and says how.
@@ -67,7 +69,12 @@ and the security reviewer reading the code.
 
 * **Library first. Hand-rolling is a decision, not a default.** For any mechanism a library could
   own, look for an existing dependency, then a boring, widely used one (PROCESS.md,
-  *Dependencies*), and only then our own code, with a Coach's yes.
+  *Dependencies*), and only then our own code, with a Coach's yes. The pull to hand-roll is
+  strongest exactly where it should be weakest: the small, done-a-thousand-times utility (a
+  stable stringify, a deep-equal, a debounce). "Twelve lines, cheap to read" is the trap, not
+  the justification -- those twelve lines have a proven npm package, and the search for it comes
+  before writing them, every time. The Coach's yes comes before the hand-rolled version exists,
+  not after.
 * **Secret material never leaves through a side door.** Not into an error message, a thrown
   value's properties, a log line, a `toString`, or a validation error quoting its input. `src/`
   writes nothing to the console (the linter enforces it). An error says what went wrong and what
@@ -101,6 +108,9 @@ pnpm build           # tsdown: ESM + CJS + declarations into dist/, checked by p
   consumer unless it is its own entry in `tsdown.config.ts`.
 * `tests/` mirrors `src/` path for path: `src/foo/bar.ts` is tested in `tests/foo/bar.test.ts`.
   `fixtures/` holds sample data, when there is some.
+* `packages/` -- companion workspace packages (`byok-react`, the React binding). Each lints,
+  typechecks and tests itself (`pnpm justify` inside it); the root justify does not cover them.
+* `demos/` -- private playground apps exercising the packages; never published.
 * `dist/` is built, never committed.
 * `whiteboard/` -- work threads in progress, under a `YYYYMMDD-threadname` directory.
 * `human/` -- **from agents, to Coaches.** A scratchpad, not a record: write to it, don't read it
