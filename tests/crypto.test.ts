@@ -30,9 +30,9 @@ describe("random material", () => {
 
 describe("cipherBinding", () => {
   it("is deterministic in its parts, and different parts never collide", () => {
-    const one = cipherBinding('byok-vault-v1', 'acme', 'u1', 'main', 'vid', 1, 'vault_key_passphrase_wrapped')
-    const same = cipherBinding('byok-vault-v1', 'acme', 'u1', 'main', 'vid', 1, 'vault_key_passphrase_wrapped')
-    const other = cipherBinding('byok-vault-v1', 'acme', 'u2', 'main', 'vid', 1, 'vault_key_passphrase_wrapped')
+    const one = cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', 'vid', 1, 'vault_key_passphrase_wrapped')
+    const same = cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', 'vid', 1, 'vault_key_passphrase_wrapped')
+    const other = cipherBinding('safebyok-vault-v1', 'acme', 'u2', 'main', 'vid', 1, 'vault_key_passphrase_wrapped')
     expect(toB64(one)).to.eq(toB64(same))
     expect(toB64(one)).to.not.eq(toB64(other))
   })

@@ -132,7 +132,7 @@ export type Vault = {
  * backend's own answer ("no bundle: this vault was never created"). Symbol.for, not Symbol, so
  * the sentinel stays one value even when the ESM and CJS builds load side by side.
  */
-const UnreadBundle = Symbol.for('byok.unread_bundle')
+const UnreadBundle = Symbol.for('safebyok.unread_bundle')
 
 /**
  * The vaultKey's two lives after an unwrap. `transientKey` is extractable, because only an
@@ -192,10 +192,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   // The context each encryption is bound to; see VOCABULARY.md on cipherAdditionalData.
   const bundleBinding = (vaultId: string, epoch: number, purpose: 'vault_key_passphrase_wrapped' | 'vault_key_local_wrapped') => (
-    cipherBinding('byok-vault-v1', applabel, scope.user_id, vaultlabel, vaultId, epoch, purpose)
+    cipherBinding('safebyok-vault-v1', applabel, scope.user_id, vaultlabel, vaultId, epoch, purpose)
   )
   const boxBinding = (vaultId: string, boxlabel: string, revisionId: string, purpose: 'lockbox_key_wrapped' | 'whisper_ciphered') => (
-    cipherBinding('byok-lockbox-v1', applabel, scope.user_id, vaultlabel, vaultId, boxlabel, revisionId, purpose)
+    cipherBinding('safebyok-lockbox-v1', applabel, scope.user_id, vaultlabel, vaultId, boxlabel, revisionId, purpose)
   )
 
   const refresh = async () => {
@@ -238,7 +238,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   /** The vaultKey out of a bundle's passphrase envelope; its refusal IS the passphrase check. */
   const unwrapWithPassphrase = async (standing: VaultBundle, passphrase: string): Promise<VaultKeyPair> => {
     if (standing.key_deriver_label !== keyDeriver.key_deriver_label) {
-      throw new VaultError('unknown_key_deriver', 'This vault was made with a key deriver this package does not carry: update byok, or open the vault where it was made.')
+      throw new VaultError('unknown_key_deriver', 'This vault was made with a key deriver this package does not carry: update safebyok, or open the vault where it was made.')
     }
     const passphraseKeyBytes = await keyDeriver.deriveKeyBytes(passphrase, fromB64(standing.passphrase_salt_b64))
     const passphraseKey = await importWrappingKeyBytes(passphraseKeyBytes)
@@ -265,7 +265,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const sessionKey = await unwrapKeyUnder(passphraseKey, envelope, binding, { extractable: false, usage: ['wrapKey', 'unwrapKey'] })
     const now = new Date(clock.now()).toISOString()
     const draft: VaultBundle = {
-      format:              'byok-vault-v1',
+      format:              'safebyok-vault-v1',
       ...scope,
       vault_id:            vaultId,
       passphrase_epoch:    1,
@@ -297,7 +297,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const localUnlockKey = await makeLocalUnlockKey()
     const wrapped = await wrapKeyUnder(localUnlockKey, unlockedKey, bundleBinding(standing.vault_id, standing.passphrase_epoch, 'vault_key_local_wrapped'))
     await deviceDB.writeUnlock({
-      format:                  'byok-unlock-v1',
+      format:                  'safebyok-unlock-v1',
       ...scope,
       vault_id:                standing.vault_id,
       passphrase_epoch:        standing.passphrase_epoch,
@@ -443,7 +443,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       const now = new Date(clock.now()).toISOString()
       const prev = await vaultDB.readBox(scope, label)
       await vaultDB.writeBox(scope, {
-        format:              'byok-lockbox-v1',
+        format:              'safebyok-lockbox-v1',
         boxlabel:            label,
         revision_id:         revisionId,
         lockbox_key_wrapped: await wrapKeyUnder(unlockedKey, lockboxKey, boxBinding(vaultId, label, revisionId, 'lockbox_key_wrapped')),

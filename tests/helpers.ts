@@ -29,7 +29,7 @@ export const scopeOf = (userId: string): VaultScope => ({ applabel: 'acme', user
 
 /** A shape-valid VaultBundle for storage-layer tests; its envelope is fake and opens nothing. */
 export const bundleOf = (userId: string): VaultBundle => ({
-  format:              'byok-vault-v1',
+  format:              'safebyok-vault-v1',
   ...scopeOf(userId),
   vault_id:            `vault-id-${userId}`,
   passphrase_epoch:    1,
@@ -43,7 +43,7 @@ export const bundleOf = (userId: string): VaultBundle => ({
 
 /** A real DeviceUnlock for device-storage tests: a live non-extractable localUnlockKey around fake wrapped material. */
 export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
-  format:                  'byok-unlock-v1',
+  format:                  'safebyok-unlock-v1',
   ...scopeOf(userId),
   vault_id:                `vault-id-${userId}`,
   passphrase_epoch:        1,
@@ -54,7 +54,7 @@ export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
 
 /** A shape-valid Lockbox for storage-layer tests; its ciphered fields are fake and open nothing. */
 export const boxOf = (boxlabel: string, tag: string): Lockbox => ({
-  format:              'byok-lockbox-v1',
+  format:              'safebyok-lockbox-v1',
   boxlabel,
   revision_id:         `rev-${tag}`,
   lockbox_key_wrapped: fakeCiphered(`boxkey-${tag}`),
