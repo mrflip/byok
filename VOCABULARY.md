@@ -40,9 +40,10 @@ lockboxKey      ciphers  whisper     →  whisperCiphered             one per lo
 ## Encrypted forms
 
 A key that has been encrypted is **Wrapped**; a whisper that has been encrypted is **Ciphered**.
-Each is a pair: its cipherIv and its ciphertext. In memory both halves are bytes. How they are
-written down is your storage adapter's choice; a base64 text form takes a `B64` suffix
-(`whisperCipheredB64`).
+Each is a pair: its cipherIv and its ciphertext. byok exports the pair's one shape as the
+**`Ciphered`** type -- `{ cipher_iv_b64, ciphertext_b64 }`, each half base64url text (the `_b64`
+suffix) -- so every encrypted field in a stored record is plain JSON any storage layer can hold
+as-is.
 
 | Name                          | What it is                                                                                         | Standard term       |
 | ----------------------------- | -------------------------------------------------------------------------------------------------- | ------------------- |
