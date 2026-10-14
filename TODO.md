@@ -17,6 +17,16 @@ whisper that passed the cap over it. To decide: does the cap measure the padded 
 unpadded one? And does padding need a stored-format change, or can it be trailing JSON
 whitespace, which every existing reader already ignores?
 
+Two families of VaultError, told apart by kind, so each reaches the right person. **Misuse** is
+the developer's to fix and should be loud: `bad_option`, `bad_whisper`, `vault_closed`,
+`unknown_key_deriver`, and `bad_label` for the labels the app chooses. byok-react rethrows it
+during render, so an error boundary and the dev overlay show it (today `VaultProvider` drops an
+`openVault` rejection on the floor). **Conditions** are the app's to handle and may reach the user:
+`vault_locked`, `wrong_passphrase`, `absent_box`, `stale_write`, storage trouble, and
+`whisper_too_large` or `bad_label` when the value came from the user; the provider hands these
+over through the context. `errors.ts` exports the split. To decide: kinds that are misuse in one
+caller and a condition in another (a boxlabel the user typed).
+
 A pluggable stringifier: how a whisper becomes bytes and back (today `stableJsonify` and
 `JSON.parse`), so a host can store values JSON cannot carry.
 

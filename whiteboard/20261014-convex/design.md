@@ -22,8 +22,11 @@ Design agreed in chat with the Coach, 2026-10-14. Intent, not yet code.
   (lockbox) or `passphrase_epoch` (bundle) in the same transaction it writes in. Convex mutations
   are serializable, so the check is atomic for real; a failed expectation refuses as `stale_write`.
 * **`maxRecordBytes` is 1 MiB** (1_048_576), Convex's document limit.
+* **Numbers are `v.number()`** (float64, exact to 2^53 - 1, the rulings' safe-integer storage
+  contract), never `v.int64()`, which reads back as a BigInt.
 * **Dev dependencies**: `convex-test` (with its `@edge-runtime/vm` environment) tests the
-  component's functions under vitest.
+  component's functions under vitest. `convex-helpers` is left out: its Zod bridge is the kind of
+  kit CLAUDE.md rules out, and nothing else in it is needed.
 
 ## Tables
 
@@ -54,14 +57,26 @@ storage thread settles them.
 | subscribe                    | `onUpdate` on query `watchVault` | `{ vault_id, passphrase_epoch, boxes: [[boxlabel, revision_id]] }`; first emit skipped |
 | `maxRecordBytes`             | (a constant)                     | 1 MiB                                                       |
 
-Every function first resolves `getUserId(ctx)` (the host's: a component cannot read `ctx.auth`):
-null refuses as unauthenticated, and a `user_id` argument that differs refuses as forbidden.
+Every function first resolves `getUserId(ctx)`, the host's callback: inside a component
+`ctx.auth` is not available, so the app authenticates and passes the user id in (Convex docs,
+*Authoring Components*, which show the same re-export wrapper taking an auth callback). Null
+refuses as unauthenticated, and a `user_id` argument that differs refuses as forbidden.
 
 The client accepts a `ConvexReactClient` or a `ConvexClient`, so a React app reuses its socket.
+
+## Sizes
+
+Measured 2026-10-14. PKCS#8 PEM private keys are 1704, 3272 and 6392 bytes at RSA 2048, 4096 and
+8192; their public keys 451, 800 and 1491. Stored as a whisper, the 8192 PEM is 8680 bytes of
+base64 ciphertext. Per-record limits: DynamoDB 400 KB, Convex and Firestore 1 MiB; localStorage
+holds about 5 MB per origin in all. The binding constraints on whisper size are those limits,
+base64 growth, refresh fan-out (every refresh reads every lockbox) and one-shot WebCrypto
+encryption holding the whole whisper in memory several times; encryption time is not one.
 
 ## Open
 
 * Whisper size cap: built in the core, PR #7 (`maxWhisperBytes`, adapters' `maxRecordBytes`).
 * A box written under one `vault_id` landing in a vault recreated under another: `versionedUpdate`
-  does not see it (both expectations can hold). Checking `vault_id` would close it.
+  does not see it (both expectations can hold). Checking `vault_id` would close it. The Coach
+  calls it a huge hole; the storage thread closes it.
 * Component packaging: `convex.config` export and generated types in the package build.
