@@ -14,14 +14,14 @@ import * as Z from 'zod'
 export type WhisperJson = string | number | boolean | null | WhisperJson[] | { [ckey: string]: WhisperJson }
 
 /**
- * The data kept secret: a JSON value -- a string, number, boolean, array or plain object.
+ * The secret kept in a lockbox: a JSON value -- a string, number, boolean, array or plain object.
  * Two shapes are refused rather than silently mangled:
  *  * `undefined`, anywhere in the value: JSON cannot carry it.
  *  * a bare `null` as the whole whisper: nobody's secret is "nothing here", and emptying a
  *    lockbox is `erase`'s job. (`null` inside a structure is fine: {@link WhisperJson}.)
  *
  * @example 'sk-ant-api03-...'
- * @example { apiToken: 'sk-ant-...', orgId: null }
+ * @example { apiKey: 'sk-ant-...', orgId: null }
  */
 export type Whisper = Exclude<WhisperJson, null>
 
@@ -113,7 +113,7 @@ export type LockboxSummary = Z.infer<typeof LockboxSummary>
 
 /**
  * The per-vault record the storage layer holds so a device can unlock the vault. In the real
- * package this carries a KDF salt and the vault key wrapped under the passphrase-derived key;
+ * package this carries the passphraseSalt and the vaultKeyPassphraseWrapped;
  * here it carries the passphrase itself, in the open, so the inspector can show the slot.
  */
 export const VaultBundle = Z.object({
@@ -121,16 +121,16 @@ export const VaultBundle = Z.object({
   applabel:        Label,
   user_id:         Z.string().min(1),
   vaultlabel:      Label,
-  /** ⚠️ STUB ONLY: the real package stores a salt and a wrapped vault key, never this. */
+  /** ⚠️ STUB ONLY: the real package stores a passphraseSalt and a vaultKeyPassphraseWrapped, never this. */
   stub_passphrase: Z.string(),
   created_at:      Z.string(),
 })
 export type VaultBundle = Z.infer<typeof VaultBundle>
 
 /**
- * The device-local record of a remembered unlock. In the real package this carries the vault key
- * wrapped under a non-extractable device key; in the stub there is no key material at all, only
- * the expiry.
+ * The device-local record of a remembered unlock. In the real package this carries the
+ * vaultKeyLocalWrapped: the vaultKey, wrapped under this browser's localUnlockKey. In the stub
+ * there is no key material at all, only the expiry.
  */
 export const DeviceUnlock = Z.object({
   format:     Z.literal('byok-stub-unlock-v0'),

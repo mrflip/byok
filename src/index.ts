@@ -2,8 +2,8 @@
  * byok's public surface. ⚠️ STUB STAGE: the interface is real, the cryptography is not yet --
  * vaults store whispers and passphrases in plaintext (see src/types.ts). Not for release.
  */
-export { Argon2idWebV1 } from './kdf-profile'
-export type { KdfProfile } from './kdf-profile'
+export { Argon2idWebV1 } from './key-deriver-spec'
+export type { KeyDeriverSpec } from './key-deriver-spec'
 export { openVault } from './vault'
 export type { OpenVaultOpts, Vault, VaultSnapshot, VaultState } from './vault'
 export { Label, Lockbox, LockboxSummary, SevenDaysMs, Whisper, wallClock } from './types'

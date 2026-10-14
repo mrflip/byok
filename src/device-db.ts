@@ -3,8 +3,8 @@ import type { StringStore } from './string-store'
 
 /**
  * Device-local storage for remembered unlocks: what lets "enter your passphrase once, keep it for
- * seven days" survive a page reload. In the real package this holds the vault key wrapped under a
- * non-extractable device key; nothing here ever goes to the backend.
+ * seven days" survive a page reload. In the real package this holds the vaultKeyLocalWrapped (the
+ * vaultKey, wrapped under this browser's localUnlockKey); nothing here ever goes to the backend.
  */
 export interface DeviceDB {
   /** The remembered unlock for one vault, or null when there is none. Expiry is the vault's call. */

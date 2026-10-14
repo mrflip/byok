@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { Argon2idWebV1 } from '../src/kdf-profile'
+import { Argon2idWebV1 } from '../src/key-deriver-spec'
 
 describe("Argon2idWebV1", () => {
-  it("names its profile, as the stored format records it", () => {
-    expect(Argon2idWebV1.profile).to.eq('argon2id-web-v1')
+  it("carries its keyDeriverLabel, as the stored format records it", () => {
+    expect(Argon2idWebV1.key_deriver_label).to.eq('argon2id_web_v1')
   })
 
   it("asks for 64 MiB of memory, counted in KiB", () => {
@@ -13,13 +13,13 @@ describe("Argon2idWebV1", () => {
 
   it("pins every parameter, leaving nothing for a caller to choose", () => {
     expect(Argon2idWebV1).to.deep.equal({
-      algorithm:    'argon2id',
-      profile:      'argon2id-web-v1',
-      memory_kib:   65_536,
-      iterations:   3,
-      parallelism:  1,
-      salt_bytes:   16,
-      output_bytes: 32,
+      algorithm:         'argon2id',
+      key_deriver_label: 'argon2id_web_v1',
+      memory_kib:        65_536,
+      iterations:        3,
+      parallelism:       1,
+      salt_bytes:        16,
+      output_bytes:      32,
     })
   })
 

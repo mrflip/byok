@@ -8,7 +8,7 @@ const WhisperCases = [
   [42,                                true,   'a number'],
   [true,                              true,   'a boolean'],
   [["a", "b"],                        true,   'an array'],
-  [{ apiToken: "fake", tier: 2 },     true,   'a plain object'],
+  [{ apiKey: "fake", tier: 2 },     true,   'a plain object'],
   [{ orgId: null },                   true,   'null inside a structure: real JSON carries it'],
   [{ deep: { list: [1, null] } },     true,   'nesting, arbitrarily'],
   // what JSON cannot carry is refused, not mangled:
@@ -26,7 +26,7 @@ describe("Whisper", () => {
   }
 
   it("hands back the value unchanged when it passes", () => {
-    const bag = { apiToken: 'fake', scopes: ['read', 'write'] }
+    const bag = { apiKey: 'fake', scopes: ['read', 'write'] }
     expect(Whisper.parse(bag)).to.deep.equal(bag)
   })
 })
