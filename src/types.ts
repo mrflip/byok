@@ -8,15 +8,22 @@ import * as Z from 'zod'
  */
 
 /**
- * The data kept secret: any JSON value -- a string, number, boolean, null, array or plain object.
- * Never `undefined`, anywhere in the value: JSON cannot carry it, and storing it is refused
- * rather than silently dropped -- to empty a lockbox, erase it.
+ * The JSON a whisper is made of. `null` is legal here -- inside an array or object -- because
+ * real JSON payloads carry it; see {@link Whisper} for why a whisper can't be null as a whole.
+ */
+export type WhisperJson = string | number | boolean | null | WhisperJson[] | { [ckey: string]: WhisperJson }
+
+/**
+ * The data kept secret: a JSON value -- a string, number, boolean, array or plain object.
+ * Two shapes are refused rather than silently mangled:
+ *  * `undefined`, anywhere in the value: JSON cannot carry it.
+ *  * a bare `null` as the whole whisper: nobody's secret is "nothing here", and emptying a
+ *    lockbox is `erase`'s job. (`null` inside a structure is fine: {@link WhisperJson}.)
  *
  * @example 'sk-ant-api03-...'
- * @example { apiToken: 'sk-ant-...', orgId: 'acme' }
- * @example null
+ * @example { apiToken: 'sk-ant-...', orgId: null }
  */
-export type Whisper = string | number | boolean | null | Whisper[] | { [ckey: string]: Whisper }
+export type Whisper = Exclude<WhisperJson, null>
 
 /** True for a plain key-value object: one built by a literal or Object.create(null), nothing with its own prototype (a Date, a Map) that JSON would silently flatten. */
 const isPlainBag = (val: unknown): val is Record<string, unknown> => {
@@ -25,23 +32,32 @@ const isPlainBag = (val: unknown): val is Record<string, unknown> => {
   return proto === Object.prototype || proto === null
 }
 
-const whisperRecord = Z.record(Z.string(), Z.lazy(() => Whisper))
+const whisperJson: Z.ZodType<WhisperJson> = Z.lazy(() => Z.union([
+  Z.string(),
+  Z.number(),
+  Z.boolean(),
+  Z.null(),
+  whisperArr,
+  whisperBag,
+]))
+const whisperRecord = Z.record(Z.string(), whisperJson)
 const whisperBag = Z.custom<Record<string, unknown>>(isPlainBag, 'a whisper object must be a plain object').pipe(whisperRecord)
-const whisperArr = Z.array(Z.lazy(() => Whisper))
+const whisperArr = Z.array(whisperJson)
 
 /**
- * Validator for a {@link Whisper}: accepts exactly what JSON can carry, and refuses what JSON
- * would mangle (undefined, functions, class instances such as Date or Map).
+ * Validator for a {@link Whisper}: accepts exactly what JSON can carry, refuses what JSON would
+ * mangle (undefined, functions, class instances such as Date or Map), and refuses a bare null.
  *
- * @example Whisper.parse('sk-ant-...')             // a string passes through
- * @example Whisper.safeParse(new Date()).success   // false: JSON would flatten it to {}
- * @example Whisper.safeParse(undefined).success    // false: undefined cannot be stored
+ * @example Whisper.parse('sk-ant-...')                  // a string passes through
+ * @example Whisper.safeParse(new Date()).success        // false: JSON would flatten it to {}
+ * @example Whisper.safeParse(undefined).success         // false: undefined cannot be stored
+ * @example Whisper.safeParse(null).success              // false: emptying a lockbox is erase's job
+ * @example Whisper.safeParse({ orgId: null }).success   // true: null inside a structure is JSON
  */
 export const Whisper: Z.ZodType<Whisper> = Z.union([
   Z.string(),
   Z.number(),
   Z.boolean(),
-  Z.null(),
   whisperArr,
   whisperBag,
 ])

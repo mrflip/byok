@@ -129,9 +129,9 @@ const RoundTrips: readonly (readonly [Whisper, string])[] = [
   ["sk-ant-api03-fake",            'a string'],
   [42,                             'a number'],
   [false,                          'a boolean'],
-  [null,                           'null'],
   [["alpha", "beta"],              'an array'],
   [{ apiToken: "fake", tier: 2 },  'an object'],
+  [{ orgId: null },                'an object holding a null'],
 ]
 
 describe("store and read", () => {
@@ -179,6 +179,7 @@ describe("store and read", () => {
     const err = await expectRefusal(vault.store('the_box', sneaky as unknown as Whisper), 'bad_whisper')
     expect(err.message).to.not.include('SUPERSECRET')
     await expectRefusal(vault.store('the_box', undefined as unknown as Whisper), 'bad_whisper')
+    await expectRefusal(vault.store('the_box', null as unknown as Whisper), 'bad_whisper')
     expect(vault.getSnapshot().boxes).to.have.lengthOf(0)
   })
 

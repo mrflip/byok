@@ -6,7 +6,7 @@ const ParseCases = [
   ["sk-ant-fake",         "sk-ant-fake",       'ordinary text stores as the string it is'],
   ["42",                  42,                  'JSON number text stores as a number'],
   ["true",                true,                'JSON boolean text stores as a boolean'],
-  ["null",                null,                'the text null stores as null'],
+  ["null",                null,                'the text null parses to null, for the vault to refuse'],
   ['{"apiToken":"x"}',    { apiToken: "x" },   'JSON object text stores as an object'],
   ["[1, 2]",              [1, 2],              'JSON array text stores as an array'],
   ["{not json",           "{not json",         'almost-JSON falls back to the string'],
@@ -30,7 +30,7 @@ describe("showWhisper and editableWhisper", () => {
   })
 
   it("round-trip: what the edit box shows parses back to the same whisper", () => {
-    for (const whisper of ['plain text', 42, true, null, [1, 'two'], { deep: { bag: [] } }]) {
+    for (const whisper of ['plain text', 42, true, [1, 'two'], { deep: { bag: [] } }]) {
       expect(parseWhisperText(editableWhisper(whisper))).to.deep.equal(whisper)
     }
   })

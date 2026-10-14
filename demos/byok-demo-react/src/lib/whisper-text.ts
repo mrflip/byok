@@ -1,4 +1,4 @@
-import type { Whisper } from 'byok'
+import type { Whisper, WhisperJson } from 'byok'
 
 /** A whisper as the UI prints it: strings bare, everything else as JSON. */
 export const showWhisper = (whisper: Whisper): string => (
@@ -11,12 +11,13 @@ export const editableWhisper = (whisper: Whisper): string => (
 )
 
 /**
- * An edit box's text read back into a whisper: valid JSON keeps its type ("42" stores the number
- * 42, "true" the boolean), anything else is stored as the string it is.
+ * An edit box's text read back into whisper material: valid JSON keeps its type ("42" stores the
+ * number 42, "true" the boolean), anything else is stored as the string it is. Typing "null"
+ * parses to a bare null, which the vault refuses at store time with its own calm message.
  */
-export const parseWhisperText = (text: string): Whisper => {
+export const parseWhisperText = (text: string): WhisperJson => {
   try {
-    return JSON.parse(text) as Whisper
+    return JSON.parse(text) as WhisperJson
   } catch {
     return text
   }

@@ -98,6 +98,13 @@ export type Vault = {
  *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, deviceDB })
  *   vault.getSnapshot().state  // 'absent' | 'locked' | 'unlocked'
  */
+/**
+ * What `bundle` holds before the backend's first answer arrives: distinct from null, which is the
+ * backend's own answer ("no bundle: this vault was never initialized"). Symbol.for, not Symbol,
+ * so the sentinel stays one value even when the ESM and CJS builds load side by side.
+ */
+const UnreadBundle = Symbol.for('byok.unread_bundle')
+
 export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const applabel   = parseLabel(opts.applabel)
   const vaultlabel = parseLabel(opts.vaultlabel)
@@ -107,18 +114,19 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const rememberForMs = opts.rememberForMs ?? SevenDaysMs
   const clock = opts.clock ?? wallClock
 
-  let bundle: VaultBundle | null = null
+  let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
   let boxes: readonly LockboxSummary[] = []
   let expiresAt: number | null = null
   let closed = false
-  let snapshot: VaultSnapshot = { state: 'opening', scope, boxes, expiresAt }
 
   const listeners = new Set<() => void>()
   const vaultState = (): VaultState => {
+    if (bundle === UnreadBundle) { return 'opening' }
     if (bundle === null) { return 'absent' }
     if (expiresAt !== null && expiresAt > clock.now()) { return 'unlocked' }
     return 'locked'
   }
+  let snapshot: VaultSnapshot = { state: vaultState(), scope, boxes, expiresAt }
   // The snapshot keeps its identity until something really changed: useSyncExternalStore's
   // contract, and what spares React a render when a background refresh found nothing new.
   const bump = () => {
@@ -165,7 +173,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     unlock: async (passphrase) => {
       ensureOpen()
       if (! passphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
-      if (bundle === null) {
+      // The UnreadBundle arm is for the type: unlock() can only run on a returned handle, and
+      // openVault resolves only after the first refresh has read the bundle.
+      if (bundle === null || bundle === UnreadBundle) {
         bundle = {
           format:          'byok-stub-vault-v0',
           ...scope,
@@ -195,7 +205,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       const checked = Whisper.safeParse(whisper)
       // The refusal never quotes its input: a whisper stays out of error messages.
       if (! checked.success) {
-        throw new VaultError('bad_whisper', 'A whisper must be a JSON value: a string, number, boolean, null, array, or plain object. undefined cannot be stored: to empty a lockbox, erase it.')
+        throw new VaultError('bad_whisper', 'A whisper must be a JSON value: a string, number, boolean, array, or plain object. A bare null or undefined cannot be stored -- to empty a lockbox, erase it. (null inside an array or object is fine.)')
       }
       const now = new Date(clock.now()).toISOString()
       const prev = await vaultDB.readBox(scope, label)

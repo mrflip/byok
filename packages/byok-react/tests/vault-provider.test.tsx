@@ -6,19 +6,20 @@ import { VaultProvider, useVault, useVaultSnapshot } from '../src/vault-provider
 
 /** A probe component exercising the binding the way a host app would. */
 const Probe = () => {
-  const { vault, guard } = useVault()
+  const { vault, withUnlockedVault } = useVault()
   const snapshot = useVaultSnapshot()
   const [outcome, setOutcome] = useState('')
 
   if (vault === null) { return <span data-testid="state">no vault</span> }
 
   const put = () => {
-    void guard(() => vault.store('anthropic_api_key', 'sk-fake'))
+    void withUnlockedVault(() => vault.store('anthropic_api_key', 'sk-fake'))
       .then((stored) => { setOutcome(stored === null ? 'dismissed' : 'stored') })
   }
+  // A whisper is never null, so null from withUnlockedVault can only mean "dismissed".
   const grab = () => {
-    void guard(async () => ({ whisper: await vault.read('anthropic_api_key') }))
-      .then((got) => { setOutcome(got === null ? 'dismissed' : `read:${String(got.whisper)}`) })
+    void withUnlockedVault(() => vault.read('anthropic_api_key'))
+      .then((whisper) => { setOutcome(whisper === null ? 'dismissed' : `read:${String(whisper)}`) })
   }
 
   return (
@@ -59,7 +60,7 @@ describe("VaultProvider", () => {
     expect(screen.queryByText('Choose a vault passphrase')).to.be.null
   })
 
-  it("a guarded action summons the dialog, and unlocking retries the action", async () => {
+  it("an action through withUnlockedVault summons the dialog, and unlocking retries it", async () => {
     const world = makeWorld()
     world.mount('u1')
     await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
@@ -76,7 +77,7 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('boxcount').textContent).to.eq('1') })
   })
 
-  it("once unlocked, further guarded actions run without the dialog", async () => {
+  it("once unlocked, further actions run without the dialog", async () => {
     const world = makeWorld()
     world.mount('u1')
     await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
@@ -114,7 +115,7 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('read:sk-fake') })
   })
 
-  it("dismissing the dialog resolves the guarded action to null, and nothing is stored", async () => {
+  it("dismissing the dialog resolves the action to null, and nothing is stored", async () => {
     const world = makeWorld()
     world.mount('u1')
     await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })

@@ -3,25 +3,26 @@ import { isVaultError, openVault, type DeviceDB, type Vault, type VaultDB, type 
 import { PassphraseModal } from './passphrase-modal'
 
 /**
- * What the provider hands down: the vault handle (null while opening or signed out) and the
- * guard that owns the ask-for-the-passphrase-when-needed flow.
+ * What the provider hands down: the vault handle (null while opening or signed out) and
+ * `withUnlockedVault`, which owns the ask-for-the-passphrase-when-needed flow.
  */
 export type VaultContextShape = {
   vault: Vault | null
   /**
    * Run an action that may need the vault unlocked. If it refuses with kind 'vault_locked', the
    * passphrase dialog opens; after a successful unlock the action runs again. Resolves null when
-   * the user dismisses the dialog instead -- so wrap a result that could itself be null:
+   * the user dismisses the dialog instead -- unambiguously for whisper reads, since a whisper is
+   * never null. Only an action whose own result could be null needs to wrap it in an object.
    *
-   * @example const got = await guard(async () => ({ whisper: await vault.read('anthropic_api_key') }))
-   *          // got === null: user dismissed; got.whisper: the (possibly null) whisper
+   * @example const whisper = await withUnlockedVault(() => vault.read('anthropic_api_key'))
+   *          // whisper === null: the user dismissed the dialog
    */
-  guard: <ResultT>(action: () => Promise<ResultT>) => Promise<ResultT | null>
+  withUnlockedVault: <ResultT>(action: () => Promise<ResultT>) => Promise<ResultT | null>
 }
 
 const VaultContext = createContext<VaultContextShape | null>(null)
 
-/** The vault handle and the guard, from the nearest VaultProvider. */
+/** The vault handle and withUnlockedVault, from the nearest VaultProvider. */
 export const useVault = (): VaultContextShape => {
   const shape = useContext(VaultContext)
   if (shape === null) { throw new Error('useVault needs a <VaultProvider> above it.') }
@@ -59,7 +60,7 @@ export type VaultProviderProps = {
 /**
  * Opens the vault for the signed-in user and keeps it matched to that identity: a null userId
  * closes the handle, a different userId opens a different vault. Renders the passphrase dialog
- * when a guarded action finds the vault locked. The dialog is unstyled markup under the
+ * when an action run through withUnlockedVault finds the vault locked. The dialog is unstyled markup under the
  * `modal-scrim` / `modal` class names; the host's stylesheet dresses it.
  *
  * @example
@@ -88,7 +89,7 @@ export const VaultProvider = ({ applabel, vaultlabel, userId, vaultDB, deviceDB,
     }
   }, [userId, applabel, vaultlabel, vaultDB, deviceDB])
 
-  const guard = useCallback(async <ResultT,>(action: () => Promise<ResultT>): Promise<ResultT | null> => {
+  const withUnlockedVault = useCallback(async <ResultT,>(action: () => Promise<ResultT>): Promise<ResultT | null> => {
     try {
       return await action()
     } catch (err) {
@@ -100,7 +101,7 @@ export const VaultProvider = ({ applabel, vaultlabel, userId, vaultDB, deviceDB,
   }, [])
 
   return (
-    <VaultContext.Provider value={{ vault, guard }}>
+    <VaultContext.Provider value={{ vault, withUnlockedVault }}>
       {children}
       {asking !== null && vault !== null && (
         <PassphraseModal

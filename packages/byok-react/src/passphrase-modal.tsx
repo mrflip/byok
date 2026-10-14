@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
 import { isVaultError, type Vault } from 'byok'
 
 /**
- * The dialog a guarded action summons when the vault turns out to be locked. Unstyled markup
+ * The dialog withUnlockedVault summons when the vault turns out to be locked. Unstyled markup
  * under the `modal-scrim` / `modal` / `quiet` / `gripe` class names, for the host's stylesheet
  * to dress. Its two behaviors are the contract: a first-ever unlock reads as "choose a
  * passphrase" (it creates the vault), and a wrong passphrase stays in the dialog with a calm
@@ -13,7 +13,7 @@ export const PassphraseModal = ({ vault, onDone }: { vault: Vault, onDone: (unlo
   const [gripe, setGripe] = useState<string | null>(null)
   const creating = vault.getSnapshot().state === 'absent'
 
-  const submit = async (evt: FormEvent) => {
+  const submit = async (evt: SubmitEvent) => {
     evt.preventDefault()
     try {
       await vault.unlock(passphrase)

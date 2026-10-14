@@ -4,10 +4,11 @@ The thin React binding for byok: no vault logic, only the React-shaped plumbing 
 otherwise write itself.
 
 * `VaultProvider` -- opens the vault for the signed-in user (`userId` prop from your auth) and
-  keeps it matched to that identity; renders the passphrase dialog when a guarded action finds
-  the vault locked.
-* `useVault()` -- the vault handle and `guard()`, which wraps any action that touches a whisper:
-  on `vault_locked` it asks for the passphrase and retries, and resolves `null` if dismissed.
+  keeps it matched to that identity; renders the passphrase dialog when an action run through
+  `withUnlockedVault` finds the vault locked.
+* `useVault()` -- the vault handle and `withUnlockedVault()`, which wraps any action that touches
+  a whisper: on `vault_locked` it asks for the passphrase and retries, and resolves `null` if
+  dismissed (unambiguous for reads: a whisper is never null).
 * `useVaultSnapshot()` -- the live snapshot via `useSyncExternalStore`.
 * `PassphraseModal` -- the default dialog: unstyled markup under `modal-scrim` / `modal` class
   names for the host's stylesheet to dress.

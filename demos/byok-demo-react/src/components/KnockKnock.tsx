@@ -4,15 +4,15 @@ import { gripeForJokeErr, tellKnockKnockJoke } from '../lib/anthropic'
 
 /**
  * The "app": a knock-knock machine powered by the user's own Anthropic key. This is what using
- * the library day-to-day looks like -- one lockbox holding the key, `guard()` around anything
- * that needs it, and `vault.use()` scoping the decrypted key to the API call.
+ * the library day-to-day looks like -- one lockbox holding the key, `withUnlockedVault()` around
+ * anything that needs it, and `vault.use()` scoping the decrypted key to the API call.
  */
 
 /** The lockbox the knock-knock machine keeps its key in. */
 const ApiKeyBoxlabel = 'anthropic_api_key'
 
 export const KnockKnock = () => {
-  const { vault, guard } = useVault()
+  const { vault, withUnlockedVault } = useVault()
   const snapshot = useVaultSnapshot()
   const [whosThere, setWhosThere] = useState('')
   const [joke, setJoke] = useState<string | null>(null)
@@ -27,7 +27,7 @@ export const KnockKnock = () => {
     setJoke(null)
     setGripe(null)
     try {
-      const told = await guard(() => vault.use(ApiKeyBoxlabel, (whisper) => tellKnockKnockJoke(String(whisper), whosThere.trim())))
+      const told = await withUnlockedVault(() => vault.use(ApiKeyBoxlabel, (whisper) => tellKnockKnockJoke(String(whisper), whosThere.trim())))
       if (told !== null) { setJoke(told) }
     } catch (err) {
       setGripe(gripeForJokeErr(err))
@@ -66,7 +66,7 @@ export const KnockKnock = () => {
 
 /** The facility for entering (or replacing) the Anthropic API key, stored as a lockbox. */
 const ApiKeySlot = ({ haveKeyBox, updatedAt }: { haveKeyBox: boolean, updatedAt?: string }) => {
-  const { vault, guard } = useVault()
+  const { vault, withUnlockedVault } = useVault()
   const [editing, setEditing] = useState(false)
   const [keyText, setKeyText] = useState('')
   const [gripe, setGripe] = useState<string | null>(null)
@@ -76,7 +76,7 @@ const ApiKeySlot = ({ haveKeyBox, updatedAt }: { haveKeyBox: boolean, updatedAt?
   const save = async () => {
     setGripe(null)
     try {
-      const saved = await guard(async () => {
+      const saved = await withUnlockedVault(async () => {
         await vault.store(ApiKeyBoxlabel, keyText.trim(), { note: 'feeds the knock-knock machine' })
         return true
       })
