@@ -7,9 +7,18 @@ Add the convex skill to the appropriate place, **scoped** to only that directory
 
 A pad/unpad helper, so a lockbox's ciphertext length stops telling the backend what kind of
 whisper it holds (an API key from a PEM). Padding goes inside the encryption, by a published
-scheme (PADMÉ, from the PURBs paper, or power-of-two buckets), not one of our own. To decide: does
-it need a stored-format change, or can the padding be trailing JSON whitespace, which every
-existing reader already ignores?
+scheme (PADMÉ, from the PURBs paper, or power-of-two buckets), not one of our own, with a 64-byte
+minimum. Above that minimum, check where the lengths of standard payloads land, so that no common
+kind sits alone in a size that names it: API keys, OAuth tokens, service-account JSON, RSA keys
+(PKCS#8 PEM is 1704, 3272 and 6392 bytes at 2048, 4096 and 8192 bits). To decide: does it need a
+stored-format change, or can the padding be trailing JSON whitespace, which every existing reader
+already ignores?
+
+A pluggable stringifier: how a whisper becomes bytes and back (today `stableJsonify` and
+`JSON.parse`), so a host can store values JSON cannot carry.
+
+Tree-shakability: an app that imports one thing from byok bundles only what that thing uses.
+`sideEffects: false`, no work at module top level, and a check in CI that keeps it so.
 
 Use stable jsonify
 
