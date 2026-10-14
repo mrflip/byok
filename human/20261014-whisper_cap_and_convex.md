@@ -1,4 +1,4 @@
-# 2026-10-14: Convex adapter designed; whisper cap in PR #7 -- three questions
+# 2026-10-14: Convex adapter designed; whisper cap in PR #7 -- two questions
 
 Two threads, both stacked on #6 (`20261014-nonextractable`), each in its own worktree so the
 agent working in `/workspace/byok` is undisturbed.
@@ -12,11 +12,17 @@ agent working in `/workspace/byok` is undisturbed.
 * **`20261014-whisper-cap`**, PR [#7](https://github.com/mrflip/byok/pull/7): `openVault({ maxWhisperBytes })`,
   default `MaxWhisperBytes = 40444`, checked on write only.
 
+## Settled in chat
+
+* `MaxWhisperBytes = 40_444 // searchable: 40444`.
+* `VaultProvider` takes every openVault option and passes each through as given.
+* Each VaultDB declares `maxRecordBytes`; openVault refuses a `maxWhisperBytes` over half of it.
+
 ## Questions
 
-* `MaxWhisperBytes` carries an `eslint-disable-line unicorn/numeric-separators-style`, so it
-  stays greppable as `40444`. OK?
-* Should `VaultProvider` forward `maxWhisperBytes` (and `rememberForMs`, which it doesn't today),
-  or take an `openVault` options object?
-* Should each adapter declare a ceiling (Convex about 1 MiB, DynamoDB 400 KB) that `openVault`
-  refuses to exceed?
+* `localVaultDB` declares a mebibyte per record: localStorage has no per-record limit, only about
+  5 MB per origin in all, so the number is a choice, not a fact. `idbVaultDB` declares `Infinity`.
+  Right?
+* `VaultProvider` drops an `openVault` rejection on the floor (`void openVault(...).then`), as it
+  did before this PR. Now that props can be refused (`bad_option`), should it surface the error,
+  through the context or an `onError` prop?
