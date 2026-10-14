@@ -1,6 +1,6 @@
 {
   "name": "safebyok-demo-react",
-  "private": false,
+  "private": true,
   "version": "0.0.0",
   "description": "Single-page React playground for the safebyok interface: a stub vault, a fake sign-in, and an inspector showing what lands where. Never published.",
   "type": "module",
