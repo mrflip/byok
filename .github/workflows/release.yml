@@ -36,6 +36,10 @@ jobs:
             echo "::error::Release tag $TAG does not match package.json's version, $version"
             exit 1
           fi
+      # The npm bundled with the pinned Node (11.19.0 with Node 24.21.0) predates the 11.21.0 that
+      # `npm dist-tag` over OIDC needs; npm 12.2.0 is the current release and supports Node 24.
+      - name: Install the pinned npm
+        run: npm install --global npm@12.2.0
       # A prerelease version (`1.2.0-beta.1`) goes out under the `next` dist-tag, so that a plain
       # `npm install safebyok` never picks it up. `prepublishOnly` runs `pnpm justify` first.
       - name: Stage for approval
