@@ -1,0 +1,14 @@
+{
+  "name": "byok-sandbox",
+  "build": { "dockerfile": "Dockerfile", "args": { "REPO": "${localWorkspaceFolderBasename}" } },
+  "remoteUser": "node",
+  "workspaceFolder": "/workspace/${localWorkspaceFolderBasename}",
+  "workspaceMount": "source=${localWorkspaceFolder}/..,target=/workspace,type=bind",
+  "mounts": [
+    "source=byok-${devcontainerId}-claude,target=/home/node/.claude,type=volume",
+    "source=byok-${devcontainerId}-node_modules,target=/workspace/${localWorkspaceFolderBasename}/node_modules,type=volume"
+  ],
+  "containerEnv": { "CLAUDE_CONFIG_DIR": "/home/node/.claude" },
+  "customizations": { "vscode": { "extensions": ["anthropic.claude-code"] } },
+  "postCreateCommand": "pnpm install"
+}
