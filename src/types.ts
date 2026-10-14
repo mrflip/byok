@@ -176,7 +176,7 @@ export const SevenDaysMs = 7 * 24 * 60 * 60 * 1000
  * well inside what every storage backend can hold. A larger whisper is usually a sign that the
  * wrong value is being stored.
  */
-export const MaxWhisperBytes = 40444 // eslint-disable-line unicorn/numeric-separators-style -- unseparated, so it greps the same as error messages print it
+export const MaxWhisperBytes = 40_444 // searchable: 40444
 
 /** Injected time source, so expiry is testable; defaults to the wall clock. */
 export type Clock = { now(): number }
