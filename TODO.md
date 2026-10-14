@@ -14,4 +14,7 @@ export a treeshakeable byok/utils, with a function
 Reasonable tasks that we do not plan to do in the near term. Do not anticipate them in your implementation.
 
 * Recovery keys
+* A blob helper, for secrets too large to be a whisper: a lockbox holds the key, and byok's own
+  vetted, context-bound encryption seals the blob into a separate pluggable blob store (its own
+  interface beside VaultDB), so no host app hand-rolls encryption with a key taken out of a vault.
 
