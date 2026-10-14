@@ -1,6 +1,6 @@
 # Sprint pr_releases: progress
 
-**Status**: threads 1, 2 filed; thread 3 in review.
+**Status**: paused: threads 1, 2 filed; thread 3 built and reviewed, waiting unfiled on one uncommitted review fix.
 
 ## Status
 
@@ -8,7 +8,7 @@
 | - | ------ | ----- | ---- | ------ |
 | 1 | `20261014-react_publishable` | sonnet | `origin/main` | filed [#15](https://github.com/mrflip/safebyok/pull/15) |
 | 2 | `20261014-core_under_packages` | opus | thread 1's tip (#15) | filed [#16](https://github.com/mrflip/safebyok/pull/16) |
-| 3 | `20261014-changeset_releases` | opus | thread 2's tip (#16) | in review |
+| 3 | `20261014-changeset_releases` | opus | thread 2's tip (#16) | blocked: reviewer's fix uncommitted |
 
 ## What the threads have taught
 
@@ -68,3 +68,15 @@ tarballs; **each package gets its own tag (`safebyok@0.1.0`), not one `v<version
 widened); the workflow is four jobs (select-mode, version, pack, publish) with only `publish` able to get an
 npm token. The Coach has switches to flip before the first release: allow Actions to create PRs; write the
 first changeset; widen the tag ruleset; decide on a token for the Version PR so its CI runs.
+
+*Review of thread 3 (reviewer `bailed` at its commit step):* one fix made and proven (`release.ts stage`
+now turns a throw from `git ls-remote`/`tar` into a `failed` outcome and carries on to the next package,
+as its doc block promises; new test; justify green with it) but **not committed**: the permission system
+denied the reviewer's `git commit`. It sits uncommitted in `/workspace/byok-changeset_releases` (two files),
+HEAD `ef5098a`. Everything else verified: action pins, job permissions (only `publish` has `id-token`), the
+artifact hand-off, `changeset status --since` exit codes, `changeset version` under `fixed`, requirement 2,
+secrets handling. Minor, left: every push to main runs `pack`/`publish` as a no-op while a version is
+unreleased; a rejected or never-approved stage is never restaged (tag names an earlier commit; number counts
+as burned); "already staged" is recognised only by npm's "previously published" wording (unverified); a failed
+tag push or release creation is not retried by a re-run; global `npm@12.2.0` installed unpinned by hash in
+`publish`. Not run: `npm stage`, the workflows, actionlint (not installed in the reviewer's sandbox).
