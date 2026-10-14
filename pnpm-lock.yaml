@@ -236,6 +236,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: ^6.1.2
         version: 6.1.2(vite@8.3.4(@types/node@24.19.2)(esbuild@0.27.0)(jiti@2.7.0)(yaml@2.9.1))
+      '@vitest/coverage-v8':
+        specifier: ^5.0.4
+        version: 5.0.4(vitest@5.0.4)
       eslint:
         specifier: ^10.12.0
         version: 10.12.0(jiti@2.7.0)
