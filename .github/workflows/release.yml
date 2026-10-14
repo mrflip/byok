@@ -34,7 +34,7 @@ jobs:
             exit 1
           fi
       # A prerelease version (`1.2.0-beta.1`) goes out under the `next` dist-tag, so that a plain
-      # `npm install byok` never picks it up. `prepublishOnly` runs `pnpm justify` first.
+      # `npm install safebyok` never picks it up. `prepublishOnly` runs `pnpm justify` first.
       - name: Publish
         run: |
           version=$(node -p "require('./package.json').version")

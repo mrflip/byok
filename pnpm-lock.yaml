@@ -243,17 +243,17 @@ importers:
         specifier: ^4.6.7
         version: 4.6.7
 
-  demos/byok-demo-react:
+  demos/safebyok-demo-react:
     dependencies:
       '@anthropic-ai/sdk':
         specifier: ^0.133.0
         version: 0.133.0(zod@4.6.7)
-      byok:
+      safebyok:
         specifier: workspace:*
         version: link:../..
-      byok-react:
+      safebyok-react:
         specifier: workspace:*
-        version: link:../../packages/byok-react
+        version: link:../../packages/safebyok-react
       react:
         specifier: ^19.3.0
         version: 19.3.0
@@ -304,9 +304,9 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4(@edge-runtime/vm@5.0.0)(@types/node@24.19.2)(@vitest/coverage-v8@5.0.4)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@24.19.2)(esbuild@0.27.0)(yaml@2.9.1))
 
-  packages/byok-convex:
+  packages/safebyok-convex:
     dependencies:
-      byok:
+      safebyok:
         specifier: workspace:*
         version: link:../..
     devDependencies:
@@ -338,9 +338,9 @@ importers:
         specifier: ^5.0.4
         version: 5.0.4(@edge-runtime/vm@5.0.0)(@types/node@24.19.2)(@vitest/coverage-v8@5.0.4)(jsdom@30.1.2(@noble/hashes@2.4.0))(vite@8.3.4(@types/node@24.19.2)(esbuild@0.27.0)(yaml@2.9.1))
 
-  packages/byok-react:
+  packages/safebyok-react:
     dependencies:
-      byok:
+      safebyok:
         specifier: workspace:*
         version: link:../..
     devDependencies:

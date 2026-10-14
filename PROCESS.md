@@ -53,7 +53,7 @@ prefix names the part of the package the commit is about, never the kind of chan
 | `vault`   | the vault's lifecycle and state: create, unlock, lock, refresh, rotate, subscribe                                                      |
 | `storage` | the storage interfaces and their adapters                                                                                              |
 | `api`     | the public surface: exports, entry points, exported types, errors                                                                      |
-| `client`  | the companion client bindings under `packages/`, such as `byok-react`                                                                  |
+| `client`  | the companion client bindings under `packages/`, such as `safebyok-react`                                                              |
 | `tools`   | build, lint, test and TypeScript configuration, CI and release workflows                                                               |
 | `deps`    | adding, removing or bumping a dependency, and the lockfile. Where reasonable, commit the package change independently |
 | `docs`    | `README.md`, `PROCESS.md`, `STYLE.md`, `notes/`, `CLAUDE.md` and other directives to agents   |

@@ -1,4 +1,4 @@
-# byok — design outline
+# safebyok — design outline
 
 The relic that seeded this project, rewritten (2026-10-14, crypto thread) to describe the
 interface as built. `src/` is the signature authority: where this document and the code disagree,
@@ -14,7 +14,7 @@ identity discussion.
 
 - **Key deriver:** Argon2id via `@noble/hashes` (audited, pure JS, no WASM), pinned spec
 - **Encryption and key wrapping:** WebCrypto `crypto.subtle`, AES-256-GCM
-- **Device persistence:** IndexedDB via `idb-keyval` (`byok/idb` entry point)
+- **Device persistence:** IndexedDB via `idb-keyval` (`safebyok/idb` entry point)
 - **Validation:** plain Zod
 
 VaultDB stores only encrypted records. The passphrase derives the passphraseKey, which unwraps a
@@ -46,15 +46,15 @@ All in `src/types.ts`; every binary field is base64url text with a `_b64` suffix
 plain JSON and any backend holds them as-is. Underbar_case throughout — the relic's camelCase
 stored fields (`vaultId`, `createdAt`) were a style violation it did not survive.
 
-- **VaultBundle** (`byok-vault-v1`): scope (applabel, user_id, vaultlabel), `vault_id`,
+- **VaultBundle** (`safebyok-vault-v1`): scope (applabel, user_id, vaultlabel), `vault_id`,
   `passphrase_epoch`, `key_deriver_label`, `passphrase_salt_b64`,
   `vault_key_passphrase_wrapped`, timestamps. Decrypting the wrap IS the passphrase check —
   there is no separate verifier field, and a wrong passphrase is learned from AEAD refusal,
   never a comparison.
-- **Lockbox** (`byok-lockbox-v1`): `boxlabel`, `revision_id`, `lockbox_key_wrapped`,
+- **Lockbox** (`safebyok-lockbox-v1`): `boxlabel`, `revision_id`, `lockbox_key_wrapped`,
   `whisper_ciphered`, public `note`, timestamps. Every store mints a fresh lockboxKey and
   revision_id.
-- **DeviceUnlock** (`byok-unlock-v1`): scope, `vault_id`, `passphrase_epoch`, the
+- **DeviceUnlock** (`safebyok-unlock-v1`): scope, `vault_id`, `passphrase_epoch`, the
   **non-extractable** `local_unlock_key` CryptoKey handle, `vault_key_local_wrapped`,
   `expires_at`. No JSON form — structured clone (IndexedDB) or memory only.
 
@@ -65,10 +65,10 @@ revisions refuses to open. Encoded as a JSON array (`stableJsonify`), so parts c
 together:
 
 ```text
-['byok-vault-v1',   applabel, user_id, vaultlabel, vault_id, passphrase_epoch, 'vault_key_passphrase_wrapped']
-['byok-vault-v1',   applabel, user_id, vaultlabel, vault_id, passphrase_epoch, 'vault_key_local_wrapped']
-['byok-lockbox-v1', applabel, user_id, vaultlabel, vault_id, boxlabel, revision_id, 'lockbox_key_wrapped']
-['byok-lockbox-v1', applabel, user_id, vaultlabel, vault_id, boxlabel, revision_id, 'whisper_ciphered']
+['safebyok-vault-v1',   applabel, user_id, vaultlabel, vault_id, passphrase_epoch, 'vault_key_passphrase_wrapped']
+['safebyok-vault-v1',   applabel, user_id, vaultlabel, vault_id, passphrase_epoch, 'vault_key_local_wrapped']
+['safebyok-lockbox-v1', applabel, user_id, vaultlabel, vault_id, boxlabel, revision_id, 'lockbox_key_wrapped']
+['safebyok-lockbox-v1', applabel, user_id, vaultlabel, vault_id, boxlabel, revision_id, 'whisper_ciphered']
 ```
 
 `revision_id` is minted per write and bound into both lockbox encryptions. The relic wanted it as
@@ -78,7 +78,7 @@ a compare-and-swap token too; CAS has not landed (see Open edges).
 
 **VaultDB is an abstract class** (`src/vault-db.ts`): an adapter author implements seven small
 `fetch`/`save`/`trash` primitives against plain JSON records — a shelf, not a safe — and the
-verbs byok calls (`readBundle`, `listBoxes`, `createBundle`, `eraseVault`, `subscribe`) are
+verbs safebyok calls (`readBundle`, `listBoxes`, `createBundle`, `eraseVault`, `subscribe`) are
 composed on top, validation included. Each compound documents its default composition; a backend
 that can do better (atomic create, projected list, push subscription) overrides that one method.
 This replaced the relic's flat interface after the Coach's ruling: do the work for the adapter
@@ -89,7 +89,7 @@ boxlabel than asked for, is refused (`corrupt_record`) and **left in place** —
 never repaired or auto-deleted. (The one exception is device-local: a remembered unlock that no
 longer opens is dropped, and the user types the passphrase again.)
 
-**DeviceDB stays a small interface** (`readUnlock`/`writeUnlock`/`eraseUnlock`/`eraseAll`): byok
+**DeviceDB stays a small interface** (`readUnlock`/`writeUnlock`/`eraseUnlock`/`eraseAll`): safebyok
 ships the two that matter, `idbDeviceDB` (IndexedDB, the real one) and `memoryDeviceDB` (tests,
 and anywhere without IndexedDB). The relic's capability flags, active-principal markers and
 localUnlockKey-management methods dissolved into the DeviceUnlock record itself.

@@ -12,9 +12,9 @@ decisions and update me later", with the reasoning a reviewer would want.
   hash-wasm remains the upgrade path through the KeyDeriver seam if that ever hurts.
 * **@scure/base** for base64url (`_b64` stored fields): same author and audit trail as noble;
   hand-rolling base64 is exactly the small-utility trap CLAUDE.md names.
-* **idb-keyval** for the byok/idb adapters: ~600 bytes, ubiquitous, and IndexedDB's event-soup
+* **idb-keyval** for the safebyok/idb adapters: ~600 bytes, ubiquitous, and IndexedDB's event-soup
   API is nobody's to hand-roll. Regular dependency rather than optional peer: it is loaded only
-  through the `byok/idb` entry point, so a Node consumer never touches it, and an optional peer
+  through the `safebyok/idb` entry point, so a Node consumer never touches it, and an optional peer
   would make every browser app install it by hand. (Open question for the Coach.)
 * **fake-indexeddb** (dev) to test the adapters under Node — it structured-clones a CryptoKey
   correctly, so even the non-extractable localUnlockKey round-trips in tests.

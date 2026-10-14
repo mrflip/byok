@@ -16,4 +16,4 @@ Open:
   code carries `user_id` / `userId`, not validated as a label (auth providers' ids often contain
   capitals). Left as is.
 
-Tests: byok 106, byok-react 6, demo 24; all three justifies green.
+Tests: safebyok 106, safebyok-react 6, demo 24; all three justifies green.

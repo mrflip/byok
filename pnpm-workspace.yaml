@@ -1,4 +1,4 @@
-# The byok package itself lives at the root. packages/ holds its companion packages (the React
+# The safebyok package itself lives at the root. packages/ holds its companion packages (the React
 # binding); demos/ holds private playground apps that exercise them and are never published.
 packages:
   - packages/*

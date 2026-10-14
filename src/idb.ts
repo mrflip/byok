@@ -19,11 +19,11 @@ import type { DeviceDB } from './device-db'
  */
 
 export type IdbOpts = {
-  /** The IndexedDB database to keep records in. Default 'byok'. */
+  /** The IndexedDB database to keep records in. Default 'safebyok'. */
   dbName?: string
 }
 
-/** Which of the two byok shelves an IndexedDB database holds records on. */
+/** Which of the two safebyok shelves an IndexedDB database holds records on. */
 export type IdbShelf = 'vault_db' | 'device_db'
 
 // One UseStore per (dbName, shelf), shared by adapters and inspectors alike: idb-keyval opens
@@ -42,7 +42,7 @@ const shelfStore = (dbName: string, shelf: IdbShelf): UseStore => {
 // BroadcastChannel carries them to other tabs (the channel never echoes to its own sender).
 const bells = new Map<string, Set<() => void>>()
 const channels = new Map<string, BroadcastChannel>()
-const bellCkey = (dbName: string, shelf: IdbShelf) => `byok-idb:${dbName}:${shelf}`
+const bellCkey = (dbName: string, shelf: IdbShelf) => `safebyok-idb:${dbName}:${shelf}`
 
 const ringBell = (dbName: string, shelf: IdbShelf) => {
   const ckey = bellCkey(dbName, shelf)
@@ -81,7 +81,7 @@ const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
  *   const vaultDB = idbVaultDB({ dbName: 'my_app' })
  *   const vault = await openVault({ applabel: 'my_app', userId, vaultlabel: 'main', vaultDB, deviceDB: idbDeviceDB({ dbName: 'my_app' }) })
  */
-export const idbVaultDB = (opts: IdbOpts = {}): VaultDB => new IdbVaultDB(opts.dbName ?? 'byok')
+export const idbVaultDB = (opts: IdbOpts = {}): VaultDB => new IdbVaultDB(opts.dbName ?? 'safebyok')
 
 class IdbVaultDB extends VaultDB {
   // IndexedDB sets no per-record limit: the origin's storage quota bounds the whole database.
@@ -146,7 +146,7 @@ class IdbVaultDB extends VaultDB {
  *   await deviceDB.readUnlock({ applabel: 'acme', user_id: 'u1', vaultlabel: 'main' })  // null
  */
 export const idbDeviceDB = (opts: IdbOpts = {}): DeviceDB => {
-  const dbName = opts.dbName ?? 'byok'
+  const dbName = opts.dbName ?? 'safebyok'
   const shelf = () => shelfStore(dbName, 'device_db')
   const ring = () => { ringBell(dbName, 'device_db') }
 
@@ -187,7 +187,7 @@ export const idbDeviceDB = (opts: IdbOpts = {}): DeviceDB => {
 export type IdbRow = { ckey: string, row: unknown }
 
 /**
- * A window onto one byok shelf in IndexedDB, for inspectors and debug panels: the raw rows, a
+ * A window onto one safebyok shelf in IndexedDB, for inspectors and debug panels: the raw rows, a
  * change bell, and a wipe. This is how the demo shows "what the backend sees" without asking the
  * vault's opinion -- what it reports is what is actually stored.
  *
@@ -197,7 +197,7 @@ export type IdbRow = { ckey: string, row: unknown }
  *   const stop = inspector.subscribe(() => { void inspector.rows().then(render) })
  */
 export const inspectIdb = (opts: IdbOpts & { shelf: IdbShelf }) => {
-  const dbName = opts.dbName ?? 'byok'
+  const dbName = opts.dbName ?? 'safebyok'
   return {
     /** Every stored row on the shelf, sorted by ckey. */
     rows: async (): Promise<IdbRow[]> => {

@@ -2,7 +2,7 @@
 
 Three rulings landed, plus two IDE-reported fixes.
 
-* **`withUnlockedVault`**, né `guard`, across byok-react, its tests, the demo, and the docs.
+* **`withUnlockedVault`**, né `guard`, across safebyok-react, its tests, the demo, and the docs.
 * **A whisper is never a bare `null`.** `Whisper = Exclude<WhisperJson, null>`; the recursive
   JSON type is exported as `WhisperJson` so null stays legal inside structures. The validator
   refuses a top-level null and `bad_whisper` explains ("to empty a lockbox, erase it").
@@ -13,13 +13,13 @@ Three rulings landed, plus two IDE-reported fixes.
   library's own message.
 * **Null-sentinel audit** (`Symbol.for` where null did double duty): one real find.
   `vault.ts`'s `bundle` used null for both "backend not read yet" and "backend says absent";
-  now `Symbol.for('byok.unread_bundle')` marks unread, and `vaultState()` derives `'opening'`
+  now `Symbol.for('safebyok.unread_bundle')` marks unread, and `vaultState()` derives `'opening'`
   instead of a hand-built first snapshot. Everything else keeps null honestly: storage reads'
   `| null` is the answer "no such record" (never colliding with a legal row -- the adapter
   contract authors expect), and React's null-means-dismissed/no-session stays, per your ruling.
 * **IDE fixes**: each React package's eslint config now names its own `tsconfigRootDir` (the
-  "multiple candidate TSConfigRootDirs" parsing error; the phantom `demos/byok-react` candidate
+  "multiple candidate TSConfigRootDirs" parsing error; the phantom `demos/safebyok-react` candidate
   clears when the IDE's eslint server restarts). `FormEvent`, deprecated by @types/react 19.3,
   gave way to `SubmitEvent` in the passphrase modal.
 
-Tests: byok 106, byok-react 6, demo 24; all three justifies green.
+Tests: safebyok 106, safebyok-react 6, demo 24; all three justifies green.

@@ -107,7 +107,7 @@ Specificity is a virtue (`saltBytes` says it is bytes), but don't tag the obviou
   if (! opts.vaultlabel) { throw new VaultError('missing_label', 'A vault needs a label.') }
   //
   if (stored.key_deriver_label !== Argon2idWebV1.key_deriver_label) {
-    throw new VaultError('unknown_key_deriver', 'This vault was written by a newer version of byok: update the package to open it.')
+    throw new VaultError('unknown_key_deriver', 'This vault was written by a newer version of safebyok: update the package to open it.')
   }
   ```
 

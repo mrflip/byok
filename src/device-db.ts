@@ -4,7 +4,7 @@ import { DeviceUnlock, type VaultScope } from './types'
  * Device-local storage for remembered unlocks: what lets "enter your passphrase once, keep it for
  * seven days" survive a page reload. A {@link DeviceUnlock} record holds this browser's
  * localUnlockKey -- a non-extractable CryptoKey handle, which has no JSON form -- so an adapter
- * must keep records by structured clone (IndexedDB: see `byok/idb`) or in memory; nothing here
+ * must keep records by structured clone (IndexedDB: see `safebyok/idb`) or in memory; nothing here
  * ever goes to the backend.
  *
  * An adapter may answer a damaged or unreadable record with null rather than an error: losing a

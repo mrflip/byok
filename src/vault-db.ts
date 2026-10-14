@@ -11,12 +11,12 @@ import type { StringStore } from './string-store'
  *  * **Store what you are handed, return what you stored.** Every record is plain JSON (binary
  *    fields are base64url text), so any backend that can hold JSON can hold a vault, as-is.
  *  * **Never look inside.** Every secret field arrives encrypted; nothing you hold can open a
- *    vault, and nothing byok does ever needs you to understand a record.
+ *    vault, and nothing safebyok does ever needs you to understand a record.
  *  * **Enforce who may reach which rows.** Your backend should let a signed-in user reach only
- *    their own records: byok's encryption protects the contents, your authorization decides who
+ *    their own records: safebyok's encryption protects the contents, your authorization decides who
  *    may fetch or overwrite them at all.
- *  * **Don't repair.** Return a record exactly as stored, or null when there is none. byok
- *    validates everything it reads back; a damaged record is byok's to refuse, never yours to fix
+ *  * **Don't repair.** Return a record exactly as stored, or null when there is none. safebyok
+ *    validates everything it reads back; a damaged record is safebyok's to refuse, never yours to fix
  *    or quietly drop.
  *
  * The verbs the vault actually calls -- `readBundle`, `listBoxes`, `eraseVault` and the rest --
@@ -49,7 +49,7 @@ export abstract class VaultDB {
   /** Every stored lockbox record in `scope`, in any order. */
   protected abstract fetchBoxes(scope: VaultScope): Promise<unknown[]>
 
-  // --------------------------------------------------- the verbs byok calls, built on top
+  // --------------------------------------------------- the verbs safebyok calls, built on top
 
   /** The vault's bundle, validated, or null when the vault has never been created. */
   async readBundle(scope: VaultScope): Promise<VaultBundle | null> {
@@ -136,7 +136,7 @@ export abstract class VaultDB {
 
   /**
    * Calls `onChange` after any write touching `scope`, from this device or another; returns the
-   * unsubscribe. The default never calls: byok refreshes after its own writes regardless, so all
+   * unsubscribe. The default never calls: safebyok refreshes after its own writes regardless, so all
    * a silent backend loses is news of *other* devices' writes. A backend with live queries or
    * push (Convex, a websocket) should override this and ring the bell.
    */
@@ -155,7 +155,7 @@ const noUnsubscribing = (): void => undefined
 const checkRecord = <RecordT>(recordSchema: Z.ZodType<RecordT>, raw: unknown, said: string): RecordT => {
   const checked = recordSchema.safeParse(raw)
   if (! checked.success) {
-    throw new VaultError('corrupt_record', `A stored ${said} record did not read back in a shape this package knows. It may be damaged, or written by a newer version of byok; it was left as it is.`)
+    throw new VaultError('corrupt_record', `A stored ${said} record did not read back in a shape this package knows. It may be damaged, or written by a newer version of safebyok; it was left as it is.`)
   }
   return checked.data
 }

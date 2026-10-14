@@ -1,4 +1,4 @@
-# byok — proposed README
+# safebyok — proposed README
 
 A draft of the package README, rewritten (2026-10-14, crypto thread) against the implemented
 interface; the original relic draft described an API that no longer exists. Still a whiteboard
@@ -6,7 +6,7 @@ document: promote it to the real README when the Coach says the surface has sett
 
 ---
 
-# byok
+# safebyok
 
 An end-to-end encrypted vault for the API keys and other small secrets your users bring to your
 app. Whispers (the secrets) are encrypted on the user's device under keys that never leave it;
@@ -23,27 +23,27 @@ the code, and the environment opens nothing.
 - "Remember this device": unlocks survive a reload for seven days (your call), around a
   non-extractable browser key
 - Passphrase changes that rewrite one small record, never your users' lockboxes
-- A React binding (`byok-react`): provider, hooks, and an unstyled passphrase dialog
+- A React binding (`safebyok-react`): provider, hooks, and an unstyled passphrase dialog
 
 ## What it does not provide
 
-byok is not a request proxy. Your app decrypts a whisper on the user's device — inside
+safebyok is not a request proxy. Your app decrypts a whisper on the user's device — inside
 `vault.use(...)` — and calls the external API directly from there. If you route requests through
 your backend instead, your backend sees the key during handling: a legitimate choice, but a
 different trust model, and not this one.
 
-byok also has no recovery path: a forgotten passphrase means an unrecoverable vault (the user
+safebyok also has no recovery path: a forgotten passphrase means an unrecoverable vault (the user
 re-enters their API keys — annoying, not catastrophic). Say so in your UI.
 
 ## Install
 
 ```sh
-npm install byok zod
+npm install safebyok zod
 ```
 
 `zod` is a peer dependency (your app very likely has it already). Runtime dependencies:
 `@noble/hashes`, `@scure/base`, `idb-keyval`, `safe-stable-stringify`. The IndexedDB adapters
-live in their own entry point, `byok/idb`.
+live in their own entry point, `safebyok/idb`.
 
 ## The security model, in five lines
 
@@ -62,8 +62,8 @@ envelope refusing to decrypt — never from a comparison, and never from a store
 ## Quickstart
 
 ```ts
-import { openVault } from 'byok'
-import { idbDeviceDB, idbVaultDB } from 'byok/idb'
+import { openVault } from 'safebyok'
+import { idbDeviceDB, idbVaultDB } from 'safebyok/idb'
 
 const vault = await openVault({
   applabel:   'acme',
@@ -96,9 +96,9 @@ authenticated owner can always delete their own rows server-side), `close()`.
 Extend the abstract `VaultDB` and implement seven small methods against your backend —
 `fetchBundle`, `saveBundle`, `trashBundle`, `fetchBox`, `saveBox`, `trashBox`, `fetchBoxes`.
 Every record is plain JSON (binary fields are base64url text): store what you are handed, return
-what you stored, never look inside. byok validates everything it reads back.
+what you stored, never look inside. safebyok validates everything it reads back.
 
-The verbs byok actually calls (`readBundle`, `listBoxes`, `createBundle`, `eraseVault`,
+The verbs safebyok actually calls (`readBundle`, `listBoxes`, `createBundle`, `eraseVault`,
 `subscribe`) are composed on your primitives for you. Each documents its default composition;
 override the one your backend does better — an atomic create, a projected list that skips
 hauling ciphertext, a push subscription.
@@ -132,7 +132,7 @@ worth surfacing to support; the second is a typo.
 - Direct-from-browser Anthropic calls need the SDK's `dangerouslyAllowBrowser: true` (or the
   `anthropic-dangerous-direct-browser-access: true` header on a raw fetch) — by design here: the
   key is decrypted on-device and sent only to the provider.
-- A strict CSP matters in an app handling user keys. byok itself needs nothing special — no
+- A strict CSP matters in an app handling user keys. safebyok itself needs nothing special — no
   WASM, no workers — so `script-src 'self'` plus `connect-src` to your provider host is a fine
   starting point.
 - IndexedDB is best-effort storage. With `idbVaultDB` (the no-backend tier) the vault lives only
