@@ -83,6 +83,7 @@ prefix names the part of the package the commit is about, never the kind of chan
 | `plan`    | `whiteboard/` plans and `human/` entries                                                                                               |
 | `rel`     | the Version PR's one commit, made by the release workflow: version bumps, CHANGELOG entries, spent changesets. Never typed by hand       |
 | `tests`   | tests and fixtures, when the tests themselves are the work                                                                             |
+| `rel`     | release commits. Use `tools` for the publishing cycle itself
 
 Tests and notes that ride along with a change take its prefix
 
