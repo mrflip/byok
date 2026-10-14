@@ -82,6 +82,7 @@ prefix names the part of the package the commit is about, never the kind of chan
 | `demo`    | the playground apps under `demos/`                                                                                                     |
 | `plan`    | `whiteboard/` plans and `human/` entries                                                                                               |
 | `tests`   | tests and fixtures, when the tests themselves are the work                                                                             |
+| `rel`     | release commits. Use `tools` for the publishing cycle itself
 
 Tests and notes that ride along with a change take its prefix
 
