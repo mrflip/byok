@@ -38,11 +38,12 @@ re-enters their API keys — annoying, not catastrophic). Say so in your UI.
 ## Install
 
 ```sh
-npm install byok
+npm install byok zod
 ```
 
-Runtime dependencies: `zod`, `@noble/hashes`, `@scure/base`, `idb-keyval`,
-`safe-stable-stringify`. The IndexedDB adapters live in their own entry point, `byok/idb`.
+`zod` is a peer dependency (your app very likely has it already). Runtime dependencies:
+`@noble/hashes`, `@scure/base`, `idb-keyval`, `safe-stable-stringify`. The IndexedDB adapters
+live in their own entry point, `byok/idb`.
 
 ## The security model, in five lines
 

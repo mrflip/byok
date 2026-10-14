@@ -41,5 +41,7 @@ security expert who knows what questions to ask.
 * 2026-10-14: the demo app calls Anthropic directly from the browser with the user's own key
   (`dangerouslyAllowBrowser: true` on the SDK client), by design: the key is decrypted on-device
   inside `vault.use(...)` and sent only to `api.anthropic.com`.
-* 2026-10-14: `safe-stable-stringify` is a runtime dependency (alongside zod): `stableJsonify`
+* 2026-10-14: `safe-stable-stringify` is a runtime dependency: `stableJsonify`
   (`src/stable-jsonify.ts`) is a thin alias of it, backing snapshot change detection.
+* 2026-10-14: `zod` moved from a regular dependency to a peer dependency (`^4.0.0`): the host app
+  supplies it, so byok validates with whatever zod instance that app ships.
