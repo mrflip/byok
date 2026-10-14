@@ -1,13 +1,13 @@
 # Sprint pr_releases: progress
 
-**Status**: thread 1 filed; thread 2 underway.
+**Status**: thread 1 filed; thread 2 in review.
 
 ## Status
 
 | # | Thread | Model | Base | Status |
 | - | ------ | ----- | ---- | ------ |
 | 1 | `20261014-react_publishable` | sonnet | `origin/main` | filed [#15](https://github.com/mrflip/safebyok/pull/15) |
-| 2 | `20261014-core_under_packages` | opus | thread 1's tip (#15) | underway |
+| 2 | `20261014-core_under_packages` | opus | thread 1's tip (#15) | in review |
 | 3 | `20261014-changeset_releases` | opus | thread 2's tip | pending |
 
 ## What the threads have taught
@@ -35,3 +35,22 @@ the `packages` job on GitHub, Node 22/26, demo click-through.
 * **Known flake, not ours**: `tests/vault.test.ts` "altered ciphertext" fails ~1/64 runs (prepends `A`).
   Mentioned in the PR; fix is its own thread.
 * Passphrase-dialog click-through of the demo was not done (no browser in the sandbox): Coach to check.
+
+*Orchestrator, after thread 2 `ready`:*
+
+* **Layout now**: the core is `packages/safebyok` (own scripts, eslint, vitest, tsdown, LICENSE); the root is
+  private `safebyok-workspace` with a small eslint/tsconfig/vitest for `scripts/` and `tests/scripts/`
+  (root tests stay at the root). Whole-repo `lint|typecheck|test|test:coverage|justify` = root's own
+  `*:root` check then `pnpm -r --stream <script>`; `build` = `pnpm -r --stream build`.
+* **`workspaceConcurrency: 1`** in `pnpm-workspace.yaml` (parallel `build:deps` hooks would clobber the core's
+  `dist/`); scripts therefore need `--stream`. Keep this in mind for any new `pnpm -r` call (release script).
+* **`pnpm bump`** is `cd packages/safebyok && bumpp ...`; thread 3 deletes it.
+* `release.yml` now reads the version from, and stages in, `packages/safebyok`; thread 3 rewrites it.
+* **Thread 3 also owes**: `.claude/agents/thread-worker.md` / `thread-reviewer.md` (and the sprint skill if
+  it says so) still say the root justify does not cover packages: make them true. Confirm dependabot with
+  `directory: /` covers workspace packages (or add entries). The demo now has `test:coverage` (so required
+  CI runs its tests).
+* **Flaky tests**: two, same cause (`tests/vault.test.ts` and `tests/crypto.test.ts` "altered ciphertext"
+  replaces first base64 char with `A`; ~1/64). Not in this sprint; the Coach should give it its own thread.
+* **Stray process**: a vite dev server from thread 1's (removed) worktree still runs on port 5199
+  (pids 281403/281454); not ours to kill without the Coach's word, but harmless.
