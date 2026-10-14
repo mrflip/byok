@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Label, Whisper } from '../../src/byok/types'
+import { Label, Whisper } from '../src/types'
 
 const WhisperCases = [
   // every JSON shape a whisper may take:
@@ -32,19 +32,23 @@ describe("Whisper", () => {
 
 const LabelCases = [
   // regular usage:
-  ["ANTHROPIC_API_KEY",  true,   'an env-var style label'],
-  ["anthropic_personal", true,   'lowercase words joined by underscores'],
+  ["anthropic_api_key",  true,   'lowercase words joined by underscores'],
+  ["anthropic",          true,   'a plain lowercase word'],
   ["ab",                 true,   'two characters is enough'],
   ["a2",                 true,   'may end in a digit'],
+  ["a_1_b_2",            true,   'digits may follow each underscore'],
   // edge cases:
   ["a",                  false,  'one character is too short'],
   ["2fast",              false,  'must start with a letter'],
-  ["dev_",               false,  'may not end in punctuation'],
+  ["dev_",               false,  'may not end in an underscore'],
+  ["_dev",               false,  'may not start with an underscore'],
+  ["dev__key",           false,  'underscores come one at a time'],
+  ["ANTHROPIC_API_KEY",  false,  'lowercase only'],
   ["anthropic key",      false,  'no spaces'],
-  ["anthropic-key",      false,  'no hyphens: word characters only'],
+  ["anthropic-key",      false,  'no hyphens'],
   ["",                   false,  'never empty'],
-  ["x".repeat(65),       false,  'sixty-five characters is one too many'],
-  ["x".repeat(64),       true,   'sixty-four characters is the ceiling'],
+  ["x".repeat(41),       false,  'forty-one characters is one too many'],
+  ["x".repeat(40),       true,   'forty characters is the ceiling'],
 ] as const
 
 describe("Label", () => {

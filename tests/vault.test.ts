@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { SevenDaysMs, type Whisper } from '../../src/byok/types'
-import { VaultError } from '../../src/byok/errors'
-import { localDeviceDB } from '../../src/byok/device-db'
-import { localVaultDB } from '../../src/byok/vault-db'
-import { memoryStore } from '../../src/byok/string-store'
-import { openVault, type OpenVaultOpts } from '../../src/byok/vault'
+import { SevenDaysMs, type Whisper } from '../src/types'
+import { VaultError } from '../src/errors'
+import { localDeviceDB } from '../src/device-db'
+import { localVaultDB } from '../src/vault-db'
+import { memoryStore } from '../src/string-store'
+import { openVault, type OpenVaultOpts } from '../src/vault'
 
 /** A fresh in-memory world: both stores, both adapters, a steerable clock, and an opener. */
 const makeWorld = () => {
@@ -79,7 +79,7 @@ describe("unlock and lock", () => {
   it("a passphrase of only whitespace is refused outright", async () => {
     const world = makeWorld()
     const vault = await world.open()
-    await expectRefusal(vault.unlock('   '), 'wrong_passphrase')
+    await expectRefusal(vault.unlock(' '.repeat(3)), 'wrong_passphrase')
     expect(vault.getSnapshot().state).to.eq('absent')
   })
 
@@ -102,7 +102,8 @@ describe("the remembered unlock", () => {
     world.advance(6 * 24 * 60 * 60 * 1000)
     const later = await world.open()
     expect(later.getSnapshot().state).to.eq('unlocked')
-    expect(await later.read('missing').catch((err: VaultError) => err.kind)).to.eq('absent_box')
+    // Genuinely unlocked: a read reaches the box layer ('absent_box'), not the lock ('vault_locked').
+    await expectRefusal(later.read('missing'), 'absent_box')
   })
 
   it("has lapsed by day eight: the next open is locked", async () => {
@@ -124,7 +125,7 @@ describe("the remembered unlock", () => {
   })
 })
 
-const RoundTrips: ReadonlyArray<readonly [Whisper, string]> = [
+const RoundTrips: readonly (readonly [Whisper, string])[] = [
   ["sk-ant-api03-fake",            'a string'],
   [42,                             'a number'],
   [false,                          'a boolean'],
@@ -227,7 +228,7 @@ describe("use", () => {
     const vault = await world.open()
     await vault.unlock('pw')
     await vault.store('anthropic', 'sk-fake')
-    const shouted = await vault.use('anthropic', (whisper) => String(whisper).toUpperCase())
+    const shouted = await vault.use('anthropic', (whisper) => (typeof whisper === 'string' ? whisper.toUpperCase() : ''))
     expect(shouted).to.eq('SK-FAKE')
   })
 

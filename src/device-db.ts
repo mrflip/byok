@@ -49,9 +49,8 @@ export const localDeviceDB = (store: StringStore): DeviceDB => ({
   },
 
   eraseAll: () => {
-    store.ckeys()
-      .filter((ckey) => ckey.startsWith('unlock:'))
-      .forEach((ckey) => { store.erase(ckey) })
+    const doomed = store.ckeys().filter((ckey) => ckey.startsWith('unlock:'))
+    for (const ckey of doomed) { store.erase(ckey) }
     return Promise.resolve()
   },
 })

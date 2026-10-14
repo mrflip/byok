@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { memoryStore } from '../../src/byok/string-store'
-import { localVaultDB } from '../../src/byok/vault-db'
-import type { Lockbox, VaultBundle, VaultScope } from '../../src/byok/types'
+import { memoryStore } from '../src/string-store'
+import { localVaultDB } from '../src/vault-db'
+import type { Lockbox, VaultBundle, VaultScope } from '../src/types'
 
 const scopeOf = (userId: string): VaultScope => ({ applabel: 'acme', user_id: userId, vaultlabel: 'main' })
 
@@ -48,8 +48,10 @@ describe("localVaultDB", () => {
     const vaultDB = localVaultDB(memoryStore())
     await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'u1-secret'))
     await vaultDB.writeBox(scopeOf('u2'), boxOf('anthropic', 'u2-secret'))
-    expect((await vaultDB.readBox(scopeOf('u1'), 'anthropic'))?.whisper).to.eq('u1-secret')
-    expect((await vaultDB.readBox(scopeOf('u2'), 'anthropic'))?.whisper).to.eq('u2-secret')
+    const oneBox = await vaultDB.readBox(scopeOf('u1'), 'anthropic')
+    const twoBox = await vaultDB.readBox(scopeOf('u2'), 'anthropic')
+    expect(oneBox?.whisper).to.eq('u1-secret')
+    expect(twoBox?.whisper).to.eq('u2-secret')
     expect(await vaultDB.listBoxes(scopeOf('u2'))).to.have.lengthOf(1)
   })
 
@@ -72,7 +74,8 @@ describe("localVaultDB", () => {
     expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
     expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
     expect(await vaultDB.readBundle(scopeOf('u2'))).to.not.be.null
-    expect((await vaultDB.readBox(scopeOf('u2'), 'anthropic'))?.whisper).to.eq('u2-secret')
+    const keptBox = await vaultDB.readBox(scopeOf('u2'), 'anthropic')
+    expect(keptBox?.whisper).to.eq('u2-secret')
   })
 
   it("refuses a mangled row rather than returning garbage", async () => {

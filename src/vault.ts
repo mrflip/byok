@@ -1,5 +1,6 @@
 import { Label, LockboxSummary, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError } from './errors'
+import { stableJsonify } from './stable-jsonify'
 import type { DeviceDB } from './device-db'
 import type { VaultDB } from './vault-db'
 
@@ -113,14 +114,17 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   let snapshot: VaultSnapshot = { state: 'opening', scope, boxes, expiresAt }
 
   const listeners = new Set<() => void>()
+  const vaultState = (): VaultState => {
+    if (bundle === null) { return 'absent' }
+    if (expiresAt !== null && expiresAt > clock.now()) { return 'unlocked' }
+    return 'locked'
+  }
   // The snapshot keeps its identity until something really changed: useSyncExternalStore's
   // contract, and what spares React a render when a background refresh found nothing new.
   const bump = () => {
-    const state: VaultState = bundle === null ? 'absent'
-      : (expiresAt !== null && expiresAt > clock.now()) ? 'unlocked'
-      : 'locked'
+    const state = vaultState()
     const next: VaultSnapshot = { state, scope, boxes, expiresAt: state === 'unlocked' ? expiresAt : null }
-    if (JSON.stringify(next) === JSON.stringify(snapshot)) { return }
+    if (stableJsonify(next) === stableJsonify(snapshot)) { return }
     snapshot = next
     listeners.forEach((listener) => { listener() })
   }
@@ -138,11 +142,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
   const ensureUnlocked = () => {
     ensureOpen()
-    if (expiresAt === null || expiresAt <= clock.now()) {
-      expiresAt = null
-      bump()
-      throw new VaultError('vault_locked', 'The vault is locked: ask the user for their passphrase and call unlock().')
-    }
+    if (expiresAt !== null && expiresAt > clock.now()) { return }
+    expiresAt = null
+    bump()
+    throw new VaultError('vault_locked', 'The vault is locked: ask the user for their passphrase and call unlock().')
   }
 
   const readBoxOrThrow = async (boxlabel: string) => {
@@ -253,7 +256,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 const parseLabel = (candidate: string): string => {
   const checked = Label.safeParse(candidate)
   if (! checked.success) {
-    throw new VaultError('bad_label', 'A label is 2-64 letters, digits and underscores, starting with a letter and ending with a letter or digit.')
+    throw new VaultError('bad_label', 'A label is 2-40 lowercase letters and digits, words joined by single underscores, starting with a letter.')
   }
   return checked.data
 }

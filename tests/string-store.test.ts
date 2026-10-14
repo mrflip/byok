@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { memoryStore } from '../../src/byok/string-store'
+import { memoryStore } from '../src/string-store'
 
 describe("memoryStore", () => {
   it("reads back what was written, and null where nothing was", () => {

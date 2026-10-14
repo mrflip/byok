@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { memoryStore } from '../../src/byok/string-store'
-import { localDeviceDB } from '../../src/byok/device-db'
-import type { DeviceUnlock, VaultScope } from '../../src/byok/types'
+import { memoryStore } from '../src/string-store'
+import { localDeviceDB } from '../src/device-db'
+import type { DeviceUnlock, VaultScope } from '../src/types'
 
 const scopeOf = (userId: string): VaultScope => ({ applabel: 'acme', user_id: userId, vaultlabel: 'main' })
 

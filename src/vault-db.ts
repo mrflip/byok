@@ -26,6 +26,9 @@ export interface VaultDB {
   subscribe(scope: VaultScope, onChange: () => void): () => void
 }
 
+/** `fn`'s result (or failure) as a promise: a sync throw becomes a rejection, never an escape. */
+const soon = async <ValT>(fn: () => ValT | Promise<ValT>): Promise<ValT> => await fn()
+
 const scopePath = (scope: VaultScope) => `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}`
 const bundleCkey = (scope: VaultScope) => `vault:${scopePath(scope)}`
 const boxCkey = (scope: VaultScope, boxlabel: string) => `box:${scopePath(scope)}:${boxlabel}`
@@ -50,39 +53,33 @@ export const localVaultDB = (store: StringStore): VaultDB => {
     return rowSchema.parse(JSON.parse(text))
   }
 
-  // Every method is `async` even where nothing awaits: a storage fault must reject the returned
-  // promise, never throw before the caller has one in hand.
+  // Work is deferred into the promise chain even though the store is synchronous: a storage
+  // fault must reject the returned promise, never throw before the caller has one in hand.
   return {
-    readBundle: async (scope) => readRow(bundleCkey(scope), VaultBundle),
+    readBundle: (scope) => soon(() => readRow(bundleCkey(scope), VaultBundle)),
 
-    writeBundle: async (bundle) => {
-      store.write(bundleCkey(bundle), JSON.stringify(bundle))
-    },
+    writeBundle: (bundle) => soon(() => { store.write(bundleCkey(bundle), JSON.stringify(bundle)) }),
 
-    listBoxes: async (scope) => (
+    listBoxes: (scope) => soon(() => (
       store.ckeys()
         .filter((ckey) => ckey.startsWith(boxPrefix(scope)))
         .map((ckey) => readRow(ckey, Lockbox))
         .filter((lockbox): lockbox is Lockbox => lockbox !== null)
         .map((lockbox) => LockboxSummary.parse(lockbox))
-        .sort((one, two) => one.boxlabel.localeCompare(two.boxlabel))
-    ),
+        .toSorted((one, two) => one.boxlabel.localeCompare(two.boxlabel))
+    )),
 
-    readBox: async (scope, boxlabel) => readRow(boxCkey(scope, boxlabel), Lockbox),
+    readBox: (scope, boxlabel) => soon(() => readRow(boxCkey(scope, boxlabel), Lockbox)),
 
-    writeBox: async (scope, lockbox) => {
-      store.write(boxCkey(scope, lockbox.boxlabel), JSON.stringify(lockbox))
-    },
+    writeBox: (scope, lockbox) => soon(() => { store.write(boxCkey(scope, lockbox.boxlabel), JSON.stringify(lockbox)) }),
 
-    eraseBox: async (scope, boxlabel) => {
-      store.erase(boxCkey(scope, boxlabel))
-    },
+    eraseBox: (scope, boxlabel) => soon(() => { store.erase(boxCkey(scope, boxlabel)) }),
 
-    eraseVault: async (scope) => {
-      store.ckeys()
+    eraseVault: (scope) => soon(() => {
+      const doomed = store.ckeys()
         .filter((ckey) => ckey === bundleCkey(scope) || ckey.startsWith(boxPrefix(scope)))
-        .forEach((ckey) => { store.erase(ckey) })
-    },
+      for (const ckey of doomed) { store.erase(ckey) }
+    }),
 
     // The store's bell rings on every write, not only ones in scope: a spurious refresh is
     // harmless in a prototype, and the real adapter (Convex) subscribes precisely.
