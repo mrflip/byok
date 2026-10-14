@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+# Retires stray local branches to tags. A branch off the history it is judged by (HEAD's, unless
+# --against names another), whose every commit is nonetheless in that history -- as the same
+# change, or under the same subject line -- becomes an annotated tag attic/<branch> that says what
+# it was, and the branch is deleted. A branch holding unmatched work is only reported, until
+# --retire names it. Reports what it would do unless given --apply. Never touches a remote.
+#
+# The manual is notes/housekeeping.md, *Retiring stray branches*; --help prints that section.
+#
+# Written for the bash macOS ships (3.2) as well as a current one: no associative arrays, no
+# mapfile, and no empty arrays under `set -u`.
+#
+# Usage: scripts/git-attic [--apply] [--against <ref>] [--retire <branch>]... [--no-prs]
+# Exits 0 when the report (or its retiring) is done, 1 on a failure, 2 on a bad argument.
+set -euo pipefail
+
+scriptdir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+manual="${scriptdir}/../notes/housekeeping.md"
+usage="Usage: scripts/git-attic [--apply] [--against <ref>] [--retire <branch>]... [--no-prs]   (--help for more)"
+
+die() {
+  echo "git-attic: $*" >&2
+  exit 1
+}
+
+refuseArgs() {
+  echo "git-attic: $*" >&2
+  echo "$usage" >&2
+  exit 2
+}
+
+# The manual's section on this script, from its heading to the next.
+printManual() {
+  if [[ ! -r "$manual" ]]; then
+    echo "$usage"
+    return
+  fi
+  awk '/^## Retiring stray branches/ { within = 1; print; next } within && /^## / { exit } within' "$manual"
+}
+
+# A count and its noun, "1 commit" or "2 commits": counted <n> <noun> [<plural>].
+counted() {
+  if [[ "$1" -eq 1 ]]; then echo "1 $2"; else echo "$1 ${3:-${2}s}"; fi
+}
+
+apply=no
+against=HEAD
+asks_prs=yes
+retiring=''
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --apply)   apply=yes ;;
+    --no-prs)  asks_prs=no ;;
+    --against)
+      if [[ $# -lt 2 ]]; then refuseArgs "--against needs a ref"; fi
+      against="$2"
+      shift
+      ;;
+    --retire)
+      if [[ $# -lt 2 ]]; then refuseArgs "--retire needs a branch"; fi
+      retiring="${retiring}${2}"$'\n'
+      shift
+      ;;
+    -h | --help) printManual; exit 0 ;;
+    *) refuseArgs "no such option: $1" ;;
+  esac
+  shift
+done
+
+git rev-parse --git-dir > /dev/null 2>&1 || die "not inside a git repository"
+base="$(git rev-parse --verify --quiet "${against}^{commit}")" || die "no such commit: ${against}"
+while IFS= read -r branch; do
+  if [[ -z "$branch" ]]; then continue; fi
+  git show-ref --verify --quiet "refs/heads/${branch}" || die "--retire names no local branch: ${branch}"
+done <<< "$retiring"
+
+scratch="$(mktemp -d "${TMPDIR:-/tmp}/git-attic.XXXXXX")"
+trap 'rm -rf "$scratch"' EXIT
+
+# Every subject line in the history judged by, one a line, for whole-line matching.
+git log --format=%s "$base" > "${scratch}/subjects"
+# Every branch checked out in a worktree, this one included.
+git worktree list --porcelain | sed -n 's|^branch refs/heads/||p' > "${scratch}/checked_out"
+# Each pull request as <head branch> TAB #<number> TAB <state>, when gh can say.
+knows_prs=no
+if [[ "$asks_prs" == yes ]] && command -v gh > /dev/null 2>&1; then
+  if gh pr list --state all --limit 1000 --json number,headRefName,state \
+      --jq '.[] | [.headRefName, "#\(.number)", (.state | ascii_downcase)] | @tsv' \
+      > "${scratch}/prs" 2> /dev/null; then
+    knows_prs=yes
+  fi
+fi
+
+# The pull request a branch was, as "#73, merged": a merged one if there is one, else the first.
+prOf() {
+  awk -F '\t' -v branch="$1" '
+    $1 == branch && $3 == "merged" { print $2 ", merged"; found = 1; exit }
+    $1 == branch && first == ""   { first = $2 ", " $3 }
+    END { if (! found && first != "") { print first } }
+  ' "${scratch}/prs"
+}
+
+# The tag to retire a branch to, given its tip, and whether it already exists there:
+# prints "<tagname> new" or "<tagname> exists".
+tagFor() {
+  local branch="$1" tip="$2" tagname held
+  for tagname in "attic/${branch}" "attic/${branch}-$(git rev-parse --short "$tip")"; do
+    git check-ref-format "refs/tags/${tagname}" || die "cannot make a tag of branch ${branch}"
+    held="$(git rev-parse --verify --quiet "refs/tags/${tagname}^{commit}" || true)"
+    if [[ -z "$held" ]]; then
+      echo "${tagname} new"
+      return
+    fi
+    if [[ "$held" == "$tip" ]]; then
+      echo "${tagname} exists"
+      return
+    fi
+  done
+  die "attic/${branch} and its hashed fallback both name other commits; retire ${branch} by hand"
+}
+
+in_history=0
+retired=0
+unmerged=0
+held=0
+verb="would retire"
+if [[ "$apply" == yes ]]; then verb="retired"; fi
+
+git for-each-ref --format='%(refname:short)' refs/heads/ > "${scratch}/branches"
+while IFS= read -r branch; do
+  tip="$(git rev-parse "refs/heads/${branch}")"
+  if git merge-base --is-ancestor "$tip" "$base"; then
+    in_history=$((in_history + 1))
+    continue
+  fi
+
+  total="$(git rev-list --count "${base}..${tip}")"
+  # Read from files, not from <(...), so that a git that fails stops the script under set -e.
+  git cherry "$base" "$tip" > "${scratch}/cherry"
+  same=0
+  drafts=''
+  unmatched=''
+  while read -r mark sha; do
+    if [[ "$mark" == - ]]; then
+      same=$((same + 1))
+      continue
+    fi
+    subject="$(git log -1 --format=%s "$sha")"
+    line="  $(git log -1 --format='%h %s' "$sha")"$'\n'
+    if [[ -n "$subject" ]] && grep -qxF -- "$subject" "${scratch}/subjects"; then
+      drafts="${drafts}${line}"
+    else
+      unmatched="${unmatched}${line}"
+    fi
+  done < "${scratch}/cherry"
+
+  pr=''
+  if [[ "$knows_prs" == yes ]]; then pr="$(prOf "$branch")"; fi
+  pr_note=''
+  if [[ -n "$pr" ]]; then pr_note="  (${pr})"; fi
+
+  let_go=no
+  if grep -qxF -- "$branch" <<< "$retiring"; then let_go=yes; fi
+  if [[ -n "$unmatched" && "$let_go" == no ]]; then
+    unmerged=$((unmerged + 1))
+    echo "unmerged      ${branch}${pr_note}: $(counted "$(grep -c . <<< "$unmatched")" commit) with no match"
+    printf '%s' "$unmatched" | sed 's/^/  /'
+    continue
+  fi
+  if grep -qxF -- "$branch" "${scratch}/checked_out"; then
+    held=$((held + 1))
+    echo "checked out   ${branch}: left alone, as a worktree holds it"
+    continue
+  fi
+
+  tagging="$(tagFor "$branch" "$tip")"
+  read -r tagname tagstate <<< "$tagging"
+  drafted="$(grep -c . <<< "$drafts" || true)"
+  {
+    echo "Branch ${branch}, retired $(date +%F) by scripts/git-attic."
+    if [[ -n "$unmatched" ]]; then
+      echo "Not merged: let go by hand (--retire)."
+    fi
+    if [[ "$knows_prs" == yes ]]; then
+      echo "Pull request: ${pr:-none found}."
+    fi
+    echo "Tip: $(git log -1 --format='%h %cs %s' "$tip")"
+    echo "$(counted "$total" commit) off the history of ${against} ($(git rev-parse --short "$base")):" \
+      "${same} the same change as one there, ${drafted} under the subject of one there."
+    if [[ -n "$drafts" ]]; then
+      echo "Matched by subject:"
+      printf '%s' "$drafts"
+    fi
+    if [[ -n "$unmatched" ]]; then
+      echo "Matched nothing:"
+      printf '%s' "$unmatched"
+    fi
+  } > "${scratch}/message"
+
+  if [[ "$apply" == yes ]]; then
+    if [[ "$tagstate" == new ]]; then
+      git tag --annotate --file "${scratch}/message" "$tagname" "$tip"
+    fi
+    git branch --quiet --delete --force "$branch"
+  fi
+  retired=$((retired + 1))
+  tag_note="-> ${tagname}"
+  if [[ "$tagstate" == exists ]]; then tag_note="-> ${tagname}, which already exists"; fi
+  if [[ -n "$unmatched" ]]; then tag_note="${tag_note}; not merged"; fi
+  echo "${verb}  ${branch} ${tag_note}${pr_note}"
+done < "${scratch}/branches"
+
+echo
+tally="${retired} retired"
+if [[ "$apply" == no ]]; then tally="${retired} to retire"; fi
+echo "$(counted "$in_history" branch branches) in the history of ${against}, left alone;" \
+  "${tally}, ${unmerged} unmerged, ${held} checked out."
+if [[ "$apply" == no && "$retired" -gt 0 ]]; then
+  echo "Nothing was changed: --apply retires them."
+elif [[ "$apply" == yes && "$retired" -gt 0 ]]; then
+  echo "The tags are local: git push origin 'refs/tags/attic/*' publishes them."
+fi
