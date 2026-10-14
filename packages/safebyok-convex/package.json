@@ -17,7 +17,7 @@
     "build:deps": "pnpm --filter 'safebyok-convex^...' build",
     "typecheck": "tsc --noEmit",
     "pretypecheck": "pnpm build:deps",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "pretest": "pnpm build:deps",
     "test:watch": "vitest",
     "justify": "pnpm lint && pnpm typecheck && pnpm test"
