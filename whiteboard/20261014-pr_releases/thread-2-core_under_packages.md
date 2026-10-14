@@ -1,6 +1,6 @@
 # Thread 2: the core under packages/safebyok (2026-10-14)
 
-Branch `20261014-core_under_packages`, PR not yet filed, stacked on
+Branch `20261014-core_under_packages`, PR [#16](https://github.com/mrflip/safebyok/pull/16), stacked on
 [#15](https://github.com/mrflip/safebyok/pull/15). Justify: root green -- root's own 2 files / 31
 tests (scripts/), then `pnpm -r justify`: core 10 files / 143 tests + build (publint, attw clean),
 convex (no source, passes), binding 1 / 7 + build, demo 3 / 24. `pnpm install --frozen-lockfile`
