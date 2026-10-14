@@ -13,6 +13,18 @@ otherwise write itself.
 * `PassphraseModal` -- the default dialog: unstyled markup under `modal-scrim` / `modal` class
   names for the host's stylesheet to dress.
 
-A workspace package, source-exported (`exports` points at `src/index.ts`) while the interface
-settles; not yet built or published. `pnpm justify` here runs its lint, typecheck and tests
-(vitest + testing-library under jsdom).
+## Install
+
+```sh
+pnpm add safebyok safebyok-react react
+```
+
+`safebyok` and `react` are peer dependencies: the host app installs them itself, so the binding and
+the app share one copy of each.
+
+## Development
+
+`pnpm justify` here runs lint, typecheck, tests (vitest + testing-library under jsdom) and the
+build with its publint and arethetypeswrong checks. The tests, typecheck and build resolve
+`safebyok` through its built `dist/`, as a consumer's would; each script builds the core first by
+itself (`pnpm build:deps`), so a fresh clone needs no prebuild step.
