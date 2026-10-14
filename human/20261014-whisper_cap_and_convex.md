@@ -1,28 +1,27 @@
-# 2026-10-14: Convex adapter designed; whisper cap in PR #7 -- two questions
+# 2026-10-14: Convex adapter designed; whisper cap in PR #7 -- nothing waiting on you
 
-Two threads, both stacked on #6 (`20261014-nonextractable`), each in its own worktree so the
-agent working in `/workspace/byok` is undisturbed.
+Two PRs, stacked: #7 (`20261014-whisper-cap`) on #6, then #8 (`20261014-convex`) on #7. Each was
+built in its own worktree (`/workspace/byok-whisper-cap`, `/workspace/byok-convex`), so the
+agent in `/workspace/byok` was undisturbed.
 
-* **`20261014-convex`** (branch only, no PR yet): the design, as you decided it, is in
-  `whiteboard/20261014-convex/design.md`, a component in `packages/byok-convex` with typed columns
-  and Ciphered fields stored nested. The package so far is a `package.json` with `convex` (peer),
-  `convex-test` and `@edge-runtime/vm`. The esbuild install script is denied. TODO.md gained the
-  scoped Convex skill, padding, a pluggable stringifier and tree-shakability (Soonish), and a blob
-  helper (Not yet).
-* **`20261014-whisper-cap`**, PR [#7](https://github.com/mrflip/byok/pull/7): `openVault({ maxWhisperBytes })`,
-  default `MaxWhisperBytes = 40444`, checked on write only.
+* **#7**: `openVault({ maxWhisperBytes })`, default `MaxWhisperBytes = 40_444`, checked on write
+  only; every VaultDB declares `maxRecordBytes`, and openVault refuses a `maxWhisperBytes` over half
+  of it; `VaultProvider` passes every openVault option through as given.
+* **#8**: the Convex design (`whiteboard/20261014-convex/design.md`), the `byok-convex` package
+  scaffold (dependencies only), and TODOs.
 
 ## Settled in chat
 
 * `MaxWhisperBytes = 40_444 // searchable: 40444`.
-* `VaultProvider` takes every openVault option and passes each through as given.
-* Each VaultDB declares `maxRecordBytes`; openVault refuses a `maxWhisperBytes` over half of it.
+* `localVaultDB` declares 1 MiB per record; `idbVaultDB` declares `Infinity`.
+* The vault_id hole (a box from a destroyed vault landing in its recreation) is the storage
+  thread's to close.
+* `VaultProvider`'s swallowed openVault rejection becomes the error-families TODO: misuse is
+  thrown loud, during render, to an error boundary; conditions go through the context.
 
-## Questions
+## For whoever picks these up
 
-* `localVaultDB` declares a mebibyte per record: localStorage has no per-record limit, only about
-  5 MB per origin in all, so the number is a choice, not a fact. `idbVaultDB` declares `Infinity`.
-  Right?
-* `VaultProvider` drops an `openVault` rejection on the floor (`void openVault(...).then`), as it
-  did before this PR. Now that props can be refused (`bad_option`), should it surface the error,
-  through the context or an `onError` prop?
+* The `rememberForMs` rename (rulings) must also rename the `VaultProvider` prop: the provider's
+  `satisfies Record<keyof OpenVaultOpts, unknown>` fails the build until it does.
+* The storage rework (adapter-implemented verbs) and #7's `maxRecordBytes` both touch
+  `src/vault-db.ts`; whichever lands second rebases.
