@@ -52,3 +52,8 @@ security expert who knows what questions to ask.
   `revision_id` / `passphrase_epoch` is the one the writer read) is planned; until the IndexedDB
   adapter performs it inside a single IndexedDB transaction, its check-then-save has a small
   window in which the race survives.
+* 2026-10-14: every mutating path (`store`, `erase`, `changePassphrase`, `unlock`) re-reads the
+  bundle from the backend before acting: a session holding keys for a vault since destroyed,
+  recreated or re-passphrased elsewhere relocks instead of writing into the successor. This is
+  check-then-write, not atomic, until `versionedUpdate` carries the `vault_id` expectation to
+  the backend.

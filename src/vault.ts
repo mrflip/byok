@@ -86,7 +86,12 @@ export type Vault = {
    */
   changePassphrase(oldPassphrase: string, newPassphrase: string): Promise<void>
 
-  /** Write a whisper into the lockbox `boxlabel`, creating or replacing it. Requires unlocked. */
+  /**
+   * Write a whisper into the lockbox `boxlabel`, creating or replacing it. Requires unlocked,
+   * and looks at the backend before writing: if the vault was destroyed, recreated or
+   * re-passphrased elsewhere, nothing is written, this device relocks, and the call throws
+   * kind 'vault_locked' -- a stale session never writes into a vault reborn under new keys.
+   */
   store(boxlabel: string, whisper: Whisper, opts?: { note?: string }): Promise<void>
   /** The whisper in `boxlabel`. Requires unlocked; kind 'absent_box' when there is none. */
   read(boxlabel: string): Promise<Whisper>
@@ -97,7 +102,11 @@ export type Vault = {
    * @example await vault.use('anthropic_api_key', (whisper) => callAnthropic(whisper))
    */
   use<ResultT>(boxlabel: string, callback: (whisper: Whisper) => ResultT | Promise<ResultT>): Promise<ResultT>
-  /** Remove the lockbox `boxlabel` entirely. Requires unlocked; kind 'absent_box' when absent. */
+  /**
+   * Remove the lockbox `boxlabel` entirely. Requires unlocked; kind 'absent_box' when absent.
+   * Looks at the backend first, exactly as store() does: a stale session relocks rather than
+   * erasing from a vault reborn elsewhere.
+   */
   erase(boxlabel: string): Promise<void>
 
   /**
@@ -355,6 +364,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     unlock: async (passphrase) => {
       ensureOpen()
       if (! passphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
+      // Sync with the backend first: the passphrase proves itself against the bundle as it
+      // stands there now, not against a cached one a destroy or recreate may have outdated.
+      await refresh()
       const unlocked = await settleUnlock(passphrase)
       expiresAt = clock.now() + rememberForMs
       // The transient's last act: wrapped into this device's remembered unlock, then dropped.
@@ -374,6 +386,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     changePassphrase: async (oldPassphrase, newPassphrase) => {
       ensureOpen()
       if (! newPassphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
+      // The old passphrase proves itself against the bundle as the backend holds it now: a
+      // cached bundle could bury one written elsewhere under a different vault_id entirely.
+      await refresh()
       const standing = currentBundle()
       const proven = await unwrapWithPassphrase(standing, oldPassphrase)
       const saltBytes = randomBytes(keyDeriver.salt_bytes)
@@ -395,13 +410,17 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     },
 
     store: async (boxlabel, whisper, storeOpts) => {
-      const unlockedKey = ensureUnlocked()
+      ensureUnlocked()
       const label = parseLabel(boxlabel)
       const checked = Whisper.safeParse(whisper)
       // The refusal never quotes its input: a whisper stays out of error messages.
       if (! checked.success) {
         throw new VaultError('bad_whisper', 'A whisper must be a JSON value: a string, number, boolean, array, or plain object. A bare null or undefined cannot be stored -- to empty a lockbox, erase it. (null inside an array or object is fine.)')
       }
+      // A vault destroyed, recreated or re-passphrased elsewhere must not receive this write:
+      // look at the backend first, which relocks this device if the bundle has moved.
+      await refresh()
+      const unlockedKey = ensureUnlocked()
       const vaultId = currentBundle().vault_id
       const revisionId = randomId()
       const lockboxKey = await makeLockboxKey()
@@ -429,6 +448,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     },
 
     erase: async (boxlabel) => {
+      ensureUnlocked()
+      // The same look-first as store(): an erase must not reach into a vault reborn elsewhere.
+      await refresh()
       ensureUnlocked()
       await readBoxOrThrow(boxlabel)
       await vaultDB.eraseBox(scope, parseLabel(boxlabel))
