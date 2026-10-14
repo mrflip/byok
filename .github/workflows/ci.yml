@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to a pull request cancels that pull request's run still in progress: only the latest
+# commit's result matters there. Pushes to main each get a group of their own, by run id, so every
+# commit to main keeps its result.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+# Within a job every check runs whatever an earlier one found, so one failure never hides another,
+# and the job fails if any did. `lint-typecheck` and `test-build` are the two the main ruleset
+# requires.
+jobs:
+  # Lint first, as the likelier of the two to fail for a reason worth reading, then typecheck, then
+  # keep a pull request's history semi-linear (PROCESS.md): its branch may hold no merge commit.
+  lint-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - id: install
+        run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm typecheck
+      - name: Reject merge commits in the branch
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          merges=$(git rev-list --merges "$BASE_SHA..$HEAD_SHA")
+          if [ -n "$merges" ]; then
+            echo "::error::Branch contains merge commits. Rebase instead: git fetch origin && git rebase origin/main"
+            git log --oneline --no-walk $merges
+            exit 1
+          fi
+
+  # The unit tests with coverage, then the build. Under CI the build fails on any warning, and
+  # checks the package as a consumer would see it (publint, arethetypeswrong: tsdown.config.ts).
+  test-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .tool-versions
+          cache: pnpm
+      - id: install
+        run: pnpm install --frozen-lockfile
+      - run: pnpm test:coverage
+      - if: ${{ !cancelled() && steps.install.outcome == 'success' }}
+        run: pnpm build
+
+  # The unit tests on the other Node majors a consumer may run, beside the one we develop on.
+  # Not required by the ruleset: a failure here is news, not a gate.
+  node-compat:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 26]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
