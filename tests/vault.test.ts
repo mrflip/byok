@@ -130,7 +130,7 @@ const RoundTrips: readonly (readonly [Whisper, string])[] = [
   [42,                             'a number'],
   [false,                          'a boolean'],
   [["alpha", "beta"],              'an array'],
-  [{ apiToken: "fake", tier: 2 },  'an object'],
+  [{ apiKey: "fake", tier: 2 },  'an object'],
   [{ orgId: null },                'an object holding a null'],
 ]
 
@@ -175,7 +175,7 @@ describe("store and read", () => {
     const world = makeWorld()
     const vault = await world.open()
     await vault.unlock('pw')
-    const sneaky = { apiToken: 'sk-ant-SUPERSECRET', when: new Date() }
+    const sneaky = { apiKey: 'sk-ant-SUPERSECRET', when: new Date() }
     const err = await expectRefusal(vault.store('the_box', sneaky as unknown as Whisper), 'bad_whisper')
     expect(err.message).to.not.include('SUPERSECRET')
     await expectRefusal(vault.store('the_box', undefined as unknown as Whisper), 'bad_whisper')

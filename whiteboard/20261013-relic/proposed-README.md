@@ -2,26 +2,26 @@
 
 `BYOKVault` is a browser-side encrypted vault for user-provided API keys and other small JSON secrets.
 
-It is intended for applications where users bring their own API token, such as an Anthropic API key, and the application should be able to synchronize encrypted key material between devices without storing the usable token in its backend database.
+It is intended for applications where users bring their own API key, such as an Anthropic API key, and the application should be able to synchronize encrypted key material between devices without storing the usable API key in its backend database.
 
 ## What it provides
 
 - Passphrase-protected vaults synchronized through a remote `VaultDB`
 - Client-side encryption using:
-  - `argon2id-web-v1` for passphrase derivation
+  - `argon2id_web_v1` for passphrase derivation
   - AES-256-GCM through WebCrypto for encryption and key wrapping
 - Multiple encrypted lockboxes per vault
-- Typed JSON contents validated with Zod
+- Typed JSON whispers validated with Zod
 - Optional “remember this device” unlocks using IndexedDB
 - Optional recovery kits
 - Compare-and-swap support for multi-device writes
-- React-friendly lifecycle operations: initialize, unlock, lock, refresh, rotate, store, and use
+- React-friendly lifecycle operations: initialize, unlock, lock, refresh, changePassphrase, store, and use
 
 ## What it does not provide
 
 BYOKVault does not proxy requests to Anthropic or another external provider.
 
-Your application decrypts a token on the user's device and makes the API request directly from that device.
+Your application decrypts an API key on the user's device and makes the API request directly from that device.
 
 ```text
 User browser
@@ -60,7 +60,7 @@ The exact package names may differ based on your distribution, but the expected 
 
 | Dependency | Purpose |
 |---|---|
-| `zod` | Validating stored and decrypted JSON data |
+| `zod` | Validating stored records and decrypted whispers |
 | `hash-wasm` | Argon2id passphrase derivation |
 | Browser `crypto.subtle` | AES-GCM encryption and key wrapping |
 | `idb-keyval` | IndexedDB remembered-device storage |
@@ -76,49 +76,49 @@ A vault is protected by a user passphrase.
 ```text
 Passphrase
   │
-  ├─ Argon2id (`argon2id-web-v1`)
+  ├─ Argon2id (`argon2id_web_v1`)
   │
   ▼
-Passphrase-derived key
+passphraseKey
   │
   ├─ decrypts
   ▼
-VaultKey
+vaultKey
   │
-  ├─ decrypts per-lockbox data keys
+  ├─ decrypts per-lockbox lockboxKeys
   │
   ▼
-Encrypted JSON contents
+whisperCiphered
 ```
 
 The remote database stores records such as:
 
-- Argon2 salt
-- KDF profile metadata
-- Encrypted VaultKey envelope
-- Encrypted lockbox DEKs
-- Encrypted JSON content
+- passphraseSalt
+- keyDeriverSpec
+- vault_key_passphrase_wrapped
+- lockbox_key_wrapped for each lockbox
+- whisper_ciphered for each lockbox
 - Non-secret metadata such as `"anthropic"` or `"Personal account"`
 
 The remote database does not need to receive:
 
 - User passphrases
-- Decrypted API tokens
-- Vault keys
-- Per-lockbox encryption keys
-- Decrypted lockbox JSON
+- Decrypted API keys
+- vaultKeys
+- lockboxKeys
+- Decrypted whispers
 
-## Pinned cryptographic profile
+## Pinned keyDeriverSpec
 
-BYOKVault uses one profile:
+BYOKVault uses one keyDeriverSpec:
 
 ```text
-argon2id-web-v1
-  memory:       64 MiB
+argon2id_web_v1
+  memory_kib:   65536 (64 MiB)
   iterations:   3
   parallelism:  1
-  salt:         16 bytes
-  output:       32 bytes
+  salt_bytes:   16
+  output_bytes: 32
 ```
 
 The browser must support:
@@ -154,12 +154,12 @@ Use `RestVaultDB` when your application has a REST API, GraphQL API, tRPC servic
 Your backend generally needs endpoints equivalent to:
 
 ```text
-GET    /vaults/:vaultLabel
-PUT    /vaults/:vaultLabel
-GET    /vaults/:vaultLabel/lockboxes/:boxLabel
-PUT    /vaults/:vaultLabel/lockboxes/:boxLabel
-GET    /vaults/:vaultLabel/lockboxes
-DELETE /vaults/:vaultLabel/lockboxes/:boxLabel
+GET    /vaults/:vaultlabel
+PUT    /vaults/:vaultlabel
+GET    /vaults/:vaultlabel/lockboxes/:boxlabel
+PUT    /vaults/:vaultlabel/lockboxes/:boxlabel
+GET    /vaults/:vaultlabel/lockboxes
+DELETE /vaults/:vaultlabel/lockboxes/:boxlabel
 ```
 
 The backend should:
@@ -167,7 +167,7 @@ The backend should:
 1. Authenticate the current application user.
 2. Authorize access to the requested vault.
 3. Store and return ciphertext records without attempting to decrypt them.
-4. Enforce compare-and-swap expectations for bundle epochs and lockbox key IDs.
+4. Enforce compare-and-swap expectations for bundle passphraseEpochs and lockbox revisionIds.
 
 Example construction:
 
@@ -207,9 +207,9 @@ The Convex adapter typically maps vault operations to Convex queries and mutatio
 | Vault operation | Convex operation |
 |---|---|
 | `getVaultBundle` | Query |
-| `putVaultBundle` | Mutation with epoch compare-and-swap |
+| `putVaultBundle` | Mutation with passphraseEpoch compare-and-swap |
 | `getLockbox` | Query |
-| `putLockbox` | Mutation with key ID compare-and-swap |
+| `putLockbox` | Mutation with revisionId compare-and-swap |
 | `listLockboxes` | Query |
 | `deleteLockbox` | Mutation |
 | `subscribeToVaultBundle` | Reactive query subscription |
@@ -258,52 +258,52 @@ A Convex schema will usually need two encrypted-record tables:
 ```text
 vaultBundles
   - authenticated owner identifier
-  - vaultLabel
+  - vaultlabel
   - vaultId
-  - epoch
-  - salt
-  - kdfProfile
-  - passphraseVaultKey
+  - passphrase_epoch
+  - passphrase_salt
+  - key_deriver_spec
+  - vault_key_passphrase_wrapped
   - recovery, optional
   - timestamps
 
 vaultLockboxes
   - authenticated owner identifier
-  - vaultLabel
-  - boxLabel
-  - keyId
-  - wrappedDEK
-  - data
+  - vaultlabel
+  - boxlabel
+  - revision_id
+  - lockbox_key_wrapped
+  - whisper_ciphered
   - public metadata
   - timestamps
 ```
 
-Use Convex byte fields for ciphertext and IV data where practical. Base64 encoding is also possible, but adds size and encoding overhead.
+Use Convex byte fields for ciphertext and cipherIv values where practical. Base64 encoding is also possible, but adds size and encoding overhead.
 
 Convex access control remains important. Encryption protects database contents; authorization limits who can fetch encrypted records in the first place.
 
 ---
 
-# Defining vault contents
+# Defining whispers
 
 A vault is generic over a Zod schema registry.
 
-Each known lockbox label has a schema describing its decrypted JSON content.
+Each known lockbox label has a schema describing its decrypted whisper.
 
 ```ts
 import { z } from "zod";
 
 export const vaultSchemas = {
   "anthropic:personal": z.object({
-    apiToken: z.string().min(1),
+    apiKey: z.string().min(1),
   }),
 
   "anthropic:work": z.object({
-    apiToken: z.string().min(1),
+    apiKey: z.string().min(1),
   }),
 
   "openai:development": z.object({
-    apiToken: z.string().min(1),
+    apiKey: z.string().min(1),
     organizationId: z.string().optional(),
   }),
 } as const;
@@ -314,18 +314,18 @@ This gives typed access:
 ```ts
 await vault.store(
   "anthropic:personal",
-  { apiToken: "sk-ant-..." },
+  { apiKey: "sk-ant-..." },
   {
     meta: {
       service: "anthropic",
       hint: "Personal account",
-      last4: "abcd",
+      note: mask("sk-ant-..."),
     },
   },
 );
 ```
 
-The `apiToken` is encrypted. The metadata object is intentionally available while the vault is locked.
+The `apiKey` is encrypted. The metadata object is intentionally available while the vault is locked.
 
 Avoid placing secret information in metadata fields.
 
@@ -335,7 +335,7 @@ Good metadata:
 {
   service: "anthropic",
   hint: "Work account",
-  last4: "A1B2",
+  note: mask(apiKey),
 }
 ```
 
@@ -494,7 +494,7 @@ A passphrase should ideally be:
 - Several random words, or
 - A long unique passphrase not reused elsewhere
 
-The passphrase is used to derive the encryption key locally. It should not be sent to `VaultDB`, Convex, analytics, error reporting, or logging systems.
+The passphrase is used to derive the passphraseKey locally. It should not be sent to `VaultDB`, Convex, analytics, error reporting, or logging systems.
 
 ---
 
@@ -509,20 +509,20 @@ await vault.unlock(passphrase, {
 });
 ```
 
-If the user does not select “remember this device,” the decrypted vault key remains available only in application memory until the vault is locked, the page is reloaded, or the application is destroyed.
+If the user does not select “remember this device,” the decrypted vaultKey remains available only in application memory until the vault is locked, the page is reloaded, or the application is destroyed.
 
 ## Remembered-device unlock
 
 When `remember: true` is used:
 
-1. The browser creates or reuses a local non-extractable device key.
-2. The vault key is encrypted with that device key.
-3. The encrypted vault key is stored in IndexedDB with an expiration time.
+1. The browser creates or reuses a local non-extractable localUnlockKey.
+2. The vaultKey is encrypted with that localUnlockKey.
+3. The encrypted vaultKey is stored in IndexedDB with an expiration time.
 4. On a later visit, the device can silently unlock if:
    - the cache has not expired,
    - site data has not been cleared,
-   - the vault epoch has not changed,
-   - the browser still has the device key.
+   - the passphraseEpoch has not changed,
+   - the browser still has the localUnlockKey.
 
 Remembered unlock is a convenience feature, not a replacement for the passphrase.
 
@@ -534,21 +534,21 @@ await vault.lock({ forgetDevice: true });
 
 ---
 
-# Storing an API token
+# Storing an API key
 
-Store API tokens in a lockbox.
+Store API keys in a lockbox.
 
 ```ts
 await vault.store(
   "anthropic:personal",
   {
-    apiToken: anthropicApiKey,
+    apiKey: anthropicApiKey,
   },
   {
     meta: {
       service: "anthropic",
       hint: "Personal Anthropic account",
-      last4: anthropicApiKey.slice(-4),
+      note: mask(anthropicApiKey),
     },
   },
 );
@@ -556,28 +556,28 @@ await vault.store(
 
 Each `store()` operation creates fresh encryption material for that lockbox revision:
 
-- A new lockbox DEK
-- A new AES-GCM IV
-- A new encrypted DEK envelope
-- A new lockbox `keyId`
+- A new lockboxKey
+- A new whisper cipherIv
+- A new lockbox_key_wrapped
+- A new lockbox `revisionId`
 
 The old ciphertext is replaced through compare-and-swap semantics, which helps prevent accidental overwrite by multiple devices.
 
 ---
 
-# Using an API token
+# Using an API key
 
-Use `vault.use()` to scope decrypted contents to a callback.
+Use `vault.use()` to scope the decrypted whisper to a callback.
 
 ```ts
 const response = await vault.use(
   "anthropic:personal",
-  async ({ apiToken }) => {
+  async ({ apiKey }) => {
     return fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": apiToken,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({
@@ -595,16 +595,16 @@ const response = await vault.use(
 );
 ```
 
-The callback receives decrypted content in ordinary JavaScript memory. Avoid doing the following inside the callback:
+The callback receives the decrypted whisper in ordinary JavaScript memory. Avoid doing the following inside the callback:
 
 ```ts
-console.log(apiToken);
-setApiTokenInReactState(apiToken);
-analytics.track("token-used", { apiToken });
-throw new Error(`Failed with token ${apiToken}`);
+console.log(apiKey);
+setApiKeyInReactState(apiKey);
+analytics.track("key-used", { apiKey });
+throw new Error(`Failed with key ${apiKey}`);
 ```
 
-The callback pattern does not make JavaScript strings erasable, but it makes the intended lifetime of decrypted data explicit and discourages long-lived storage in UI state.
+The callback pattern does not make JavaScript strings erasable, but it makes the intended lifetime of the decrypted whisper explicit and discourages long-lived storage in UI state.
 
 ---
 
@@ -644,12 +644,12 @@ Example result:
 ```ts
 [
   {
-    boxLabel: "anthropic:personal",
-    keyId: "01J...",
+    boxlabel: "anthropic:personal",
+    revision_id: "01J...",
     meta: {
       service: "anthropic",
       hint: "Personal Anthropic account",
-      last4: "ABCD",
+      note: "••••ABCD",
       createdAt: "2025-01-01T00:00:00.000Z",
       updatedAt: "2025-01-01T00:00:00.000Z",
     },
@@ -683,17 +683,17 @@ Call `refresh()` when:
 const status = await vault.refresh();
 ```
 
-If another device adds a lockbox but does not rotate the passphrase, the current device can usually access the new lockbox without another passphrase prompt.
+If another device adds a lockbox but does not change the passphrase, the current device can usually access the new lockbox without another passphrase prompt.
 
-If another device rotates the passphrase, the vault bundle epoch changes.
+If another device changes the passphrase, the vault bundle passphraseEpoch changes.
 
 In that case `refresh()` transitions the local instance to:
 
 ```ts
 {
   state: "stale",
-  localEpoch: 3,
-  remoteEpoch: 4,
+  localPassphraseEpoch: 3,
+  remotePassphraseEpoch: 4,
 }
 ```
 
@@ -712,19 +712,19 @@ await vault.unlock(currentPassphrase);
 
 ---
 
-# Rotating a passphrase
+# Changing a passphrase
 
-A passphrase rotation changes the passphrase-derived wrapping key and increments the vault epoch.
+A passphrase change replaces the passphraseKey and increments the passphraseEpoch.
 
 ```ts
-await vault.rotate(oldPassphrase, newPassphrase);
+await vault.changePassphrase(oldPassphrase, newPassphrase);
 ```
 
-The vault's random VaultKey remains stable, so lockbox ciphertext does not need to be rewritten.
+The vault's random vaultKey remains stable, so lockbox ciphertext does not need to be rewritten.
 
-This means rotating a passphrase is relatively lightweight even if the vault contains many lockboxes.
+This means changing a passphrase is relatively lightweight even if the vault contains many lockboxes.
 
-After rotation:
+After a passphrase change:
 
 - Old remembered-device unlocks become stale.
 - Other devices must unlock using the new passphrase.
@@ -734,7 +734,7 @@ After rotation:
 
 # Rotating one lockbox
 
-Use `rotateLockbox()` when you want to re-encrypt a particular lockbox under a fresh lockbox DEK.
+Use `rotateLockbox()` when you want to re-encrypt a particular lockbox under a fresh lockboxKey.
 
 ```ts
 await vault.rotateLockbox("anthropic:personal");
@@ -744,9 +744,9 @@ Typical reasons include:
 
 - The user replaced an API key with a new external-provider key.
 - You want to rewrite the encrypted record as a maintenance step.
-- You suspect a local lockbox key may have been exposed while the vault was unlocked.
+- You suspect a lockboxKey may have been exposed while the vault was unlocked.
 
-Usually, replacing the external API token with `store()` is sufficient because `store()` already creates a fresh DEK and lockbox revision.
+Usually, replacing the external API key with `store()` is sufficient because `store()` already creates a fresh lockboxKey and lockbox revision.
 
 ---
 
@@ -758,7 +758,7 @@ await vault.remove("anthropic:personal");
 
 This removes the encrypted record from the remote `VaultDB`.
 
-If the external token should no longer be usable, also revoke or rotate it with the external provider, such as Anthropic.
+If the external API key should no longer be usable, also revoke or rotate it with the external provider, such as Anthropic.
 
 Deleting an encrypted copy from your database does not revoke an API key that was already issued by Anthropic.
 
@@ -766,7 +766,7 @@ Deleting an encrypted copy from your database does not revoke an API key that wa
 
 # Recovery kits
 
-A recovery kit is an optional mnemonic-based alternate path to the vault key.
+A recovery kit is an optional mnemonic-based alternate path to the vaultKey.
 
 ```ts
 const recoveryKit = await vault.createRecoveryKit(passphrase);
@@ -795,7 +795,7 @@ await vault.unlockWithRecovery(recoveryPhrase, {
 });
 ```
 
-The recovery route uses the same pinned Argon2id WebAssembly profile as normal passphrase unlock. It is therefore useful for passphrase loss, but it does not make an environment that blocks Argon2id capable of decrypting the vault.
+The recovery route uses the same pinned keyDeriverSpec as normal passphrase unlock. It is therefore useful for passphrase loss, but it does not make an environment that blocks Argon2id capable of decrypting the vault.
 
 To remove recovery access:
 
@@ -812,9 +812,9 @@ Vault methods may reject with an error containing a stable `code`.
 ```ts
 try {
   await vault.unlock(passphrase);
-} catch (error) {
-  if (isVaultError(error)) {
-    switch (error.code) {
+} catch (err) {
+  if (isVaultError(err)) {
+    switch (err.code) {
       case "WrongPassphrase":
         setFormError("That passphrase did not unlock this vault.");
         return;
@@ -839,7 +839,7 @@ try {
     }
   }
 
-  throw error;
+  throw err;
 }
 ```
 
@@ -847,17 +847,17 @@ Important error categories:
 
 | Code | Meaning |
 |---|---|
-| `WrongPassphrase` | The supplied passphrase did not decrypt the VaultKey |
-| `CapabilityUnavailable` | The current browser cannot run the pinned profile or required WebCrypto operation |
-| `VaultLocked` | A data operation was attempted before unlock |
+| `WrongPassphrase` | The supplied passphrase did not decrypt the vaultKey |
+| `CapabilityUnavailable` | The current browser cannot run the pinned keyDeriverSpec or required WebCrypto operation |
+| `VaultLocked` | A whisper operation was attempted before unlock |
 | `VaultAbsent` | The requested vault has not been initialized |
 | `VaultAlreadyExists` | Another device initialized the vault first |
 | `VaultConflict` | Compare-and-swap failed because remote data changed |
-| `StaleVault` | Another device rotated the passphrase or otherwise advanced the vault epoch |
+| `StaleVault` | Another device changed the passphrase or otherwise advanced the passphraseEpoch |
 | `LockboxAbsent` | The requested lockbox does not exist |
 | `LockboxConflict` | Another device changed the lockbox during an update |
 | `IntegrityFailure` | AES-GCM authentication failed; stored data may be corrupted or tampered with |
-| `SchemaViolation` | Stored or decrypted data did not match its expected Zod schema |
+| `SchemaViolation` | Stored or decrypted records did not match its expected Zod schema |
 | `Cancelled` | A cancellable operation, such as Argon2id derivation, was aborted |
 
 Treat `IntegrityFailure` differently from `WrongPassphrase`. A wrong passphrase is a normal user error. Integrity failure should be surfaced as a data corruption or tampering issue.
@@ -873,7 +873,7 @@ await vault.lock({ forgetDevice: true });
 await deviceDB.clearAll();
 ```
 
-This removes the local remembered unlock cache and browser-local device keys for the current browser profile.
+This removes the local remembered unlock cache and browser-local localUnlockKeys for the current browser profile.
 
 It does not delete encrypted vault records from `VaultDB`.
 
@@ -910,7 +910,7 @@ Test the production CSP early. An overly restrictive CSP can prevent the Argon2i
 
 - Use a seven-day remembered-device duration.
 - Auto-lock on tab hidden for higher-sensitivity applications.
-- Keep API token plaintext out of React state.
+- Keep the API key out of React state.
 - Use direct browser-to-provider API requests for the strongest server-blind model.
 - Encourage users to create external-provider spending limits.
 - Encourage users to revoke keys they no longer use.
@@ -919,9 +919,9 @@ Test the production CSP early. An overly restrictive CSP can prevent the Argon2i
 
 ## Product limitations to explain to users
 
-- Forgetting both the vault passphrase and recovery phrase can make encrypted vault contents unrecoverable.
+- Forgetting both the vault passphrase and recovery phrase can make the encrypted vault unrecoverable.
 - Clearing browser site data removes remembered-device unlocks.
-- Browser extensions, malicious scripts, compromised devices, and active XSS may access a decrypted token while the vault is unlocked.
+- Browser extensions, malicious scripts, compromised devices, and active XSS may access a decrypted API key while the vault is unlocked.
 - The external API provider receives the API key when the user makes a request.
 - API-key limits, spend caps, and revocation controls at the external provider remain important.
 
@@ -959,25 +959,25 @@ if (vault.status().state === "locked") {
 await vault.store(
   "anthropic:personal",
   {
-    apiToken: userEnteredAnthropicKey,
+    apiKey: userEnteredAnthropicKey,
   },
   {
     meta: {
       service: "anthropic",
       hint: "Personal",
-      last4: userEnteredAnthropicKey.slice(-4),
+      note: mask(userEnteredAnthropicKey),
     },
   },
 );
 
 const result = await vault.use(
   "anthropic:personal",
-  async ({ apiToken }) => {
+  async ({ apiKey }) => {
     return fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-api-key": apiToken,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
       },
       body: JSON.stringify({

@@ -29,12 +29,13 @@ byok's promise is that **whoever holds the application's database, server code a
 cannot read a user's secrets**, and cannot alter them without the change being detected. Anything
 that breaks that promise is in scope, for example:
 
-* recovering a secret, a vault key or a passphrase-derived key from what is stored;
+* recovering a whisper, a vaultKey or a passphraseKey from what is stored (VOCABULARY.md names
+  each);
 * tampering with stored records in a way that goes undetected, or that rolls a vault back to an
-  older passphrase or a weaker profile;
+  older passphrase or a weaker keyDeriverSpec;
 * secret material escaping into an error, a log, a thrown value or anything else that leaves the
   library;
-* weak or predictable randomness, or a key derivation weaker than the published profile;
+* weak or predictable randomness, or a key derivation weaker than the published keyDeriverSpec;
 * a published package whose contents do not match this repository's source.
 
 ## What is outside byok's protection

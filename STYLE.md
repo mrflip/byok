@@ -10,7 +10,7 @@ this document disagree, the linter wins and this document is a bug.
 
 ## Imports
 
-* Import paths carry no extension (`./kdf-profile`, not `./kdf-profile.ts`): the bundler resolves
+* Import paths carry no extension (`./key-deriver-spec`, not `./key-deriver-spec.ts`): the bundler resolves
   them, as the wider ecosystem does.
 * No barrel files beyond the package's entry points: import from the file that defines the thing.
 * **A module of related functions around one concern is imported whole**, under its Startcase
@@ -36,11 +36,16 @@ always a salient prefix: `vaultlabel`, `profilename`. The linter refuses these, 
 variable, parameter or destructured name; a property spelled that way (`{ name: 'AES-GCM' }`)
 is someone else's interface, and fine.
 
+**The cast is named in VOCABULARY.md** -- whisper, lockbox, vault, passphrase, each key and its
+encrypted form -- and those names are used as written, never a synonym. Never `data`, `contents`
+or `payload` for a variable or field we control: it is a whisper, or a whisperCiphered.
+
 **Never bare `key`.** In this package a key is cryptographic until proven otherwise, so:
 
-* a **cryptographic key** is named for its role: `vaultKey`, `kek` (key-encryption key), `dek`
-  (data-encryption key), `passphraseKey`. A WebCrypto `CryptoKey` and its raw bytes are told apart
-  by a tag: `dek` is the `CryptoKey`, `dekBytes` the `Uint8Array`.
+* a **cryptographic key** is named for its role, as VOCABULARY.md has it: `passphraseKey`,
+  `vaultKey`, `lockboxKey`, `localUnlockKey`. Not `kek` or `dek`. A WebCrypto `CryptoKey` and its
+  raw bytes are told apart by a tag: `lockboxKey` is the `CryptoKey`, `lockboxKeyBytes` the
+  `Uint8Array`.
 * a **map key** is a `ckey` (a string key or an array index), and a list of them `ckeys`.
 
 **Smush the tags `name`, `kind`, `label`, `path` and `bag` into one word**: `vaultlabel`,
@@ -101,8 +106,8 @@ Specificity is a virtue (`saltBytes` says it is bytes), but don't tag the obviou
   ```ts
   if (! opts.vaultlabel) { throw new VaultError('missing_label', 'A vault needs a label.') }
   //
-  if (wrapped.profile !== Argon2idWebV1.profile) {
-    throw new VaultError('unknown_profile', 'This vault was written by a newer version of byok: update the package to open it.')
+  if (stored.key_deriver_label !== Argon2idWebV1.key_deriver_label) {
+    throw new VaultError('unknown_key_deriver', 'This vault was written by a newer version of byok: update the package to open it.')
   }
   ```
 
@@ -140,7 +145,7 @@ between columns lets the editor align them (see *Tests*).
   what it is and how to use it, never how it came to be, what's next, or how it works inside. A
   caveat for future authors is a running comment by the code it concerns.
 * Lead with what the thing *is* or *returns*, skipping "Creates" and "Calculates" and articles
-  that add nothing: `Envelope for one lockbox's contents, sealed under its DEK`.
+  that add nothing: `One lockbox's whisper, ciphered under its lockboxKey`.
 * Order: header, `@param`, `@returns`, a blank line, then `@example`s -- don't be stingy with
   those. A short example on one line; a long one on following lines, indented two spaces.
 * A `@param` is the parameter's role, an entry in the playbill: `@param boxlabel - Lockbox to

@@ -23,7 +23,7 @@ export const buildJokePrompt = (whosThere: string): string => (
  * @param whosThere - Whoever the user typed into "Who's there?".
  * @param fetchFn - Test seam: a fetch to use in place of the global one.
  *
- * @example await tellKnockKnockJoke(apiTokenWhisper, 'Banana')
+ * @example await tellKnockKnockJoke(apiKeyWhisper, 'Banana')
  */
 export const tellKnockKnockJoke = async (apiKey: string, whosThere: string, fetchFn?: typeof fetch): Promise<string> => {
   const anthropic = new Anthropic({
