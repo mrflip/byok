@@ -1,6 +1,6 @@
 {
   "name": "byok-demo-react",
-  "private": true,
+  "private": false,
   "version": "0.0.0",
   "description": "Single-page React playground for the byok interface: a stub vault, a fake sign-in, and an inspector showing what lands where. Never published.",
   "type": "module",
