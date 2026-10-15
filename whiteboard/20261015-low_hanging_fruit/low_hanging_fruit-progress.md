@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 6 filing; 1, 2, 3, 4, 5, 8, 9, 10, 11 filed; 7 starts from 6 once it files. Newer than the plan wherever the two disagree.
+**Status**: 6 rebasing onto #40's restacked tip, then filing; 1, 2, 3, 4, 5, 8, 9, 10, 11 filed; 7 starts from 6 once it files. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -13,7 +13,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
 | 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37) |
-| 6  | `boundary_audit` | thread 2 (#40, ea3dc98) | filing |
+| 6  | `boundary_audit` | thread 2 (#40, restacked to 868ce73) | rebasing, then filing |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
@@ -21,6 +21,13 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
 ## For the Coach
+
+* **[#42](https://github.com/mrflip/safebyok/pull/42) (thread 8) stands on #40's pre-restack tip
+  `ea3dc98`.** #34 and #40 were force-pushed (05:03, 05:10 UTC) onto main after #26 and #30;
+  #42 was filed minutes later on the old base, so it carries old copies of #34's and #40's
+  commits. Restacking it onto `868ce73` needs a force-push, which workers may not do: yours, or
+  say the word and the orchestrator has it done with `--force-with-lease`. Thread 6, still
+  unfiled, is being moved onto `868ce73` before it files.
 
 * ~~**Thread 10's root scripts drop extra arguments**~~ -- *the Coach approved the reviewer's
   fix in chat at about 04:55 UTC*; applied on #36 as 9140e2f (fast-forward), proved with real
