@@ -224,7 +224,7 @@ Caveats:
 
 ### 7. zod/mini and a tree-shaking audit
 
-Depends on low-hanging-fruit thread 7 (the size budget is the before-and-after). Measured
+Depends on low-hanging-fruit thread 8 (the size budget, [#42](https://github.com/mrflip/safebyok/pull/42), merged: it is the before-and-after). Measured
 before: zod classic is about three quarters of every bundle (183 KB raw), and it does not
 tree-shake because the schemas are built at module top level in a shared chunk; even a bare
 `stableJsonify` import drags all schemas. The thread: move the core's schemas to `zod/mini`

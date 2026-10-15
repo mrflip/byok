@@ -148,6 +148,11 @@ Start: 1, 3, 4. Then the lowest-numbered thread whose base exists, as slots free
     * Asked for more explanation before deciding: the provider handing conditions to the context;
       #43's three questions; #44's `vault_locked` vs `stale_write`; #33/#32's screen-lock recipe
       and the `unlock()`/`lock()` race.
+16. **The Coach's next answers** (in chat): the rebases of #37, #46 and #50 are the orchestrator's,
+    force-pushes authorized (done with leases). The cost of `\p{M}` (Indic and Thai vowels, which
+    are combining marks) is noted in `mask`'s docs on #37, and `maskCarefully` (marks kept, a few
+    per base) goes under TODO.md's NOT YET. The far-future constant is exported as `FarFuture` (#53).
+    zod/mini is not part of this sprint: it is roadmap item 7, whose baseline (#42) has merged.
 
 ## The threads
 
