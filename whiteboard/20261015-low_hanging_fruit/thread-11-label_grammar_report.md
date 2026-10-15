@@ -1,6 +1,6 @@
 # Thread 11: label_grammar_report (2026-10-15)
 
-Branch `20261015-label_grammar_report`, PR not yet filed. Justify: not run in full (documents only, no code); the changeset is empty.
+Branch `20261015-label_grammar_report`, PR [#35](https://github.com/mrflip/safebyok/pull/35). Justify: green (safebyok 248, safebyok-convex 213, safebyok-react 7, demo 24, scripts 72); documents only, the changeset is empty.
 
 * **Built**: an investigation, no code. The report is `human/20261015-label_grammar_report.md` (read it for the evidence); this file is its summary.
 * **Decisions taken**: none that touch code. Recommendations, for the Soonish thread and the Coach:

@@ -2,7 +2,7 @@
 
 Thread 11 of low_hanging_fruit, an investigation: no code changed. It answers what depends on
 `Label` (`^[a-z](_?[a-z0-9])+$`, at most 40) so the *Soonish* "pluggable label validator" can
-start from it. Branch `20261015-label_grammar_report`; PR not yet filed.
+start from it. Branch `20261015-label_grammar_report`; PR [#35](https://github.com/mrflip/safebyok/pull/35).
 
 ## The answer in four lines
 
