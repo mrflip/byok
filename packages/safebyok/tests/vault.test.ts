@@ -934,8 +934,8 @@ describe("changePassphrase", () => {
 
 /**
  * A world whose slow waits can be held mid-flight, to land a lock inside an unlock: each `holdNext`
- * arms a gate on the next look at the bundle, passphrase derivation, or device-record write, and
- * hands it back. Its key deriver is its own copy of testDeriver, so a spy on it stays here.
+ * arms a gate on the next look at the bundle, passphrase derivation, device-record write, or (to
+ * hold a store in hand) read of a lockbox, and hands it back. Its key deriver is its own copy of testDeriver, so a spy on it stays here.
  */
 const makeRacingWorld = () => {
   const world = makeWorld()
@@ -967,8 +967,17 @@ const makeRacingWorld = () => {
     })
     return gate
   }
+  const holdNextBoxRead = () => {
+    const gate = TH.makeGate()
+    const readBox = world.vaultDB.readBox.bind(world.vaultDB)
+    vi.spyOn(world.vaultDB, 'readBox').mockImplementationOnce(async (scope, boxlabel) => {
+      await gate.pass()
+      return await readBox(scope, boxlabel)
+    })
+    return gate
+  }
   const rememberedUnlock = async () => await world.deviceDB.readUnlock(scopeOf('u1'))
-  return { ...world, open, holdNextLook, holdNextDerive, holdNextRemember, rememberedUnlock }
+  return { ...world, open, holdNextLook, holdNextDerive, holdNextRemember, holdNextBoxRead, rememberedUnlock }
 }
 
 describe("a lock that lands while an unlock is under way", () => {
@@ -1209,6 +1218,300 @@ describe("a vault that moves elsewhere while an unlock is under way", () => {
   })
 })
 
+/** A vault made and unlocked, with nothing in it. */
+const openUnlocked = async () => {
+  const vault = await makeWorld().open()
+  await vault.unlock('pw one')
+  return vault
+}
+
+describe("lockSoon", () => {
+  // Only the timers: promises, and vitest's own waits, keep running as they do.
+  beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }) })
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.restoreAllMocks()
+  })
+
+  const GraceMs = 5000
+
+  it("closes the entry gate at once: the snapshot reads 'locked', and no whisper comes out", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.store('anthropic', 'sk-fake')
+    await vault.lockSoon()
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(vault.getSnapshot().askPassphraseAt).to.be.null
+    await expectRefusal(vault.read('anthropic'), 'vault_locked')
+    await expectRefusal(vault.store('openai', 'sk-fake-too'), 'vault_locked')
+  })
+
+  it("forgets the remembered unlock at once: a reopen within the grace asks for the passphrase", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lockSoon()
+    expect(await world.rememberedUnlock()).to.be.null
+    const reopened = await world.open()
+    expect(reopened.getSnapshot().state).to.eq('locked')
+  })
+
+  it("lets work in hand finish: a store already under way lands within the grace", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const gate = world.holdNextBoxRead()
+    const storing = vault.store('anthropic', 'sk-fake')
+    await gate.reached
+    await vault.lockSoon()
+    gate.release()
+    await storing
+    await vault.unlock('pw one')
+    expect(await vault.read('anthropic')).to.eq('sk-fake')
+  })
+
+  it("keeps the key for work in hand while new work is refused at the gate", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const gate = world.holdNextBoxRead()
+    const storing = vault.store('anthropic', 'sk-fake')
+    await gate.reached
+    await vault.lockSoon()
+    await expectRefusal(vault.read('anthropic'), 'vault_locked')
+    gate.release()
+    await storing
+  })
+
+  it("drops the vaultKey when the grace runs out: work still in hand after it is refused", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const gate = world.holdNextBoxRead()
+    const storing = expectRefusal(vault.store('anthropic', 'sk-fake'), 'vault_locked')
+    await gate.reached
+    await vault.lockSoon()
+    vi.advanceTimersByTime(GraceMs)
+    gate.release()
+    await storing
+    expect(vi.getTimerCount()).to.eq(0)
+    await vault.unlock('pw one')
+    await expectRefusal(vault.read('anthropic'), 'absent_box')
+  })
+
+  it("unlike lock(), which refuses work in hand at its next look", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const gate = world.holdNextBoxRead()
+    const storing = expectRefusal(vault.store('anthropic', 'sk-fake'), 'vault_locked')
+    await gate.reached
+    await vault.lock()
+    gate.release()
+    await storing
+  })
+
+  it("defeats an unlock under way when it is called, as lock() does", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await vault.lockSoon()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+  })
+
+  it("defeats the unlock of a changePassphrase() under way, which still changes the passphrase", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('old passphrase')
+    const gate = world.holdNextDerive()
+    const changing = vault.changePassphrase('old passphrase', 'new passphrase')
+    await gate.reached
+    await vault.lockSoon()
+    gate.release()
+    await changing
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+    await expectRefusal(vault.unlock('old passphrase'), 'wrong_passphrase')
+    await vault.unlock('new passphrase')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("is ended by an unlock within the grace: the new unlock stands past it, remembered", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.store('anthropic', 'sk-fake')
+    await vault.lockSoon()
+    await vault.unlock('pw one')
+    expect(vi.getTimerCount()).to.eq(0)
+    vi.advanceTimersByTime(GraceMs * 2)
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + SevenDaysMs)
+    expect(await vault.read('anthropic')).to.eq('sk-fake')
+    expect(await world.rememberedUnlock()).to.not.be.null
+  })
+
+  it("loses to an unlock begun within the grace and still under way when it runs out", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.store('anthropic', 'sk-fake')
+    await vault.lockSoon()
+    const gate = world.holdNextDerive()
+    const unlocking = vault.unlock('pw one')
+    await gate.reached
+    vi.advanceTimersByTime(GraceMs)
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(await vault.read('anthropic')).to.eq('sk-fake')
+  })
+
+  it("never lengthens a grace already running, and a shorter one shortens it", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const firstGate = world.holdNextBoxRead()
+    const firstStoring = expectRefusal(vault.store('anthropic', 'sk-fake'), 'vault_locked')
+    await firstGate.reached
+    await vault.lockSoon(1)
+    await vault.lockSoon(30)
+    vi.advanceTimersByTime(1000)
+    firstGate.release()
+    await firstStoring
+
+    await vault.unlock('pw one')
+    const secondGate = world.holdNextBoxRead()
+    const secondStoring = expectRefusal(vault.store('anthropic', 'sk-fake'), 'vault_locked')
+    await secondGate.reached
+    await vault.lockSoon(30)
+    await vault.lockSoon(1)
+    vi.advanceTimersByTime(1000)
+    secondGate.release()
+    await secondStoring
+    expect(vi.getTimerCount()).to.eq(0)
+  })
+
+  it("with a grace of 0 is lock(): work in hand is refused, and no timer is left", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const gate = world.holdNextBoxRead()
+    const storing = expectRefusal(vault.store('anthropic', 'sk-fake'), 'vault_locked')
+    await gate.reached
+    await vault.lockSoon(0)
+    expect(vi.getTimerCount()).to.eq(0)
+    gate.release()
+    await storing
+    expect(await world.rememberedUnlock()).to.be.null
+  })
+
+  it("on a vault already locked, or never made, leaves it so, with no timer", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.lockSoon()
+    expect(vault.getSnapshot().state).to.eq('absent')
+    await vault.unlock('pw one')
+    await vault.lock()
+    await vault.lockSoon()
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(vi.getTimerCount()).to.eq(0)
+  })
+
+  it("tells subscribers once, when the gate closes, and not again when the key goes", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const listener = vi.fn()
+    vault.subscribe(listener)
+    await vault.lockSoon()
+    expect(listener).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(GraceMs)
+    expect(listener).toHaveBeenCalledTimes(1)
+  })
+
+  it("is cut short by close(): no timer outlives the handle", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lockSoon(60)
+    expect(vi.getTimerCount()).to.eq(1)
+    vault.close()
+    expect(vi.getTimerCount()).to.eq(0)
+    await expectRefusal(vault.lockSoon(), 'vault_closed')
+  })
+
+  it("is cut short by lock(), and by destroy()", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lockSoon()
+    await vault.lock()
+    expect(vi.getTimerCount()).to.eq(0)
+    await vault.unlock('pw one')
+    await vault.lockSoon()
+    await vault.destroy()
+    expect(vi.getTimerCount()).to.eq(0)
+    expect(vault.getSnapshot().state).to.eq('absent')
+  })
+
+  it("as the screen-lock recipe calls it, when the tab is hidden", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    // A stand-in for `document`, which Node has not.
+    const page = Object.assign(new EventTarget(), { hidden: false })
+    page.addEventListener('visibilitychange', () => { if (page.hidden) { void vault.lockSoon() } })
+    const listener = vi.fn()
+    vault.subscribe(listener)
+    page.hidden = true
+    page.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => { expect(listener).toHaveBeenCalled() })
+    expect(vault.getSnapshot().state).to.eq('locked')
+  })
+
+  const AcceptedGraces = [
+    [undefined,  'left out, it is five seconds'],
+    [0,          'zero is allowed, and means lock() now'],
+    [0.5,        'fractions are fine'],
+    [60,         'sixty seconds is the longest grace'],
+  ] as const
+
+  const RefusedGraces = [
+    [60.001,     'past sixty seconds is refused'],
+    [-1,         'a negative grace is refused'],
+    [NaN,        'NaN is refused'],
+    [Infinity,   'Infinity is refused: the key must die'],
+    ["5",        'a number in a string is refused'],
+    [null,       'null is refused'],
+  ] as const
+
+  describe("graceSeconds", () => {
+    for (const [grace, blurb] of AcceptedGraces) {
+      it(blurb, async () => {
+        const vault = await openUnlocked()
+        await vault.lockSoon(grace)
+        expect(vault.getSnapshot().state).to.eq('locked')
+      })
+    }
+    for (const [grace, blurb] of RefusedGraces) {
+      it(blurb, async () => {
+        const vault = await openUnlocked()
+        const err = await expectRefusal(vault.lockSoon(grace as unknown as number), 'bad_option')
+        expect(err.message).to.include('graceSeconds')
+        expect(vault.getSnapshot().state).to.eq('unlocked')
+      })
+    }
+  })
+})
+
 describe("the key deriver seam", () => {
   it("a vault made under one deriver refuses to unlock under another, by label", async () => {
     const world = makeWorld()
@@ -1267,6 +1570,38 @@ describe("close", () => {
     vault.close()
     await expectRefusal(vault.read('anything'), 'vault_closed')
     await expectRefusal(vault.unlock('pw'), 'vault_closed')
+  })
+
+  it("an unlock under way when the handle closes takes nothing up, remembers nothing, and throws 'vault_closed'", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.lock()
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw'), 'vault_closed')
+    await gate.reached
+    vault.close()
+    gate.release()
+    await unlocking
+    expect(await world.rememberedUnlock()).to.be.null
+    const reopened = await world.open()
+    expect(reopened.getSnapshot().state).to.eq('locked')
+    vi.restoreAllMocks()
+  })
+
+  it("a close during the unlock's device record write: the record is erased again", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.lock()
+    const gate = world.holdNextRemember()
+    const unlocking = expectRefusal(vault.unlock('pw'), 'vault_closed')
+    await gate.reached
+    vault.close()
+    gate.release()
+    await unlocking
+    expect(await world.rememberedUnlock()).to.be.null
+    vi.restoreAllMocks()
   })
 
   it("closing forgets nothing stored: the next open still finds the vault", async () => {
