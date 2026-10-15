@@ -9,19 +9,24 @@ export interface MaskOpts {
   tail?: number
   /** Fewest stars the result may carry, however short the whisper. Default 6. */
   minStars?: number
-  /** Longest result worth showing, in characters; longer collapses to `***...***`. Default 15. `Infinity` never collapses. */
+  /**
+   * Longest result, in characters: a longer one collapses to `head`, `***...***`, `tail`. Default
+   * 15, or `head + tail + 9` when that is more. At least `head + tail + 9`; `Infinity` never collapses.
+   */
   maxLen?: number
 }
 
 /** The stars-and-dots a masked whisper collapses to once the result would pass `maxLen`. */
 const Collapsed = '***...***'
 
+const DefaultMaxLen = 15
+
 const wholeCount = Z.number().int().nonnegative()
 const maskOpts = Z.object({
   head:     wholeCount.default(2),
   tail:     wholeCount.default(4),
   minStars: wholeCount.default(6),
-  maxLen:   Z.union([Z.literal(Infinity), wholeCount]).default(15),
+  maxLen:   Z.union([Z.literal(Infinity), wholeCount]).optional(),
 })
 
 const parseMaskOpts = (candidate: MaskOpts | undefined): Required<MaskOpts> => {
@@ -29,7 +34,16 @@ const parseMaskOpts = (candidate: MaskOpts | undefined): Required<MaskOpts> => {
   if (! checked.success) {
     throw new VaultError('bad_option', 'mask takes head, tail and minStars as whole numbers of characters, and maxLen as a whole number or Infinity, none below zero.')
   }
-  return checked.data
+  const { head, tail, minStars } = checked.data
+
+  // A collapsed result is head + tail characters around the marker, so a maxLen below that could
+  // make the result longer than maxLen: refuse it, so that maxLen is always a true ceiling.
+  const shortestMaxLen = head + tail + Collapsed.length
+  const maxLen = checked.data.maxLen ?? Math.max(DefaultMaxLen, shortestMaxLen)
+  if (maxLen < shortestMaxLen) {
+    throw new VaultError('bad_option', `mask's maxLen must be at least head + tail + ${String(Collapsed.length)}, the room a collapsed result needs: with head ${String(head)} and tail ${String(tail)} that is ${String(shortestMaxLen)}. Raise maxLen, or lower head or tail.`)
+  }
+  return { head, tail, minStars, maxLen }
 }
 
 /**
@@ -38,12 +52,18 @@ const parseMaskOpts = (candidate: MaskOpts | undefined): Required<MaskOpts> => {
  * `Intl.Segmenter`.
  */
 const charsOf = (text: string): string[] => {
-  if (typeof Intl.Segmenter !== 'function') { return text.match(/./gsu) ?? [] }
+  if (typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') { return text.match(/./gsu) ?? [] }
   return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), (part) => part.segment)
 }
 
-/** Control characters (newline, return and tab among them) and the line and paragraph separators. */
-const Unprintable = /[\p{Cc}\p{Zl}\p{Zp}]/gu
+/**
+ * What `mask` removes before it counts: control characters (newline, return and tab among them),
+ * the line and paragraph separators, the bidirectional controls (which could make the end of a
+ * result read in the wrong order), and the characters that take no room on screen but would
+ * count as one (zero-width space, word joiner, byte-order mark). The zero-width joiner and
+ * non-joiner, variation selectors and tag characters stay: emoji and many scripts need them.
+ */
+const Unprintable = /[\p{Cc}\p{Zl}\p{Zp}\p{Bidi_Control}\u{200B}\u{2060}\u{FEFF}]/gu
 
 /**
  * A whisper's outline, safe to show: its first and last few characters with stars between, so a
@@ -51,13 +71,14 @@ const Unprintable = /[\p{Cc}\p{Zl}\p{Zp}]/gu
  * public: show it, but never count on it to hide more than it does -- it gives away the whisper's
  * ends, and (below `maxLen`) its length.
  *
- * Control characters are removed first. A character is a user-perceived one, so an emoji or an
- * accented letter is never split. At least `minStars` stars always stand in the whisper's place:
+ * Control characters, bidirectional controls and invisible spaces are removed first. A character
+ * is a user-perceived one, so an emoji or an accented letter is never split. At least `minStars` stars always stand in the whisper's place:
  * a whisper too short to keep `head` and `tail` and still hide `minStars` characters gives up
  * `head` characters first, then `tail`, and one shorter than `minStars` shows only stars. A
- * result that would pass `maxLen` characters is instead the `head`, `***...***`, then the `tail`
- * (so `maxLen` wins over `minStars`, if they disagree). A whisper with nothing left to show gives
- * the empty string.
+ * result that would pass `maxLen` characters is instead the `head` kept, `***...***`, then the
+ * `tail` kept, which is never longer than `maxLen` (a `maxLen` too small for that is refused), and
+ * wins over `minStars` if they disagree. A whisper with nothing left to show gives the empty
+ * string.
  *
  * Pass `{ head: 0, tail: 0 }` to show nothing of the whisper but how long it is. Lower `minStars`
  * with care: at 0 a short whisper may be shown whole.
@@ -74,6 +95,7 @@ const Unprintable = /[\p{Cc}\p{Zl}\p{Zp}]/gu
  * @example mask('abc')                                      // '******'
  * @example mask('sk-1234abcd', { head: 0, tail: 0 })        // '***********'
  * @example mask('sk-\nant-\tabcd1234')                      // 'sk*********1234'
+ * @example mask('sk-ant-abcd1234', { maxLen: 5 })           // throws 'bad_option': room for a collapsed result is head + tail + 9
  */
 export const mask = (whisper: string, opts?: MaskOpts): string => {
   if (typeof whisper !== 'string') {
