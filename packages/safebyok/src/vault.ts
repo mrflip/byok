@@ -628,7 +628,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   /**
    * True when the vault has shut (or closed) since `shutsThen`, or the bundle standing now is no
-   * longer the one `standing` proved a passphrase against: destroyed, made anew, or its passphrase
+   * longer the one `standing` proved a passphrase against: destroyed, made anew, or its unlocks
    * changed, here or elsewhere.
    */
   const outrun = (standing: VaultBundle, shutsThen: number) => (
