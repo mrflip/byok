@@ -105,7 +105,7 @@ pnpm test            # vitest, every package; pnpm test:coverage likewise
 pnpm lint            # eslint, every package
 pnpm typecheck       # tsc --noEmit, every package
 pnpm build           # tsdown: ESM + CJS + declarations into each dist/, checked by publint and attw
-pnpm size            # the tree-shaking budget: size-limit over the built core, per import
+pnpm size            # the tree-shaking budget: size-limit over the built packages, per import
                      # shape (.size-limit.json); CI runs it after the build
 pnpm --filter safebyok test        # one package, any script (or `pnpm test` in its directory);
                                    # it builds the packages it depends on first
@@ -116,7 +116,8 @@ pnpm changeset                     # a PR's release note; `--empty` when it need
 ## Layout
 
 * `packages/` -- the workspace packages: `safebyok` (the core), `safebyok-react` (the React
-  binding), `safebyok-convex` (the Convex storage adapter). Each has its own `package.json`,
+  binding), `safebyok-convex` (the Convex storage adapter), `safebyok-argon2-wasm` (a
+  WebAssembly key deriver). Each has its own `package.json`,
   configs, `src/` and `tests/`, and runs its own `pnpm justify`; the root's runs them all.
 * In a package, `src/index.ts` is the entry point; nothing else is importable by a consumer unless
   it is its own entry in that package's `tsdown.config.ts` (in `safebyok-convex`, its
