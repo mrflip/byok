@@ -42,6 +42,13 @@ describe("cipherBinding", () => {
     // A naive join would make ('ab','c') and ('a','bc') the same binding; the encoding must not.
     expect(toB64(cipherBinding('ab', 'c'))).to.not.eq(toB64(cipherBinding('a', 'bc')))
   })
+
+  it("encodes a record part with its keys sorted, an undefined field left out as if never there", () => {
+    const header = cipherBinding('safebyok-lockbox-v1', { revision_id: 'r1', boxlabel: 'anthropic', changed_at: 1 })
+    expect(toB64(cipherBinding('safebyok-lockbox-v1', { boxlabel: 'anthropic', changed_at: 1, revision_id: 'r1' }))).to.eq(toB64(header))
+    expect(toB64(cipherBinding('safebyok-lockbox-v1', { boxlabel: 'anthropic', changed_at: 1, revision_id: 'r1', note: undefined }))).to.eq(toB64(header))
+    expect(toB64(cipherBinding('safebyok-lockbox-v1', { boxlabel: 'anthropic', changed_at: 1, revision_id: 'r1', note: '' }))).to.not.eq(toB64(header))
+  })
 })
 
 describe("cipher and decipher", () => {

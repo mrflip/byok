@@ -49,17 +49,18 @@ const IvBytes = 12
 
 /**
  * One part of a {@link cipherBinding}: a string or number, or a flat record of them -- the public
- * header of an unlock envelope, say -- encoded with its keys sorted.
+ * header of an unlock envelope or a lockbox, say -- encoded with its keys sorted. A field of the
+ * record that is undefined is left out, as JSON leaves it out: the same as a field never there.
  */
-export type CipherBindingPart = string | number | Readonly<Record<string, string | number>>
+export type CipherBindingPart = string | number | Readonly<Record<string, string | number | undefined>>
 
 /**
  * The context an encryption is bound to, as AES-GCM additional data: a deterministic encoding of
  * the given parts (app, user, vault, lockbox, revision, purpose -- whatever names the slot).
  * Rebuilt rather than stored; if any part differs at decryption, the ciphertext refuses to open.
  *
- * @example cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', vaultId, 1, 'vault_key_local_wrapped')
- * @example cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', vaultId, 'vault_key_passphrase_wrapped', { method: 'passphrase', unlock_id, unlocklabel, key_deriver_label, salt_b64 })
+ * @example cipherBinding('safebyok-unlock-v1', 'acme', 'u1', 'main', vaultId, 1, askPassphraseAt, 'vault_key_local_wrapped')
+ * @example cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', vaultId, registeredAt, 'vault_key_passphrase_wrapped', { method: 'passphrase', unlock_id, unlocklabel, key_deriver_label, salt_b64 })
  */
 export const cipherBinding = (...parts: readonly CipherBindingPart[]): Uint8Array => (
   new TextEncoder().encode(stableJsonify(parts))
@@ -102,10 +103,11 @@ export const importWrappingKeyBytes = (keyBytes: Uint8Array): Promise<CryptoKey>
 /**
  * A non-extractable AES-GCM wrapping key made from secret bytes that are already uniformly random
  * -- a passkey's PRF output -- by HKDF-SHA256 (RFC 5869), with no salt (the RFC's default, for
- * input that is already uniform) and `info` naming what the key is for, so the same bytes put to
- * another use make another key: the passkeyKey. The bytes stay with the caller; drop them promptly.
+ * input that is already uniform) and `info` naming what the key is for and where, so the same
+ * bytes put to another use, or in another place, make another key: the passkeyKey. The bytes stay
+ * with the caller; drop them promptly.
  *
- * @example await deriveWrappingKey(prfBytes, cipherBinding('safebyok-vault-v1', 'vault_key_passkey_wrapped', credentialId))
+ * @example await deriveWrappingKey(prfBytes, cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', vaultId, registeredAt, 'vault_key_passkey_wrapped', header))
  */
 export const deriveWrappingKey = async (keyBytes: Uint8Array, info: Uint8Array): Promise<CryptoKey> => {
   const inputKey = await crypto.subtle.importKey('raw', keyBytes as BufferSource, 'HKDF', false, ['deriveKey'])
