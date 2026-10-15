@@ -1,6 +1,6 @@
 # Thread 13: error_kinds (2026-10-15)
 
-Branch `20261015-error_kinds`, PR not yet filed, stacked on [#46](https://github.com/mrflip/safebyok/pull/46)
+Branch `20261015-error_kinds`, PR PRNUM, stacked on [#46](https://github.com/mrflip/safebyok/pull/46)
 (thread 12). Justify: green (core 322, convex 257, react 15, demo 28, root 91).
 
 * **Built**:
@@ -23,6 +23,13 @@ Branch `20261015-error_kinds`, PR not yet filed, stacked on [#46](https://github
   React binding names kinds only to branch on (`vault_locked`, `wrong_passphrase`). So nothing
   was added to the core. `not_permitted` is never thrown by the core, only by adapters
   (the Convex server, via `convexVaultDB`'s mapping).
+
+* **Review**: 0 significant, 6 minor. The reviewer's commit efa6d7f makes the core and React
+  READMEs list `corrupt_record` among `openVault`'s refusals (its first read can throw it). I made
+  two fixes after it: the errors test uses `to.be.true` / `to.be.false` (STYLE.md), and the
+  changeset names `safebyok-react` too. Left as is: `unknown_key_deriver` as misuse (open to the
+  Coach), the `absent_vault` comment (for #37), the provider's doc block (goes with TODO.md's open
+  question), the heading-dependent README test.
 
 * **Decisions taken**:
   - **Docs, not an export.** No `VaultErrorFamilies` or `isMisuse`: nothing in the packages
