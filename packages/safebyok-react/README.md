@@ -22,6 +22,21 @@ pnpm add safebyok safebyok-react react
 `safebyok` and `react` are peer dependencies: the host app installs them itself, so the binding and
 the app share one copy of each.
 
+## When opening fails
+
+If `openVault` rejects -- a bad label or option, or storage that cannot be reached -- the provider
+throws that error while rendering. Wrap it in an error boundary, keyed on the user's identity, so
+the boundary's fallback shows the failure and a different user (or a sign-out and back in) gets a
+fresh attempt:
+
+```tsx
+<ErrorBoundary key={userId ?? 'signed-out'} fallback={<VaultTroubleNotice />}>
+  <VaultProvider applabel="acme" vaultlabel="main" userId={userId} vaultDB={vaultDB} deviceDB={deviceDB} keyDeriver={keyDeriver}>
+    <App />
+  </VaultProvider>
+</ErrorBoundary>
+```
+
 ## Development
 
 `pnpm justify` here runs lint, typecheck, tests (vitest + testing-library under jsdom) and the
