@@ -70,10 +70,6 @@ Small irritants, each a few lines, picked up by whoever is nearby.
   `packages/safebyok/tests/crypto.test.ts` with `tweakB64`; the same overwrite-with-`A` remains in
   `packages/safebyok/tests/vault.test.ts` ("a lockbox with altered ciphertext refuses to open")
   and fails one run in sixty-four. Use the helper. (Low-hanging-fruit thread 10 sweeps it in.)
-* **Dependabot after the move.** `.github/dependabot.yml` still says `directory: /`, which should
-  cover a pnpm workspace from its root lockfile, but nobody has seen it update a dependency under
-  `packages/` or `demos/` since the core moved there. Check its next weekly run; if it skips them,
-  replace `directory: /` with `directories: ['/', '/packages/*', '/demos/*']`.
 * **Click through the demo's passphrase dialog.** No agent has a browser, so the dialog in
   `demos/safebyok-demo-react` has never been exercised by hand since `safebyok-react` became a
   built package. `pnpm --filter safebyok-demo-react dev`, then set, enter, mistype and dismiss a
