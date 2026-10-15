@@ -34,7 +34,7 @@ export const BundleColumns = everyFieldOf<VaultBundle>()([
   ['vaultlabel',       'text'],
   ['format',           'text'],
   ['vault_id',         'text'],
-  ['passphrase_epoch', 'bigint'],
+  ['unlock_epoch', 'bigint'],
   ['unlocks',          'jsonb'],
   ['registered_at',    'bigint'],
 ] as const)

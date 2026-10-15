@@ -195,7 +195,7 @@ describe("the fixtures", () => {
 
   it("bundleOf: a shape-valid VaultBundle, with any field overridden", () => {
     expect(VaultBundle.safeParse(TH.bundleOf('u1')).success).to.be.true
-    expect(TH.bundleOf('u1', { passphrase_epoch: 2 })).to.deep.equal({ ...TH.bundleOf('u1'), passphrase_epoch: 2 })
+    expect(TH.bundleOf('u1', { unlock_epoch: 2 })).to.deep.equal({ ...TH.bundleOf('u1'), unlock_epoch: 2 })
   })
 
   it("noBoxYet and thisVault: the expectations u1's vault meets, before its first box and for an erase", async () => {

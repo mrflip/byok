@@ -152,14 +152,14 @@ export const passkeyOf = async (tag: string, prfSaltB64?: string): Promise<Passk
  * tests, which never decrypt. Its vault_id is `vault-id-<userId>`, its epoch 1, and its one way in
  * an {@link envelopeOf} labelled `passphrase` whose wrap is `bundle-<userId>`.
  *
- * @example bundleOf('u1', { passphrase_epoch: 2 })
+ * @example bundleOf('u1', { unlock_epoch: 2 })
  * @example bundleOf('u1', { unlocks: [envelopeOf('passphrase'), envelopeOf('home_phrase')] })
  */
 export const bundleOf = (userId: string, overrides: Partial<VaultBundle> = {}): VaultBundle => ({
   format:              'safebyok-vault-v1',
   ...scopeOf(userId),
   vault_id:            `vault-id-${userId}`,
-  passphrase_epoch:    1,
+  unlock_epoch:    1,
   unlocks:             [envelopeOf('passphrase', { vault_key_wrapped: fakeCiphered(`bundle-${userId}`) })],
   registered_at:       Date.UTC(2026, 9, 14),
   ...overrides,
@@ -204,7 +204,7 @@ export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
   format:                  'safebyok-unlock-v1',
   ...scopeOf(userId),
   vault_id:                `vault-id-${userId}`,
-  passphrase_epoch:        1,
+  unlock_epoch:        1,
   local_unlock_key:        await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey']),
   vault_key_local_wrapped: fakeCiphered(`local-${userId}`),
   ask_passphrase_at:       1_900_000_000_000,
@@ -497,30 +497,30 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
 
     it("updateBundle lands while the standing bundle is the one proven against", async () => {
       const vaultDB = await withBundle()
-      const next = { ...bundleOf('u1'), passphrase_epoch: 2 }
-      await vaultDB.updateBundle(next, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
+      const next = { ...bundleOf('u1'), unlock_epoch: 2 }
+      await vaultDB.updateBundle(next, { vault_id: 'vault-id-u1', unlock_epoch: 1 })
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(next)
     })
 
-    it("updateBundle refuses over a passphrase_epoch since moved on, writing nothing", async () => {
+    it("updateBundle refuses over a unlock_epoch since moved on, writing nothing", async () => {
       const vaultDB = await withBundle()
-      const theirs = { ...bundleOf('u1'), passphrase_epoch: 2, unlocks: [envelopeOf('passphrase', { vault_key_wrapped: fakeCiphered('theirs') })] }
-      await vaultDB.updateBundle(theirs, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
-      const mine = { ...bundleOf('u1'), passphrase_epoch: 2, unlocks: [envelopeOf('passphrase', { vault_key_wrapped: fakeCiphered('mine') })] }
-      await expectRefusal(vaultDB.updateBundle(mine, { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'stale_write')
+      const theirs = { ...bundleOf('u1'), unlock_epoch: 2, unlocks: [envelopeOf('passphrase', { vault_key_wrapped: fakeCiphered('theirs') })] }
+      await vaultDB.updateBundle(theirs, { vault_id: 'vault-id-u1', unlock_epoch: 1 })
+      const mine = { ...bundleOf('u1'), unlock_epoch: 2, unlocks: [envelopeOf('passphrase', { vault_key_wrapped: fakeCiphered('mine') })] }
+      await expectRefusal(vaultDB.updateBundle(mine, { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(theirs)
     })
 
     it("updateBundle refuses over a vault made anew under another vault_id", async () => {
       const vaultDB = await withBundle()
-      const next = { ...bundleOf('u1'), vault_id: 'vault-id-gone', passphrase_epoch: 2 }
-      await expectRefusal(vaultDB.updateBundle(next, { vault_id: 'vault-id-gone', passphrase_epoch: 1 }), 'stale_write')
+      const next = { ...bundleOf('u1'), vault_id: 'vault-id-gone', unlock_epoch: 2 }
+      await expectRefusal(vaultDB.updateBundle(next, { vault_id: 'vault-id-gone', unlock_epoch: 1 }), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
     })
 
     it("updateBundle refuses where no bundle stands: an update never creates", async () => {
       const vaultDB = await makeVaultDB()
-      await expectRefusal(vaultDB.updateBundle(bundleOf('u1'), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'stale_write')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
     })
   })
@@ -705,8 +705,8 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       const overlong = boxOf('anthropic', 'one', { note: 'n'.repeat(257) })
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), overlong, noBoxYet), 'bad_option')
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: '' }), 'bad_option')
-      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { passphrase_epoch: 0 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'bad_option')
-      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { vault_id: 'vault-id-new', passphrase_epoch: 2 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'bad_option')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { unlock_epoch: 0 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'bad_option')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { vault_id: 'vault-id-new', unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'bad_option')
       await expectRefusal(vaultDB.eraseVault(scopeOf('u1'), { vault_id: '' }), 'bad_option')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
       expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)

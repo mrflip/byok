@@ -179,7 +179,7 @@ describe("the README route recipe", () => {
     expect(notMine).to.be.instanceOf(VaultError)
     expect(notMine.kind).to.eq('not_permitted')
     await browser.createBundle(TH.bundleOf('u1'))
-    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', passphrase_epoch: 7 }))
+    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 7 }))
     expect(stale.kind).to.eq('stale_write')
   })
 

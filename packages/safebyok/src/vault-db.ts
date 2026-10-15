@@ -4,16 +4,16 @@ import { VaultError } from './errors'
 import type { StringStore } from './string-store'
 
 /**
- * What a bundle update was proven against: the vault and the passphrase epoch of the bundle the
+ * What a bundle update was proven against: the vault and the unlock epoch of the bundle the
  * writer read. The update lands only while the standing bundle still has both. Plain JSON, so it
  * crosses any wire as-is.
  *
- * @example { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }
+ * @example { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch }
  */
 export type BundleExpectation = Z.infer<typeof BundleExpectation>
 const BundleExpectation = Z.object({
   vault_id:         VaultBundle.shape.vault_id,
-  passphrase_epoch: VaultBundle.shape.passphrase_epoch,
+  unlock_epoch: VaultBundle.shape.unlock_epoch,
 })
 
 /**
@@ -53,7 +53,7 @@ const EraseExpectation = Z.object({
  *    fields are base64url text), so any backend that can hold JSON can hold a vault, as-is.
  *  * **Never look inside.** Every secret field arrives encrypted; nothing you hold can open a
  *    vault, and nothing safebyok does ever needs you to understand a record -- only to compare a
- *    few public fields (`vault_id`, `passphrase_epoch`, `revision_id`) before a write.
+ *    few public fields (`vault_id`, `unlock_epoch`, `revision_id`) before a write.
  *  * **Write only as expected.** Every update and erase carries an expectation of what stands in
  *    storage, and writes only if it still does: check and write in one atomic step (a
  *    transaction, a conditional write), and resolve `false` when the expectation fails. An
@@ -118,7 +118,7 @@ export abstract class VaultDB {
 
   /**
    * Replace the bundle with `bundle`, only while the standing one still has the `vault_id` and
-   * `passphrase_epoch` in `expected`. Refuses with kind `stale_write` otherwise -- including when
+   * `unlock_epoch` in `expected`. Refuses with kind `stale_write` otherwise -- including when
    * no bundle stands at all -- and writes nothing. A vault's `vault_id` never changes, so `bundle`
    * must carry the one in `expected`: kind 'bad_option' otherwise.
    */
@@ -232,7 +232,7 @@ export abstract class VaultDB {
   protected abstract doCreateBundle(bundle: VaultBundle): Promise<unknown>
   /**
    * Replace the standing bundle with `bundle` if, and only if, it has `expected.vault_id` and
-   * `expected.passphrase_epoch`. True when it was written; false, writing nothing, when the
+   * `expected.unlock_epoch`. True when it was written; false, writing nothing, when the
    * expectation failed or no bundle stands.
    */
   protected abstract doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean>
@@ -367,7 +367,7 @@ const checkRecord = <RecordT>(recordSchema: Z.ZodMiniType<RecordT>, raw: unknown
 // ---------------------------------------------- localVaultDB's own, not public surface
 
 // Just the fields an expectation compares; a standing row too damaged to show them fails it.
-const StandingBundle = Z.object({ vault_id: Z.string(), passphrase_epoch: Z.number() })
+const StandingBundle = Z.object({ vault_id: Z.string(), unlock_epoch: Z.number() })
 const StandingBox = Z.object({ revision_id: Z.string() })
 
 /** True when the bundle row standing in storage is the one `expected` names. */
@@ -375,7 +375,7 @@ const bundleMeetsExpectation = (standingBundle: unknown, expected: BundleExpecta
   const standing = StandingBundle.safeParse(standingBundle)
   return standing.success
     && standing.data.vault_id === expected.vault_id
-    && standing.data.passphrase_epoch === expected.passphrase_epoch
+    && standing.data.unlock_epoch === expected.unlock_epoch
 }
 
 /** True when the bundle row standing in storage belongs to the vault `expected` names. */

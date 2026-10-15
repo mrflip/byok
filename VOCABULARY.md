@@ -76,11 +76,11 @@ wrong or has been tampered with, decryption fails.
 | **keyDeriverLabel**      | The keyDeriverSpec's name (`argon2id_web_v1` for the supplied one), stored with each passphrase envelope so that the vault says how it was made. A label always means the same parameters. | KDF identifier       |
 | **key deriver**          | What makes the passphraseKey under a keyDeriverSpec: `argon2idWebV1Deriver` for the supplied one, `argon2idDeriver(spec)` for a host's own. One standing in for a supplied spec carries its parameters, or the vault refuses it. | KDF                  |
 | **cipherIv**             | 12 random bytes, fresh for every encryption, stored beside the ciphertext it opens.                                                                                  | IV, nonce            |
-| **cipherAdditionalData** | The context an encryption is bound to: the record's format, which app, user and vault, which lockbox and revision (or, for a key wrap, which passphraseEpoch), and which field it is. It is rebuilt rather than stored, so ciphertext copied anywhere else will not open. | associated data (AAD) |
+| **cipherAdditionalData** | The context an encryption is bound to: the record's format, which app, user and vault, which lockbox and revision (or, for a key wrap, which unlockEpoch), and which field it is. It is rebuilt rather than stored, so ciphertext copied anywhere else will not open. | associated data (AAD) |
 | **ciphertext**           | The encrypted bytes, with their authentication tag on the end.                                                                                                       | ciphertext           |
 | **vaultId**              | A random id minted when the vault is made, and never changed; part of every cipherAdditionalData.                                                                   | --                   |
 | **revisionId**           | A fresh id for each write of a lockbox. It is part of the cipherAdditionalData; storage refuses (`stale_write`) a write made from a stale read.                     | version, CAS token   |
-| **passphraseEpoch**      | A counter that goes up whenever the vault's unlocks change -- a passphrase or passkey added, removed or changed -- so other devices and remembered unlocks know to ask again. | key epoch       |
+| **unlockEpoch**          | A counter that goes up whenever the vault's unlocks change -- a passphrase or passkey added, removed or changed -- so other devices and remembered unlocks know to ask again. | key epoch       |
 
 ## Names, records and times
 
@@ -95,8 +95,8 @@ words of letters and digits joined by single underscores, such as `anthropic_api
 | **userId**                      | The signed-in user's id from your own auth, the one name in a scope that is not a label. Stored as `user_id`.                                                               |
 | **scope**                       | An applabel, a userId and a vaultlabel together: it names one vault (`VaultScope`).                                                                                         |
 | **note**                        | A lockbox's public text, up to 256 characters, which your UI may show while the vault is locked. It is never encrypted: never put a secret in it.                           |
-| **bundle**                      | The one record per vault that every device syncs (`VaultBundle`): the vaultId, passphraseEpoch, and its unlocks, each an unlock envelope. Nothing in it opens without a passphrase. |
-| **device unlock**               | (Also a remembered unlock.) What a device keeps to unlock without the passphrase (`DeviceUnlock`): the localUnlockKey, the vaultKeyLocalWrapped, the vaultId, the passphraseEpoch and the askPassphraseAt. It stays on the device. |
+| **bundle**                      | The one record per vault that every device syncs (`VaultBundle`): the vaultId, unlockEpoch, and its unlocks, each an unlock envelope. Nothing in it opens without a passphrase. |
+| **device unlock**               | (Also a remembered unlock.) What a device keeps to unlock without the passphrase (`DeviceUnlock`): the localUnlockKey, the vaultKeyLocalWrapped, the vaultId, the unlockEpoch and the askPassphraseAt. It stays on the device. |
 | **vaultDB**                     | The storage plug-in for what syncs: bundles and lockboxes, ciphertext only (`VaultDB`; `localVaultDB`, `idbVaultDB` and `convexVaultDB` are supplied).                      |
 | **deviceDB**                    | The storage plug-in for this device's device unlock (`DeviceDB`; `memoryDeviceDB` and `idbDeviceDB` are supplied).                                                          |
 | **registeredAt**, **changedAt** | When a lockbox was first stored, and when its whisper last changed; the bundle has a registeredAt too: when the vault was made. Stored as `registered_at` and `changed_at`. |

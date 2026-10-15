@@ -788,7 +788,7 @@ describe("the times a vault keeps", () => {
     expect(storedBundleOf(world)).to.include({ registered_at: madeAt })
     world.advance(60_000)
     await vault.changePassphrase('pw one', 'pw two')
-    expect(storedBundleOf(world)).to.include({ registered_at: madeAt, passphrase_epoch: 2 })
+    expect(storedBundleOf(world)).to.include({ registered_at: madeAt, unlock_epoch: 2 })
   })
 
   it("writes no created_at or updated_at, to a lockbox or a bundle", async () => {
@@ -1579,7 +1579,7 @@ describe("several passphrases", () => {
 
     await here.removeUnlock('first', unlockId)
     await vi.waitFor(() => { expect(there.getSnapshot().state).to.eq('locked') })
-    expect(storedBundleOf(world)['passphrase_epoch']).to.eq(3)
+    expect(storedBundleOf(world)['unlock_epoch']).to.eq(3)
     expect(here.getSnapshot().state).to.eq('unlocked')
   })
 
@@ -1791,7 +1791,7 @@ describe("passkeys", () => {
     await there.unlock(await TH.passkeyOf('laptop'))
     await here.removeUnlock('pw', unlockId)
     await vi.waitFor(() => { expect(there.getSnapshot().state).to.eq('locked') })
-    expect(storedBundleOf(world)['passphrase_epoch']).to.eq(3)
+    expect(storedBundleOf(world)['unlock_epoch']).to.eq(3)
     expect(here.getSnapshot().state).to.eq('unlocked')
   })
 

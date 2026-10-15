@@ -20,7 +20,7 @@ type Caller = ReturnType<ReturnType<typeof createTest>['withIdentity']>
 const EveryCall: [string, (caller: Caller) => Promise<unknown>][] = [
   ['getBundle',        (caller) => caller.query(api.safebyok.getBundle, { scope: u1 })],
   ['createBundle',     (caller) => caller.mutation(api.safebyok.createBundle, { bundle: TH.bundleOf('u1') })],
-  ['updateBundle',     (caller) => caller.mutation(api.safebyok.updateBundle, { bundle: TH.bundleOf('u1', { passphrase_epoch: 2 }), expected: { vault_id: 'vault-id-u1', passphrase_epoch: 1 } })],
+  ['updateBundle',     (caller) => caller.mutation(api.safebyok.updateBundle, { bundle: TH.bundleOf('u1', { unlock_epoch: 2 }), expected: { vault_id: 'vault-id-u1', unlock_epoch: 1 } })],
   ['getBox',           (caller) => caller.query(api.safebyok.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })],
   ['listBoxSummaries', (caller) => caller.query(api.safebyok.listBoxSummaries, { scope: u1 })],
   ['updateBox',        (caller) => caller.mutation(api.safebyok.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })],
@@ -43,7 +43,7 @@ describe("SafebyokComponent.api, for the vault's own user", () => {
     expect(await asU1.query(api.safebyok.getBundle, { scope: u1 })).to.deep.equal(TH.bundleOf('u1'))
     expect(await asU1.query(api.safebyok.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a1'))
     expect(await asU1.query(api.safebyok.watchVault, { scope: u1 })).to.deep.equal({
-      vault_id: 'vault-id-u1', passphrase_epoch: 1, boxes: [['anthropic_api_key', 'rev-a1']],
+      vault_id: 'vault-id-u1', unlock_epoch: 1, boxes: [['anthropic_api_key', 'rev-a1']],
     })
   })
 

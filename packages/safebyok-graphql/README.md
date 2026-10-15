@@ -159,7 +159,7 @@ by, exactly as safebyok wrote it:
 Each has an input type twin (`SafebyokVaultBundleInput`, and so on), and each expectation one
 of its own.
 
-* **Text is a `String`**, a count (`passphrase_epoch`) an `Int`, and a time a `Float` -- epoch
+* **Text is a `String`**, a count (`unlock_epoch`) an `Int`, and a time a `Float` -- epoch
   milliseconds, a whole number past what GraphQL's 32-bit `Int` holds.
 * **The bundle's `unlocks`** is a list of `SafebyokUnlockEnvelope`, each one opaque JSON, its
   `method` saying its shape: the adapter carries an envelope as it is, never looking inside, as

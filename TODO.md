@@ -132,9 +132,9 @@ first release; the Convex sprint's component thread puts the same columns in its
   `{ method: 'passphrase', key_deriver_label, salt_b64, vault_key_wrapped }`, where a passkey
   envelope later adds `credential_id` and a recovery envelope its own method. The binding's
   purpose string already names the method (`vault_key_passphrase_wrapped`), so each method gets
-  its own purpose and nothing already bound changes. `passphrase_epoch` stays bundle-wide (it is
-  the `versionedUpdate` expectation) and bumps when any envelope changes; whether it is renamed
-  `unlock_epoch` is the thread's call. This is what makes fingerprint unlock (8) and recovery
+  its own purpose and nothing already bound changes. `unlock_epoch` stays bundle-wide (it is
+  the `versionedUpdate` expectation) and bumps when any envelope changes (renamed from
+  `passphrase_epoch`, built). This is what makes fingerprint unlock (8) and recovery
   keys (*Not yet*) additive.
 * **The lockbox names its whisper codec and schema version.** `whisper_codec` (default
   `json_v1`, the stringifier label a pluggable stringifier will later vary) and
@@ -170,7 +170,7 @@ first release; the Convex sprint's component thread puts the same columns in its
   `changed_at` standing still across a write tells the backend two consecutive payloads were
   equal, one bit, only when a host re-stores identical content); bundle `registered_at`. Today's `created_at`/`updated_at` go: `updated_at` bumps on every
   store whether or not the contents changed, so it is a row fact under a content name, and the
-  bundle's is redundant with the passphrase epoch. The lockbox's ISO strings and the device
+  bundle's is redundant with the unlock epoch. The lockbox's ISO strings and the device
   record's epoch numbers become one convention (integers, which the clock seam already yields
   and any index sorts).
 * **`note` goes; a bound `public` bag is reserved in its place** (recommended, awaiting the

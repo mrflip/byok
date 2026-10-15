@@ -3,7 +3,7 @@ import type { BundleExpectation, EraseExpectation, LockboxExpectation } from 'sa
 /**
  * Whether what stands on the shelf is what a write expects: the comparisons every versioned
  * write makes before it lands, on the few public fields an adapter compares (`vault_id`,
- * `passphrase_epoch`, `revision_id`) and nothing else. They read the standing row as it is,
+ * `unlock_epoch`, `revision_id`) and nothing else. They read the standing row as it is,
  * unvalidated: a row too damaged to show a field fails the comparison, so nothing lands on it.
  * The expectation itself is clean -- `VaultDB`'s verbs checked it before the adapter saw it.
  * They hold for any key-value backend; one of your own keeps them as they are.
@@ -15,16 +15,16 @@ const fieldOf = (standing: unknown, field: string): unknown => (
 )
 
 /**
- * True when the bundle standing is the one `expected` names: its vault, at its passphrase epoch.
+ * True when the bundle standing is the one `expected` names: its vault, at its unlock epoch.
  *
  * @param standing - The bundle row standing in storage, or undefined when there is none.
  * @param expected - What the update was proven against.
  *
- * @example bundleMeetsExpectation(standing, { vault_id: 'v1', passphrase_epoch: 2 })
+ * @example bundleMeetsExpectation(standing, { vault_id: 'v1', unlock_epoch: 2 })
  */
 export const bundleMeetsExpectation = (standing: unknown, expected: BundleExpectation): boolean => (
   fieldOf(standing, 'vault_id') === expected.vault_id
-  && fieldOf(standing, 'passphrase_epoch') === expected.passphrase_epoch
+  && fieldOf(standing, 'unlock_epoch') === expected.unlock_epoch
 )
 
 /**
@@ -39,7 +39,7 @@ export const bundleMeetsExpectation = (standing: unknown, expected: BundleExpect
  */
 export const vaultMeetsExpectation = (standing: unknown, expected: EraseExpectation): boolean => (
   fieldOf(standing, 'vault_id') === expected.vault_id
-  && Number.isFinite(fieldOf(standing, 'passphrase_epoch'))
+  && Number.isFinite(fieldOf(standing, 'unlock_epoch'))
 )
 
 /**
