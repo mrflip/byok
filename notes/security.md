@@ -395,3 +395,12 @@ security expert who knows what questions to ask.
   backend cannot make one unlock derive more. Which envelope opened shows in how long the unlock
   took, on the device only. Envelopes made by a key deriver the vault was not opened with are
   passed over, and refused as `unknown_key_deriver` only when no envelope is left to try.
+* 2026-10-15: `safebyok-postgres` authorizes on the server, per request: `postgresVaultDB` is
+  made with the `userId` the host's auth verified, and refuses (`not_permitted`) any other user's
+  scope, or any while signed out, before querying; that check is the whole of the authorization.
+  Row-level security is on with no policy (the owner role bypasses it; every other role,
+  Supabase's Data API roles among them, reaches no row). The NOTIFY payload is the scope, which
+  any role able to connect may LISTEN for. The server holds a vault to no size of its own. Past
+  scope and boxlabel, a route's bundles, lockboxes and expectations are validated only as the
+  core's VaultDB validates them. A driver's error rides as `cause` and may quote key columns; the
+  README's route recipe sends the browser only a refusal's kind and message.
