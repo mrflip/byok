@@ -222,8 +222,9 @@ subscriber: at worst, a refresh that finds nothing new.
 ## What is stored
 
 Two tables, each record **a column to a field**, exactly as safebyok wrote it: text as text, a
-time or a count as a `bigint`, and each encrypted value -- a cipherIv and its ciphertext,
-`{ cipher_iv_b64, ciphertext_b64 }` -- as one opaque `jsonb`. Nothing is normalized: a note or a
+time or a count as a `bigint`, and each structured value as one opaque `jsonb` -- an encrypted
+value (a cipherIv and its ciphertext, `{ cipher_iv_b64, ciphertext_b64 }`), or the bundle's
+`unlocks`, its list of unlock envelopes. Nothing is normalized: a note or a
 user id reads back byte for byte.
 
 | Table                | One row per | Primary key                                    | Columns                                                                                           |
@@ -232,11 +233,12 @@ user id reads back byte for byte.
 | `safebyok_lockboxes` | lockbox     | `applabel`, `user_id`, `vaultlabel`, `boxlabel` | the vault's scope and `vault_id`, then every field of the `Lockbox`; a lockbox with no note, null |
 
 * **Encrypted**: each whisper (`whisper_ciphered`), each lockbox's lockboxKey
-  (`lockbox_key_wrapped`), and the vaultKey (`vault_key_passphrase_wrapped`).
+  (`lockbox_key_wrapped`), and the vaultKey, once under each way into the vault (each unlock
+  envelope's `vault_key_wrapped`, inside the bundle's `unlocks`).
 * **In the open**: the scope, each `boxlabel` and `note`, the `vault_id`, `passphrase_epoch`,
-  `revision_id`s, the passphraseSalt and key deriver's label, when each vault and lockbox was
-  first stored and each whisper last changed (`registered_at`, `changed_at`, epoch milliseconds),
-  and the length of every ciphertext.
+  `revision_id`s, each unlock envelope's method, id, label, salt and key deriver's label, when
+  each vault and lockbox was first stored and each whisper last changed (`registered_at`,
+  `changed_at`, epoch milliseconds), and the length of every ciphertext.
 * **Never**: a whisper, a passphrase, any key in usable form, or the device-local remembered
   unlock. No history: an update replaces its row (your database's backups and WAL keep what
   they keep).

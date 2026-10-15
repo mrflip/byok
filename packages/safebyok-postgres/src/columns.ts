@@ -2,8 +2,8 @@ import type { Lockbox, VaultBundle } from 'safebyok'
 
 /**
  * How one field is stored: `text` as given, `bigint` for a whole number (a time, an epoch), and
- * `jsonb` for an opaque structured value -- a Ciphered, which safebyok rebuilds its binding from
- * by field, so jsonb's reordering of its keys is harmless.
+ * `jsonb` for an opaque structured value -- a Ciphered, or a bundle's list of unlock envelopes --
+ * whose binding safebyok rebuilds from field values, so jsonb's reordering of keys is harmless.
  */
 export type ColumnKind = 'text' | 'bigint' | 'jsonb'
 
@@ -29,16 +29,14 @@ function everyFieldOf<RecordT>() {
  * vault-tables.sql, that names the bundle's columns. The compiler holds it to the bundle's shape.
  */
 export const BundleColumns = everyFieldOf<VaultBundle>()([
-  ['applabel',                     'text'],
-  ['user_id',                      'text'],
-  ['vaultlabel',                   'text'],
-  ['format',                       'text'],
-  ['vault_id',                     'text'],
-  ['passphrase_epoch',             'bigint'],
-  ['key_deriver_label',            'text'],
-  ['passphrase_salt_b64',          'text'],
-  ['vault_key_passphrase_wrapped', 'jsonb'],
-  ['registered_at',                'bigint'],
+  ['applabel',         'text'],
+  ['user_id',          'text'],
+  ['vaultlabel',       'text'],
+  ['format',           'text'],
+  ['vault_id',         'text'],
+  ['passphrase_epoch', 'bigint'],
+  ['unlocks',          'jsonb'],
+  ['registered_at',    'bigint'],
 ] as const)
 
 /**

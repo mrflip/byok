@@ -130,23 +130,33 @@ describe("postgresVaultDB, who may reach a vault", () => {
 })
 
 describe("postgresVaultDB, what it stores", () => {
-  it("stores a bundle a column to a field, its wrapped vaultKey as jsonb", async () => {
+  it("stores a bundle a column to a field, its unlock envelopes as one jsonb", async () => {
     const db = await TH.emptyDatabase()
     const vaultDB = TH.requestFor(db, 'u1')
     await vaultDB.createBundle(TH.bundleOf('u1'))
     const { rows } = await db.query('SELECT * FROM safebyok_bundles')
     expect(rows).to.deep.equal([{
-      applabel:                     'acme',
-      user_id:                      'u1',
-      vaultlabel:                   'main',
-      format:                       'safebyok-vault-v1',
-      vault_id:                     'vault-id-u1',
-      passphrase_epoch:             1,
-      key_deriver_label:            'test_digest_v0',
-      passphrase_salt_b64:          TH.bundleOf('u1').passphrase_salt_b64,
-      vault_key_passphrase_wrapped: TH.fakeCiphered('bundle-u1'),
-      registered_at:                Date.UTC(2026, 9, 14),
+      applabel:         'acme',
+      user_id:          'u1',
+      vaultlabel:       'main',
+      format:           'safebyok-vault-v1',
+      vault_id:         'vault-id-u1',
+      passphrase_epoch: 1,
+      unlocks:          TH.bundleOf('u1').unlocks,
+      registered_at:    Date.UTC(2026, 9, 14),
     }])
+  })
+
+  it("keeps a bundle's envelopes whole and in their order, through an update", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = TH.requestFor(db, 'u1')
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    const unlocks = [TH.envelopeOf('work_phrase'), TH.envelopeOf('home_phrase'), TH.envelopeOf('passphrase')]
+    const next = TH.bundleOf('u1', { passphrase_epoch: 2, unlocks })
+    await vaultDB.updateBundle(next, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
+    const standing = await vaultDB.readBundle(u1)
+    expect(standing).to.deep.equal(next)
+    expect(standing?.unlocks.map((envelope) => envelope.unlocklabel)).to.deep.equal(['work_phrase', 'home_phrase', 'passphrase'])
   })
 
   it("stores a lockbox a column to a field, beside its vault's scope and vault_id, and no note as null", async () => {
@@ -315,11 +325,11 @@ describe("postgresVaultDB, in trouble", () => {
     const db = await TH.emptyDatabase()
     const vaultDB = TH.requestFor(db, 'u1')
     await vaultDB.createBundle(TH.bundleOf('u1'))
-    await db.query(`UPDATE safebyok_bundles SET vault_key_passphrase_wrapped = '"not a ciphered"'::jsonb`)
+    await db.query(`UPDATE safebyok_bundles SET unlocks = '"not a list"'::jsonb`)
     const refusal = await TH.refusalOf(vaultDB.readBundle(u1))
     expect(refusal.kind).to.eq('corrupt_record')
-    const { rows } = await db.query<{ wrapped: unknown }>('SELECT vault_key_passphrase_wrapped AS wrapped FROM safebyok_bundles')
-    expect(rows[0]?.wrapped).to.eq('not a ciphered')
+    const { rows } = await db.query<{ unlocks: unknown }>('SELECT unlocks FROM safebyok_bundles')
+    expect(rows[0]?.unlocks).to.eq('not a list')
   })
 })
 

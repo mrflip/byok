@@ -14,21 +14,20 @@ export const VaultTablesSql = `-- safebyok-postgres: the tables a safebyok vault
 -- again: it creates only the tables that are missing, and replaces its function and triggers.
 --
 -- Each record is stored field by field, a column to a field, exactly as safebyok wrote it:
--- text as text, a time or a count as a bigint, and each encrypted value (a cipherIv and its
--- ciphertext) as one opaque jsonb. A record's secret fields are ciphertext, every one.
+-- text as text, a time or a count as a bigint, and each structured value -- an encrypted value
+-- (a cipherIv and its ciphertext), or a bundle's list of unlock envelopes -- as one opaque jsonb.
+-- A record's secret fields are ciphertext, every one.
 
 -- One bundle per vault.
 CREATE TABLE IF NOT EXISTS safebyok_bundles (
-  applabel                     text   NOT NULL,
-  user_id                      text   NOT NULL,
-  vaultlabel                   text   NOT NULL,
-  format                       text   NOT NULL,
-  vault_id                     text   NOT NULL,
-  passphrase_epoch             bigint NOT NULL,
-  key_deriver_label            text   NOT NULL,
-  passphrase_salt_b64          text   NOT NULL,
-  vault_key_passphrase_wrapped jsonb  NOT NULL,
-  registered_at                bigint NOT NULL,
+  applabel         text   NOT NULL,
+  user_id          text   NOT NULL,
+  vaultlabel       text   NOT NULL,
+  format           text   NOT NULL,
+  vault_id         text   NOT NULL,
+  passphrase_epoch bigint NOT NULL,
+  unlocks          jsonb  NOT NULL,
+  registered_at    bigint NOT NULL,
   PRIMARY KEY (applabel, user_id, vaultlabel),
   -- What a lockbox's foreign key names: its vault, down to the vault_id.
   UNIQUE (applabel, user_id, vaultlabel, vault_id)
