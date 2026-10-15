@@ -1,6 +1,6 @@
 # Thread 5: docs_refresh (2026-10-15)
 
-Branch `20261015-docs_refresh`, PR not yet filed, stacked on #66. Justify: green (core 705,
+Branch `20261015-docs_refresh`, PR #69, stacked on #66. Not put through a thread review (documents and two comments). Justify: green (core 705,
 convex 265, react 28, demo 61, root 105 tests).
 
 * **Built**: `notes/security.md` checked entry by entry against the code on #66's tip;
