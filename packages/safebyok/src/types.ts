@@ -87,7 +87,8 @@ const cryptoKeyHandle = Z.custom<CryptoKey>((val) => val instanceof CryptoKey, '
 
 /**
  * A lockbox's public note, shown beside it while the vault is locked: text of at most 256
- * characters. Never put secret material here.
+ * characters. Never put secret material here. A host's form can check a note with it before
+ * `store()`, which refuses one that fails with kind 'bad_option'.
  *
  * @example LockboxNote.parse('work account')
  * @example LockboxNote.safeParse('n'.repeat(257)).success  // false: 256 characters at most
