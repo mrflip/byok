@@ -45,7 +45,7 @@ builds on them (threads 3 and 4). The skills (thread 1) are independent and smal
 
 ## Ground rules for this sprint
 
-* **The core changes in thread 2 only.** Threads 3 and 4 live in `packages/safebyok-convex/`. If
+* **The core changes in thread 2 only** (*relaxed 2026-10-15, see the Coach's rulings above*). Threads 3 and 4 live in `packages/safebyok-convex/`. If
   thread 4 finds it needs a core change (an export, an error kind thread 2 did not add), it makes
   the smallest one, declares it in its thread file and PR, and says why thread 2 missed it.
 * **Two contracts are in play** (CLAUDE.md, *What the package promises*). Thread 2 changes the
@@ -234,6 +234,12 @@ thread 2 files; thread 4 from thread 3's tip once thread 3 files. The Coach merg
 
 * 2026-10-15: **`eraseBox` carries a `vault_id`-only expectation** -- "it's the most likely cause of a vault
   replacing another one" -- and, asked, **`eraseVault` too**. Built in thread 2 (#18), mirrored in thread 3.
+* 2026-10-15: **Generic kinds live in the core** ("put things as generic as stale_write, not_permitted,
+  storage_unavailable in the core"), and **the Convex threads may influence the core's architecture**, since
+  they are proving it out. This relaxes the ground rule below: threads 3 and 4 may change `src/` where the
+  adapter shows the core is wrong or missing something generic. Each such change is a separate commit with
+  the core's prefix, declared in the thread file and the PR, and must keep every stored record readable.
+  Anything Convex-specific stays in `packages/safebyok-convex/`.
 
 ## For the Coach
 
