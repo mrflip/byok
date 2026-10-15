@@ -8,11 +8,11 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | # | Thread             | Base                  | Status  |
 | - | ------------------ | --------------------- | ------- |
 | 1 | kdf_configs        | #66 tip `5fefc90`     | filed [#68](https://github.com/mrflip/safebyok/pull/68) |
-| 2 | vaultdb_validation | #66 tip `dfdbbec`     | in review |
+| 2 | vaultdb_validation | #66 tip `dfdbbec`     | filing |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
 | 4 | ci_tooling         | #66 tip `5fefc90`     | underway |
-| 5 | docs_refresh       | #66 tip `5fefc90`     | filing (no review: documents only) |
-| 6 | thin_tests         | #66 tip `dfdbbec`     | pending |
+| 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
+| 6 | thin_tests         | thread 2's tip, once filed | waiting on thread 2 |
 | 7 | test_helpers       | thread 6's tip        | pending |
 | 8 | comment_width      | #66 tip, after 1-7    | pending |
 
@@ -64,8 +64,18 @@ that client** rather than on Zod letting a field through.
 whichever merges second will fail `pnpm size` in CI and needs either a raised budget (the Coach's
 word) or a trim. Thread 8 and anything else touching `vault.ts` should not add to the bundle.
 
-*Orchestrator:* thread 5, docs_refresh, is `ready` and goes straight to filing: its diff is
+*Orchestrator:* thread 5, docs_refresh, filed as [#69](https://github.com/mrflip/safebyok/pull/69) without a thread review: its diff is
 `notes/security.md`, `VOCABULARY.md` and two reworded comments in `vault.ts`, so no thread review.
 It added a "Names, records and times" section to VOCABULARY and removed the `whisperSchemaVersion`
 row (nothing exports or stores it). **Thread 8**: VOCABULARY's table rows run past 100 columns and
 cannot wrap -- the comment-width rule must leave Markdown alone (it is about source comments).
+
+*Orchestrator:* thread 2's *Review:* `fixed` -- the `maxVaultBytes` doc and the security note now
+say the 2 KiB covers a lockbox's other fields for a `user_id` up to 512 bytes (nothing bounds
+`user_id`). Verified: no new refusal quotes its input; stripping unknown fields drops nothing the
+stored format needs; the reframed inequality admits exactly the old configurations. Left, as open
+questions: `user_id` unbounded; a control-character note escapes past 2 KiB on a JSON backend;
+`openVault` duck-types `vaultDB` (a hand-written object skips the write checks); small
+duplications. **Re-plan:** thread 6 now stacks on thread 2 (it strengthens the Convex "never
+quotes a record" test thread 2 rewrote; both would rewrite the same lines), so thread 6 is cut
+from thread 2's tip once it files, and thread 7 from thread 6's.

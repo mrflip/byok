@@ -7,7 +7,7 @@
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach), over the dispositions marked in
   `whiteboard/20261015-gripes/20261015-gripes.md`
-* **Status**: threads 3 (#67) and 1 (#68) filed; threads 2, 4, 5 underway
+* **Status**: threads 3 (#67), 1 (#68), 5 (#69) filed; 2 filing, 4 underway; 6 waits on 2
 
 ## Read first
 
