@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 2 building; 5 (second review, re-run) and 10 in review; 1, 3, 4, 9, 11 filed. Newer than the plan wherever the two disagree.
+**Status**: 2 building; 5 filing; 1, 3, 4, 9, 10, 11 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -17,7 +17,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
-| 10 | `sandals` | `origin/main` | filing |
+| 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
 | 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
 ## For the Coach
@@ -90,7 +90,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   function returning an unsubscribe -- the same name as the planned core API, so the expiry
   thread should rename one. The demo calls `navigator.storage.persist()`. `notes/security.md`
   gained a dated bullet for the release App key. Devcontainer volumes stay `byok-*`.
-* **Thread 10** (`sandals`): after it merges, core tests star-import `test-helpers.ts` as `TH`; a
+* **Thread 10** (`sandals`, [#36](https://github.com/mrflip/safebyok/pull/36); the React eslint header wrap was dropped at rebase, #29 had done it): after it merges, core tests star-import `test-helpers.ts` as `TH`; a
   rebased test using a bare `testDeriver`, `scopeOf` or `tweakB64` must write `TH.x`. Root
   scripts run the root check and `pnpm -r --no-bail`. `safebyok` is a peer of `safebyok-convex`.
   The slow justify is 13 tsdown builds; cheapest fix: build once at the start.
