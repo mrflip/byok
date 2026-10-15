@@ -17,10 +17,17 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
-| 10 | `sandals` | `origin/main` | in review |
+| 10 | `sandals` | `origin/main` | filing |
 | 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
 ## For the Coach
+
+* **Thread 10's root scripts drop extra arguments** (its review): they end in
+  `exit $(( root || $? ))` and pnpm appends arguments after it, so `pnpm lint --fix` loses them
+  (dash) or exits 1 with "too many arguments" (bash-as-`sh`, macOS). Nothing passes arguments
+  today. The reviewer's fix (`both() { ...; pnpm -r ... "$@"; ...; }; both`) **was refused by the
+  permission system** ("Modify Shared Resources" on root `package.json`), so it is not applied,
+  and the orchestrator did not hand it to another agent. Yours to apply or have applied.
 
 * **[#31](https://github.com/mrflip/safebyok/pull/31) conflicts with main** since #29 merged
   (`demos/safebyok-demo-react/src/lib/auth.ts`, a small textual overlap). Rebasing a filed
