@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import * as ZClassic from 'zod'
-import { EpochMillis, FarFuture, FarPast, ForeverMs, Label, Lockbox, LockboxNote, LockboxSummary, MaxUnlocks, MaxUserIdChars, UserId, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { DeviceUnlock, EpochMillis, FarFuture, FarPast, ForeverMs, Lockbox, LockboxSummary, MaxUnlocks, VaultBundle, VaultScope, Whisper } from '../src/types'
 import * as TH from './test-helpers'
 
 const WhisperCases = [
@@ -33,75 +32,15 @@ describe("Whisper", () => {
   })
 })
 
-const LabelCases = [
-  // regular usage:
-  ["anthropic_api_key",  true,   'lowercase words joined by underscores'],
-  ["anthropic",          true,   'a plain lowercase word'],
-  ["ab",                 true,   'two characters is enough'],
-  ["a2",                 true,   'may end in a digit'],
-  ["a_1_b_2",            true,   'digits may follow each underscore'],
-  // edge cases:
-  ["a",                  false,  'one character is too short'],
-  ["2fast",              false,  'must start with a letter'],
-  ["dev_",               false,  'may not end in an underscore'],
-  ["_dev",               false,  'may not start with an underscore'],
-  ["dev__key",           false,  'underscores come one at a time'],
-  ["ANTHROPIC_API_KEY",  false,  'lowercase only'],
-  ["anthropic key",      false,  'no spaces'],
-  ["anthropic-key",      false,  'no hyphens'],
-  ["",                   false,  'never empty'],
-  ["x".repeat(41),       false,  'forty-one characters is one too many'],
-  ["x".repeat(40),       true,   'forty characters is the ceiling'],
-] as const
-
-describe("Label", () => {
-  for (const [candidate, expected, blurb] of LabelCases) {
-    it(blurb, () => { expect(Label.safeParse(candidate).success).to.eq(expected) })
-  }
-})
-
-const UserIdCases = [
-  // regular usage:
-  ["u1",                         true,   'a short id'],
-  ["user|2fJ8:google",           true,   'an id in whatever form the host app issues, colons and capitals and all'],
-  ["u".repeat(100),              true,   'a hundred characters is the ceiling'],
-  ["\u{4E00}".repeat(100),       true,   'a hundred characters, however many bytes each'],
-  // refused:
-  ["",                           false,  'an empty id names no one'],
-  ["u".repeat(101),              false,  'a hundred and one is one too many'],
-  [42,                           false,  'a number is not an id'],
-  [null,                         false,  'null names no one'],
-] as const
-
-describe("UserId", () => {
-  for (const [candidate, expected, blurb] of UserIdCases) {
-    it(blurb, () => { expect(UserId.safeParse(candidate).success).to.eq(expected) })
-  }
-
-  it("names its bound when it refuses, and never quotes the id", () => {
-    const overlong = `alice@example.com${'u'.repeat(MaxUserIdChars)}`
-    const refusals = [UserId.safeParse(overlong), UserId.safeParse('')].map((checked) => JSON.stringify(checked.error?.issues.map((issue) => issue.message)))
-    expect(refusals[0]).to.include('at most 100 characters')
-    expect(refusals[1]).to.include("can't be empty")
-    expect(refusals.join(' ')).to.not.include('alice')
-  })
-
-  it("passes and refuses as its examples show", () => {
-    expect(UserId.parse('user|2fJ8:google')).to.eq('user|2fJ8:google')
-    expect(UserId.safeParse('').success).to.be.false
-    expect(UserId.safeParse('u'.repeat(101)).success).to.be.false
-  })
-})
-
 const ScopeCases = [
   // regular usage:
   [TH.scopeOf('u1'),                                  true,   'an applabel, a user_id and a vaultlabel'],
   [TH.scopeOf('user|2fJ8:google'),                    true,   'a user_id in whatever form the host app issues'],
-  [TH.scopeOf('u'.repeat(100)),                       true,   'a user_id of a hundred characters'],
+  [TH.scopeOf('u'.repeat(101)),                       true,   'a user_id of any length: what a name may be is the validators\' to say'],
+  [{ ...TH.scopeOf('u1'), applabel: 'Acme: Ünïcode' },  true,   'an applabel of any text'],
+  [{ ...TH.scopeOf('u1'), user_id: '' },              true,   'even empty text, which the default UserId refuses'],
   // refused:
-  [{ ...TH.scopeOf('u1'), user_id: '' },              false,  'an empty user_id names no one'],
-  [TH.scopeOf('u'.repeat(101)),                       false,  'a user_id over a hundred characters'],
-  [{ ...TH.scopeOf('u1'), applabel: 'Acme' },         false,  'an applabel outside the label grammar'],
+  [{ ...TH.scopeOf('u1'), applabel: 42 },             false,  'an applabel that is not text'],
   [{ applabel: 'acme', user_id: 'u1' },              false,  'a scope missing its vaultlabel'],
 ] as const
 
@@ -133,7 +72,8 @@ const BundleCases = [
   [{ ...TH.bundleOf('u1'), unlock_epoch: 0 },                false,  'an epoch starts at one'],
   [{ ...TH.bundleOf('u1'), unlock_epoch: 1.5 },              false,  'an epoch is a whole number'],
   [{ ...TH.bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
-  [TH.bundleOf('u'.repeat(101)),                            false,  'a user_id over a hundred characters'],
+  [TH.bundleOf('u'.repeat(101)),                            true,   'a user_id of any length: the validators check names, not the record'],
+  [{ ...TH.bundleOf('u1'), vaultlabel: null },               false,  'a vaultlabel that is not text'],
   [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { vault_key_wrapped: { cipher_iv_b64: 'iv' } as never })] }, false, 'an envelope missing its ciphertext'],
   [{ ...TH.bundleOf('u1'), registered_at: 1_792_022_400 },   false,  'a registered_at in epoch seconds'],
   [{ ...TH.bundleOf('u1'), registered_at: Infinity },        false,  'a registered_at that never comes'],
@@ -190,7 +130,9 @@ const LockboxCases = [
   [{ ...notelessBox, note: undefined },                    true,   'a lockbox an earlier version stored with an undefined note'],
   // refused, as a damaged or foreign record:
   [{ ...notelessBox, note: null },                         false,  'a null note'],
-  [{ ...notelessBox, note: 'n'.repeat(257) },              false,  'a note over 256 characters'],
+  [{ ...notelessBox, note: 'n'.repeat(257) },              true,   'a note of any length: the validators check notes, not the record'],
+  [{ ...notelessBox, boxlabel: 'Ключ API: מפתח' },        true,   'a boxlabel of any text'],
+  [{ ...notelessBox, note: 42 },                           false,  'a note that is not text'],
   [{ ...notelessBox, format: 'safebyok-lockbox-v2' },      false,  'a format this version does not know'],
   [{ ...notelessBox, changed_at: FarFuture + 1 },          false,  'a changed_at past FarFuture'],
   [{ ...notelessBox, registered_at: Infinity },            false,  'a registered_at that never comes'],
@@ -204,25 +146,6 @@ describe("Lockbox", () => {
   for (const [candidate, expected, blurb] of LockboxCases) {
     it(blurb, () => { expect(Lockbox.safeParse(candidate).success).to.eq(expected) })
   }
-})
-
-const NoteCases = [
-  // regular usage:
-  ["work account",         true,   'a few words'],
-  ["",                     true,   'even empty text'],
-  ["n".repeat(256),        true,   'two hundred fifty-six characters is the ceiling'],
-  // refused:
-  ["n".repeat(257),        false,  'two hundred fifty-seven is one too many'],
-  [null,                   false,  'null: a lockbox with no note stores no note field'],
-  [42,                     false,  'a number is not a note'],
-] as const
-
-describe("LockboxNote", () => {
-  for (const [candidate, expected, blurb] of NoteCases) {
-    it(blurb, () => { expect(LockboxNote.safeParse(candidate).success).to.eq(expected) })
-  }
-
-  it("hands a note back as it is", () => { expect(LockboxNote.parse('work account')).to.eq('work account') })
 })
 
 const { format: _format, lockbox_key_wrapped: _wrapped, whisper_ciphered: _ciphered, ...notelessSummary } = notelessBox
@@ -240,8 +163,9 @@ describe("LockboxSummary", () => {
     it(blurb, () => { expect(LockboxSummary.parse(candidate).note).to.eq(expected) })
   }
 
-  it("refuses a note over 256 characters, as a stored lockbox does", () => {
-    expect(LockboxSummary.safeParse({ ...notelessSummary, note: 'n'.repeat(257) }).success).to.be.false
+  it("takes a note of any length, as a stored lockbox does, and refuses one that is not text", () => {
+    expect(LockboxSummary.safeParse({ ...notelessSummary, note: 'n'.repeat(257) }).success).to.be.true
+    expect(LockboxSummary.safeParse({ ...notelessSummary, note: 42 }).success).to.be.false
   })
 
   it("strips the two ciphered fields and the format from a whole lockbox", () => {
@@ -276,10 +200,10 @@ describe("ForeverMs", () => {
 })
 
 describe("DeviceUnlock", () => {
-  it("takes a user_id of a hundred characters, and refuses one longer", async () => {
-    const unlock = await TH.unlockOf('u'.repeat(100))
+  it("takes a user_id of any length, and refuses one that is not text", async () => {
+    const unlock = await TH.unlockOf('u'.repeat(1000))
     expect(DeviceUnlock.safeParse(unlock).success).to.be.true
-    expect(DeviceUnlock.safeParse({ ...unlock, user_id: 'u'.repeat(101) }).success).to.be.false
+    expect(DeviceUnlock.safeParse({ ...unlock, user_id: 42 }).success).to.be.false
   })
 })
 
@@ -334,20 +258,5 @@ describe("EpochMillis", () => {
     expect(EpochMillis.safeParse(1_792_022_400_000_000).success).to.be.false
     expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.false
     expect(EpochMillis.safeParse(Infinity).success).to.be.false
-  })
-})
-
-describe("the exported validators, inside a host's own Zod", () => {
-  // A host on classic Zod holds them in its own schemas, as a form checking a lockbox might.
-  const BoxForm = ZClassic.object({ scope: VaultScope, boxlabel: Label, note: ZClassic.optional(LockboxNote) })
-
-  it("compose into a classic Zod schema and check as they do alone", () => {
-    const form = { scope: TH.scopeOf('u1'), boxlabel: 'anthropic_api_key', note: 'work account' }
-    expect(BoxForm.parse(form)).to.deep.equal(form)
-  })
-
-  it("refuse inside a classic Zod schema what they refuse alone", () => {
-    expect(BoxForm.safeParse({ scope: TH.scopeOf('u1'), boxlabel: 'ANTHROPIC' }).success).to.be.false
-    expect(BoxForm.safeParse({ scope: TH.scopeOf('u1'), boxlabel: 'anthropic', note: 'n'.repeat(257) }).success).to.be.false
   })
 })

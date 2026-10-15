@@ -2,8 +2,9 @@
  * safebyok's public surface: an end-to-end encrypted vault for API keys and other small secrets.
  * Whispers are encrypted on the user's device under keys that never leave it; the storage layer
  * holds ciphertext only. The IndexedDB device store lives in its own entry point, `safebyok/idb`,
- * the browser's defaults for openVault's options in another, `safebyok/browser`, and the
- * IndexedDB vault store in a package of its own, `safebyok-indexeddb`.
+ * the browser's defaults for openVault's options in another, `safebyok/browser`, the checks for
+ * names and notes, with their bounds, in `safebyok/validators` as well as here, and the IndexedDB
+ * vault store in a package of its own, `safebyok-indexeddb`.
  */
 export { Argon2idWebV1 } from './key-deriver-spec'
 export type { KeyDeriverSpec } from './key-deriver-spec'
@@ -12,7 +13,9 @@ export type { KeyDeriver } from './key-deriver'
 export { openVault } from './vault'
 export type { OpenVaultOpts, Vault, VaultSnapshot, VaultState } from './vault'
 export type { VaultLogger } from './logger'
-export { EpochMillis, FarFuture, FarPast, ForcePassphraseReentryHours, ForeverMs, Label, Lockbox, LockboxNote, LockboxSummary, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, PasskeyEnvelope, PasskeySaltBytes, PassphraseEnvelope, UnlockEnvelope, UnlockMethodVals, UserId, VaultBundle, VaultScope, Whisper, wallClock } from './types'
+export { EpochMillis, FarFuture, FarPast, ForcePassphraseReentryHours, ForeverMs, Lockbox, LockboxSummary, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, PasskeyEnvelope, PasskeySaltBytes, PassphraseEnvelope, UnlockEnvelope, UnlockMethodVals, VaultBundle, VaultScope, Whisper, wallClock } from './types'
+export { AnyTextValidators, DefaultValidators, Label, LabelPattern, LockboxNote, MaxLabelChars, MaxNoteChars, MaxUserIdChars, UserId } from './validators'
+export type { NameValidator, VaultValidators } from './validators'
 export type { Clock, DeviceUnlock, PasskeyProof, UnlockMethod, UnlockSummary, WhisperJson } from './types'
 export { Ciphered } from './crypto'
 export { VaultError, VaultErrorFamilyForKind, VaultErrorFamilyVals, VaultErrorKindVals, isVaultCondition, isVaultError } from './errors'
