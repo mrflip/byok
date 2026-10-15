@@ -21,7 +21,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "pretest:coverage": "pnpm build:deps",
-    "justify": "pnpm lint && pnpm typecheck && pnpm test"
+    "justify": "pnpm install && pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
     "safebyok": "workspace:*"
