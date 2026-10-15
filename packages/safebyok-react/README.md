@@ -46,7 +46,8 @@ throws that error while rendering. Wrap it in an error boundary, keyed on the us
 the boundary's fallback shows the failure and a different user (or a sign-out and back in) gets a
 fresh attempt. (Which kinds of `VaultError` that can be, and what each means, is in the
 `safebyok` README's *Errors* section; `bad_label` and `bad_option` are misuse, while
-`storage_unavailable` and `not_permitted` are conditions that reach the boundary here too.)
+`storage_unavailable`, `not_permitted` and `corrupt_record` are conditions that reach the
+boundary here too.)
 
 ```tsx
 <ErrorBoundary key={userId ?? 'signed-out'} fallback={<VaultTroubleNotice />}>
