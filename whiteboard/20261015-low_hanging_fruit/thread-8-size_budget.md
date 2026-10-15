@@ -1,6 +1,6 @@
 # Thread 8: size_budget (2026-10-15)
 
-Branch `20261015-size_budget`, PR not yet filed, stacked on [#40](https://github.com/mrflip/safebyok/pull/40) (itself on [#34](https://github.com/mrflip/safebyok/pull/34)). Justify: green (root 72 tests; core 283, convex 217, react 8, demo 24; `pnpm size` passes).
+Branch `20261015-size_budget`, PR [#42](https://github.com/mrflip/safebyok/pull/42), stacked on [#40](https://github.com/mrflip/safebyok/pull/40) (itself on [#34](https://github.com/mrflip/safebyok/pull/34)). Justify: green (root 72 tests; core 283, convex 217, react 8, demo 24; `pnpm size` passes).
 
 * **Built**: `.size-limit.json` at the root and `pnpm size` (builds the core, then `size-limit`). Six entries over the built `packages/safebyok/dist/`: `everything`, `openVault`, `stableJsonify`, `argon2idWebV1Deriver` (all from `index.js`), `idbDeviceDB` (`idb.js`), `browserOpts` (`browser.js`). CI's `test-build` job runs `pnpm size` after the build. A `CLAUDE.md` Commands line. Dev dependencies `size-limit` and `@size-limit/preset-small-lib` (both 14.2.0, current on 2026-10-15), at the root; empty changeset `.changeset/20261015-size_budget.md`.
 * **Measured and set** (rolldown via the preset, minified, **brotlied**, zod included; limit is about 7-8% above):
