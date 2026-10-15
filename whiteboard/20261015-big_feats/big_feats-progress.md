@@ -13,12 +13,19 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
 | 4 | indexeddb_package | #74 `00daf1f` (restacked; was #70)     | filed #77 `12fc4d0`            |
 | 5 | postgres_vaultdb  | #76 `cfdd0be` (restacked; was #71)     | filed #73 `6d23727`            |
 | 6 | graphql_vaultdb   | #73 `6d23727`                          | filed #78 `4d2a0f8`            |
-| 7 | epoch_rename      | #77 `12fc4d0`                          | underway                       |
-| 8 | store_vault_cap   | thread 7's tip                         | pending (waits on 7)           |
-| 9 | unlock_fixes      | #77 `12fc4d0`                          | underway                       |
-| 10 | docs_housekeeping | #77 `12fc4d0`                         | underway                       |
+| 7 | epoch_rename      | #77 `12fc4d0`                          | filed #84 `60af0b7`            |
+| 8 | store_vault_cap   | #84 `60af0b7`                          | underway                       |
+| 9 | unlock_fixes      | #77 `12fc4d0`                          | filed #88 `b616bc0`            |
+| 10 | docs_housekeeping | #77 `12fc4d0`                         | filed #86 `e467b08`            |
 
 ## What the threads have taught
+
+* *Orchestrator:* **For the final assembly** (#77 → #84 → thread 8 → #88 → #86 → #79, justify at the top):
+  * **The PGlite boot fix moved #73 and #78.** CI timed out on the first test of each Postgres file while PGlite booted, so #73 (`89017f9`) and #78 (`b0e9e63`) now boot it in a `beforeAll` with a 60 s hook timeout. #74 still sits on #78's old tip: replay it with `--onto b0e9e63 4d2a0f8`, then #77 onto it, then the amendments.
+  * **#88 against #84:** one known conflict, in `reviseUnlocks` (`vault.ts`). Resolve it as `unlock_epoch: standing.unlock_epoch + 1,` then `unlocks,`.
+  * **#86 against #84:** the reviewer's u2 routing test in `packages/safebyok/tests/test-helpers.test.ts` names `passphrase_epoch`. Rename it.
+  * **#86 against thread 8:** `perUser` and the test's `servingOnly` each need `maxLockboxes` beside `maxRecordBytes`.
+* *Orchestrator:* **Reviews of the amendments:** #84, #86 and #88 all came back `fixed`, with nothing significant. Each review is posted on its PR. One correction from them reaches past the sprint: `@noble/hashes`'s one audit (Cure53, 2022) left Argon2 out of scope, so none of our Argon2id implementations is audited. #86 corrects `notes/security.md`.
 
 * *Orchestrator:* **The restack** (2026-10-15, at the Coach's word). gripe_fixes restacked into one
   line on main (#66's duplicates dropped), top #82 `7bf5a4b`. Thread 2's worker replayed all six
