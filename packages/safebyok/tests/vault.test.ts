@@ -231,6 +231,22 @@ describe("the remembered unlock", () => {
     })
   })
 
+  it("reads a remembered deadline past what a Date holds as the latest one, and refuses an infinite one", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const written = await world.deviceDB.readUnlock(scopeOf('u1'))
+    if (written === null) { throw new Error('expected a remembered unlock on the device') }
+    await world.deviceDB.writeUnlock({ ...written, expires_at: 1e300 })
+    const farFuture = await world.open()
+    expect(farFuture.getSnapshot().state).to.eq('unlocked')
+    expect(farFuture.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
+    await world.deviceDB.writeUnlock({ ...written, expires_at: Infinity })
+    const infinite = await world.open()
+    expect(infinite.getSnapshot().state).to.eq('locked')
+    expect(await world.deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+  })
+
   it("clamps a huge finite forcePassphraseReentryHours to the same latest deadline", async () => {
     const world = makeWorld()
     for (const huge of [1e12, 1e300, Number.MAX_VALUE]) {

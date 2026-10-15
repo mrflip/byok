@@ -383,7 +383,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         bundleBinding(bundle.vault_id, bundle.passphrase_epoch, 'vault_key_local_wrapped'),
         { extractable: false, usage: ['wrapKey', 'unwrapKey'] },
       )
-      askPassphraseAt = remembered.expires_at
+      // Older records, or a host's own deviceDB, may hold a finite deadline past what a Date can.
+      askPassphraseAt = Math.min(remembered.expires_at, LatestAskPassphraseAt)
     } catch {
       // A record that no longer opens reads as "no remembered unlock": the safe failure.
       await deviceDB.eraseUnlock(scope)
