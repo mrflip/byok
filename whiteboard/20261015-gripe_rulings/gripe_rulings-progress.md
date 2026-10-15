@@ -10,7 +10,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 1 | damaged_boxes          | #83 tip    | filed [#93](https://github.com/mrflip/safebyok/pull/93) |
 | 2 | dialog_wording         | #83 tip    | filed [#91](https://github.com/mrflip/safebyok/pull/91) |
 | 3 | tuple_ckeys            | #83 tip    | filed [#92](https://github.com/mrflip/safebyok/pull/92) |
-| 4 | replaceable_validators | #92 `9218318` | underway |
+| 4 | replaceable_validators | #92 `9218318` | in review ([#95](https://github.com/mrflip/safebyok/pull/95)) |
 
 ## What the threads have taught
 
