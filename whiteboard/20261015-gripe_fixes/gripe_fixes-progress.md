@@ -10,7 +10,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 1 | kdf_configs        | #66 tip `5fefc90`     | filed [#68](https://github.com/mrflip/safebyok/pull/68) |
 | 2 | vaultdb_validation | #66 tip `5fefc90`     | filed [#70](https://github.com/mrflip/safebyok/pull/70) |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
-| 4 | ci_tooling         | #66 tip `5fefc90`     | in review |
+| 4 | ci_tooling         | #66 tip `5fefc90`     | filing |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
 | 6 | thin_tests         | #70 tip `d874db3`     | underway |
 | 7 | test_helpers       | thread 6's tip        | pending (after 6 files) |
