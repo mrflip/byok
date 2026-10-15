@@ -1,8 +1,9 @@
 import { Component, type ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
-import { VaultError, type Vault } from 'safebyok'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { VaultError, isVaultError, type Vault } from 'safebyok'
 import { PassphraseModal } from '../src/passphrase-modal'
+import * as TH from './test-helpers'
 
 /** Just enough of a Vault for the dialog to read its state; it never unlocks one here. */
 const vaultInState = (state: 'absent' | 'locked') => ({ getSnapshot: () => ({ state }) }) as unknown as Vault
@@ -27,6 +28,9 @@ class Catcher extends Component<{ children: ReactNode }, { caught: string | null
   static getDerivedStateFromError(err: unknown) { return { caught: err instanceof Error ? err.message : 'not an Error' } }
   override render() { return this.state.caught === null ? this.props.children : <p>{`caught: ${this.state.caught}`}</p> }
 }
+
+/** The dialog's word to a user it cannot help, once something not theirs to mend went wrong. */
+const Trouble = /This app ran into a problem of its own, not one you caused, and could not unlock your vault\. Your secrets are safe\./
 
 /** A locked Vault whose every unlock is refused as a wrong passphrase. */
 const wrong = () => vaultUnlockingWith(() => Promise.reject(new VaultError('wrong_passphrase', 'That passphrase did not open the vault.')))
@@ -102,18 +106,53 @@ describe("PassphraseModal", () => {
       expect(screen.queryByText(/caught:/)).to.be.null
     })
 
-    it("throws misuse while rendering, for the nearest error boundary", async () => {
-      const vault = vaultUnlockingWith(() => Promise.reject(new VaultError('vault_closed', 'The vault was closed.')))
-      render(<Catcher><PassphraseModal vault={vault} onDone={noop} /></Catcher>)
+    it("meets misuse with a calm notice in the dialog, and reports the very error to React, leaving the page alone", async () => {
+      const closed = new VaultError('vault_closed', 'The vault was closed.')
+      const heard: boolean[] = []
+      const { reported } = TH.renderReporting(<Catcher><PassphraseModal vault={vaultUnlockingWith(() => Promise.reject(closed))} onDone={(unlocked) => { heard.push(unlocked) }} /></Catcher>)
       submitPassphrase('pw one')
-      await waitFor(() => { expect(screen.queryByText('caught: The vault was closed.')).to.not.be.null })
+      expect(await screen.findByText('Something went wrong')).to.not.be.null
+      expect(screen.getByRole('alert').textContent).to.match(Trouble)
+      expect(reported).to.deep.equal([closed])
+      expect(reported[0]).to.equal(closed)
+      expect(screen.queryByText(/caught:/)).to.be.null
+      expect(screen.queryByText('The vault was closed.')).to.be.null
+      expect(heard).to.deep.equal([])
     })
 
-    it("throws a failure that is no VaultError the same way", async () => {
-      const vault = vaultUnlockingWith(() => Promise.reject(new TypeError('fell over')))
-      render(<Catcher><PassphraseModal vault={vault} onDone={noop} /></Catcher>)
+    it("forgets the typed passphrase with the form, and moves focus to Close", async () => {
+      const vault = vaultUnlockingWith(() => Promise.reject(new VaultError('bad_option', 'A bad option.')))
+      TH.renderReporting(<PassphraseModal vault={vault} onDone={noop} />)
       submitPassphrase('pw one')
-      await waitFor(() => { expect(screen.queryByText('caught: fell over')).to.not.be.null })
+      await screen.findByText('Something went wrong')
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+      expect(screen.queryByDisplayValue('pw one')).to.be.null
+      expect(document.activeElement).to.equal(screen.getByRole('button', { name: 'Close' }))
+    })
+
+    it("closes as if dismissed when the user closes the notice", async () => {
+      const heard: boolean[] = []
+      const vault = vaultUnlockingWith(() => Promise.reject(new VaultError('unknown_key_deriver', 'This vault was made with a key deriver this package does not carry.')))
+      TH.renderReporting(<PassphraseModal vault={vault} onDone={(unlocked) => { heard.push(unlocked) }} />)
+      submitPassphrase('pw one')
+      fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+      expect(heard).to.deep.equal([false])
+    })
+
+    it("meets a failure that is no VaultError the same way", async () => {
+      const fell = new TypeError('fell over')
+      const { reported } = TH.renderReporting(<Catcher><PassphraseModal vault={vaultUnlockingWith(() => Promise.reject(fell))} onDone={noop} /></Catcher>)
+      submitPassphrase('pw one')
+      expect(await screen.findByText('Something went wrong')).to.not.be.null
+      expect(reported).to.deep.equal([fell])
+      expect(screen.queryByText(/caught:|fell over/)).to.be.null
+    })
+
+    it("meets a rejection that is no Error at all the same way", async () => {
+      const { reported } = TH.renderReporting(<Catcher><PassphraseModal vault={{ getSnapshot: () => ({ state: 'locked' }), unlock: vi.fn().mockRejectedValue(null) } as unknown as Vault} onDone={noop} /></Catcher>)
+      submitPassphrase('pw one')
+      expect(await screen.findByText('Something went wrong')).to.not.be.null
+      expect(reported).to.deep.equal([null])
     })
   })
 
@@ -143,9 +182,13 @@ describe("PassphraseModal", () => {
     }
 
     for (const hours of [0, -1, NaN]) {
-      it(`refuses ${String(hours)} hours, which no vault could have been opened with`, () => {
-        render(<Catcher><PassphraseModal vault={vaultInState('locked')} reentryHours={hours} onDone={noop} /></Catcher>)
-        expect(screen.queryByText(/caught: .*reentryHours is a number of hours greater than zero/)).to.not.be.null
+      it(`refuses ${String(hours)} hours, which no vault could have been opened with, as misuse`, () => {
+        const { reported } = TH.renderReporting(<Catcher><PassphraseModal vault={vaultInState('locked')} reentryHours={hours} onDone={noop} /></Catcher>)
+        expect(screen.queryByText('Something went wrong')).to.not.be.null
+        expect(screen.queryByText(/caught:/)).to.be.null
+        expect(reported).to.have.lengthOf(1)
+        expect(isVaultError(reported[0], 'bad_option')).to.be.true
+        expect((reported[0] as VaultError).message).to.match(/reentryHours is a number of hours greater than zero/)
       })
     }
   })

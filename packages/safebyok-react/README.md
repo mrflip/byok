@@ -16,8 +16,9 @@ otherwise write itself.
   7 days", "for 15 minutes", "until you lock it" -- from the `forcePassphraseReentryHours` the
   provider opened the vault with (a hand-rendered dialog takes it as `reentryHours`). A wrong
   passphrase, or any other condition the unlock meets (storage out of reach), shows in the dialog
-  in place; misuse is thrown while rendering, to your error boundary. For a vault with a passkey,
-  it offers "Use a passkey" beside the passphrase field.
+  in place; anything else (misuse, a bug) shows a calm "Something went wrong" with a Close
+  button, and goes to React's error reporting, never to your page (*When an unlock fails*,
+  below). For a vault with a passkey, it offers "Use a passkey" beside the passphrase field.
 * `createPasskey()`, `askPasskey()`, `passkeysAvailable()` and `PasskeyUnlockButton` -- the
   WebAuthn half of a fingerprint (passkey, security key) unlock, below. The three functions import
   no React.
@@ -87,6 +88,34 @@ shows it and a different user (or a sign-out and back in) gets a fresh attempt:
 </ErrorBoundary>
 ```
 
+## When an unlock fails
+
+**The user sees what they can mend.** A wrong passphrase, storage out of reach, a passkey that
+does not answer: each condition shows in the dialog in the vault's own calm words, to try again
+or cancel.
+
+**Anything else never takes your page down.** Misuse -- a closed vault handle, an `rpId` that
+does not fit the page, a vault made with a key deriver this build lacks (as in a tab left open
+across a deployment) -- or a failure that is no `VaultError` is not the user's to mend, and its
+message is written for you, not them. The dialog shows "Something went wrong", that their secrets
+are safe, and to reload and try again, with a Close button that resolves `withUnlockedVault` to
+null, as Cancel does; the typed passphrase goes with the form. A `PasskeyUnlockButton` that meets
+one takes itself away and tells `onGripe` to use the passphrase instead. Your error boundary
+never sees it.
+
+**React reports it to you.** Each component catches such a failure in an error boundary of its
+own, so React hands the very error to the root's `onCaughtError`: by default the console, with the
+component stack, in development and production alike. Hook your error tracker there:
+
+```tsx
+createRoot(rootElement, {
+  onCaughtError: (err, info) => { tracker.capture(err, { componentStack: info.componentStack }) },
+}).render(<App />)
+```
+
+An open's misuse is the exception: `VaultProvider` throws it to your boundary at mount (*When
+opening fails*, above), where it fires on every load, before any user has typed anything.
+
 ## Fingerprint unlock (passkeys)
 
 A vault may let the user in with a passkey -- a fingerprint, a face, a phone, a security key --
@@ -131,7 +160,8 @@ if (passkey !== null) { await vault.unlock(passkey) }
   `PasskeyUnlockButton`): a passkey answers only under the relying party it was made for.
 * **The dialog.** `PassphraseModal` shows `PasskeyUnlockButton` when the vault lists a passkey and
   the browser offers WebAuthn, under the page's own relying party. A dialog of your own can place
-  `<PasskeyUnlockButton vault={vault} onDone={close} onGripe={setGripe} />` beside its field.
+  `<PasskeyUnlockButton vault={vault} onDone={close} onGripe={setGripe} />` beside its field;
+  `onGripe` hears each condition's message, and the button's word when it takes itself away.
 * **A passkey can stand in for a forgotten passphrase**: `vault.addPassphrase(passkey, fresh, {
   unlocklabel })`, then `vault.removeUnlock(passkey, oldId)`. A vault always keeps one passphrase:
   removing the last refuses with kind `last_unlock`.
