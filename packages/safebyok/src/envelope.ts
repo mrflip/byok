@@ -1,13 +1,13 @@
-import { cipherBinding, fromB64, importWrappingKeyBytes, randomBytes, toB64, unwrapKeyUnder, wrapKeyUnder } from './crypto'
+import { cipherBinding, deriveWrappingKey, fromB64, importWrappingKeyBytes, randomBytes, toB64, unwrapKeyUnder, wrapKeyUnder } from './crypto'
 import { VaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
-import type { PassphraseEnvelope, UnlockEnvelope, UnlockMethod, UnlockSummary, VaultBundle, VaultScope } from './types'
+import { PasskeySaltBytes, type PasskeyEnvelope, type PasskeyProof, type PassphraseEnvelope, type UnlockEnvelope, type UnlockMethod, type UnlockSummary, type VaultBundle, type VaultScope } from './types'
 
 /**
  * Unlock envelopes: each the vaultKey wrapped under a key one method makes, so a vault has several
  * ways in and one vaultKey behind them all. Imported whole, as `Envelope`: `Envelope.sealPassphrase`
- * makes one, `Envelope.openWithPassphrase` finds the one a passphrase opens, `Envelope.summarize`
- * gives its public face. Internal to the package; the vault calls it.
+ * and `Envelope.sealPasskey` make one, `Envelope.open` finds the one a passphrase or a passkey
+ * opens, `Envelope.summarize` gives its public face. Internal to the package; the vault calls it.
  *
  * Each envelope's wrap is bound to its vault and to its own public header -- every field but the
  * wrap itself, encoded with its keys sorted -- under a purpose its method names. The bundle's
@@ -17,7 +17,7 @@ import type { PassphraseEnvelope, UnlockEnvelope, UnlockMethod, UnlockSummary, V
 
 /**
  * The vaultKey's two lives after an unwrap. `transientKey` is extractable, because only an
- * extractable key can be wrapped (for the device record, or under a new passphraseKey); the
+ * extractable key can be wrapped (for the device record, or into a new way in); the
  * operation that needed it drops it on return. `sessionKey` is the handle the vault keeps
  * between operations: non-extractable, so the platform itself refuses to export its bytes.
  */
@@ -31,6 +31,7 @@ export type EnvelopeHeader = HeaderOf<UnlockEnvelope>
 /** The binding purpose of each method's wrap, so no method's envelope opens as another's. */
 const PurposeForMethod = {
   passphrase: 'vault_key_passphrase_wrapped',
+  passkey:    'vault_key_passkey_wrapped',
 } as const satisfies Readonly<Record<UnlockMethod, string>>
 
 /** The usages of the handle a vault keeps: it wraps a lockboxKey and unwraps one, nothing else. */
@@ -49,6 +50,13 @@ const headerOf = (envelope: UnlockEnvelope): EnvelopeHeader => {
   const { vault_key_wrapped: _wrapped, ...header } = envelope
   return header
 }
+
+/**
+ * Every unlock's proof: a passphrase the user typed, or what a passkey answered. A blank
+ * passphrase never reaches here, nor a passkey proof of the wrong shape: the vault refuses both
+ * at its door.
+ */
+export type UnlockProof = string | PasskeyProof
 
 /** The passphraseKey a passphrase and its salt make, through `keyDeriver`. */
 const passphraseKeyOf = async (keyDeriver: KeyDeriver, passphrase: string, saltBytes: Uint8Array): Promise<CryptoKey> => (
@@ -110,9 +118,8 @@ export const openWithPassphrase = async (
   bundle: VaultBundle,
   unlockId?: string,
 ): Promise<VaultKeyPair & { unlockId: string }> => {
-  // Every envelope is a passphrase's while that is the only method; a second method's envelopes
-  // are passed over here.
-  const aimed = unlockId === undefined ? bundle.unlocks : bundle.unlocks.filter((envelope) => envelope.unlock_id === unlockId)
+  const passphrases = bundle.unlocks.filter((envelope) => envelope.method === 'passphrase')
+  const aimed = unlockId === undefined ? passphrases : passphrases.filter((envelope) => envelope.unlock_id === unlockId)
   if (aimed.length === 0) {
     throw new VaultError('absent_unlock', "None of this vault's passphrases has that unlock_id: it may have been removed on another device. Look again at the snapshot's unlocks.")
   }
@@ -123,7 +130,7 @@ export const openWithPassphrase = async (
   // Checked for every envelope before the first derivation, so the outcome never hangs on order:
   // a salt the deriver's own label says it never made is a damaged record, not a wrong passphrase.
   // (Here rather than in the record's schema, which every entry point's bundle carries whole.)
-  if (derivable.some((envelope) => saltBytesOf(envelope)?.length !== keyDeriver.salt_bytes)) {
+  if (derivable.some((envelope) => saltBytesOf(envelope.salt_b64)?.length !== keyDeriver.salt_bytes)) {
     throw new VaultError('corrupt_record', "One of this vault's passphrases is stored with a salt its key deriver could not have made: the bundle is damaged. It was left as it is.")
   }
   for (const envelope of derivable) {
@@ -133,10 +140,10 @@ export const openWithPassphrase = async (
   throw new VaultError('wrong_passphrase', "That passphrase didn't unlock the vault. Check for typos and try again.")
 }
 
-/** An envelope's passphraseSalt as bytes, or null when its `salt_b64` is not base64url. */
-const saltBytesOf = (envelope: PassphraseEnvelope): Uint8Array | null => {
+/** An envelope's salt as bytes, or null when its base64url text is not base64url. */
+const saltBytesOf = (saltB64: string): Uint8Array | null => {
   try {
-    return fromB64(envelope.salt_b64)
+    return fromB64(saltB64)
   } catch {
     return null
   }
@@ -151,10 +158,15 @@ const tryPassphrase = async (
   envelope: PassphraseEnvelope,
 ): Promise<VaultKeyPair | null> => {
   const passphraseKey = await passphraseKeyOf(keyDeriver, passphrase, fromB64(envelope.salt_b64))
+  return await tryUnwrap(passphraseKey, scope, vaultId, envelope)
+}
+
+/** Both lives of the vaultKey out of `envelope` under `wrappingKey`, or null when it will not open. */
+const tryUnwrap = async (wrappingKey: CryptoKey, scope: VaultScope, vaultId: string, envelope: UnlockEnvelope): Promise<VaultKeyPair | null> => {
   const envelopeBinding = binding(scope, vaultId, headerOf(envelope))
   try {
-    const transientKey = await unwrapKeyUnder(passphraseKey, envelope.vault_key_wrapped, envelopeBinding, TransientUsage)
-    const sessionKey = await unwrapKeyUnder(passphraseKey, envelope.vault_key_wrapped, envelopeBinding, SessionUsage)
+    const transientKey = await unwrapKeyUnder(wrappingKey, envelope.vault_key_wrapped, envelopeBinding, TransientUsage)
+    const sessionKey = await unwrapKeyUnder(wrappingKey, envelope.vault_key_wrapped, envelopeBinding, SessionUsage)
     return { transientKey, sessionKey }
   } catch {
     return null
@@ -163,12 +175,111 @@ const tryPassphrase = async (
 
 /**
  * The public face of an envelope, as a locked vault may show it: its method, id and label, and
- * none of its salt or wrap.
+ * for a passkey the credential and salt a host asks its authenticator with; never a passphrase's
+ * salt, never a wrap.
  *
  * @example Envelope.summarize(bundle.unlocks[0])  // { method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase' }
+ * @example Envelope.summarize(passkeyEnvelope)    // { method: 'passkey', unlock_id, unlocklabel: 'laptop', credential_id: 'AXk3...', prf_salt_b64: 'q83v...' }
  */
-export const summarize = (envelope: UnlockEnvelope): UnlockSummary => ({
-  method:      envelope.method,
-  unlock_id:   envelope.unlock_id,
-  unlocklabel: envelope.unlocklabel,
-})
+export const summarize = (envelope: UnlockEnvelope): UnlockSummary => {
+  const { method, unlock_id, unlocklabel } = envelope
+  if (method === 'passphrase') { return { method, unlock_id, unlocklabel } }
+  return { method, unlock_id, unlocklabel, credential_id: envelope.credential_id, prf_salt_b64: envelope.prf_salt_b64 }
+}
+
+/**
+ * The vaultKey out of whichever of `bundle`'s envelopes `proof` opens: a passphrase as
+ * {@link openWithPassphrase} finds it, a passkey as {@link openWithPasskey} does.
+ */
+export const open = async (
+  keyDeriver: KeyDeriver,
+  proof: UnlockProof,
+  scope: VaultScope,
+  bundle: VaultBundle,
+  unlockId?: string,
+): Promise<VaultKeyPair & { unlockId: string }> => (
+  typeof proof === 'string'
+    ? await openWithPassphrase(keyDeriver, proof, scope, bundle, unlockId)
+    : await openWithPasskey(proof, scope, bundle, unlockId)
+)
+
+/**
+ * The passkeyKey a passkey's PRF answer makes: HKDF-SHA256 over the answer, its `info` naming the
+ * purpose and the credential, so the same answer put to any other use makes another key.
+ */
+const passkeyKeyOf = async (prfBytes: Uint8Array, credentialId: string): Promise<CryptoKey> => (
+  await deriveWrappingKey(prfBytes, cipherBinding('safebyok-vault-v1', PurposeForMethod.passkey, credentialId))
+)
+
+/**
+ * A passkey envelope around `vaultKey`, for the passkey whose answer `passkey` holds, and the
+ * session's handle on the vaultKey through it. The envelope keeps the passkey's credential id and
+ * the salt it answered for, so the vault can ask it again; never the answer.
+ *
+ * @param passkey - What the new passkey answered, over a fresh salt of {@link PasskeySaltBytes}.
+ * @param scope - The vault's scope, bound into the wrap.
+ * @param vaultId - The vault's id, bound into the wrap.
+ * @param naming - The envelope's `unlock_id` and `unlocklabel`.
+ * @param vaultKey - The vaultKey to wrap: extractable, as only such a key can be.
+ * @returns The envelope, and a non-extractable handle on the vaultKey unwrapped from it.
+ */
+export const sealPasskey = async (
+  passkey: PasskeyProof,
+  scope: VaultScope,
+  vaultId: string,
+  naming: { unlock_id: string, unlocklabel: string },
+  vaultKey: CryptoKey,
+): Promise<{ envelope: PasskeyEnvelope, sessionKey: CryptoKey }> => {
+  const header = {
+    method:        'passkey',
+    unlock_id:     naming.unlock_id,
+    unlocklabel:   naming.unlocklabel,
+    credential_id: passkey.credentialId,
+    prf_salt_b64:  passkey.prfSaltB64,
+  } as const
+  const passkeyKey = await passkeyKeyOf(passkey.prfBytes, passkey.credentialId)
+  const envelopeBinding = binding(scope, vaultId, header)
+  const wrapped = await wrapKeyUnder(passkeyKey, vaultKey, envelopeBinding)
+  const sessionKey = await unwrapKeyUnder(passkeyKey, wrapped, envelopeBinding, SessionUsage)
+  return { envelope: { ...header, vault_key_wrapped: wrapped }, sessionKey }
+}
+
+/**
+ * The vaultKey out of the passkey envelope of the credential that answered `passkey` -- given
+ * `unlockId`, only if that is the envelope it names. No key derivation to speak of, and nothing
+ * to try in turn: a credential has at most one envelope in a vault.
+ *
+ * Refuses with kind `absent_unlock` when no passkey envelope of the bundle is that credential's
+ * (or the one `unlockId` names is not), `corrupt_record` when its envelope's salt is not base64url
+ * of {@link PasskeySaltBytes} bytes, and `wrong_passkey` when the answer is for another salt than
+ * the envelope's, or does not open it.
+ *
+ * @returns Both lives of the vaultKey, and the `unlock_id` of the envelope that opened.
+ */
+export const openWithPasskey = async (
+  passkey: PasskeyProof,
+  scope: VaultScope,
+  bundle: VaultBundle,
+  unlockId?: string,
+): Promise<VaultKeyPair & { unlockId: string }> => {
+  const envelope = bundle.unlocks.find((candidate): candidate is PasskeyEnvelope => (
+    candidate.method === 'passkey' && candidate.credential_id === passkey.credentialId
+    && (unlockId === undefined || candidate.unlock_id === unlockId)
+  ))
+  if (envelope === undefined) {
+    throw new VaultError('absent_unlock', "None of this vault's passkeys is the one that answered: it may have been removed on another device, or be a passkey for another vault. Look again at the snapshot's unlocks.")
+  }
+  // A salt no envelope this package writes could hold is a damaged record, not a wrong passkey.
+  if (saltBytesOf(envelope.prf_salt_b64)?.length !== PasskeySaltBytes) {
+    throw new VaultError('corrupt_record', "This vault's passkey is stored with a salt this package could not have made: the bundle is damaged. It was left as it is.")
+  }
+  if (envelope.prf_salt_b64 !== passkey.prfSaltB64) {
+    throw new VaultError('wrong_passkey', "The passkey answered for a different salt than this vault keeps for it: ask it again with the prf_salt_b64 the snapshot's unlocks list.")
+  }
+  const passkeyKey = await passkeyKeyOf(passkey.prfBytes, envelope.credential_id)
+  const opened = await tryUnwrap(passkeyKey, scope, bundle.vault_id, envelope)
+  if (opened === null) {
+    throw new VaultError('wrong_passkey', "That passkey's answer didn't unlock the vault. Try the passkey again, or unlock with a passphrase.")
+  }
+  return { ...opened, unlockId: envelope.unlock_id }
+}

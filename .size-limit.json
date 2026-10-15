@@ -1,6 +1,6 @@
 [
-  { "name": "everything", "path": "packages/safebyok/dist/index.js", "limit": "24.5 kB" },
-  { "name": "openVault", "path": "packages/safebyok/dist/index.js", "import": "{ openVault }", "limit": "17.5 kB" },
+  { "name": "everything", "path": "packages/safebyok/dist/index.js", "limit": "25.5 kB" },
+  { "name": "openVault", "path": "packages/safebyok/dist/index.js", "import": "{ openVault }", "limit": "18.5 kB" },
   { "name": "stableJsonify", "path": "packages/safebyok/dist/index.js", "import": "{ stableJsonify }", "limit": "2.5 kB" },
   { "name": "argon2idWebV1Deriver", "path": "packages/safebyok/dist/index.js", "import": "{ argon2idWebV1Deriver }", "limit": "5.5 kB" },
   { "name": "idbDeviceDB", "path": "packages/safebyok/dist/idb.js", "import": "{ idbDeviceDB }", "limit": "9 kB" },

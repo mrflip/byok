@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { localVaultDB, memoryDeviceDB, memoryStore, openVault } from '../src/index'
-import { Ciphered } from '../src/crypto'
-import { Lockbox, VaultBundle, VaultScope } from '../src/types'
+import { Ciphered, fromB64 } from '../src/crypto'
+import { Lockbox, PasskeySaltBytes, VaultBundle, VaultScope } from '../src/types'
 import * as TH from './test-helpers'
 
 const TweakCases = [
@@ -103,6 +103,26 @@ describe("the fixtures", () => {
   it("bundleOf: a shape-valid VaultBundle, with any field overridden", () => {
     expect(VaultBundle.safeParse(TH.bundleOf('u1')).success).to.be.true
     expect(TH.bundleOf('u1', { passphrase_epoch: 2 })).to.deep.equal({ ...TH.bundleOf('u1'), passphrase_epoch: 2 })
+  })
+
+  it("passkeyEnvelopeOf: a shape-valid passkey envelope, with any field overridden", () => {
+    const bundle = TH.bundleOf('u1', { unlocks: [TH.envelopeOf('passphrase'), TH.passkeyEnvelopeOf('laptop')] })
+    expect(VaultBundle.safeParse(bundle).success).to.be.true
+    expect(TH.passkeyEnvelopeOf('laptop')).to.include({ method: 'passkey', unlock_id: 'unlock-laptop', credential_id: 'cred-laptop' })
+    expect(TH.passkeyEnvelopeOf('laptop', { credential_id: 'other' }).credential_id).to.eq('other')
+  })
+
+  it("passkeyOf: the same passkey and salt answer the same, another salt or passkey otherwise", async () => {
+    const laptop = await TH.passkeyOf('laptop')
+    expect(laptop.prfBytes).to.have.lengthOf(32)
+    expect(fromB64(laptop.prfSaltB64)).to.have.lengthOf(PasskeySaltBytes)
+    expect(new TextDecoder().decode(fromB64(laptop.credentialId))).to.eq('cred-laptop')
+    expect(await TH.passkeyOf('laptop')).to.deep.equal(laptop)
+    const phone = await TH.passkeyOf('phone')
+    const elsewhere = await TH.passkeyOf('laptop', phone.prfSaltB64)
+    expect(elsewhere.credentialId).to.eq(laptop.credentialId)
+    expect(elsewhere.prfBytes).to.not.deep.equal(laptop.prfBytes)
+    expect(phone.prfBytes).to.not.deep.equal(laptop.prfBytes)
   })
 
   it("boxOf: a shape-valid Lockbox, with any field overridden", () => {

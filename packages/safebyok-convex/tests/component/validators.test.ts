@@ -137,13 +137,15 @@ const OldIso = '2026-10-14T00:00:00.000Z'
 const BundleCases = [
   // both accept:
   [TH.bundleOf('u1'),                                                        true,   true,   'a whole bundle'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase'), TH.passkeyEnvelopeOf('laptop')] }, true, true, 'a bundle with a passphrase and a passkey'],
   // both refuse -- what Convex can see:
   [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },                    false,  false,  'a format this package does not know'],
   [{ ...TH.bundleOf('u1'), format: 'safebyok-lockbox-v1' },                  false,  false,  "another record's format"],
   [bundleWithoutVaultId,                                                  false,  false,  'a bundle missing its vault_id'],
   [{ ...TH.bundleOf('u1'), passphrase_epoch: '1' },                          false,  false,  'an epoch written as text'],
   [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { vault_key_wrapped: { cipher_iv_b64: 'iv' } as never })] }, false, false, 'a ciphered envelope missing its ciphertext'],
-  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { method: 'passkey' as never })] }, false, false, 'an unlock method this package does not know'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { method: 'fingerprint' as never })] }, false, false, 'an unlock method this package does not know'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { method: 'passkey' as never })] }, false, false, "a passphrase's fields under the passkey method"],
   [{ ...bundleWithoutUnlocks, ...OldEnvelopeFields },                     false,  false,  'a bundle from before its unlocks were a list of envelopes'],
   [{ ...TH.bundleOf('u1'), registered_at: null },                            false,  false,  'a null registered_at'],
   [{ ...TH.bundleOf('u1'), registered_at: '2026-10-14T00:00:00.000Z' },      false,  false,  'a registered_at as an ISO string'],
@@ -158,6 +160,7 @@ const BundleCases = [
   [{ ...TH.bundleOf('u1'), registered_at: 1_792_022_400 },                   false,  true,   'a registered_at in epoch seconds, before 1981'],
   [{ ...TH.bundleOf('u1'), unlocks: [] },                                    false,  true,   'a vault with no way in'],
   [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('one'), TH.envelopeOf('one', { unlock_id: 'unlock-two' })] }, false, true, 'two ways in sharing an unlocklabel'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.passkeyEnvelopeOf('one'), TH.passkeyEnvelopeOf('two', { credential_id: 'cred-one' })] }, false, true, 'two passkeys for the same credential'],
 ] as const
 
 const LockboxCases = [
