@@ -304,15 +304,10 @@ no field. The security note on ciphertext length stays until this lands.
 
 ### Error families: misuse versus conditions
 
-Two families of VaultError, told apart by kind, so each reaches the right person. **Misuse** is
-the developer's to fix and should be loud: `bad_option`, `bad_whisper`, `vault_closed`,
-`unknown_key_deriver`, and `bad_label` for the labels the app chooses. safebyok-react rethrows it
-during render, so an error boundary and the dev overlay show it (low-hanging-fruit thread 3 does
-the one silent case today). **Conditions** are the app's to handle and may reach the user:
-`vault_locked`, `wrong_passphrase`, `absent_box`, `stale_write`, `not_permitted`,
-`storage_unavailable`, and `whisper_too_large` or `bad_label` when the value came from the user;
-the provider hands these over through the context. `errors.ts` exports the split. To decide:
-kinds that are misuse in one caller and a condition in another (a boxlabel the user typed).
+Done in low-hanging-fruit thread 13 (`error_kinds`): every kind has one family, in `errors.ts`'s
+doc block and the core README's *Errors* tables. Still open: `VaultProvider` throws any
+`openVault` rejection to the error boundary, conditions (`storage_unavailable`, `not_permitted`)
+included; whether it should hand those to the context instead is undecided.
 
 ### Pluggable label validator
 
