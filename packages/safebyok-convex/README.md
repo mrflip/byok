@@ -54,6 +54,11 @@ Run your usual Convex codegen, and your clients reach these as `api.safebyok.*`.
   and the bundle's `passphrase_epoch` or the lockbox's `revision_id` -- and checks it in the same
   transaction it writes in. When that no longer stands, it writes nothing and resolves `false`,
   which the client turns into a `stale_write`. Not an error: no `ConvexError`, nothing in your logs.
+* **A vault the component has no room for.** `updateBox` refuses, writing nothing, a lockbox
+  that would take its vault past the component's own limits (see *How big a vault can be*), with
+  a `ConvexError` whose `data` is `{ kind: 'vault_full', message }`, which the client turns into
+  a `VaultError` of that kind. The limits are the component's, not your app's or the client's to
+  set.
 
 ## What your app does on the client
 
@@ -91,8 +96,9 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
   it changes, so its snapshot (and a React render) follows writes from anywhere.
 * **Refusals** are `VaultError`s: `not_permitted` (signed out, or not this user's vault);
   `stale_write` (another device changed the vault first: the vault has already caught up, so
-  read again before retrying); and `storage_unavailable` for anything else Convex reported, with
-  Convex's own error as its `cause`.
+  read again before retrying); `vault_full` (the vault holds all the component lets it: erase a
+  lockbox first); and `storage_unavailable` for anything else Convex reported, with Convex's own
+  error as its `cause`.
 * **Offline, a call waits** for the connection, as every Convex call does, rather than failing.
   Convex resends a mutation when it reconnects, so a write may land after any timeout you set:
   show progress, but don't report it failed.
@@ -102,12 +108,13 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
 
 ## What is stored
 
-Two tables, inside the component, beside nothing of your app's:
+Three tables, inside the component, beside nothing of your app's:
 
-| Table                | One row per | Columns                                                         | Index                                                |
-| -------------------- | ----------- | --------------------------------------------------------------- | ---------------------------------------------------- |
-| `safebyok_bundles`   | vault       | the `VaultBundle` record as-is                                  | `by_scope`: `user_id`, `applabel`, `vaultlabel`      |
-| `safebyok_lockboxes` | lockbox     | the `Lockbox` record as-is, and its vault's scope columns       | `by_box`: `user_id`, `applabel`, `vaultlabel`, `boxlabel` |
+| Table                    | One row per | Columns                                                         | Index                                                |
+| ------------------------ | ----------- | --------------------------------------------------------------- | ---------------------------------------------------- |
+| `safebyok_bundles`       | vault       | the `VaultBundle` record as-is                                  | `by_scope`: `user_id`, `applabel`, `vaultlabel`      |
+| `safebyok_lockboxes`     | lockbox     | the `Lockbox` record as-is, and its vault's scope columns       | `by_box`: `user_id`, `applabel`, `vaultlabel`, `boxlabel` |
+| `safebyok_vault_tallies` | vault       | `bundle_id` (its bundle's row), `lockbox_count`, `lockbox_bytes` | `by_bundle`: `bundle_id`                             |
 
 * **Encrypted**, as `{ cipher_iv_b64, ciphertext_b64 }`: each whisper (`whisper_ciphered`), each
   lockbox's lockboxKey (`lockbox_key_wrapped`), and the vaultKey (`vault_key_passphrase_wrapped`).
@@ -117,17 +124,31 @@ Two tables, inside the component, beside nothing of your app's:
 * **Never**: a whisper, a passphrase, any key in usable form, or the device-local remembered
   unlock. No history: an update replaces its row. (Convex's own backups and exports keep what
   they keep.)
-* `user_id` leads both indexes, so one user's rows are one range of each.
+* `user_id` leads the bundle and lockbox indexes, so one user's rows are one range of each.
+* **A vault's tally** counts its lockboxes and their bytes as Convex weighs them, kept in step
+  by every lockbox write and erase in the same transaction. A vault written before tallies
+  were kept has none, and reads as ever: its next lockbox write counts it, reading the vault
+  once (and no further than its limits). An erase never counts a vault.
 
 **How big a vault can be.** Listing a vault, watching it and erasing it each read the whole vault
-in one Convex transaction, which may read 16 MiB; erasing reads it twice, so `convexVaultDB`
-declares a `maxVaultBytes` of 8 MiB. A vault holds 100 lockboxes by default, raised with
+in one Convex transaction, which may read 16 MiB and 32,000 documents, and write 16,000 documents;
+erasing reads it twice, so `convexVaultDB` declares a `maxVaultBytes` of 8 MiB. A vault holds 100 lockboxes by default, raised with
 `maxLockboxes` as far as `maxVaultBytes` allows: `openVault` refuses, with kind `bad_option`, a
 `maxLockboxes` whose lockboxes at `maxWhisperBytes` each might not fit, and its message says how
 many would. At the default `maxWhisperBytes` (40444) that is at most 101; at a `maxWhisperBytes`
 of 2048, ample for API keys, it is 1365. A store past the limit is refused with kind
 `vault_full`, until a lockbox is erased. Each record must also fit Convex's 1 MiB document limit,
 which the core's `maxWhisperBytes` keeps well inside.
+
+The component holds every vault to limits of its own, whatever its client asks, so that even a
+modified client cannot grow a vault past what erasing can reach: **8,000 lockboxes**, and
+**7 MiB less 1 KiB** of them as Convex weighs a document (half the read budget, less a whole
+document for the bundle and room for the tally). A client within its own `maxLockboxes` stays
+well inside both. A write that would take a vault past either, and leave it larger than it was
+-- a new lockbox, or a heavier replacement -- is refused with kind `vault_full`; a replacement no
+heavier, and every erase, always lands, so a vault over its limits (written before they were
+kept) can always shrink, and be erased a lockbox at a time even when it is too large to erase
+whole.
 
 ## The functions
 
@@ -141,7 +162,7 @@ the core's own records, scopes and expectations.
 | `updateBundle`     | mutation | `{ bundle, expected: { vault_id, passphrase_epoch } }` | `true` if written, `false` if not           |
 | `getBox`           | query    | `{ scope, boxlabel }`                       | the `Lockbox`, or null                                |
 | `listBoxSummaries` | query    | `{ scope }`                                 | each lockbox without its ciphered fields, `format` kept, in boxlabel order |
-| `updateBox`        | mutation | `{ scope, lockbox, expected: { vault_id, revision_id } }` | `true` if written, `false` if not        |
+| `updateBox`        | mutation | `{ scope, lockbox, expected: { vault_id, revision_id } }` | `true` if written, `false` if not; refuses `vault_full` past the vault's limits |
 | `eraseBox`         | mutation | `{ scope, boxlabel, expected: { vault_id } }` | `true` if the vault still stands (box or none), `false` if not |
 | `eraseVault`       | mutation | `{ scope, expected: { vault_id } }`         | `true` if erased, `false` if not                      |
 | `watchVault`       | query    | `{ scope }`                                 | `{ vault_id, passphrase_epoch, boxes: [[boxlabel, revision_id]] }`, changing with every write |
