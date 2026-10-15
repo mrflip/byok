@@ -602,10 +602,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         return
       }
       // A shut in all but the key: an unlock under way loses, no new operation starts, and this
-      // device forgets its remembered unlock now. Only the vaultKey waits, for work in hand.
+      // device forgets its remembered unlock now. Only the vaultKey waits, for work in hand. The
+      // gate closes by having no deadline at all, not one at now, which a clock stepped back reopens.
       shutsSoFar += 1
-      const now = clock.now()
-      askPassphraseAt = Math.min(askPassphraseAt ?? now, now)
+      askPassphraseAt = null
       shutAfter(graceMs)
       bump()
       await deviceDB.eraseUnlock(scope)
