@@ -5,22 +5,39 @@ const MinutesPerHour = 60
 const MinutesPerDay = 24 * MinutesPerHour
 const MsPerMinute = 60_000
 
-/** A count with its unit spelled out and pluralized: 'minute' to '15 minutes', in English. */
-const counted = (count: number, unit: 'day' | 'hour' | 'minute'): string => (
-  new Intl.NumberFormat('en', { style: 'unit', unit, unitDisplay: 'long', useGrouping: false }).format(count)
+/** The language the dialog's own sentences are in: the one place to change when it learns another. */
+const Locale = 'en'
+
+type Unit = 'day' | 'hour' | 'minute'
+
+/** The window as a count of whole days, else of whole hours, else of minutes (at least one). */
+const windowCount = (reentryWindowMs: number): { count: number, unit: Unit } => {
+  const minutes = Math.max(1, Math.round(reentryWindowMs / MsPerMinute))
+  if (minutes % MinutesPerDay === 0) { return { count: minutes / MinutesPerDay, unit: 'day' } }
+  if (minutes % MinutesPerHour === 0) { return { count: minutes / MinutesPerHour, unit: 'hour' } }
+  return { count: minutes, unit: 'minute' }
+}
+
+/** A count with its unit spelled out and pluralized: 'minute' to '15 minutes'. */
+const counted = (count: number, unit: Unit): string => (
+  new Intl.NumberFormat(Locale, { style: 'unit', unit, unitDisplay: 'long', useGrouping: false }).format(count)
 )
 
 /**
- * What the dialog promises about how long an unlock lasts, from the vault's `reentryWindowMs`: a
- * whole number of days, else of hours, else of minutes; and the longest window a vault keeps
- * (`ForeverMs`, which `Infinity` hours becomes) reads as lasting until the user locks it.
+ * What the dialog promises about how long an unlock lasts, from the vault's `reentryWindowMs`:
+ * 'Locks again on this device in 7 days' (a whole number of days, else of hours, else of
+ * minutes, phrased by `Intl.RelativeTimeFormat`); and the longest window a vault keeps
+ * (`ForeverMs`, which `Infinity` hours becomes) reads as lasting until the user locks it. Where
+ * the platform lacks `Intl.RelativeTimeFormat`, it falls back to 'Stays unlocked on this device
+ * for 7 days'.
  */
 const unlockedFor = (reentryWindowMs: number): string => {
   if (reentryWindowMs >= ForeverMs) { return 'Stays unlocked on this device until you lock it.' }
-  const minutes = Math.max(1, Math.round(reentryWindowMs / MsPerMinute))
-  if (minutes % MinutesPerDay === 0) { return `Stays unlocked on this device for ${counted(minutes / MinutesPerDay, 'day')}.` }
-  if (minutes % MinutesPerHour === 0) { return `Stays unlocked on this device for ${counted(minutes / MinutesPerHour, 'hour')}.` }
-  return `Stays unlocked on this device for ${counted(minutes, 'minute')}.`
+  const { count, unit } = windowCount(reentryWindowMs)
+  if (! ('RelativeTimeFormat' in Intl)) { return `Stays unlocked on this device for ${counted(count, unit)}.` }
+  // numeric 'always', so that one day reads 'in 1 day' and never 'tomorrow'.
+  const relative = new Intl.RelativeTimeFormat(Locale, { numeric: 'always', style: 'long' }).format(count, unit)
+  return `Locks again on this device ${relative}.`
 }
 
 /**
@@ -38,8 +55,8 @@ const unlockedFor = (reentryWindowMs: number): string => {
  * the nearest error boundary above the dialog to catch.
  *
  * How long an unlock lasts it reads from the vault itself (its `reentryWindowMs`, the
- * `forcePassphraseReentryHours` it was opened with): 'for 7 days', 'for 15 minutes', 'until you
- * lock it' for `Infinity`. Nobody need tell the dialog the window again.
+ * `forcePassphraseReentryHours` it was opened with): 'Locks again on this device in 7 days', 'in 15
+ * minutes', 'Stays unlocked on this device until you lock it' for `Infinity`. Nobody need tell the dialog the window again.
  *
  * @example
  *   <PassphraseModal vault={vault} onDone={(unlocked) => { setAsking(false) }} />
