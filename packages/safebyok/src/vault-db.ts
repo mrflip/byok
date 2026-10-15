@@ -84,7 +84,9 @@ export abstract class VaultDB {
    * `maxLockboxes` lockboxes at `maxWhisperBytes` each, with room for encoding and each
    * lockbox's other fields, might not fit in half of it. A backend that also enforces a limit
    * of its own sets it above what this admits, and refuses a lockbox write past it with a
-   * VaultError of kind `vault_full`.
+   * VaultError of kind `vault_full`. A backend that does not hold to the limit it declares, or
+   * a vault opened with limits that disagree with its backend's, is undefined behaviour: not a
+   * bug we will fix, and not one whose outcome we promise.
    */
   abstract readonly maxVaultBytes: number
 
