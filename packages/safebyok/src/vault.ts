@@ -97,9 +97,16 @@ export type Vault = {
    * `forcePassphraseReentryHours`. On an `absent` vault this first unlock creates it, with this passphrase.
    * A wrong passphrase throws kind 'wrong_passphrase' and changes nothing -- learned from the
    * vaultKey envelope refusing to decrypt, never from a comparison.
+   *
+   * A `lock()` or `destroy()` called while the unlock is still under way wins: the vault stays
+   * locked, this device remembers nothing, and the call throws kind 'vault_locked'. A vault the
+   * unlock was creating stays created, locked, under this passphrase.
    */
   unlock(passphrase: string): Promise<void>
-  /** Forget the unlock, in memory and on this device: back to `locked`. */
+  /**
+   * Forget the unlock, in memory and on this device: back to `locked`. Wins over an `unlock()` or
+   * `changePassphrase()` still under way, which then leaves the vault locked.
+   */
   lock(): Promise<void>
 
   /**
@@ -112,6 +119,10 @@ export type Vault = {
    * throws kind 'wrong_passphrase' and changes nothing. If another device changes the passphrase
    * (or destroys the vault) between this device's look and its write, nothing is written and
    * the call throws kind 'stale_write', after catching up with storage.
+   *
+   * Leaves the vault unlocked under the new passphrase -- unless `lock()` or `destroy()` is
+   * called while the change is under way, which wins: the passphrase still changes, and the
+   * vault stays locked.
    */
   changePassphrase(oldPassphrase: string, newPassphrase: string): Promise<void>
 
@@ -219,6 +230,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   let askPassphraseAt: number | null = null
   let vaultKey: CryptoKey | null = null
   let closed = false
+  // How many times this handle has shut. An unlock under way notes the number when it starts, and
+  // takes nothing up if a shut has moved it meanwhile: the lock wins.
+  let shutsSoFar = 0
 
   const listeners = new Set<() => void>()
   const vaultState = (): VaultState => {
@@ -326,18 +340,58 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     return { draft, transientKey: freshKey, sessionKey }
   }
 
-  /** The vaultKey for an unlock: creating the vault when absent, proving the passphrase when not. */
-  const settleUnlock = async (passphrase: string): Promise<VaultKeyPair> => {
+  /**
+   * The vaultKey for an unlock, and the bundle it was proven against: creating the vault when
+   * absent, proving the passphrase when not.
+   */
+  const settleUnlock = async (passphrase: string): Promise<{ standing: VaultBundle } & VaultKeyPair> => {
     if (bundle === null || bundle === UnreadBundle) {
       const { draft, transientKey, sessionKey } = await draftBundle(passphrase)
       const settled = await vaultDB.createBundle(draft)
       bundle = settled
-      if (settled.vault_id === draft.vault_id) { return { transientKey, sessionKey } }
+      if (settled.vault_id === draft.vault_id) { return { standing: settled, transientKey, sessionKey } }
       // Another device created the vault between our look and our write: the settled bundle is
       // theirs, and this passphrase must prove itself against it like any other.
-      return await unwrapWithPassphrase(settled, passphrase)
+      return { standing: settled, ...await unwrapWithPassphrase(settled, passphrase) }
     }
-    return await unwrapWithPassphrase(bundle, passphrase)
+    const standing = bundle
+    return { standing, ...await unwrapWithPassphrase(standing, passphrase) }
+  }
+
+  /**
+   * Forget the unlock, in memory and on this device. Every lock goes through here, and whatever
+   * unlock is under way when it does loses to it.
+   */
+  const shut = async () => {
+    shutsSoFar += 1
+    vaultKey = null
+    askPassphraseAt = null
+    await deviceDB.eraseUnlock(scope)
+  }
+
+  /** True when the vault has shut since `shutsThen` was read from `shutsSoFar`. */
+  const shutSince = (shutsThen: number) => shutsSoFar !== shutsThen
+
+  /**
+   * Remember an unlock on this device and take up its vaultKey, deadline from now -- unless the
+   * vault has shut since `shutsThen`, which wins: then nothing is taken up, and a device record
+   * already written is erased again.
+   *
+   * @returns True when the vault is now unlocked.
+   */
+  const takeUpUnlock = async (unlocked: VaultKeyPair, standing: VaultBundle, shutsThen: number): Promise<boolean> => {
+    if (shutSince(shutsThen)) { return false }
+    const until = deadlineAfter(clock.now(), reentryMs)
+    // The transient's last act: wrapped into this device's remembered unlock, then dropped.
+    await rememberDevice(unlocked.transientKey, standing, until)
+    if (shutSince(shutsThen)) {
+      // The shut's own erase may have run before this record landed.
+      await deviceDB.eraseUnlock(scope)
+      return false
+    }
+    vaultKey = unlocked.sessionKey
+    askPassphraseAt = until
+    return true
   }
 
   /** Mint a fresh localUnlockKey, wrap the vaultKey under it, and remember the unlock on this device. */
@@ -445,28 +499,28 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     unlock: async (passphrase) => {
       ensureOpen()
       if (! passphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
+      const shutsThen = shutsSoFar
       // Sync with the backend first: the passphrase proves itself against the bundle as it
       // stands there now, not against a cached one a destroy or recreate may have outdated.
       await refresh()
-      const unlocked = await settleUnlock(passphrase)
-      askPassphraseAt = deadlineAfter(clock.now(), reentryMs)
-      // The transient's last act: wrapped into this device's remembered unlock, then dropped.
-      await rememberDevice(unlocked.transientKey, currentBundle(), askPassphraseAt)
-      vaultKey = unlocked.sessionKey
+      const unlocked = shutSince(shutsThen) ? null : await settleUnlock(passphrase)
+      const tookUp = unlocked !== null && await takeUpUnlock(unlocked, unlocked.standing, shutsThen)
       bump()
+      if (! tookUp) {
+        throw new VaultError('vault_locked', 'The vault was locked (or destroyed) while this unlock was under way, and that wins: nothing was unlocked, and this device remembers nothing. Unlock again if that was not meant.')
+      }
     },
 
     lock: async () => {
       ensureOpen()
-      vaultKey = null
-      askPassphraseAt = null
-      await deviceDB.eraseUnlock(scope)
+      await shut()
       bump()
     },
 
     changePassphrase: async (oldPassphrase, newPassphrase) => {
       ensureOpen()
       if (! newPassphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
+      const shutsThen = shutsSoFar
       // The old passphrase proves itself against the bundle as the backend holds it now: a
       // cached bundle could bury one written elsewhere under a different vault_id entirely.
       await refresh()
@@ -484,9 +538,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       }
       await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }))
       bundle = next
-      askPassphraseAt = deadlineAfter(clock.now(), reentryMs)
-      await rememberDevice(proven.transientKey, next, askPassphraseAt)
-      vaultKey = proven.sessionKey
+      // The change has landed, whatever happens now: a shut meanwhile leaves only its unlock untaken.
+      await takeUpUnlock(proven, next, shutsThen)
       bump()
     },
 
@@ -570,9 +623,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       // Only the vault this handle had read when called: one destroyed and made anew since
       // refuses, even if a background refresh brings it in while this awaits.
       const doomed = bundle
-      vaultKey = null
-      askPassphraseAt = null
-      await deviceDB.eraseUnlock(scope)
+      await shut()
       if (doomed !== null && doomed !== UnreadBundle) {
         await refreshOnStale(vaultDB.eraseVault(scope, { vault_id: doomed.vault_id }))
       }

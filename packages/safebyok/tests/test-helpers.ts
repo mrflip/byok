@@ -39,3 +39,39 @@ export const tweakB64 = (b64: string): string => {
  * @example await wakeupAtNextTick() // background refreshes have landed
  */
 export const wakeupAtNextTick = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
+
+/**
+ * A gate for holding an async seam mid-flight, so a test can land one call in the middle of
+ * another: `pass()` waits until `release()` is called, and `reached` resolves once something is
+ * waiting at it. Released, it stays open: later passes go straight through.
+ *
+ * @returns The gate: `pass`, to await inside the seam; `reached`, to await in the test; `release`.
+ *
+ * @example
+ *   const gate = TH.makeGate()
+ *   const slowDeriver = { ...testDeriver, deriveKeyBytes: async (passphrase, saltBytes) => { await gate.pass(); return await testDeriver.deriveKeyBytes(passphrase, saltBytes) } }
+ *   const unlocking = vault.unlock('pw')   // now waiting at the gate
+ *   await gate.reached
+ *   await vault.lock()                     // lands mid-unlock
+ *   gate.release()
+ */
+export const makeGate = () => {
+  const opened = deferred()
+  const arrived = deferred()
+  const pass = async () => {
+    arrived.resolve()
+    await opened.promise
+  }
+  return { pass, reached: arrived.promise, release: opened.resolve }
+}
+
+/** Stands in for a resolver until the promise hands over its own. */
+const unresolved = () => { /* replaced before use */ }
+
+/** A promise, and apart from it the function that resolves it. */
+const deferred = () => {
+  let resolve: () => void = unresolved
+  // eslint-disable-next-line unicorn/prefer-promise-with-resolvers -- Promise.withResolvers is ES2024, and every tsconfig's lib stops at ES2023
+  const promise = new Promise<void>((resolver) => { resolve = resolver })
+  return { promise, resolve }
+}

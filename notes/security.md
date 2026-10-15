@@ -226,3 +226,13 @@ security expert who knows what questions to ask.
   `src/`, for the workspace's own tooling; `pnpm pack` ships `publishConfig.exports` (dist only)
   instead. `scripts/release.ts` refuses a tarball that still carries the condition, and each
   public package's `prepublishOnly` refuses a publish not run by pnpm.
+* 2026-10-15: a `lock()` (or `destroy()`) called while an `unlock()` or `changePassphrase()` is
+  still under way wins. Each lock moves a per-handle counter; the unlock reads it at its start
+  and again after each wait (the bundle read, the key derivation, the device record's write),
+  and on finding it moved takes up no vaultKey, erases a device record it had already written,
+  and throws `vault_locked`. A vault that unlock was creating stays created, locked. A passphrase
+  change still lands in storage (its proof is the old passphrase, not the unlock), and only its
+  unlock is dropped. The counter is per handle: a lock in one tab does not reach an unlock under
+  way in another, beyond both writing the one device record. The undoing erase is
+  unconditional, so it can also erase a record written by a second unlock begun after the lock
+  on the same handle; that device then asks for the passphrase at its next open.
