@@ -57,3 +57,5 @@ from `origin/main` at 6f9911d. Justify: green -- core 868, react 51, convex 268,
   - `PassphraseModal`'s `reentryHours` prop is removed, not deprecated (pre-1.0, minor bump).
     A host's hand-made `Vault` fake now needs `reentryWindowMs`.
   - Should `MaxUserIdChars` be public too, for a host form's `maxLength`? Left internal.
+  - Should `store()` overwrite a box whose record fails validation, as `erase()` now removes it?
+    Left refusing: the ruling named `erase()` only.
