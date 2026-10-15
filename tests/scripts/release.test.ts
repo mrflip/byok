@@ -91,6 +91,18 @@ describe("workspaceRanges", () => {
   }
 })
 
+const SourceConditionCases = [
+  [{ exports: { ".": { "@safebyok/source": "./src/index.ts", import: "./dist/index.js" } } }, ['exports["."]: @safebyok/source'], 'a source condition is caught'],
+  [{ exports: { ".": { import: "./dist/index.js" }, "./package.json": "./package.json" } },   [],                                  'dist-only exports pass'],
+  [{ name: "safebyok" },                                                                     [],                                  'a package with no exports passes'],
+] as const
+
+describe("sourceConditions", () => {
+  for (const [manifest, expected, blurb] of SourceConditionCases) {
+    it(blurb, () => { expect(Release.sourceConditions(manifest)).to.deep.equal(expected) })
+  }
+})
+
 describe("readPackDir", () => {
   let scratch = ''
   beforeEach(() => { scratch = mkdtempSync(path.join(tmpdir(), 'release-pack-')) })
@@ -287,6 +299,16 @@ describe("stage", () => {
     const outcomes = await Release.stage([releaseOf('safebyok-react')], { run: fake.run, dryRun: false, tagfile })
     expect(outcomes.map((outcome) => outcome.kind)).to.deep.equal(['failed'])
     expect(outcomes[0]?.detail).to.include('safebyok: workspace:^')
+    expect(fake.calls.map(([command]) => command)).to.deep.equal(['git', 'git', 'tar'])
+  })
+
+  it("refuses a tarball whose package.json still points at the workspace's source", async () => {
+    const tarball = '/pack/packages/safebyok-0.1.0.tgz'
+    const exports = { '.': { '@safebyok/source': './src/index.ts', import: './dist/index.js' } }
+    const fake = makeFake({}, { manifests: { [tarball]: { exports } } })
+    const outcomes = await Release.stage([releaseOf('safebyok')], { run: fake.run, dryRun: false, tagfile })
+    expect(outcomes.map((outcome) => outcome.kind)).to.deep.equal(['failed'])
+    expect(outcomes[0]?.detail).to.include('@safebyok/source')
     expect(fake.calls.map(([command]) => command)).to.deep.equal(['git', 'git', 'tar'])
   })
 
