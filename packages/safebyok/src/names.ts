@@ -31,14 +31,15 @@ export const rulesOf = (validators: VaultValidators = {}): NameRules => ({
 
 /**
  * True when `candidate` is text that passes the `field` check. A check that throws rather than
- * answering -- an async one, or a host's own bug -- is misuse: kind 'bad_option'.
+ * answering -- an async one, or a host's own bug -- is misuse: kind 'bad_option', carrying nothing
+ * of what it threw, which may quote the candidate.
  */
 export const admits = (rules: NameRules, field: NameField, candidate: unknown): candidate is string => {
   if (typeof candidate !== 'string') { return false }
   try {
     return Z.safeParse(rules[field], candidate).success
-  } catch (err) {
-    throw new VaultError('bad_option', `The ${field} check in openVault's validators threw rather than answering: each must be a Zod schema that checks synchronously. Its own error is this error's cause.`, { cause: err })
+  } catch {
+    throw new VaultError('bad_option', `The ${field} check in openVault's validators threw rather than answering: each must be a Zod schema that checks synchronously, and returns its refusals rather than throwing them.`)
   }
 }
 

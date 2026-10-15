@@ -62,11 +62,14 @@ describe("Names.admits", () => {
     expect(err.message).to.include('boxlabel')
   })
 
-  it("refuses a check that throws as misuse, with the host's own error as the cause", () => {
-    const hostTrouble = new Error('the host check fell over')
-    const throwing = Names.rulesOf({ note: ZClassic.string().refine(() => { throw hostTrouble }) })
-    const err = refusalOf(() => Names.admits(throwing, 'note', 'work account'), 'bad_option')
-    expect(err.cause).to.eq(hostTrouble)
+  it("refuses a check that throws as misuse, carrying nothing of what it threw, which may quote the candidate", () => {
+    const quotingThrow = Names.rulesOf({ note: ZClassic.string().refine((note) => { throw new Error(`no note like ${note}`) }) })
+    const err = refusalOf(() => Names.admits(quotingThrow, 'note', 'sk-ant-fake-pasted-by-mistake'), 'bad_option')
+    expect(err.message).to.include('note')
+    expect(err.cause).to.be.undefined
+    expect(Object.getOwnPropertyNames(err)).to.have.members(['stack', 'message', 'name', 'kind'])
+    expect(TH.thrownText(err)).to.not.include('sk-ant-fake')
+    expect(TH.leafTexts(err).join(' ')).to.not.include('sk-ant-fake')
   })
 })
 
