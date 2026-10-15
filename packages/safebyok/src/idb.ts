@@ -210,10 +210,11 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
       ring()
     },
 
+    // The scope's own unlock goes first, so a sweep that fails never keeps a lock from forgetting it.
     eraseUnlock: async (scope) => {
-      await sweepStrays()
       await del(Ckeys.unlock(scope), shelf())
       ring()
+      await sweepStrays()
     },
 
     // The shelf holds remembered unlocks and nothing else, so forgetting them all is clearing it:
