@@ -9,7 +9,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | - | ------------------ | --------------------- | ------- |
 | 1 | kdf_configs        | #66 tip `dfdbbec`     | underway |
 | 2 | vaultdb_validation | #66 tip `dfdbbec`     | underway |
-| 3 | react_dialog       | #66 tip `dfdbbec`     | underway |
+| 3 | react_dialog       | #66 tip `dfdbbec`     | in review |
 | 4 | ci_tooling         | #66 tip `dfdbbec`     | pending |
 | 5 | docs_refresh       | #66 tip `dfdbbec`     | pending |
 | 6 | thin_tests         | #66 tip `dfdbbec`     | pending |
@@ -18,4 +18,4 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 ## What the threads have taught
 
-*Orchestrator:* nothing yet.
+*Orchestrator:* thread 3 (react_dialog) is `ready`: `PassphraseModal` takes an optional `reentryHours` prop that `VaultProvider` fills from its `forcePassphraseReentryHours`. No core accessor exists for the window, so a host rendering the dialog by hand repeats the value; a later core accessor would end that (thread 3 left `vault.ts` to threads 1 and 2).
