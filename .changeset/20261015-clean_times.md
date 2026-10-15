@@ -9,4 +9,4 @@ What existing data must do: a vault written before this release does not open. I
 
 The host's `clock` is checked. `openVault` refuses a clock that is not `{ now() }`, or whose reading is not epoch milliseconds from 1981 to 2255 (`FarPast` to `FarFuture`), with kind `bad_option`, before it touches storage; any later call that reads it out of bounds throws `bad_option` too. A reading with a fraction of a millisecond is fine: `EpochMillis` now accepts any number in bounds, where it refused fractions, and the package still writes whole milliseconds.
 
-`forcePassphraseReentryHours: Infinity` is still welcome, and still makes `askPassphraseAt` read `FarFuture`; it now becomes a finite window as the option is parsed, so nothing past `openVault`'s door holds `Infinity`.
+`forcePassphraseReentryHours: Infinity` is still welcome, and still makes `askPassphraseAt` read `FarFuture`; it now becomes a finite window as the option is parsed, so nothing past `openVault`'s door holds `Infinity`. Likewise a storage adapter's `maxRecordBytes` or `maxVaultBytes` of `Infinity`, for no limit, is read as `Number.MAX_SAFE_INTEGER` bytes.

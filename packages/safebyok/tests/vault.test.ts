@@ -1004,6 +1004,21 @@ describe("the lockbox limit", () => {
     }
   })
 
+  it("takes an adapter's Infinity, for no limit, as the largest finite limit, so nothing past openVault holds Infinity", async () => {
+    const world = makeWorld()
+    const unlimited = String(Number.MAX_SAFE_INTEGER)
+    expect(world.vaultDB.maxVaultBytes).to.eq(Infinity)
+    await world.open({ maxLockboxes: 1_000_000_000 })
+    const tooManyBoxes = await expectRefusal(world.open({ maxLockboxes: 9_000_000_000_000 }), 'bad_option')
+    expect(tooManyBoxes.message).to.include(`${unlimited} bytes`)
+    expect(tooManyBoxes.message).to.not.include('Infinity')
+    const noRecordLimit = Object.create(world.vaultDB, { maxRecordBytes: { value: Infinity } }) as VaultDB
+    await world.open({ vaultDB: noRecordLimit, maxLockboxes: 1, maxWhisperBytes: 1_000_000_000 })
+    const tooLarge = await expectRefusal(world.open({ vaultDB: noRecordLimit, maxWhisperBytes: Number.MAX_SAFE_INTEGER }), 'bad_option')
+    expect(tooLarge.message).to.include(`${unlimited} bytes`)
+    expect(tooLarge.message).to.not.include('Infinity')
+  })
+
   it("says so plainly when not even one lockbox of that maxWhisperBytes fits", async () => {
     const world = makeWorld()
     const vaultDB = declaringVaultBytes(world.vaultDB, world.vaultDB.maxRecordBytes)
