@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: thread 10 building; 1, 5, 9 in review; 3 and 4 filed. Newer than the plan wherever the two disagree.
+**Status**: 5, 10, 11 building; 1 and 9 filing; 3 and 4 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -18,7 +18,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 8  | `size_budget` | thread 2 | pending |
 | 9  | `docs_sweep` | `origin/main` | filing |
 | 10 | `sandals` | `origin/main` | underway |
-| 11 | `label_grammar_report` | `origin/main` | pending |
+| 11 | `label_grammar_report` | `origin/main` | underway |
 
 ## What the threads have taught
 
