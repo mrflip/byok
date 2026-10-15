@@ -244,6 +244,20 @@ describe("stage", () => {
     expect(reported()).to.deep.equal([{ type: 'git-tag', tag: 'safebyok-react@0.1.0', packageName: 'safebyok-react' }])
   })
 
+  it("fails a release whose tag git cannot look up, and still attempts the next", async () => {
+    const fake = makeFake({})
+    const run: Release.Runner = (command, args) => (
+      command === 'git' && args.includes('refs/tags/safebyok@0.1.0')
+        ? Promise.resolve({ exitCode: 128, stdout: '', stderr: 'fatal: unable to access the remote' })
+        : fake.run(command, args)
+    )
+    const outcomes = await Release.stage([releaseOf('safebyok'), releaseOf('safebyok-react')], { run, dryRun: false, tagfile })
+    expect(outcomes.map((outcome) => outcome.kind)).to.deep.equal(['failed', 'staged'])
+    expect(outcomes[0]?.detail).to.match(/could not tell whether to stage it: git ls-remote .* failed \(exit 128\): fatal: unable to access/)
+    expect(fake.calls.filter(([command]) => command === 'npm')).to.have.lengthOf(1)
+    expect(reported()).to.deep.equal([{ type: 'git-tag', tag: 'safebyok-react@0.1.0', packageName: 'safebyok-react' }])
+  })
+
   it("quotes npm's error code and summary, and nothing else it printed", async () => {
     const fake = makeFake({ 'safebyok': npmFailure('E500', 'Internal error\nsecond line', 'detail naming npm_FAKETOKEN') })
     const outcomes = await Release.stage([releaseOf('safebyok')], { run: fake.run, dryRun: false, tagfile })
