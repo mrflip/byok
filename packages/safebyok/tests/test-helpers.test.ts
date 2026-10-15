@@ -454,10 +454,12 @@ describe("perUser", () => {
 
   it("has the limits of the VaultDB it made for anyone", () => {
     const store = memoryStore()
-    expect(TH.perUser((userId) => servingOnly(userId, store))).to.include({
-      maxRecordBytes: localVaultDB(store).maxRecordBytes,
-      maxVaultBytes:  localVaultDB(store).maxVaultBytes,
+    const limitedBy = (userId: string): TH.VaultDBVerbs => ({
+      ...servingOnly(userId, store),
+      maxRecordBytes: userId === 'anyone' ? 4096 : 1,
+      maxVaultBytes:  userId === 'anyone' ? 65_536 : 1,
     })
+    expect(TH.perUser(limitedBy)).to.include({ maxRecordBytes: 4096, maxVaultBytes: 65_536 })
   })
 
   it("passes on a refusal from the user's VaultDB", async () => {
