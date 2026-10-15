@@ -442,8 +442,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   // The context each encryption is bound to; see VOCABULARY.md on cipherAdditionalData. An
   // unlock envelope's binding is Envelope's. The remembered device unlock's binds every field of
   // its record but the key and the wrap, the scope, vault and epoch as this vault expects them.
-  const localBinding = (vaultId: string, epoch: number, askAt: number) => (
-    cipherBinding('safebyok-unlock-v1', applabel, scope.user_id, vaultlabel, vaultId, epoch, askAt, 'vault_key_local_wrapped')
+  const localBinding = (vaultId: string, epoch: number, deadline: number) => (
+    cipherBinding('safebyok-unlock-v1', applabel, scope.user_id, vaultlabel, vaultId, epoch, deadline, 'vault_key_local_wrapped')
   )
   // A lockbox's binds the vault it lies in, and its record's whole public header: every field but
   // the two encrypted ones, so a note or a time altered in storage refuses to open.
