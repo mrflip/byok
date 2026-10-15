@@ -2871,28 +2871,33 @@ describe("the logger", () => {
     const device = uncheckingDeviceDB()
     const whisper = 'sk-FAKESECRET-whisper'
     const passphrase = 'FAKESECRET passphrase'
-    let reading = world.clock.now()
-    const clock = { now: () => reading }
+    const reading = world.clock.now()
+    let clockBroken = false
+    const clock = { now: () => { if (clockBroken) { throw new Error('the host clock broke: battery flat') } return reading } }
     const vault = await world.open({ deviceDB: device.deviceDB, clock })
     await vault.unlock(passphrase)
     await vault.store('anthropic', whisper, { note: 'FAKESECRET note' })
     await vault.changePassphrase(passphrase, `${passphrase} two`)
     const secrets = storedSecrets(world)
     // every call site: a remembered unlock unreadable, a background refresh refused, a lock
-    // without its grace, a failed open's watch stuck open
+    // without its grace (its error carrying the host clock's as its cause), a failed open's watch
+    // stuck open
     device.spoilRow((row) => ({ ...row, ask_passphrase_at: `${passphrase} ${whisper}` }))
     const reopened = await world.open({ deviceDB: device.deviceDB, clock })
     reopened.close()
     world.dbStore.write('box:acme:u1:main:anthropic', JSON.stringify({ ...storedRowOf(world, 'anthropic'), changed_at: whisper }))
     await TH.wakeupAtNextTick()
-    reading = Infinity
+    clockBroken = true
     await vault.lockSoon()
+    clockBroken = false
     vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(new VaultError('not_permitted', 'Sign in to reach this vault.'))
     vi.spyOn(world.vaultDB, 'subscribe').mockReturnValueOnce(() => { throw new Error('the adapter could not unsubscribe') })
-    reading = world.clock.now()
     await expectRefusal(world.open(), 'not_permitted')
     expect(world.logged.map((heard) => heard.level)).to.deep.equal(['warn', 'warn', 'warn', 'error'])
+    expect((world.logged[2]?.err?.cause as Error).message).to.match(/battery flat/)
     const text = TH.loggedText(world.logged)
+    // the walk reached the cause, so its search covers what causes hold
+    expect(text).to.include('battery flat')
     expect(text.toLowerCase()).to.not.include('fakesecret')
     expect(secrets.length).to.be.greaterThan(2)
     for (const secret of secrets) { expect(text).to.not.include(secret) }
