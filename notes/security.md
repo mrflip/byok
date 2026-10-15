@@ -107,6 +107,17 @@ security expert who knows what questions to ask.
   windows. It is client-side politeness, not a vault-wide synced policy: nothing stored enforces
   it across devices, and a modified client could choose any window it likes. The real bounds
   stay the passphrase and the device-bound localUnlockKey.
+* 2026-10-15: a host may let a device stay unlocked indefinitely, by passing
+  `forcePassphraseReentryHours: Infinity` (or any huge number); that is the host's choice, with no
+  upper cap. The stored deadline is then clamped to 8.64e15 ms, the last instant a `Date` holds,
+  so `expires_at` stays a finite number and the stored shape is unchanged. What still ends such an
+  unlock: `lock()` (memory and device record), a passphrase change on another device (the next
+  look at the bundle sees a new epoch), and the vault being destroyed or made anew (a new
+  `vault_id`). Nothing else does: no timer, and no idle detection. Two consequences: an open
+  handle sees that new epoch only when it next reads the bundle (an unlock, a write, or a change
+  the vaultDB pushes), so a handle that only reads whispers, on storage that pushes nothing, keeps
+  its vaultKey in memory until then; and lowering the option later does not shorten an unlock a
+  device already remembers, since the remembered path reads the stored `expires_at` as written.
 * 2026-10-14: the package was renamed `byok` → `safebyok` before any release, and its stored
   format tags with it (`safebyok-vault-v1`, `safebyok-lockbox-v1`, `safebyok-unlock-v1`). The
   tags are also the first element of every encryption's additional data, so a record written

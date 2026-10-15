@@ -192,6 +192,19 @@ export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 export const ForcePassphraseReentryHours = 168 // seven days
 
 /**
+ * The latest instant a JavaScript `Date` can hold, in epoch ms: 8.64e15 (the year 275760).
+ *
+ * `askPassphraseAt` equals it when the vault never asks for the passphrase again on this device
+ * until `lock()`: `forcePassphraseReentryHours: Infinity`, or a window so large its deadline
+ * would pass it. A host compares against it to show "until locked" rather than a date in the
+ * year 275760, and `new Date(askPassphraseAt)` is always a valid date.
+ *
+ * @example askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toLocaleString()
+ * @example new Date(FarFuture).getTime() === FarFuture   // true: the last instant a Date holds
+ */
+export const FarFuture = 8.64e15
+
+/**
  * The largest whisper a vault stores unless the caller says otherwise, in bytes of its JSON:
  * several times the beefiest credential (an RSA-8192 private key as PEM is about 6.4 KB), and
  * well inside what every storage backend can hold. A larger whisper is usually a sign that the
