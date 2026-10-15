@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MaxWhisperBytes, SevenDaysMs, type Whisper } from '../src/types'
+import { MaxLockboxes, MaxWhisperBytes, SevenDaysMs, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB } from '../src/device-db'
-import { localVaultDB } from '../src/vault-db'
+import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
-import { openVault, type OpenVaultOpts } from '../src/vault'
+import { openVault, type OpenVaultOpts, type Vault } from '../src/vault'
 import { testDeriver } from './helpers'
 
 /**
@@ -249,6 +249,149 @@ describe("store and read", () => {
     await vault.unlock('pw')
     const err = await expectRefusal(vault.read('nothing_here'), 'absent_box')
     expect(err.message).to.include('nothing_here')
+  })
+})
+
+/**
+ * `vaultDB` declaring `maxVaultBytes` as given, and otherwise itself: the in-tree local adapters
+ * set no limit on a vault, and the limit's check wants one that does.
+ */
+const declaringVaultBytes = (vaultDB: VaultDB, maxVaultBytes: unknown): VaultDB => (
+  Object.create(vaultDB, { maxVaultBytes: { value: maxVaultBytes } }) as VaultDB
+)
+
+/** Boxlabels in the snapshot, in order. */
+const boxlabelsOf = (vault: Vault) => vault.getSnapshot().boxes.map((summary) => summary.boxlabel)
+
+describe("the lockbox limit", () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it("stores up to maxLockboxes, then refuses a new lockbox as 'vault_full', quoting none of its label", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ maxLockboxes: 2 })
+    await vault.unlock('pw')
+    await vault.store('openai', 'sk-fake-one')
+    await vault.store('anthropic', 'sk-ant-fake-two')
+    const err = await expectRefusal(vault.store('secret_project_x', 'sk-fake-three'), 'vault_full')
+    expect(err.message).to.include('2 lockboxes')
+    expect(err.message).to.not.include('secret_project_x')
+    expect(boxlabelsOf(vault)).to.deep.equal(['anthropic', 'openai'])
+    expect(world.dbStore.ckeys().filter((ckey) => ckey.includes('secret_project_x'))).to.have.lengthOf(0)
+  })
+
+  it("holds MaxLockboxes, 100, unless told otherwise", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    for (let ii = 0; ii < MaxLockboxes; ii++) { await vault.store(`box_${String(ii)}`, `sk-fake-${String(ii)}`) }
+    expect(vault.getSnapshot().boxes).to.have.lengthOf(100)
+    await expectRefusal(vault.store('one_more', 'sk-fake'), 'vault_full')
+  })
+
+  it("never refuses a replacement for room: a full vault still takes a new whisper in a box it holds", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ maxLockboxes: 1 })
+    await vault.unlock('pw')
+    await vault.store('openai', 'sk-fake-old')
+    await vault.store('openai', 'sk-fake-new')
+    expect(await vault.read('openai')).to.eq('sk-fake-new')
+  })
+
+  it("an erase makes room for the next new lockbox", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ maxLockboxes: 1 })
+    await vault.unlock('pw')
+    await vault.store('openai', 'sk-fake-one')
+    await expectRefusal(vault.store('anthropic', 'sk-ant-fake'), 'vault_full')
+    await vault.erase('openai')
+    await vault.store('anthropic', 'sk-ant-fake')
+    expect(boxlabelsOf(vault)).to.deep.equal(['anthropic'])
+  })
+
+  it("checks the limit on a new lockbox only, so lowering it strands nothing already stored", async () => {
+    const world = makeWorld()
+    const roomy = await world.open()
+    await roomy.unlock('pw')
+    for (const boxlabel of ['one', 'two', 'three']) { await roomy.store(boxlabel, `sk-fake-${boxlabel}`) }
+    roomy.close()
+    const tight = await world.open({ maxLockboxes: 2 })
+    expect(await tight.read('three')).to.eq('sk-fake-three')
+    await tight.store('three', 'sk-fake-replaced')
+    await tight.erase('one')
+    await expectRefusal(tight.store('four', 'sk-fake-four'), 'vault_full')
+    await tight.erase('two')
+    await tight.store('four', 'sk-fake-four')
+    expect(boxlabelsOf(tight)).to.deep.equal(['four', 'three'])
+  })
+
+  it("counts the lockboxes other devices have stored", async () => {
+    const world = makeWorld()
+    const here = await world.open({ maxLockboxes: 2 })
+    await here.unlock('pw')
+    const there = await world.open()
+    await there.store('openai', 'sk-fake-one')
+    await there.store('anthropic', 'sk-ant-fake-two')
+    await vi.waitFor(() => { expect(here.getSnapshot().boxes).to.have.lengthOf(2) })
+    await expectRefusal(here.store('mistral', 'sk-fake-three'), 'vault_full')
+  })
+
+  it("catches up with storage before refusing: room another device made unheard is found", async () => {
+    const world = makeWorld()
+    // This handle hears nothing pushed from storage, so its snapshot falls behind.
+    vi.spyOn(world.vaultDB, 'subscribe').mockReturnValueOnce(() => { /* nothing to unsubscribe */ })
+    const here = await world.open({ maxLockboxes: 1 })
+    await here.unlock('pw')
+    await here.store('openai', 'sk-fake-one')
+    const there = await world.open()
+    await there.erase('openai')
+    expect(boxlabelsOf(here)).to.deep.equal(['openai'])
+    await here.store('anthropic', 'sk-ant-fake')
+    expect(boxlabelsOf(here)).to.deep.equal(['anthropic'])
+  })
+
+  it("opens with the defaults on a backend holding 8 MiB of a vault, as Convex does", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ vaultDB: declaringVaultBytes(world.vaultDB, 8 * 1024 * 1024) })
+    expect(vault.getSnapshot().state).to.eq('absent')
+  })
+
+  it("refuses a maxLockboxes and maxWhisperBytes the adapter might not hold together, naming both and its limit", async () => {
+    const world = makeWorld()
+    const vaultDB = declaringVaultBytes(world.vaultDB, 8 * 1024 * 1024)
+    const err = await expectRefusal(world.open({ vaultDB, maxLockboxes: 102 }), 'bad_option')
+    expect(err.message).to.include('maxLockboxes')
+    expect(err.message).to.include('maxWhisperBytes')
+    expect(err.message).to.include('8388608 bytes')
+    expect(err.message).to.include('at most 101 lockboxes')
+  })
+
+  it("lets the host raise either limit while the pair still fits", async () => {
+    const world = makeWorld()
+    const vaultDB = declaringVaultBytes(world.vaultDB, 8 * 1024 * 1024)
+    await world.open({ vaultDB, maxLockboxes: 1000, maxWhisperBytes: 3000 })
+    await world.open({ vaultDB, maxLockboxes: 1, maxWhisperBytes: 500_000 })
+    await expectRefusal(world.open({ vaultDB, maxLockboxes: 1000, maxWhisperBytes: 4000 }), 'bad_option')
+  })
+
+  it("counts room for each lockbox's other fields, so a vault of tiny whispers cannot be made unerasable", async () => {
+    const world = makeWorld()
+    const vaultDB = declaringVaultBytes(world.vaultDB, 8 * 1024 * 1024)
+    await world.open({ vaultDB, maxLockboxes: 4092, maxWhisperBytes: 1 })
+    await expectRefusal(world.open({ vaultDB, maxLockboxes: 4093, maxWhisperBytes: 1 }), 'bad_option')
+  })
+
+  it("refuses a maxLockboxes that is not a whole number above zero", async () => {
+    const world = makeWorld()
+    for (const nonsense of [0, -1, 1.5, NaN]) {
+      await expectRefusal(world.open({ maxLockboxes: nonsense }), 'bad_option')
+    }
+  })
+
+  it("refuses an adapter that declares no maxVaultBytes", async () => {
+    const world = makeWorld()
+    for (const undeclared of [undefined, NaN, 0, -1]) {
+      await expectRefusal(world.open({ vaultDB: declaringVaultBytes(world.vaultDB, undeclared) }), 'bad_option')
+    }
   })
 })
 

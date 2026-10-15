@@ -1,5 +1,5 @@
 import * as Z from 'zod'
-import { Label, LockboxSummary, type Lockbox, MaxWhisperBytes, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { Label, LockboxSummary, type Lockbox, MaxLockboxes, MaxWhisperBytes, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import { argon2idWebV1Deriver, type KeyDeriver } from './key-deriver'
 import {
@@ -56,6 +56,14 @@ export type OpenVaultOpts = {
    * half the vaultDB's `maxRecordBytes`: openVault refuses more with kind 'bad_option'.
    */
   maxWhisperBytes?: number | undefined
+  /**
+   * The most lockboxes the vault holds. Default: {@link MaxLockboxes}, 100. `store()` refuses a
+   * new lockbox past it with kind 'vault_full'; replacing one already there is always allowed,
+   * and lowering it strands nothing already stored. Raise this or `maxWhisperBytes` freely while
+   * the two fit the vaultDB's `maxVaultBytes`: openVault refuses a pair that might not, with kind
+   * 'bad_option'.
+   */
+  maxLockboxes?: number | undefined
 }
 
 /**
@@ -97,7 +105,9 @@ export type Vault = {
 
   /**
    * Write a whisper into the lockbox `boxlabel`, creating or replacing it. Requires unlocked;
-   * kind 'whisper_too_large' when its JSON is over the vault's `maxWhisperBytes`.
+   * kind 'whisper_too_large' when its JSON is over the vault's `maxWhisperBytes`, and kind
+   * 'vault_full' when `boxlabel` is new and the vault already holds its `maxLockboxes` -- erase
+   * one first. Replacing a lockbox is never refused for room.
    *
    * The write lands only if storage still holds what this device last read: the same vault, and
    * the same revision of this lockbox (or still none). Otherwise nothing is written and the call
@@ -174,9 +184,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const clock = opts.clock ?? wallClock
   const keyDeriver = opts.keyDeriver ?? argon2idWebV1Deriver
   const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
-  if (whisperByteLimit > vaultDB.maxRecordBytes * WhisperShareOfRecord) {
-    throw new VaultError('bad_option', `maxWhisperBytes is over half of the ${String(vaultDB.maxRecordBytes)} bytes this storage adapter holds in one record, so a whisper that large might not store: pass a smaller maxWhisperBytes.`)
-  }
+  const lockboxLimit = parseMaxLockboxes(opts.maxLockboxes)
+  ensureLimitsFit(vaultDB, whisperByteLimit, lockboxLimit)
 
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
   let boxes: readonly LockboxSummary[] = []
@@ -347,6 +356,19 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     }
   }
 
+  /**
+   * Refuse a new lockbox while the vault holds its limit. Counted from the snapshot's boxes, which
+   * every write and every change pushed from storage refreshes, so a store costs no extra read of
+   * the whole vault; a vault that looks full is caught up with storage before it is refused.
+   */
+  const ensureRoomFor = async (boxlabel: string) => {
+    const othersCount = () => boxes.filter((summary) => summary.boxlabel !== boxlabel).length
+    if (othersCount() < lockboxLimit) { return }
+    await refresh()
+    if (othersCount() < lockboxLimit) { return }
+    throw new VaultError('vault_full', `This vault already holds its limit of ${String(lockboxLimit)} lockboxes: erase one before storing another. If the vault really is meant to hold more, pass a larger maxLockboxes to openVault.`)
+  }
+
   const readBoxOrThrow = async (boxlabel: string) => {
     const lockbox = await vaultDB.readBox(scope, parseLabel(boxlabel))
     if (lockbox === null) { throw new VaultError('absent_box', `No lockbox is labelled '${boxlabel}' in this vault.`) }
@@ -446,6 +468,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         throw new VaultError('whisper_too_large', `That whisper is over this vault's limit of ${String(whisperByteLimit)} bytes of JSON: check that the right value is being stored. If it really is meant to be this large, pass a larger maxWhisperBytes to openVault.`)
       }
       const prev = await vaultDB.readBox(scope, label)
+      if (prev === null) { await ensureRoomFor(label) }
       // The key and the vault it belongs to, taken together after the last look at storage.
       const unlockedKey = ensureUnlocked()
       const vaultId = currentBundle().vault_id
@@ -550,13 +573,24 @@ const parseLabel = (candidate: string): string => {
 }
 
 /**
- * The share of an adapter's maxRecordBytes a whisper may claim. Stored, a whisper's ciphertext is
- * base64, a third larger than the whisper; the record's other fields, and each backend's own way
+ * The share of an adapter's limits a vault's whispers may claim: of its maxRecordBytes, one
+ * whisper; of its maxVaultBytes, every lockbox at its largest. Stored, a whisper's ciphertext is
+ * base64, a third larger than the whisper; the records' other fields, and each backend's own way
  * of counting bytes, need the rest.
  */
-const WhisperShareOfRecord = 0.5
+const WhisperShareOfStorage = 0.5
+
+/**
+ * Room for a lockbox's fields besides its whisper -- its boxlabel, note, wrapped lockboxKey,
+ * revision and timestamps, and the scope a backend files it under -- counted as whisper bytes
+ * are, against {@link WhisperShareOfStorage}. A vault of many small whispers is mostly these.
+ */
+const LockboxFieldsBytes = 1024
 
 const maxWhisperBytes = Z.number().int().positive().default(MaxWhisperBytes)
+const maxLockboxes = Z.number().int().positive().default(MaxLockboxes)
+/** A limit as an adapter declares one: some bytes, or none at all. */
+const declaredBytes = Z.union([Z.number().positive(), Z.literal(Infinity)])
 
 const parseMaxWhisperBytes = (candidate: number | undefined): number => {
   const checked = maxWhisperBytes.safeParse(candidate)
@@ -564,6 +598,33 @@ const parseMaxWhisperBytes = (candidate: number | undefined): number => {
     throw new VaultError('bad_option', 'maxWhisperBytes is a whole number of bytes, greater than zero.')
   }
   return checked.data
+}
+
+const parseMaxLockboxes = (candidate: number | undefined): number => {
+  const checked = maxLockboxes.safeParse(candidate)
+  if (! checked.success) {
+    throw new VaultError('bad_option', 'maxLockboxes is a whole number of lockboxes, greater than zero.')
+  }
+  return checked.data
+}
+
+/**
+ * Refuse limits the storage adapter might not honour: a whisper too large for one of its records,
+ * or a vault too large for it to hold, list and erase whole.
+ */
+const ensureLimitsFit = (vaultDB: VaultDB, whisperByteLimit: number, lockboxLimit: number) => {
+  if (whisperByteLimit > vaultDB.maxRecordBytes * WhisperShareOfStorage) {
+    throw new VaultError('bad_option', `maxWhisperBytes is over half of the ${String(vaultDB.maxRecordBytes)} bytes this storage adapter holds in one record, so a whisper that large might not store: pass a smaller maxWhisperBytes.`)
+  }
+  // An adapter written before maxVaultBytes existed declares none: refuse it, never guess.
+  if (! declaredBytes.safeParse(vaultDB.maxVaultBytes).success) {
+    throw new VaultError('bad_option', 'This storage adapter does not declare maxVaultBytes, the most it holds of one vault: update the adapter, or ask its author to.')
+  }
+  const vaultBudget = vaultDB.maxVaultBytes * WhisperShareOfStorage
+  const lockboxBytes = whisperByteLimit + LockboxFieldsBytes
+  if (lockboxLimit * lockboxBytes <= vaultBudget) { return }
+  const fitting = Math.floor(vaultBudget / lockboxBytes)
+  throw new VaultError('bad_option', `${String(lockboxLimit)} lockboxes (maxLockboxes) of up to ${String(whisperByteLimit)} bytes of whisper each (maxWhisperBytes) might not fit in the ${String(vaultDB.maxVaultBytes)} bytes this storage adapter holds of one vault (its maxVaultBytes), with room for each lockbox's other fields. At that maxWhisperBytes, at most ${String(fitting)} lockboxes fit: pass a smaller maxLockboxes or maxWhisperBytes.`)
 }
 
 /** JSON text parsed, or null on text that is not JSON -- which Whisper's validator then refuses. */
