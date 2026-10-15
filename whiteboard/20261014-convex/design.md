@@ -55,15 +55,19 @@ The rulings' `versionedUpdate` is `updateBundle` and `updateBox`; the erases car
 | `readBox`                    | query `getBox`                   |                                                             |
 | `listBoxes`                  | query `listBoxSummaries`         | projected server-side, keeping `format`; sorted client-side |
 | `updateBox`                  | mutation `updateBox`             | only if the scope's bundle has the expected `vault_id`, and the standing `revision_id` is the expected one (or, for null, there is none); refuses when the scope holds no bundle |
-| `eraseBox`                   | mutation `eraseBox`              | only if the scope's bundle has the expected `vault_id`; no revision expected, so erase wins; quiet on an absent box |
+| `eraseBox`                   | mutation `eraseBox`              | only if the scope's bundle has the expected `vault_id`; no revision expected, so erase wins; quiet (true) on an absent box |
 | `eraseVault`                 | mutation `eraseVault`            | only if the bundle has the expected `vault_id`; boxes and bundle in one transaction |
-| `subscribe`                  | `onUpdate` on query `watchVault` | `{ vault_id, passphrase_epoch, boxes: [[boxlabel, revision_id]] }`; first emit skipped |
+| `subscribe`                  | `onUpdate` on query `watchVault` | `{ vault_id, passphrase_epoch, boxes: [[boxlabel, revision_id]] }`, ids null while no bundle stands; first emit skipped |
 | `maxRecordBytes`             | (a constant)                     | 1 MiB                                                       |
 
 Every function first resolves `getUserId(ctx)`, the host's callback: inside a component
 `ctx.auth` is not available, so the app authenticates and passes the user id in (Convex docs,
 *Authoring Components*, which show the same re-export wrapper taking an auth callback). Null
-refuses as unauthenticated, and a `user_id` argument that differs refuses as forbidden.
+(or empty) and a `user_id` argument that differs both refuse with a `ConvexError` whose data is
+`{ kind: 'not_permitted', message }`, the VaultError kind of that name. An update or erase whose
+expectation fails is not refused: it writes nothing and resolves `false`, which the base class
+turns into `stale_write` (built 2026-10-15, thread `20261014-convex_component`; the functions'
+args and returns are in its thread file).
 
 The client accepts a `ConvexReactClient` or a `ConvexClient`, so a React app reuses its socket.
 
@@ -76,9 +80,20 @@ holds about 5 MB per origin in all. The binding constraints on whisper size are 
 base64 growth, refresh fan-out (every refresh reads every lockbox) and one-shot WebCrypto
 encryption holding the whole whisper in memory several times; encryption time is not one.
 
+Per vault, on Convex (measured 2026-10-15, under `convex-test`'s enforced limits): listing,
+watching and erasing each read the whole vault in one transaction, which may read 16 MiB, and an
+erase reads every lockbox twice. At the default `maxWhisperBytes` a lockbox is about 54 KB, so a
+vault erases whole up to about 150 such lockboxes (140 passes, 160 fails); an API-key lockbox is
+about 1 KB.
+
 ## Open
 
 * Whisper size cap: built in the core, PR #7 (`maxWhisperBytes`, adapters' `maxRecordBytes`).
 * ~~A box written under one `vault_id` landing in a vault recreated under another.~~ Closed by
   the storage thread: `updateBox` carries a `vault_id` expectation.
-* Component packaging: `convex.config` export and generated types in the package build.
+* Component packaging: settled for the workspace, not for npm. The package is source-exported:
+  `safebyok-convex/convex.config`, `./server` (`SafebyokComponent`), `./test` (`register`), and
+  `./_generated/component.js`, where `ComponentApi` is derived from the functions' types because
+  Convex's codegen of a component's `component.ts` needs a deployment. A published build keeps
+  each component module its own file (no bundling), with `convex.config.js` and `_generated/`
+  beside it; that waits on the release threads.
