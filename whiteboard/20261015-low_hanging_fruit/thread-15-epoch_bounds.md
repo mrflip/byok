@@ -24,5 +24,6 @@ The Coach: "for far future -- I'm inclined to go with the microsecond epochalyps
   - `rememberedUnlock`'s `Math.min(remembered.expires_at, FarFuture)` cannot be reached now, and its running comment ("a finite deadline past what a Date can") is stale. Both are left for second_harvest's thread 3, which stacks on this PR and owns those lines.
 
 * **For the Coach**:
-  - Open: the host's `Clock` is not checked. A one-time `EpochMillis` check of `clock.now()` at `openVault` (kind `bad_option`) would catch a clock in seconds at once; it touches `openVault`, which the threads stacked here are rewriting.
+  - Release level: `patch` as recorded, though erasing some device records that released versions wrote may merit `minor` before 1.0 (the second reviewer's point). Your call at release.
+  - Open: the host's `Clock` is not checked. A clock in seconds keeps an unlock in memory a thousand times its window, and its remembered unlocks never read back. A one-time `EpochMillis` check of `clock.now()` at `openVault` (kind `bad_option`) would catch it at once; it touches `openVault`, which the threads stacked here are rewriting.
   - Not taken: clamping an out-of-bounds stored deadline on read to `FarFuture` (the reviewer's option b), which would keep the 0.1.0/0.2.0 records above unlocked. It would make the ceiling a clamp rather than a refusal.
