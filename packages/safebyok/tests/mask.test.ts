@@ -12,8 +12,8 @@ const Family = `${Man}\u{200D}${Woman}\u{200D}${Girl}`
 const EAcute = 'e\u{0301}'
 const Alphabet = 'abcdefghijklmnopqrstuvwxyz'
 
-/** What no result may contain: marks, controls, spaces of any kind, ignorables, bidi controls. */
-const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}]/u
+/** What no result may contain: marks, controls, spaces of any kind, ignorables, bidi controls, blank symbols. */
+const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}\u{1D159}]/u
 
 const thrownBy = (run: () => void): unknown => {
   try {
@@ -101,6 +101,7 @@ describe("mask", () => {
     ["\u{FEFF}sk-ant-abcd1234\u{2060}",         undefined,             "sk*********1234",  'a byte-order mark and a word joiner are removed'],
     ["sk-ant-abcd12\u{AD}34\u{2062}",           undefined,             "sk*********1234",  'a soft hyphen and invisible operators are removed'],
     ["sk-ant-abcd12\u{3164}\u{FFA0}\u{2800}34", undefined,             "sk*********1234",  'filler characters and the blank braille pattern are removed'],
+    ["a\u{1D159}cdefghijklmnop",                { head: 3, maxLen: Infinity }, "acd********mnop", 'the null notehead, a symbol drawn blank, is removed'],
     ["sk-ant-abcd123\u{FE0F}4\u{E0041}",        undefined,             "sk*********1234",  'variation selectors and tag characters are removed'],
     ["sk-ant-abcd12\u{200D}\u{200C}34",         undefined,             "sk*********1234",  'joiners are removed'],
     ["\u{200B}\u{2060}\u{FEFF}\u{202E}",        undefined,             "******",           'a whisper of only invisible characters is minStars stars'],
@@ -140,7 +141,7 @@ describe("mask", () => {
       '\u{1F1EB}\u{1F1F7}\u{1F1E9}\u{1F1EA}\u{1F3FD}\u{1F44D}',
       `z${'\u{300}\u{301}\u{302}\u{303}\u{304}\u{305}'.repeat(30)}a${'\u{489}\u{20DD}'.repeat(10)}`,
       '\u{D800}\u{DC00}\u{D800}x\u{DC00}y\u{DBFF}',
-      '\u{E0001}\u{E0020}tag\u{E007F}\u{FE0F}\u{180B}\u{180E}\u{34F}\u{115F}\u{1160}',
+      '\u{E0001}\u{E0020}tag\u{E007F}\u{FE0F}\u{180B}\u{180E}\u{34F}\u{115F}\u{1160}\u{1D159}',
       '\u{A0}\u{1680}\u{2000}\u{200A}\u{202F}\u{205F}\u{3000}key\u{FEFF}',
       '\u{627}\u{644}\u{645}\u{641}\u{62A}\u{627}\u{62D}sk-12345\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}',
       '\u{E000}\u{F8FF}\u{FFFE}\u{FFFF}\u{10FFFF}\u{378}',
