@@ -8,7 +8,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | # | Thread             | Base                  | Status  |
 | - | ------------------ | --------------------- | ------- |
 | 1 | kdf_configs        | #66 tip `5fefc90`     | filed [#68](https://github.com/mrflip/safebyok/pull/68) |
-| 2 | vaultdb_validation | #66 tip `dfdbbec`     | underway |
+| 2 | vaultdb_validation | #66 tip `dfdbbec`     | in review |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
 | 4 | ci_tooling         | #66 tip `5fefc90`     | underway |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | underway |
@@ -50,3 +50,16 @@ reserved label namespace.
 *Orchestrator:* other sessions now have worktrees stacked on this sprint's branches (for example
 `byok-argon2_wasm` on #68's tip, `byok-big_feats`, `byok-unlock_envelopes`). They are not this
 sprint's; nothing here touches them.
+
+*Orchestrator:* thread 2, vaultdb_validation, is `ready` (survey in its branch's
+`validation-survey.md`). For later threads: VaultDB's write verbs now parse every record and
+expectation (unknown fields stripped, refusals never quote); `openVault` checks its options bag,
+`userId`, and the shapes of `vaultDB`/`deviceDB`; listeners and callbacks must be functions; the
+IndexedDB `dbName` goes through `src/idb-opts.ts`. The Convex test "never quotes a record the
+deployment refused" now adds its stray field through a wrapping client -- **thread 6 builds on
+that client** rather than on Zod letting a field through.
+
+*Orchestrator:* **a size-budget collision to watch.** `openVault`'s budget is 16.5 kB; thread 1
+(#68) takes it to 16.19 and thread 2 to 16.27, each from 15.9. Together they likely pass 16.5, so
+whichever merges second will fail `pnpm size` in CI and needs either a raised budget (the Coach's
+word) or a trim. Thread 8 and anything else touching `vault.ts` should not add to the bundle.
