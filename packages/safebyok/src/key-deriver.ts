@@ -109,18 +109,32 @@ const SpecLimitForField: Readonly<Record<keyof KeyDeriverSpec, string>> = {
 }
 
 /**
- * `candidate` as a KeyDeriverSpec Argon2id can run, refusing (kind 'bad_option') one it cannot,
- * or one that wears a supplied spec's label without its parameters. Weak parameters that run
- * are allowed: choosing them is the host's call.
+ * `candidate` as a KeyDeriverSpec Argon2id can run, holding only a spec's fields: the check
+ * {@link argon2idDeriver} makes, for a deriver of another Argon2id implementation to make the
+ * same. Refuses (kind 'bad_option') a spec Argon2id cannot run -- a salt under 8 bytes or over
+ * 65536, memory under 8 KiB a lane or over 1 GiB, no passes, no lanes, a key other than 32
+ * bytes -- and one wearing a supplied spec's label without its parameters, naming the field and
+ * never quoting what was handed in. Weak parameters that run are allowed: choosing them is the
+ * host's call.
+ *
+ * @param candidate - A host's keyDeriverSpec, as handed to a deriver factory.
+ * @returns The spec, checked, with nothing but its fields.
+ *
+ * @example
+ *   const spec = parseKeyDeriverSpec({ ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', memory_kib: 131_072 })
+ *   // spec.memory_kib === 131_072
+ * @example
+ *   parseKeyDeriverSpec({ ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', salt_bytes: 4 })
+ *   // throws 'bad_option': Argon2id takes no salt under 8 bytes
  */
-const parseKeyDeriverSpec = (candidate: KeyDeriverSpec): KeyDeriverSpec => {
+export const parseKeyDeriverSpec = (candidate: KeyDeriverSpec): KeyDeriverSpec => {
   const checked = keyDeriverSpec.safeParse(candidate)
   if (! checked.success) {
     const field = checked.error.issues[0]?.path[0]
     const limit = (typeof field === 'string' && Object.hasOwn(SpecLimitForField, field))
       ? SpecLimitForField[field as keyof KeyDeriverSpec]
       : 'It needs every field of a KeyDeriverSpec: algorithm, key_deriver_label, memory_kib, iterations, parallelism, salt_bytes and output_bytes.'
-    throw new VaultError('bad_option', `argon2idDeriver cannot run that spec. ${limit}`)
+    throw new VaultError('bad_option', `Argon2id cannot run that keyDeriverSpec. ${limit}`)
   }
   ensureSuppliedSpecKept(checked.data)
   return checked.data
