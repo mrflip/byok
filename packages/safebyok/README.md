@@ -11,11 +11,14 @@ Bring Your Own Key (BYOK) Browser Vault using E2EE (End-to-end Encryption) and p
 
 It is react-friendly (`safebyok-react`) and database agnostic: storage adapters implement a small
 abstract seam, IndexedDB adapters ship in `safebyok/idb`, and a Convex adapter is planned.
-`safebyok/testing` is for tests only, star-imported as `TH`: a cheap key deriver, shape-valid
-records with fake ciphertext, a live device unlock, small timing and tampering aids, a logger
-that keeps what it hears (`spyLogger`), checks that a call refuses (`expectRefusal`) and that
-what it threw quotes nothing it should not (`thrownText`, `leafTexts`), and `describeVaultDB`,
-the vitest suite every storage adapter owes.
+`safebyok/testing` is for tests only, star-imported as `TH`: a cheap key deriver, a vault's
+options over stores in memory (`memoryVaultOpts`), shape-valid records with fake ciphertext, a
+live device unlock, small timing and tampering aids, a way to hold or slip work into an
+adapter's next call (`holdNextCall`, `beforeNextCall`) and to count its storage watches
+(`tallyWatches`), a logger that keeps what it hears (`spyLogger`), checks that a call refuses
+(`expectRefusal`) and that what it threw quotes nothing it should not (`thrownText`,
+`leafTexts`), and `describeVaultDB` and `describeDeviceDB`, the vitest suites every storage
+adapter owes.
 `safebyok/utils` holds small helpers for the app around the vault, such as `mask`, which shows
 which API key a lockbox holds (`sk***...***wxyz`) without showing the key. `mask` is intended
 for plain text; calling it with arbitrary blobs may give unusual behavior. It strips every

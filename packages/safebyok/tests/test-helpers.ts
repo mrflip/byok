@@ -1,18 +1,22 @@
 /**
  * safebyok's test helpers, everything in one module: star-import it as `TH` in this package's
  * tests (`import * as TH from './test-helpers'`), and from `safebyok/testing` in another package's.
- * A cheap key deriver, shape-valid records whose ciphertext is fake, a live device unlock, small
- * timing and tampering aids, a logger that keeps what it hears, checks that a call refuses and
- * that what it threw quotes nothing it shouldn't, and the suite every VaultDB adapter owes. For
- * tests only, and under vitest: the deriver is worthless against a brute-forcer.
+ * A cheap key deriver, a vault's options over stores in memory, shape-valid records whose
+ * ciphertext is fake, a live device unlock, small timing, interception and tampering aids, a
+ * logger that keeps what it hears, checks that a call refuses and that what it threw quotes
+ * nothing it shouldn't, and the suites every VaultDB and DeviceDB adapter owes. For tests only,
+ * and under vitest: the deriver is worthless against a brute-forcer.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Ciphered } from '../src/crypto'
+import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import type { VaultError, VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
+import { memoryStore } from '../src/string-store'
 import type { DeviceUnlock, Lockbox, VaultBundle, VaultScope } from '../src/types'
-import type { VaultDB } from '../src/vault-db'
+import type { OpenVaultOpts } from '../src/vault'
+import { localVaultDB, type VaultDB } from '../src/vault-db'
 
 /** A Lockbox as the core writes one: a note, or no note field at all, never an undefined one. */
 type WrittenLockbox = Omit<Lockbox, 'note'> & { note?: string }
@@ -36,6 +40,35 @@ export const testDeriver: KeyDeriver = {
     return new Uint8Array(await crypto.subtle.digest('SHA-256', joined))
   },
 }
+
+/**
+ * Everything openVault needs, over stores in memory made fresh for each call: `u1`'s `main` vault
+ * in the `acme` app (as {@link scopeOf} has it), deriving through {@link testDeriver}. `overrides`
+ * replace any of it -- a store of the test's own, a clock, a logger, another user.
+ *
+ * @param overrides - Options to use in place of the defaults.
+ * @returns A complete bag of options for openVault, or (`userId` aside) for a VaultProvider.
+ *
+ * @example const vault = await openVault(TH.memoryVaultOpts())
+ * @example const vault = await openVault(TH.memoryVaultOpts({ userId: 'u2', vaultDB: myVaultDB }))
+ */
+export const memoryVaultOpts = (overrides: Partial<OpenVaultOpts> = {}): OpenVaultOpts => ({
+  applabel:   'acme',
+  userId:     'u1',
+  vaultlabel: 'main',
+  vaultDB:    localVaultDB(memoryStore()),
+  deviceDB:   memoryDeviceDB(),
+  keyDeriver: testDeriver,
+  ...overrides,
+})
+
+/**
+ * A database name no other call has handed out, so each test of an IndexedDB adapter starts
+ * from an empty database of its own.
+ *
+ * @example idbVaultDB({ dbName: TH.freshDbName() })
+ */
+export const freshDbName = (): string => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
 
 /**
  * A shape-valid Ciphered that opens nothing: for storage-layer tests, which never decrypt.
@@ -91,6 +124,21 @@ export const boxOf = (boxlabel: string, tag: string, overrides: Partial<WrittenL
   changed_at:          Date.UTC(2026, 9, 14),
   ...overrides,
 })
+
+/**
+ * What a write into {@link bundleOf}('u1')'s vault expects when its lockbox is not there yet:
+ * that vault, and no revision.
+ *
+ * @example vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet)
+ */
+export const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null } as const
+
+/**
+ * What an erase of {@link bundleOf}('u1')'s vault, or of a lockbox in it, expects: that vault.
+ *
+ * @example vaultDB.eraseVault(TH.scopeOf('u1'), TH.thisVault)
+ */
+export const thisVault = { vault_id: 'vault-id-u1' } as const
 
 /** A real DeviceUnlock for device-storage tests: a live non-extractable localUnlockKey around fake wrapped material. */
 export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
@@ -156,6 +204,82 @@ export const makeGate = () => {
     await opened.promise
   }
   return { pass, reached: arrived.promise, release: opened.resolve }
+}
+
+/** The names of `Target`'s methods that return a promise. */
+export type AsyncVerbOf<Target> = {
+  [Verb in keyof Target]-?: Target[Verb] extends (...args: never[]) => Promise<unknown> ? Verb : never
+}[keyof Target]
+
+/**
+ * Has `meanwhile` run inside the next call to `target[verb]`, before the call itself goes on: for
+ * slipping another device's doings, or a pause, between a vault's look at storage and its write.
+ * Only the next call is touched; later ones go straight through.
+ *
+ * @param target - The object whose method to intercept: an adapter, a deriver.
+ * @param verb - The method, one returning a promise.
+ * @param meanwhile - What to run first, and wait for.
+ *
+ * @example TH.beforeNextCall(vaultDB, 'updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
+ */
+export const beforeNextCall = <Target extends object>(target: Target, verb: AsyncVerbOf<Target> & string, meanwhile: () => Promise<unknown>): void => {
+  // Typed loosely from here: the caller's types were checked at the signature.
+  type AsyncFn = (...args: unknown[]) => Promise<unknown>
+  const original = (target as unknown as Record<string, AsyncFn | undefined>)[verb]?.bind(target)
+  if (original === undefined) { throw new TypeError(`beforeNextCall found no method ${verb} to intercept.`) }
+  vi.spyOn(target as unknown as Record<string, AsyncFn>, verb).mockImplementationOnce(async (...args: unknown[]) => {
+    await meanwhile()
+    return await original(...args)
+  })
+}
+
+/**
+ * Holds the next call to `target[verb]` at a gate (see {@link makeGate}) until the test releases
+ * it, so the test can land another call while that one is in flight. Later calls go straight
+ * through.
+ *
+ * @param target - The object whose method to hold: an adapter, a deriver.
+ * @param verb - The method, one returning a promise.
+ * @returns The gate: await `reached`, then `release()`.
+ *
+ * @example
+ *   const gate = TH.holdNextCall(vaultDB, 'readBundle')
+ *   const unlocking = vault.unlock('pw')   // now waiting at the gate
+ *   await gate.reached
+ *   await vault.lock()                     // lands mid-unlock
+ *   gate.release()
+ */
+export const holdNextCall = <Target extends object>(target: Target, verb: AsyncVerbOf<Target> & string) => {
+  const gate = makeGate()
+  beforeNextCall(target, verb, gate.pass)
+  return gate
+}
+
+/**
+ * A count of the storage watches `vaultDB` opens and closes from here on, kept by spying on its
+ * `subscribe`: for a test that a failed open, a close or a lock leaves no watch running that
+ * nobody could end. Each watch still reaches the adapter's own `subscribe`.
+ *
+ * @param vaultDB - The adapter whose watches to count.
+ * @returns The tally, live: `opened` and `closed`, each a count so far.
+ *
+ * @example
+ *   const tally = TH.tallyWatches(vaultDB)
+ *   await TH.expectRefusal(openVault(opts), 'not_permitted')
+ *   expect(tally.opened - tally.closed).to.eq(0)
+ */
+export const tallyWatches = (vaultDB: Pick<VaultDB, 'subscribe'>) => {
+  const tally = { opened: 0, closed: 0 }
+  const subscribe = vaultDB.subscribe.bind(vaultDB)
+  vi.spyOn(vaultDB, 'subscribe').mockImplementation((scope, onChange) => {
+    tally.opened += 1
+    const unsubscribe = subscribe(scope, onChange)
+    return () => {
+      tally.closed += 1
+      unsubscribe()
+    }
+  })
+  return tally
 }
 
 /** Stands in for a resolver until the promise hands over its own. */
@@ -295,8 +419,6 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
     await vaultDB.createBundle(bundleOf('u1'))
     return vaultDB
   }
-  const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null }
-  const thisVault = { vault_id: 'vault-id-u1' }
 
   describe(`${adapterTitle}, as a VaultDB: the bundle`, () => {
     it("has none until one is created, then reads it back whole", async () => {
@@ -528,6 +650,51 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await expectRefusal(vaultDB.eraseVault(scopeOf('u1'), { vault_id: '' }), 'bad_option')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
       expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
+    })
+  })
+}
+
+/**
+ * The behaviour every DeviceDB owes, written once: no remembered unlock until one is written,
+ * then that one back, its localUnlockKey still a non-extractable CryptoKey; each scope kept to
+ * itself; and an erase of one, or of all. Run it against an adapter with a factory making a fresh,
+ * empty one per test. For a DeviceDB's own tests, from `safebyok/testing`; it runs under vitest.
+ *
+ * @param adapterTitle - The adapter under test, as the suite's titles name it.
+ * @param makeDeviceDB - A fresh, empty adapter: no record in it, and none shared with another call.
+ *
+ * @example
+ *   describeDeviceDB('memoryDeviceDB', () => memoryDeviceDB())
+ */
+export const describeDeviceDB = (adapterTitle: string, makeDeviceDB: () => DeviceDB | Promise<DeviceDB>) => {
+  describe(`${adapterTitle}, as a DeviceDB`, () => {
+    it("has no remembered unlock until one is written, then keeps it whole, localUnlockKey handle and all", async () => {
+      const deviceDB = await makeDeviceDB()
+      expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+      const unlock = await unlockOf('u1')
+      await deviceDB.writeUnlock(unlock)
+      const kept = await deviceDB.readUnlock(scopeOf('u1'))
+      expect(kept).to.deep.equal(unlock)
+      expect(kept?.local_unlock_key).to.be.instanceOf(CryptoKey)
+      expect(kept?.local_unlock_key.extractable).to.be.false
+    })
+
+    it("keeps unlocks per user: erasing one leaves the other", async () => {
+      const deviceDB = await makeDeviceDB()
+      await deviceDB.writeUnlock(await unlockOf('u1'))
+      await deviceDB.writeUnlock(await unlockOf('u2'))
+      await deviceDB.eraseUnlock(scopeOf('u1'))
+      expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+      expect(await deviceDB.readUnlock(scopeOf('u2'))).to.not.be.null
+    })
+
+    it("eraseAll forgets every remembered unlock", async () => {
+      const deviceDB = await makeDeviceDB()
+      await deviceDB.writeUnlock(await unlockOf('u1'))
+      await deviceDB.writeUnlock(await unlockOf('u2'))
+      await deviceDB.eraseAll()
+      expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+      expect(await deviceDB.readUnlock(scopeOf('u2'))).to.be.null
     })
   })
 }

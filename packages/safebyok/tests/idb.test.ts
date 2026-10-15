@@ -7,10 +7,9 @@ import { idbDeviceDB, idbVaultDB, inspectIdb, type IdbOpts } from '../src/idb'
 import { VaultError } from '../src/errors'
 import * as TH from './test-helpers'
 
-// Each world gets its own database so tests never see each other's rows.
-const freshDbName = () => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
-
-TH.describeVaultDB('idbVaultDB', () => idbVaultDB({ dbName: freshDbName() }))
+// Each test gets its own database, so tests never see each other's rows.
+TH.describeVaultDB('idbVaultDB', () => idbVaultDB({ dbName: TH.freshDbName() }))
+TH.describeDeviceDB('idbDeviceDB', () => idbDeviceDB({ dbName: TH.freshDbName() }))
 
 /** Option bags no IndexedDB adapter takes: each refused as it is made, before a database opens. */
 const BadIdbOpts = [
@@ -48,10 +47,10 @@ describe("idbVaultDB", () => {
   })
 
   it("keeps each record as itself, at the ckey it always had", async () => {
-    const dbName = freshDbName()
+    const dbName = TH.freshDbName()
     const vaultDB = idbVaultDB({ dbName })
     await vaultDB.createBundle(TH.bundleOf('u1'))
-    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet)
     expect(await inspectIdb({ dbName, shelf: 'vault_db' }).rows()).to.deep.equal([
       { ckey: 'box:acme:u1:main:anthropic', row: TH.boxOf('anthropic', 'one') },
       { ckey: 'vault:acme:u1:main',         row: TH.bundleOf('u1') },
@@ -59,7 +58,7 @@ describe("idbVaultDB", () => {
   })
 
   it("reads a vault stored before the storage verbs: the same rows, at the same ckeys", async () => {
-    const dbName = freshDbName()
+    const dbName = TH.freshDbName()
     const shelf = createStore(`${dbName}:vault_db`, 'records')
     await set('vault:acme:u1:main', TH.bundleOf('u1'), shelf)
     await set('box:acme:u1:main:anthropic', TH.boxOf('anthropic', 'one'), shelf)
@@ -69,45 +68,21 @@ describe("idbVaultDB", () => {
   })
 
   it("rings its subscribers on a write, and unsubscribing silences it", async () => {
-    const vaultDB = idbVaultDB({ dbName: freshDbName() })
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
     let heardCount = 0
     const unsubscribe = vaultDB.subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vi.waitFor(() => { expect(heardCount).to.be.greaterThan(0) })
     const heardBefore = heardCount
     unsubscribe()
-    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet)
     expect(heardCount).to.eq(heardBefore)
-  })
-})
-
-describe("idbDeviceDB", () => {
-  it("keeps a DeviceUnlock by structured clone, non-extractable localUnlockKey and all", async () => {
-    const deviceDB = idbDeviceDB({ dbName: freshDbName() })
-    expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
-    const unlock = await TH.unlockOf('u1')
-    await deviceDB.writeUnlock(unlock)
-    const kept = await deviceDB.readUnlock(TH.scopeOf('u1'))
-    expect(kept?.vault_id).to.eq('vault-id-u1')
-    expect(kept?.local_unlock_key).to.be.instanceOf(CryptoKey)
-    expect(kept?.local_unlock_key.extractable).to.be.false
-  })
-
-  it("erases one unlock, and eraseAll forgets every one", async () => {
-    const deviceDB = idbDeviceDB({ dbName: freshDbName() })
-    await deviceDB.writeUnlock(await TH.unlockOf('u1'))
-    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
-    await deviceDB.eraseUnlock(TH.scopeOf('u1'))
-    expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
-    expect(await deviceDB.readUnlock(TH.scopeOf('u2'))).to.not.be.null
-    await deviceDB.eraseAll()
-    expect(await deviceDB.readUnlock(TH.scopeOf('u2'))).to.be.null
   })
 })
 
 describe("inspectIdb", () => {
   it("shows the raw rows of a shelf, hears writes, and wipes it clean", async () => {
-    const dbName = freshDbName()
+    const dbName = TH.freshDbName()
     const vaultDB = idbVaultDB({ dbName })
     const inspector = inspectIdb({ dbName, shelf: 'vault_db' })
     let heardCount = 0
@@ -131,7 +106,7 @@ describe("inspectIdb", () => {
   })
 
   it("refuses a listener that is not a function as it subscribes, so no later write meets it", async () => {
-    const dbName = freshDbName()
+    const dbName = TH.freshDbName()
     const inspector = inspectIdb({ dbName, shelf: 'vault_db' })
     expect(() => inspector.subscribe('not a listener' as unknown as () => void)).to.throw(VaultError, /listener function/)
     await idbVaultDB({ dbName }).createBundle(TH.bundleOf('u1'))
