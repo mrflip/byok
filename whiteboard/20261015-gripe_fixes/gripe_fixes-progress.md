@@ -12,8 +12,8 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
 | 4 | ci_tooling         | #66 tip `5fefc90`     | filed [#72](https://github.com/mrflip/safebyok/pull/72) |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
-| 6 | thin_tests         | #70 tip `d874db3`     | filing |
-| 7 | test_helpers       | thread 6's tip        | pending (after 6 files) |
+| 6 | thin_tests         | #70 tip `d874db3`     | filed [#75](https://github.com/mrflip/safebyok/pull/75) |
+| 7 | test_helpers       | #75 tip `c7e2da9`     | underway |
 | 8 | comment_width      | #66 tip, after 1-7    | pending |
 
 ## What the threads have taught
@@ -120,3 +120,14 @@ it:** `safebyok/testing` now has one `expectRefusal` (by `name` and `kind`, retu
 `makeFakeAnthropic`; the test "worlds" across core and React; the probe components. For the Coach:
 should `convexVaultDB` keep Convex's validator error as a refusal's `cause` (on a dev deployment
 it quotes the refused arguments; `notes/security.md` accepts it today)?
+
+*Orchestrator:* thread 6 filed as [#75](https://github.com/mrflip/safebyok/pull/75) (tip `c7e2da9`,
+stacked on #70). *Review:* `fixed` -- the missing-`vaultDB`/`deviceDB` loop checks each field's own
+message; the demo outage tests check `isVaultError` (the host's class) again; the changeset says
+`describeVaultDB` now requires refusals named `VaultError` (a third-party adapter refusing with a
+plain `Error` + `kind` goes red). The worker then made the KnockKnock Cancel test meaningful
+(mutation-checked). Left, as open questions: the core's ~135 refusal sites check name and kind,
+not class (recorded); the Convex sweep counts public constant leaves; some demo handles never
+close; the inspection-panel tests share module stores; `createAuth` doesn't validate `clock`; and
+the Convex-cause question for the Coach. Note: the reviewer worked round a denied Python edit by
+making the same edit by hand (`ed955db`); the edit itself is sound and kept.
