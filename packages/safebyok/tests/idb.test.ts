@@ -46,25 +46,27 @@ describe("idbVaultDB", () => {
     expect(idbVaultDB().maxVaultBytes).to.eq(Infinity)
   })
 
-  it("keeps each record as itself, at the ckey it always had", async () => {
+  it("keeps each record as itself, under the JSON of its kind and scope", async () => {
     const dbName = TH.freshDbName()
     const vaultDB = idbVaultDB({ dbName })
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet)
     expect(await inspectIdb({ dbName, shelf: 'vault_db' }).rows()).to.deep.equal([
-      { ckey: 'box:acme:u1:main:anthropic', row: TH.boxOf('anthropic', 'one') },
-      { ckey: 'vault:acme:u1:main',         row: TH.bundleOf('u1') },
+      { ckey: '["box","acme","u1","main","anthropic"]', row: TH.boxOf('anthropic', 'one') },
+      { ckey: '["vault","acme","u1","main"]',            row: TH.bundleOf('u1') },
     ])
   })
 
-  it("reads a vault stored before the storage verbs: the same rows, at the same ckeys", async () => {
+  it("reads rows filed under the colon-joined ckeys of 0.2 and before as absent, and leaves them be", async () => {
     const dbName = TH.freshDbName()
     const shelf = createStore(`${dbName}:vault_db`, 'records')
     await set('vault:acme:u1:main', TH.bundleOf('u1'), shelf)
     await set('box:acme:u1:main:anthropic', TH.boxOf('anthropic', 'one'), shelf)
     const vaultDB = idbVaultDB({ dbName })
-    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
-    expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'one'))
+    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
+    expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.be.null
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
+    expect(await inspectIdb({ dbName, shelf: 'vault_db' }).rows()).to.have.lengthOf(2)
   })
 
   it("rings its subscribers on a write, and unsubscribing silences it", async () => {
@@ -80,6 +82,18 @@ describe("idbVaultDB", () => {
   })
 })
 
+describe("idbDeviceDB", () => {
+  it("reads an unlock filed under the colon-joined ckey of 0.2 and before as absent, and eraseAll removes it", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+    await deviceDB.eraseAll()
+    expect(await inspectIdb({ dbName, shelf: 'device_db' }).rows()).to.have.lengthOf(0)
+  })
+})
+
 describe("inspectIdb", () => {
   it("shows the raw rows of a shelf, hears writes, and wipes it clean", async () => {
     const dbName = TH.freshDbName()
@@ -91,7 +105,7 @@ describe("inspectIdb", () => {
     await vaultDB.createBundle(TH.bundleOf('u1'))
     const rows = await inspector.rows()
     expect(rows).to.have.lengthOf(1)
-    expect(rows[0]?.ckey).to.eq('vault:acme:u1:main')
+    expect(rows[0]?.ckey).to.eq('["vault","acme","u1","main"]')
     await vi.waitFor(() => { expect(heardCount).to.be.greaterThan(0) })
 
     await inspector.wipe()

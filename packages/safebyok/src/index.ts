@@ -18,6 +18,7 @@ export { VaultError, VaultErrorFamilyForKind, VaultErrorFamilyVals, VaultErrorKi
 export type { VaultErrorFamily, VaultErrorKind } from './errors'
 export { VaultDB, localVaultDB } from './vault-db'
 export type { BundleExpectation, EraseExpectation, LockboxExpectation } from './vault-db'
+export * as Ckeys from './ckeys'
 export { memoryDeviceDB } from './device-db'
 export type { DeviceDB } from './device-db'
 export { domStore, memoryStore } from './string-store'

@@ -8,7 +8,13 @@ import { LockboxFieldsBytes, StoredBytesPerWhisperByte, openVault, type OpenVaul
 import { cipherBinding, cipherBytes, fromB64, makeLockboxKey, makeVaultKey, randomBytes, wrapKeyUnder } from '../src/crypto'
 import type { KeyDeriver } from '../src/key-deriver'
 import { Argon2idWebV1, MaxSaltBytes } from '../src/key-deriver-spec'
+import * as Ckeys from '../src/ckeys'
 import * as TH from './test-helpers'
+
+/** Where the vault each world opens, `u1`'s `main`, files its bundle and each of its lockboxes. */
+const u1BundleCkey = Ckeys.bundle(TH.scopeOf('u1'))
+const u1BoxCkey = (boxlabel: string) => Ckeys.box(TH.scopeOf('u1'), boxlabel)
+const isU1Box = Ckeys.isBoxIn(TH.scopeOf('u1'))
 
 /** An unsubscribe with nothing to undo. */
 const silence = (): void => undefined
@@ -254,7 +260,7 @@ describe("the host's clock", () => {
     const vault = await world.openUnlocked('pw', { clock: { now: () => reading } })
     reading = Infinity
     await TH.expectRefusal(vault.store('anthropic', 'sk-fake'), 'bad_option')
-    expect(world.dbStore.ckeys().filter((ckey) => ckey.startsWith('box:'))).to.have.lengthOf(0)
+    expect(world.dbStore.ckeys().filter((ckey) => isU1Box(ckey))).to.have.lengthOf(0)
   })
 })
 
@@ -770,12 +776,12 @@ describe("store and read", () => {
 
 /** The stored row of the lockbox `boxlabel`, as the backend holds it. */
 const storedRowOf = (world: ReturnType<typeof makeWorld>, boxlabel: string): Record<string, unknown> => (
-  JSON.parse(world.dbStore.read(`box:acme:u1:main:${boxlabel}`) ?? 'null') as Record<string, unknown>
+  JSON.parse(world.dbStore.read(u1BoxCkey(boxlabel)) ?? 'null') as Record<string, unknown>
 )
 
 /** The vault's stored bundle, as the backend holds it. */
 const storedBundleOf = (world: ReturnType<typeof makeWorld>): Record<string, unknown> => (
-  JSON.parse(world.dbStore.read('vault:acme:u1:main') ?? 'null') as Record<string, unknown>
+  JSON.parse(world.dbStore.read(u1BundleCkey) ?? 'null') as Record<string, unknown>
 )
 
 describe("the times a vault keeps", () => {
@@ -829,7 +835,7 @@ describe("the times a vault keeps", () => {
     const storedAt = world.clock.now()
     const row = storedRowOf(world, 'anthropic') as { whisper_ciphered: { ciphertext_b64: string } }
     row.whisper_ciphered.ciphertext_b64 = TH.tweakB64(row.whisper_ciphered.ciphertext_b64)
-    world.dbStore.write('box:acme:u1:main:anthropic', JSON.stringify(row))
+    world.dbStore.write(u1BoxCkey('anthropic'), JSON.stringify(row))
     world.advance(60_000)
     await vault.store('anthropic', 'sk-fake')
     expect(vault.getSnapshot().boxes[0]).to.include({ registered_at: storedAt, changed_at: storedAt + 60_000 })
@@ -868,13 +874,13 @@ describe("the times a vault keeps", () => {
     const vault = await world.openUnlocked('pw')
     await vault.store('anthropic', 'sk-fake')
     const box = JSON.stringify({ ...storedRowOf(world, 'anthropic'), changed_at: world.clock.now() + 0.5 })
-    world.dbStore.write('box:acme:u1:main:anthropic', box)
+    world.dbStore.write(u1BoxCkey('anthropic'), box)
     await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
-    expect(world.dbStore.read('box:acme:u1:main:anthropic')).to.eq(box)
+    expect(world.dbStore.read(u1BoxCkey('anthropic'))).to.eq(box)
     const bundle = JSON.stringify({ ...storedBundleOf(world), registered_at: world.clock.now() + 0.5 })
-    world.dbStore.write('vault:acme:u1:main', bundle)
+    world.dbStore.write(u1BundleCkey, bundle)
     await TH.expectRefusal(world.open(), 'corrupt_record')
-    expect(world.dbStore.read('vault:acme:u1:main')).to.eq(bundle)
+    expect(world.dbStore.read(u1BundleCkey)).to.eq(bundle)
   })
 
   it("refuses a stored lockbox from before its times were renamed, leaving it as it is", async () => {
@@ -883,9 +889,9 @@ describe("the times a vault keeps", () => {
     await vault.store('anthropic', 'sk-fake')
     const { registered_at: _registered, changed_at: _changed, ...row } = storedRowOf(world, 'anthropic')
     const olden = JSON.stringify({ ...row, created_at: '2026-10-14T00:00:00.000Z', updated_at: '2026-10-14T00:00:00.000Z' })
-    world.dbStore.write('box:acme:u1:main:anthropic', olden)
+    world.dbStore.write(u1BoxCkey('anthropic'), olden)
     await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
-    expect(world.dbStore.read('box:acme:u1:main:anthropic')).to.eq(olden)
+    expect(world.dbStore.read(u1BoxCkey('anthropic'))).to.eq(olden)
   })
 
   it("refuses a stored bundle from before its time was renamed, leaving it as it is", async () => {
@@ -893,9 +899,9 @@ describe("the times a vault keeps", () => {
     await world.openUnlocked('pw')
     const { registered_at: _registered, ...row } = storedBundleOf(world)
     const olden = JSON.stringify({ ...row, created_at: '2026-10-14T00:00:00.000Z', updated_at: '2026-10-14T00:00:00.000Z' })
-    world.dbStore.write('vault:acme:u1:main', olden)
+    world.dbStore.write(u1BundleCkey, olden)
     await TH.expectRefusal(world.open(), 'corrupt_record')
-    expect(world.dbStore.read('vault:acme:u1:main')).to.eq(olden)
+    expect(world.dbStore.read(u1BundleCkey)).to.eq(olden)
   })
 })
 
@@ -946,7 +952,7 @@ describe("the note", () => {
     const err = await TH.expectRefusal(vault.store('anthropic', 'sk-fake', { note: tooLong }), 'bad_option')
     expect(err.message).to.not.include('SUPERSECRET')
     await TH.expectRefusal(vault.store('anthropic', 'sk-fake', { note: 42 as unknown as string }), 'bad_option')
-    expect(world.dbStore.ckeys().filter((ckey) => ckey.startsWith('box:'))).to.have.lengthOf(0)
+    expect(world.dbStore.ckeys().filter((ckey) => isU1Box(ckey))).to.have.lengthOf(0)
     // The vault is none the worse: it still lists, stores, and opens again.
     await vault.store('anthropic', 'sk-fake', { note: 'fits' })
     const again = await world.open()
@@ -1225,10 +1231,10 @@ describe("erase and destroy", () => {
       const vault = await world.openUnlocked('pw')
       await vault.store('anthropic', 'sk-ant-fake')
       await vault.store('openai', 'sk-openai-fake', { note: 'work account' })
-      world.dbStore.write('box:acme:u1:main:anthropic', spoil(storedRowOf(world, 'anthropic')))
+      world.dbStore.write(u1BoxCkey('anthropic'), spoil(storedRowOf(world, 'anthropic')))
       await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
       await vault.erase('anthropic')
-      expect(world.dbStore.read('box:acme:u1:main:anthropic')).to.be.null
+      expect(world.dbStore.read(u1BoxCkey('anthropic'))).to.be.null
       expect(boxlabelsOf(vault)).to.deep.equal(['openai'])
       expect(vault.getSnapshot().boxes[0]?.note).to.eq('work account')
       expect(await vault.read('openai')).to.eq('sk-openai-fake')
@@ -1241,10 +1247,10 @@ describe("erase and destroy", () => {
     await vault.store('anthropic', 'sk-ant-fake')
     const [spoil] = SpoiledBoxes[0]
     const spoiled = spoil(storedRowOf(world, 'anthropic'))
-    world.dbStore.write('box:acme:u1:main:anthropic', spoiled)
+    world.dbStore.write(u1BoxCkey('anthropic'), spoiled)
     await vault.lock()
     await TH.expectRefusal(vault.erase('anthropic'), 'vault_locked')
-    expect(world.dbStore.read('box:acme:u1:main:anthropic')).to.eq(spoiled)
+    expect(world.dbStore.read(u1BoxCkey('anthropic'))).to.eq(spoiled)
   })
 
   it("erase removes the box; a second erase finds it absent", async () => {
@@ -1366,7 +1372,7 @@ describe("what the backend sees", () => {
     const vault = await world.openUnlocked('pw')
     await vault.store('one_box', 'the same whisper')
     await vault.store('two_box', 'the same whisper')
-    const rows = world.dbStore.ckeys().filter((ckey) => ckey.startsWith('box:')).map((ckey) => world.dbStore.read(ckey))
+    const rows = world.dbStore.ckeys().filter((ckey) => isU1Box(ckey)).map((ckey) => world.dbStore.read(ckey))
     const [oneRow, twoRow] = rows.map((text) => JSON.parse(text ?? '{}') as { whisper_ciphered: { ciphertext_b64: string } })
     expect(oneRow?.whisper_ciphered.ciphertext_b64).to.not.eq(twoRow?.whisper_ciphered.ciphertext_b64)
   })
@@ -1377,7 +1383,7 @@ describe("tampering", () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
     await vault.store('anthropic', 'sk-fake')
-    const ckey = world.dbStore.ckeys().find((candidate) => candidate.startsWith('box:'))
+    const ckey = world.dbStore.ckeys().find((ckey) => isU1Box(ckey))
     const row = JSON.parse(world.dbStore.read(ckey ?? '') ?? '{}') as { whisper_ciphered: { ciphertext_b64: string } }
     row.whisper_ciphered.ciphertext_b64 = TH.tweakB64(row.whisper_ciphered.ciphertext_b64)
     world.dbStore.write(ckey ?? '', JSON.stringify(row))
@@ -1391,15 +1397,15 @@ describe("tampering", () => {
     const vault = await world.openUnlocked('pw')
     await vault.store('victim_box', 'sk-fake')
     const fromCkey = world.dbStore.ckeys().find((candidate) => candidate.includes('victim_box'))
-    world.dbStore.write('box:acme:u1:main:other_box', world.dbStore.read(fromCkey ?? '') ?? '')
+    world.dbStore.write(u1BoxCkey('other_box'), world.dbStore.read(fromCkey ?? '') ?? '')
     await TH.expectRefusal(vault.read('other_box'), 'corrupt_record')
   })
 
   it("a bundle that does not parse makes the open itself refuse, deleting nothing", async () => {
     const world = makeWorld()
-    world.dbStore.write('vault:acme:u1:main', '{"format":"not-a-vault"}')
+    world.dbStore.write(u1BundleCkey, '{"format":"not-a-vault"}')
     await TH.expectRefusal(world.open(), 'corrupt_record')
-    expect(world.dbStore.read('vault:acme:u1:main')).to.eq('{"format":"not-a-vault"}')
+    expect(world.dbStore.read(u1BundleCkey)).to.eq('{"format":"not-a-vault"}')
   })
 })
 
@@ -2185,7 +2191,7 @@ describe("a failed open", () => {
 
   it("ends its storage watch when the stored bundle does not parse", async () => {
     const world = makeWorld()
-    world.dbStore.write('vault:acme:u1:main', '{"format":"not-a-vault"}')
+    world.dbStore.write(u1BundleCkey, '{"format":"not-a-vault"}')
     const tally = TH.tallyWatches(world.vaultDB)
     await TH.expectRefusal(world.open(), 'corrupt_record')
     expect(tally).to.deep.equal({ opened: 1, closed: 1 })
@@ -2832,7 +2838,7 @@ describe("the logger", () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
     await vault.store('anthropic', 'sk-fake')
-    world.dbStore.write('box:acme:u1:main:anthropic', '{"not":"a lockbox"}')
+    world.dbStore.write(u1BoxCkey('anthropic'), '{"not":"a lockbox"}')
     await TH.wakeupAtNextTick()
     expect(world.logged.map((heard) => heard.level)).to.deep.equal(['warn'])
     expect(world.logged[0]?.story).to.deep.equal({ call: 'refresh' })
@@ -2860,10 +2866,10 @@ describe("the logger", () => {
     const vault = await world.openUnlocked('pw', { logger, deviceDB: device.deviceDB, clock })
     await vault.store('anthropic', 'sk-fake')
     // a refresh rung in the background, failing
-    const row = world.dbStore.read('box:acme:u1:main:anthropic') ?? ''
-    world.dbStore.write('box:acme:u1:main:anthropic', '{"not":"a lockbox"}')
+    const row = world.dbStore.read(u1BoxCkey('anthropic')) ?? ''
+    world.dbStore.write(u1BoxCkey('anthropic'), '{"not":"a lockbox"}')
     await TH.wakeupAtNextTick()
-    world.dbStore.write('box:acme:u1:main:anthropic', row)
+    world.dbStore.write(u1BoxCkey('anthropic'), row)
     // a lock that cannot time its grace
     reading = NaN
     await vault.lockSoon()
@@ -2897,7 +2903,7 @@ describe("the logger", () => {
     device.spoilRow((row) => ({ ...row, ask_passphrase_at: `${passphrase} ${whisper}` }))
     const reopened = await world.open({ deviceDB: device.deviceDB, clock })
     reopened.close()
-    world.dbStore.write('box:acme:u1:main:anthropic', JSON.stringify({ ...storedRowOf(world, 'anthropic'), changed_at: whisper }))
+    world.dbStore.write(u1BoxCkey('anthropic'), JSON.stringify({ ...storedRowOf(world, 'anthropic'), changed_at: whisper }))
     await TH.wakeupAtNextTick()
     clockBroken = true
     await vault.lockSoon()

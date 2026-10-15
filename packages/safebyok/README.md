@@ -67,6 +67,28 @@ to its platform -- and such an app should not also ship this one (about 15 kB mi
 main entry names no default and imports nothing from `safebyok/browser`, and the package is
 marked `sideEffects: false`: what you never import never ships.
 
+## Your own storage adapter
+
+Extend `VaultDB` and implement its `do*` methods: its doc block says what each one owes, and
+`describeVaultDB` from `safebyok/testing` checks it. A backend with columns (Convex, SQL) keeps
+the applabel, user id, vaultlabel and boxlabel in columns of their own. A backend that holds rows
+under one string -- a key-value store, localStorage -- files them under `Ckeys`, as
+`localVaultDB` and `idbVaultDB` do:
+
+```ts
+import { Ckeys } from 'safebyok'
+
+Ckeys.bundle(scope)            // '["vault","acme","u1","main"]'
+Ckeys.box(scope, 'anthropic')  // '["box","acme","u1","main","anthropic"]'
+Ckeys.boxPrefix(scope)         // '["box","acme","u1","main",' -- every lockbox of the vault, by prefix scan
+ckeys.filter(Ckeys.isBoxIn(scope))
+```
+
+Each ckey is the JSON text of its kind and names, so a name may hold any text at all -- a colon, a
+quote, a bracket -- and no two vaults ever share a ckey or list each other's lockboxes. The ckeys
+are part of the stored format: use these, not a join of your own, and every version finds your
+rows.
+
 ## Key derivation
 
 The passphraseKey is made by Argon2id at a keyDeriverSpec: its parameters under a

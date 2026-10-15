@@ -1,10 +1,11 @@
 import { createStore, del, delMany, entries, get, getMany, keys, set, clear, type UseStore } from 'idb-keyval'
 import { DeviceUnlock, type Lockbox, type VaultBundle, type VaultScope } from './types'
 import {
-  VaultDB, boxCkey, bundleCkey, bundleMeetsExpectation, isBoxCkeyOf, lockboxMeetsExpectation, scopePath, vaultMeetsExpectation,
+  VaultDB, bundleMeetsExpectation, lockboxMeetsExpectation, vaultMeetsExpectation,
   type BundleExpectation, type EraseExpectation, type LockboxExpectation,
 } from './vault-db'
 import type { DeviceDB } from './device-db'
+import * as Ckeys from './ckeys'
 import { parseDbName, parseInspectorOpts, type IdbOpts, type IdbShelf } from './idb-opts'
 import { VaultError } from './errors'
 
@@ -65,8 +66,6 @@ const onBell = (dbName: string, shelf: IdbShelf, listener: () => void): (() => v
   return () => { ringers.delete(listener) }
 }
 
-const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
-
 /**
  * VaultDB over this browser's IndexedDB: the local-only tier. Nothing syncs -- this "backend"
  * never leaves the device -- but every secret field is ciphertext all the same, and the stored
@@ -96,49 +95,50 @@ class IdbVaultDB extends VaultDB {
   private ring() { ringBell(this.dbName, 'vault_db') }
 
   protected async doReadBundle(scope: VaultScope): Promise<unknown> {
-    return (await get(bundleCkey(scope), this.shelf())) ?? null
+    return (await get(Ckeys.bundle(scope), this.shelf())) ?? null
   }
 
   // The creates and updates below check, then save, in two IndexedDB transactions: another tab
   // can write in between, a window notes/security.md records.
   protected async doCreateBundle(bundle: VaultBundle): Promise<unknown> {
-    const standing: unknown = await get(bundleCkey(bundle), this.shelf())
+    const standing: unknown = await get(Ckeys.bundle(bundle), this.shelf())
     if (standing !== undefined) { return standing }
-    await set(bundleCkey(bundle), bundle, this.shelf())
+    await set(Ckeys.bundle(bundle), bundle, this.shelf())
     this.ring()
     return bundle
   }
 
   protected async doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean> {
-    const standing: unknown = await get(bundleCkey(bundle), this.shelf())
+    const standing: unknown = await get(Ckeys.bundle(bundle), this.shelf())
     if (! bundleMeetsExpectation(standing, expected)) { return false }
-    await set(bundleCkey(bundle), bundle, this.shelf())
+    await set(Ckeys.bundle(bundle), bundle, this.shelf())
     this.ring()
     return true
   }
 
   protected async doReadBox(scope: VaultScope, boxlabel: string): Promise<unknown> {
-    return (await get(boxCkey(scope, boxlabel), this.shelf())) ?? null
+    return (await get(Ckeys.box(scope, boxlabel), this.shelf())) ?? null
   }
 
   protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
+    const isBox = Ckeys.isBoxIn(scope)
     const rows = await entries(this.shelf())
     return rows
-      .filter(([ckey]) => isBoxCkeyOf(scope, ckey))
+      .filter(([ckey]) => isBox(ckey))
       .map(([, row]) => row as unknown)
   }
 
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
-    const [standingBundle, standingBox] = await getMany<unknown>([bundleCkey(scope), boxCkey(scope, lockbox.boxlabel)], this.shelf())
+    const [standingBundle, standingBox] = await getMany<unknown>([Ckeys.bundle(scope), Ckeys.box(scope, lockbox.boxlabel)], this.shelf())
     if (! lockboxMeetsExpectation(standingBundle, standingBox, expected)) { return false }
-    await set(boxCkey(scope, lockbox.boxlabel), lockbox, this.shelf())
+    await set(Ckeys.box(scope, lockbox.boxlabel), lockbox, this.shelf())
     this.ring()
     return true
   }
 
   protected async doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
-    if (! vaultMeetsExpectation(await get(bundleCkey(scope), this.shelf()), expected)) { return false }
-    await del(boxCkey(scope, boxlabel), this.shelf())
+    if (! vaultMeetsExpectation(await get(Ckeys.bundle(scope), this.shelf()), expected)) { return false }
+    await del(Ckeys.box(scope, boxlabel), this.shelf())
     this.ring()
     return true
   }
@@ -148,10 +148,10 @@ class IdbVaultDB extends VaultDB {
   // makes anew in between can be erased (notes/security.md). The delMany itself is one
   // transaction, so the rows listed go together, or none of them do.
   protected async doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
-    if (! vaultMeetsExpectation(await get(bundleCkey(scope), this.shelf()), expected)) { return false }
+    if (! vaultMeetsExpectation(await get(Ckeys.bundle(scope), this.shelf()), expected)) { return false }
     const ckeys = await keys(this.shelf())
-    const doomed = ckeys.filter((ckey) => isBoxCkeyOf(scope, ckey))
-    await delMany([...doomed, bundleCkey(scope)], this.shelf())
+    const doomed = ckeys.filter(Ckeys.isBoxIn(scope))
+    await delMany([...doomed, Ckeys.bundle(scope)], this.shelf())
     this.ring()
     return true
   }
@@ -183,11 +183,11 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
 
   return {
     readUnlock: async (scope) => {
-      const raw: unknown = await get(unlockCkey(scope), shelf())
+      const raw: unknown = await get(Ckeys.unlock(scope), shelf())
       if (raw === undefined || raw === null) { return null }
       const checked = DeviceUnlock.safeParse(raw)
       if (! checked.success) {
-        await del(unlockCkey(scope), shelf())
+        await del(Ckeys.unlock(scope), shelf())
         ring()
         return null
       }
@@ -195,20 +195,19 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
     },
 
     writeUnlock: async (unlock) => {
-      await set(unlockCkey(unlock), unlock, shelf())
+      await set(Ckeys.unlock(unlock), unlock, shelf())
       ring()
     },
 
     eraseUnlock: async (scope) => {
-      await del(unlockCkey(scope), shelf())
+      await del(Ckeys.unlock(scope), shelf())
       ring()
     },
 
+    // The shelf holds remembered unlocks and nothing else, so forgetting them all is clearing it:
+    // any row an earlier version filed under another ckey goes too.
     eraseAll: async () => {
-      const ckeys = await keys(shelf())
-      for (const ckey of ckeys) {
-        if (typeof ckey === 'string' && ckey.startsWith('unlock:')) { await del(ckey, shelf()) }
-      }
+      await clear(shelf())
       ring()
     },
   }

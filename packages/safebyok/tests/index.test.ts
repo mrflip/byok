@@ -10,10 +10,14 @@ describe("the package's entry point", () => {
       'openVault',
       'Ciphered', 'EpochMillis', 'FarFuture', 'FarPast', 'ForcePassphraseReentryHours', 'ForeverMs', 'Label', 'Lockbox', 'LockboxNote', 'LockboxSummary', 'MaxLockboxes', 'MaxWhisperBytes', 'UserId', 'VaultBundle', 'VaultScope', 'Whisper', 'wallClock',
       'VaultError', 'VaultErrorFamilyForKind', 'VaultErrorFamilyVals', 'VaultErrorKindVals', 'isVaultCondition', 'isVaultError',
-      'VaultDB', 'localVaultDB', 'memoryDeviceDB',
+      'VaultDB', 'Ckeys', 'localVaultDB', 'memoryDeviceDB',
       'domStore', 'memoryStore',
       'stableJsonify',
     ])
+  })
+
+  it("exports the ckeys an adapter over a key-value store files rows under, as one namespace", () => {
+    expect(Object.keys(safebyok.Ckeys)).to.have.members(['bundle', 'box', 'unlock', 'boxPrefix', 'isBoxIn'])
   })
 })
 

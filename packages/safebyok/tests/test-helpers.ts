@@ -552,6 +552,21 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       expect(await vaultDB.listBoxes(scopeOf('u2'))).to.have.lengthOf(1)
     })
 
+    it("keeps apart users whose ids differ only by a colon, a quote, a backslash, a comma or a bracket", async () => {
+      const vaultDB = await makeVaultDB()
+      const userIds = ['u1', 'u1:', 'u1"', String.raw`u1\\`, 'u1,', 'u1[', 'u1]', 'u1","main']
+      for (const [ii, userId] of userIds.entries()) {
+        await vaultDB.createBundle(bundleOf(userId))
+        await vaultDB.updateBox(scopeOf(userId), boxOf('anthropic', `of-${String(ii)}`), { vault_id: `vault-id-${userId}`, revision_id: null })
+      }
+      const listEach = () => Promise.all(userIds.map((userId) => vaultDB.listBoxes(scopeOf(userId))))
+      const before = await listEach()
+      expect(before.map((listing) => listing.map((box) => box.revision_id))).to.deep.equal(userIds.map((_userId, ii) => [`rev-of-${String(ii)}`]))
+      await vaultDB.eraseVault(scopeOf('u1'), thisVault)
+      const after = await listEach()
+      expect(after.map((listing) => listing.length)).to.deep.equal([0, 1, 1, 1, 1, 1, 1, 1])
+    })
+
     it("refuses a write expecting another user's vault_id", async () => {
       const vaultDB = await withBundle()
       await vaultDB.createBundle(bundleOf('u2'))
