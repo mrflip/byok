@@ -328,8 +328,9 @@ export type Vault = {
    */
   use<ResultT>(boxlabel: string, callback: (whisper: Whisper) => ResultT | Promise<ResultT>): Promise<ResultT>
   /**
-   * Remove the lockbox `boxlabel` entirely, whatever revision of it stands. Requires unlocked;
-   * kind 'absent_box' when absent. The erase lands only in the vault this device last read: if
+   * Remove the lockbox `boxlabel` entirely, whatever revision of it stands -- even one whose
+   * stored record fails verification, and so reads as 'corrupt_record': erasing it needs nothing
+   * from it, and is the remedy for it. Requires unlocked; kind 'absent_box' when absent. The erase lands only in the vault this device last read: if
    * it was destroyed, or destroyed and made anew, elsewhere, nothing is erased and the call
    * throws kind 'stale_write', after catching up with storage -- which relocks this device.
    * Unlike `store()`, an erase is never retried: that is its only expectation, and trying again
@@ -768,6 +769,18 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     throw new VaultError('vault_full', `This vault already holds its limit of ${String(lockboxLimit)} lockboxes: erase one before storing another. A vault meant to hold more can be opened with a larger maxLockboxes, up to what its storage adapter allows.`)
   }
 
+  /**
+   * Refuse, as 'absent_box', a boxlabel with no lockbox under it. A record there that fails
+   * verification still stands: what is stored under the boxlabel is there, whatever it holds.
+   */
+  const ensureBoxStands = async (boxlabel: string) => {
+    try {
+      await readBoxOrThrow(boxlabel)
+    } catch (err) {
+      if (! isVaultError(err, 'corrupt_record')) { throw err }
+    }
+  }
+
   const readBoxOrThrow = async (boxlabel: string) => {
     const lockbox = await vaultDB.readBox(scope, parseLabel(boxlabel))
     if (lockbox === null) { throw new VaultError('absent_box', `No lockbox is labelled '${boxlabel}' in this vault.`) }
@@ -1030,7 +1043,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     erase: async (boxlabel) => {
       ensureUnlocked()
       const label = parseLabel(boxlabel)
-      await readBoxOrThrow(label)
+      await ensureBoxStands(label)
       keyInHand()
       // Lands only in the vault this device holds keys for, whatever revision of the box stands:
       // a vault destroyed and made anew elsewhere refuses it. That is its only expectation, and

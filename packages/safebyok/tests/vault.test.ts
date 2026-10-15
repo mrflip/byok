@@ -1211,7 +1211,51 @@ describe("use", () => {
   })
 })
 
+/** A stored lockbox row, as text, with its whisper's ciphertext bent a little. */
+const withTweakedCiphertext = (row: Record<string, unknown>): string => {
+  const ciphered = row['whisper_ciphered'] as { cipher_iv_b64: string, ciphertext_b64: string }
+  const tweaked = TH.tweakB64(ciphered.ciphertext_b64)
+  return JSON.stringify({ ...row, whisper_ciphered: { ...ciphered, ciphertext_b64: tweaked } })
+}
+
+/** Ways a stored lockbox row can be spoiled so that it reads as 'corrupt_record'. */
+const SpoiledBoxes = [
+  [withTweakedCiphertext,                                                                        'whose ciphertext was altered, so it fails verification'],
+  [({ whisper_ciphered: _gone, ...row }: Record<string, unknown>) => JSON.stringify(row),       'missing its whisper, so it is no lockbox this package knows'],
+  [(row: Record<string, unknown>) => JSON.stringify({ ...row, boxlabel: 'other_box' }),          'naming another boxlabel than the one it is stored under'],
+  [() => '{"not": json',                                                                         'that is not JSON at all'],
+] as const
+
 describe("erase and destroy", () => {
+  for (const [spoil, blurb] of SpoiledBoxes) {
+    it(`erase removes a lockbox ${blurb}, and leaves the vault's other boxes as they were`, async () => {
+      const world = makeWorld()
+      const vault = await world.openUnlocked('pw')
+      await vault.store('anthropic', 'sk-ant-fake')
+      await vault.store('openai', 'sk-openai-fake', { note: 'work account' })
+      world.dbStore.write('box:acme:u1:main:anthropic', spoil(storedRowOf(world, 'anthropic')))
+      await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
+      await vault.erase('anthropic')
+      expect(world.dbStore.read('box:acme:u1:main:anthropic')).to.be.null
+      expect(boxlabelsOf(vault)).to.deep.equal(['openai'])
+      expect(vault.getSnapshot().boxes[0]?.note).to.eq('work account')
+      expect(await vault.read('openai')).to.eq('sk-openai-fake')
+    })
+  }
+
+  it("erase of a lockbox that fails verification still needs the vault unlocked, and leaves it as it is", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    await vault.store('anthropic', 'sk-ant-fake')
+    const [spoil] = SpoiledBoxes[0]
+    const spoiled = spoil(storedRowOf(world, 'anthropic'))
+    world.dbStore.write('box:acme:u1:main:anthropic', spoiled)
+    await vault.lock()
+    await TH.expectRefusal(vault.erase('anthropic'), 'vault_locked')
+    expect(world.dbStore.read('box:acme:u1:main:anthropic')).to.eq(spoiled)
+  })
+
+
   it("erase removes the box; a second erase finds it absent", async () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
