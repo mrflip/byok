@@ -311,3 +311,9 @@ security expert who knows what questions to ask.
   memory (clearing the timer) but leaves the device record: an unlock under way on a closed
   handle writes no record (erasing one it already wrote) and throws `vault_closed`. The timer is
   per handle and per tab, like the counter.
+* 2026-10-15: `VaultProvider` hands a stored record that fails verification at open
+  (`corrupt_record`) to the app in place, as `openError`, rather than throwing it to the error
+  boundary: it is a condition, as are `storage_unavailable` and `not_permitted`. A tampered or
+  damaged bundle therefore reaches the app's own UI, beside a `retryOpen` that cannot mend it; the
+  React README tells hosts to branch on `openError.kind`, and the error's message carries no
+  secret material. Misuse still goes to the boundary.
