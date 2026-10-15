@@ -50,11 +50,11 @@ export const memoryStore = (): StringStore => {
 
 /**
  * StringStore over a DOM Storage object (localStorage), confined to one prefix: each store sees
- * only its own entries, so one localStorage can hold two distinct places -- say a vault database and a device cache
- * -- without either seeing the other.
+ * only its own entries, so one localStorage can hold two distinct places -- say a vault database
+ * and a device cache -- without either seeing the other.
  *
  * Change notification covers this tab's own writes (DOM `storage` events only fire in *other*
- * tabs, which the demo does not chase).
+ * tabs, and this store does not listen for them).
  *
  * @param webStorage - The Storage to write through, usually `window.localStorage`.
  * @param prefix - Namespace for this store's entries, e.g. 'safebyok-demo:db:'.
