@@ -17,7 +17,7 @@ describe("the package's entry point", () => {
   })
 
   it("exports the ckeys an adapter over a key-value store files rows under, as one namespace", () => {
-    expect(Object.keys(safebyok.Ckeys)).to.have.members(['bundle', 'box', 'unlock', 'boxPrefix', 'isBoxIn'])
+    expect(Object.keys(safebyok.Ckeys)).to.have.members(['bundle', 'box', 'unlock', 'boxPrefix', 'isBoxIn', 'isUnlock'])
   })
 })
 

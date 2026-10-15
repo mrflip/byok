@@ -50,7 +50,8 @@ export const boxPrefix = (scope: VaultScope): string => `${encode(['box', ...sco
 /**
  * A test for the ckeys of `scope`'s lockboxes, for filtering every ckey in a store: true for
  * each ckey that {@link box} gives for `scope`, false for any other ckey safebyok writes, and
- * false for anything that is not text.
+ * false for anything that is not text. It tests the prefix alone, which is exact because every
+ * `box` tuple safebyok writes has exactly five elements.
  *
  * @example store.ckeys().filter(isBoxIn(scope))
  */
@@ -58,6 +59,17 @@ export const isBoxIn = (scope: VaultScope): ((ckey: unknown) => ckey is string) 
   const prefix = boxPrefix(scope)
   return (ckey: unknown): ckey is string => typeof ckey === 'string' && ckey.startsWith(prefix)
 }
+
+/**
+ * True for a ckey {@link unlock} gives, for any scope, and false for anything else: on a device
+ * shelf that holds only remembered unlocks, any other row is one this version did not write.
+ *
+ * @example isUnlock(unlock(scope))        // true
+ * @example isUnlock('unlock:acme:u1:main')  // false: an earlier version's ckey
+ */
+export const isUnlock = (ckey: unknown): ckey is string => typeof ckey === 'string' && ckey.startsWith(UnlockPrefix)
+
+const UnlockPrefix = '["unlock",'
 
 const scopeParts = (scope: VaultScope) => [scope.applabel, scope.user_id, scope.vaultlabel]
 

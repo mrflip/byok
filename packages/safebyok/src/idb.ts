@@ -1,4 +1,4 @@
-import { createStore, del, entries, get, set, clear, type UseStore } from 'idb-keyval'
+import { createStore, del, delMany, entries, get, keys, set, clear, type UseStore } from 'idb-keyval'
 import { DeviceUnlock } from './types'
 import * as Ckeys from './ckeys'
 import type { DeviceDB } from './device-db'
@@ -61,7 +61,8 @@ const onBell = (dbName: string, listener: () => void): (() => void) => {
  * non-extractable localUnlockKey -- as a handle, never as bytes.
  *
  * A record that will not read back (damaged, or written by another version) reads as "no
- * remembered unlock" and is dropped: losing the convenience is the safe failure. Kind
+ * remembered unlock" and is dropped: losing the convenience is the safe failure. A row filed
+ * under an earlier version's ckey is deleted unread at the next read or erase. Kind
  * 'bad_option' for a `dbName` that is not non-empty text.
  *
  * @example
@@ -73,8 +74,18 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
   const shelf = () => shelfStore(dbName)
   const ring = () => { ringBell(dbName) }
 
+  // A row under any ckey but an unlock's is one an earlier version filed (`unlock:acme:u1:main`
+  // before the tuple ckeys), which nothing else would ever reach, expire or erase. It is deleted
+  // unread, so an old remembered unlock never outlives the lock that should forget it.
+  const sweepStrays = async () => {
+    const ckeys = await keys(shelf())
+    const strays = ckeys.filter((ckey) => ! Ckeys.isUnlock(ckey))
+    if (strays.length > 0) { await delMany(strays, shelf()) }
+  }
+
   return {
     readUnlock: async (scope) => {
+      await sweepStrays()
       const raw: unknown = await get(Ckeys.unlock(scope), shelf())
       if (raw === undefined || raw === null) { return null }
       const checked = DeviceUnlock.safeParse(raw)
@@ -92,6 +103,7 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
     },
 
     eraseUnlock: async (scope) => {
+      await sweepStrays()
       await del(Ckeys.unlock(scope), shelf())
       ring()
     },

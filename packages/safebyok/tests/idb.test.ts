@@ -6,6 +6,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { idbDeviceDB, inspectIdbDeviceDB, type IdbOpts } from '../src/idb'
 import * as Entry from '../src/idb'
 import { VaultError } from '../src/errors'
+import * as Ckeys from '../src/ckeys'
 import * as TH from './test-helpers'
 
 // Each test gets its own database, so tests never see each other's rows.
@@ -44,6 +45,40 @@ describe("the IndexedDB device store's options", () => {
 })
 
 describe("idbDeviceDB", () => {
+  it("sweeps an unlock filed under an earlier version's ckey at the first read, never reading it", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    await set(['unlock', 'acme', 'u1', 'main'], await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
+    const gets = vi.spyOn(IDBObjectStore.prototype, 'get')
+    const getAlls = vi.spyOn(IDBObjectStore.prototype, 'getAll')
+    const cursors = vi.spyOn(IDBObjectStore.prototype, 'openCursor')
+    try {
+      expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+      expect(gets.mock.calls.map(([ckey]) => ckey)).to.deep.equal([Ckeys.unlock(TH.scopeOf('u1'))])
+      expect(getAlls).to.have.callCount(0)
+      expect(cursors).to.have.callCount(0)
+    } finally {
+      vi.restoreAllMocks()
+    }
+    const rows = await inspectIdbDeviceDB({ dbName }).rows()
+    expect(rows.map((row) => row.ckey)).to.deep.equal([Ckeys.unlock(TH.scopeOf('u2'))])
+  })
+
+  it("sweeps them at an erase too, keeping every unlock it filed", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
+    await deviceDB.eraseUnlock(TH.scopeOf('u3'))
+    expect(await deviceDB.readUnlock(TH.scopeOf('u2'))).to.not.be.null
+    const rows = await inspectIdbDeviceDB({ dbName }).rows()
+    expect(rows.map((row) => row.ckey)).to.deep.equal([Ckeys.unlock(TH.scopeOf('u2'))])
+  })
+
   it("reads an unlock filed under the colon-joined ckey of 0.2 and before as absent, and eraseAll removes it", async () => {
     const dbName = TH.freshDbName()
     const shelf = createStore(`${dbName}:device_db`, 'records')
