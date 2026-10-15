@@ -7,7 +7,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 | # | Thread             | Base                  | Status  |
 | - | ------------------ | --------------------- | ------- |
-| 1 | kdf_configs        | #66 tip `dfdbbec`     | in review |
+| 1 | kdf_configs        | #66 tip `dfdbbec`     | filing |
 | 2 | vaultdb_validation | #66 tip `dfdbbec`     | underway |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
 | 4 | ci_tooling         | #66 tip `5fefc90`     | underway |
