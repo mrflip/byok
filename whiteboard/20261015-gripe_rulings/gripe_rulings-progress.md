@@ -9,8 +9,8 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | - | ---------------------- | ---------- | -------- |
 | 1 | damaged_boxes          | #83 tip    | filed [#93](https://github.com/mrflip/safebyok/pull/93) |
 | 2 | dialog_wording         | #83 tip    | filed [#91](https://github.com/mrflip/safebyok/pull/91) |
-| 3 | tuple_ckeys            | #83 tip    | in review ([#92](https://github.com/mrflip/safebyok/pull/92)) |
-| 4 | replaceable_validators | thread 3   | pending  |
+| 3 | tuple_ckeys            | #83 tip    | filed [#92](https://github.com/mrflip/safebyok/pull/92) |
+| 4 | replaceable_validators | #92 `9218318` | underway |
 
 ## What the threads have taught
 
@@ -37,3 +37,17 @@ lists every box as damaged. **For the restack**: `boxlabelOfCkey` and both strin
 listings conflict with thread 3 (the boxlabel becomes the tuple's last element);
 `NameableLockbox` and `listedOrDamaged` should take thread 4's validators. Size: `everything`
 24.45 of 24.5 kB.
+
+*Orchestrator:* thread 3, tuple_ckeys, filed as [#92](https://github.com/mrflip/safebyok/pull/92):
+the string-keyed adapters file rows under `JSON.stringify([kind, applabel, user_id, vaultlabel(,
+boxlabel)])`, from one public module, `Ckeys` (`bundle`, `box`, `unlock`, `boxPrefix`, `isBoxIn`,
+`isUnlock`). The Coach's question answered: about 12 bytes more per ckey, listing no slower;
+JSON text chosen over IndexedDB array keys (one encoding). Old rows read as absent. *Review:*
+`flagged` -- an old `unlock:…` row (wrapped vaultKey) outlived `lock()`; swept unread, as a YOLO
+decision. Second review `fixed` -- `eraseUnlock` deletes the scope's own unlock before sweeping;
+the sweep rings the bell; the docs say when the sweep really runs (an open that finds the vault,
+or any lock). Left for the Coach: a sweep in `writeUnlock` too; a `keys()` call per read; two
+versions open at once evict each other's unlocks; the sweep as permanent code; `Ckeys` public.
+**For thread 4**: no floor is needed in the ckeys; names are encoded as given, never normalized,
+so validators check, never transform; add label cases to `describeVaultDB`'s separator test.
+`everything` is at 24.47 of 24.5 kB.
