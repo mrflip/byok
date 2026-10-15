@@ -44,7 +44,8 @@ const IvBytes = 12
  * the given parts (app, user, vault, lockbox, revision, purpose -- whatever names the slot).
  * Rebuilt rather than stored; if any part differs at decryption, the ciphertext refuses to open.
  *
- * @example cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', vaultId, 1, 'vault_key_passphrase_wrapped')
+ * @example cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', vaultId, 1,
+ *     'vault_key_passphrase_wrapped')
  */
 export const cipherBinding = (...parts: readonly (string | number)[]): Uint8Array => (
   new TextEncoder().encode(stableJsonify(parts))

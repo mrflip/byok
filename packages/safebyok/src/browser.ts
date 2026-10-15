@@ -26,9 +26,11 @@ const bagsByDbName = new Map<string, BrowserOpts>()
  * @returns A frozen bag of `keyDeriver` and `deviceDB`.
  *
  * @example
- *   const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB, ...browserOpts() })
+ *   const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB,
+ *     ...browserOpts() })
  * @example
- *   const vault = await openVault({ ...browserOpts({ dbName: 'acme' }), applabel: 'acme', userId, vaultlabel: 'main', vaultDB })
+ *   const vault = await openVault({ ...browserOpts({ dbName: 'acme' }), applabel: 'acme', userId,
+ *     vaultlabel: 'main', vaultDB })
  * @example
  *   browserOpts({ dbName: 'acme' }) === browserOpts({ dbName: 'acme' })  // true
  */

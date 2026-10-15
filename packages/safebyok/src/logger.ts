@@ -23,8 +23,10 @@ import { consoleLogger } from './console-logger'
  *     error: (message, story, err) => { telemetry.error(message, story, err) },
  *   }
  *   const vault = await openVault({ ...opts, logger })
- * @example openVault({ ...opts, logger: { log: () => {}, warn: () => {}, error: () => {} } })  // silent
- * @example openVault({ ...opts, logger: console })  // untagged, a missing story or error printed as undefined or null
+ * @example openVault({ ...opts, logger: { log: () => {}, warn: () => {}, error: () => {} } })
+ *     // silent
+ * @example openVault({ ...opts, logger: console })
+ *     // untagged, a missing story or error printed as undefined or null
  */
 export type VaultLogger = {
   /** Something worth knowing, with nothing to act on. */
@@ -40,7 +42,10 @@ export const VaultLoggerLevelVals = ['log', 'warn', 'error'] as const
 export type VaultLoggerLevel = typeof VaultLoggerLevelVals[number]
 
 const loggerCall = Z.custom<VaultLogger['log']>((candidate) => typeof candidate === 'function')
-/** What a VaultLogger must carry. Checked only: what openVault keeps calls the host's own, `this` and all. */
+/**
+ * What a VaultLogger must carry. Checked only: what openVault keeps calls the host's own, `this`
+ * and all.
+ */
 const loggerShape = Z.object({ log: loggerCall, warn: loggerCall, error: loggerCall })
 
 /**

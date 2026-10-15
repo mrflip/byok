@@ -11,7 +11,8 @@ import * as TH from './test-helpers'
 /**
  * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, a
  * logger that keeps what it hears, and an opener. Unlocks derive through the cheap testDeriver, so
- * the suite is not a benchmark of Argon2id; the real deriver has its own tests in key-deriver.test.ts.
+ * the suite is not a benchmark of Argon2id; the real deriver has its own tests in
+ * key-deriver.test.ts.
  */
 const makeWorld = () => {
   const dbStore = memoryStore()
@@ -30,7 +31,10 @@ const makeWorld = () => {
 const HourMs = 60 * 60 * 1000
 const SevenDaysMs = 7 * 24 * HourMs
 
-/** Remembered deadlines outside EpochMillis's bounds, each a unit mistake or an older reading of "far". */
+/**
+ * Remembered deadlines outside EpochMillis's bounds, each a unit mistake or an older reading of
+ * "far".
+ */
 const OutOfBoundsDeadlines = [
   [FarFuture + 1,                                       'one millisecond past FarFuture'],
   [8.64e15,                                             'the last instant a Date holds'],
@@ -42,7 +46,9 @@ const OutOfBoundsDeadlines = [
   [Date.parse('2026-10-14T12:00:00Z') + (1e9 * HourMs), 'what 0.2.0 wrote for a window of 1e9 hours'],
 ] as const
 
-/** Expect `operation` to reject with a VaultError of `kind`; hands the error back for a closer look. */
+/**
+ * Expect `operation` to reject with a VaultError of `kind`; hands the error back for a closer look.
+ */
 const expectRefusal = async (operation: Promise<unknown>, kind: VaultError['kind']): Promise<VaultError> => {
   try {
     await operation
@@ -256,7 +262,8 @@ describe("the remembered unlock", () => {
     world.advance(6 * 24 * 60 * 60 * 1000)
     const later = await world.open()
     expect(later.getSnapshot().state).to.eq('unlocked')
-    // Genuinely unlocked: a read reaches the box layer ('absent_box'), not the lock ('vault_locked').
+    // Genuinely unlocked: a read reaches the box layer ('absent_box'), not the lock
+    // ('vault_locked').
     await expectRefusal(later.read('missing'), 'absent_box')
   })
 
@@ -1347,7 +1354,8 @@ describe("changePassphrase", () => {
 /**
  * A world whose slow waits can be held mid-flight, to land a lock inside an unlock: each `holdNext`
  * arms a gate on the next look at the bundle, passphrase derivation, device-record write, or (to
- * hold a store in hand) read of a lockbox, and hands it back. Its key deriver is its own copy of testDeriver, so a spy on it stays here.
+ * hold a store in hand) read of a lockbox, and hands it back. Its key deriver is its own copy of
+ * testDeriver, so a spy on it stays here.
  */
 const makeRacingWorld = () => {
   const world = makeWorld()
@@ -2390,7 +2398,9 @@ const untilAsleep = async (waits: { mock: { calls: unknown[] } }) => {
   while (waits.mock.calls.length === 0) { await realTurn() }
 }
 
-/** Hand the faked clock forward until `operation` settles, and hand back its result, or its refusal. */
+/**
+ * Hand the faked clock forward until `operation` settles, and hand back its result, or its refusal.
+ */
 const drivenToEnd = async <ResultT>(operation: Promise<ResultT>): Promise<ResultT> => {
   const progress = { settled: false }
   const outcome = (async () => {
@@ -2411,7 +2421,10 @@ const drivenToEnd = async <ResultT>(operation: Promise<ResultT>): Promise<Result
   return finished.result
 }
 
-/** Pin the random word the retry's jitter is drawn from (its four bytes, big-endian); other draws are untouched. */
+/**
+ * Pin the random word the retry's jitter is drawn from (its four bytes, big-endian); other draws
+ * are untouched.
+ */
 const pinJitter = (word: number) => {
   const original = crypto.getRandomValues.bind(crypto)
   vi.spyOn(crypto, 'getRandomValues').mockImplementation(((filled: ArrayBufferView<ArrayBuffer>) => {

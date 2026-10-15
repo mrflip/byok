@@ -46,7 +46,10 @@ export type SafebyokApiOpts<DataModel extends GenericDataModel = GenericDataMode
 export class SafebyokComponent {
   private readonly component: ComponentApi
 
-  /** @param component - The installed component, `components.safebyok` from the host's generated api. */
+  /**
+   * @param component - The installed component, `components.safebyok` from the host's generated
+   *   api.
+   */
   constructor(component: ComponentApi) {
     this.component = component
   }

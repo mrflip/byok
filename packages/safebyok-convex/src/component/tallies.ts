@@ -39,7 +39,10 @@ export const MaxVaultLockboxes = ConvexTransactionWrittenDocuments / 2
  */
 export const MaxVaultLockboxBytes = (ConvexTransactionReadBytes / 2) - ConvexDocumentBytes - TallyReserveBytes
 
-/** How full a vault is: how many lockboxes it holds, and what they weigh in bytes, as Convex counts them. */
+/**
+ * How full a vault is: how many lockboxes it holds, and what they weigh in bytes, as Convex counts
+ * them.
+ */
 export type Tally = {
   lockbox_count: number
   lockbox_bytes: number
@@ -103,10 +106,13 @@ export const reckon = async (
  * it, so a vault over its limits can always shrink.
  *
  * @param tally - The vault's tally before the write, or null for a vault past a limit, uncounted.
- * @param growth - What the write adds: a lockbox for a new one, and its weight less any it replaces.
+ * @param growth - What the write adds: a lockbox for a new one, and its weight less any it
+ *   replaces.
  *
- * @example refuses({ lockbox_count: 8000, lockbox_bytes: 4096 }, { lockbox_count: 1, lockbox_bytes: 512 })  // => true
- * @example refuses({ lockbox_count: 8000, lockbox_bytes: 4096 }, { lockbox_count: 0, lockbox_bytes: 512 })  // => false
+ * @example refuses({ lockbox_count: 8000, lockbox_bytes: 4096 },
+ *     { lockbox_count: 1, lockbox_bytes: 512 })  // => true
+ * @example refuses({ lockbox_count: 8000, lockbox_bytes: 4096 },
+ *     { lockbox_count: 0, lockbox_bytes: 512 })  // => false
  */
 export const refuses = (tally: Tally | null, growth: Tally): boolean => {
   if (tally === null) { return growth.lockbox_count > 0 || growth.lockbox_bytes > 0 }

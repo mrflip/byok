@@ -19,7 +19,10 @@ const KnownBlanks = [
   0xA0, 0x30_00, 0x20_28, 0x85, 0x16_80, 0x17_B4, 0xFE_0F, 0xE_00_20, 0x1_D1_73,
 ].map((cp) => String.fromCodePoint(cp))
 
-/** What no result may contain: marks, controls, spaces of any kind, ignorables, bidi controls, blank symbols. */
+/**
+ * What no result may contain: marks, controls, spaces of any kind, ignorables, bidi controls, blank
+ * symbols.
+ */
 const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}\u{1D159}]/u
 
 /** The scripts written right to left, whose letters and digits `mask` keeps. */
@@ -140,7 +143,8 @@ describe("mask", () => {
     [`${KeyEmoji}${KeyEmoji}abcdefghij${Rocket}${Rocket}`, undefined,  `${KeyEmoji}${KeyEmoji}********ij${Rocket}${Rocket}`, 'an emoji is one character, and never loses half its surrogate pair'],
     [`${Family}${Family}abcdefghij${Family}${Family}`,     undefined,  `${Man}${Woman}***...***${Girl}${Man}${Woman}${Girl}`, 'a joined emoji sequence comes apart into its emoji, which are cut whole'],
 
-    // letters and numbers of right-to-left scripts are kept, and the direction marks around them are not:
+    // letters and numbers of right-to-left scripts are kept, and the direction marks around them
+    // are not:
     ["\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}\u{5D5}\u{5D6}\u{5D7}\u{5D8}\u{5D9}\u{5DA}\u{5DB}\u{5DC}\u{5DE}\u{5E0}123", undefined, "\u{5D0}\u{5D1}***...***\u{5E0}123", 'a Hebrew key with digits keeps its Hebrew ends'],
     ["\u{627}\u{644}\u{645}\u{641}\u{62A}\u{627}\u{62D}\u{661}\u{662}\u{663}", undefined, "******\u{62D}\u{661}\u{662}\u{663}", 'an Arabic key, Arabic-Indic digits and all, is its tail behind stars'],
     ["sk-ant-\u{5D0}\u{5D1}abcd\u{627}\u{661}1234", undefined,      "sk***...***1234", 'a mixed key keeps its Latin ends'],

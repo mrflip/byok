@@ -28,7 +28,9 @@ import * as TH from './test-helpers'
  */
 export const fakeDeployment = (getUserId: GetUserId = TH.bySubject) => new FakeDeployment(getUserId)
 
-/** The fake deployment's handle on one connected socket: the user it is signed in as, its watches. */
+/**
+ * The fake deployment's handle on one connected socket: the user it is signed in as, its watches.
+ */
 type Session = {
   socket:  FakeSocket
   subject: string | null
@@ -83,7 +85,10 @@ class FakeDeployment {
     return subject === null ? this.backend : this.backend.withIdentity({ subject })
   }
 
-  /** The functions every connected socket watches right now, by path: the live queries a client holds open here. */
+  /**
+   * The functions every connected socket watches right now, by path: the live queries a client
+   * holds open here.
+   */
   watching(): string[] {
     return Array.from(this.sessions.values(), (session) => Array.from(session.watched.values(), (watch) => watch.udfPath)).flat()
   }

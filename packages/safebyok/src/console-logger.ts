@@ -12,7 +12,10 @@ export const consoleLogger: VaultLogger = {
   error: (message, story, err) => { console.error(...consoleArgs(message, story, err)) },
 }
 
-/** What the console is handed: the tagged message, then the story and the error, each only when present. */
+/**
+ * What the console is handed: the tagged message, then the story and the error, each only when
+ * present.
+ */
 const consoleArgs = (message?: string, story?: Record<string, unknown>, err?: Error | null): unknown[] => [
   message === undefined ? 'safebyok' : `safebyok: ${message}`,
   ...(story === undefined ? [] : [story]),

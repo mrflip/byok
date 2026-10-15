@@ -91,7 +91,10 @@ export const boxOf = (boxlabel: string, tag: string, overrides: Partial<WrittenL
   ...overrides,
 })
 
-/** A real DeviceUnlock for device-storage tests: a live non-extractable localUnlockKey around fake wrapped material. */
+/**
+ * A real DeviceUnlock for device-storage tests: a live non-extractable localUnlockKey around fake
+ * wrapped material.
+ */
 export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
   format:                  'safebyok-unlock-v1',
   ...scopeOf(userId),
@@ -139,7 +142,8 @@ export const wakeupAtNextTick = (): Promise<void> => new Promise((resolve) => { 
  *
  * @example
  *   const gate = TH.makeGate()
- *   const slowDeriver = { ...TH.testDeriver, deriveKeyBytes: async (passphrase, saltBytes) => { await gate.pass(); return await TH.testDeriver.deriveKeyBytes(passphrase, saltBytes) } }
+ *   const slowDeriver = { ...TH.testDeriver, deriveKeyBytes: async (passphrase, saltBytes) => {
+ *     await gate.pass(); return await TH.testDeriver.deriveKeyBytes(passphrase, saltBytes) } }
  *   const unlocking = vault.unlock('pw')   // now waiting at the gate
  *   await gate.reached
  *   await vault.lock()                     // lands mid-unlock

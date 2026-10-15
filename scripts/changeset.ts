@@ -41,7 +41,8 @@ export function threadOf(branch: string): string | undefined {
  * @param taken  - File names already in .changeset/.
  * @returns A file name not in `taken`.
  *
- * @example changesetFilename('20261015-roadmap_fruit', new Set(['20261015-roadmap_fruit.md']))  // => '20261015-roadmap_fruit-2.md'
+ * @example changesetFilename('20261015-roadmap_fruit', new Set(['20261015-roadmap_fruit.md']))
+ *     // => '20261015-roadmap_fruit-2.md'
  */
 export function changesetFilename(thread: string, taken: ReadonlySet<string>): string {
   return firstFree(thread, taken, 1)

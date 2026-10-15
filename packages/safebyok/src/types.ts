@@ -19,7 +19,10 @@ export type WhisperJson = string | number | boolean | null | WhisperJson[] | { [
  */
 export type Whisper = Exclude<WhisperJson, null>
 
-/** True for a plain key-value object: one built by a literal or Object.create(null), nothing with its own prototype (a Date, a Map) that JSON would silently flatten. */
+/**
+ * True for a plain key-value object: one built by a literal or Object.create(null), nothing with
+ * its own prototype (a Date, a Map) that JSON would silently flatten.
+ */
 const isPlainBag = (val: unknown): val is Record<string, unknown> => {
   if (typeof val !== 'object' || val === null) { return false }
   const proto: unknown = Object.getPrototypeOf(val)
@@ -81,7 +84,8 @@ export const Label = Z.string().check(
  * until `lock()`: `forcePassphraseReentryHours: Infinity`, or a window so large its deadline
  * would pass it. A host compares against it to show "until locked" rather than a date in 2255.
  *
- * @example askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toLocaleString()
+ * @example askPassphraseAt === FarFuture ? 'until locked'
+ *     : new Date(askPassphraseAt).toLocaleString()
  * @example new Date(FarFuture).toISOString()   // '2255-06-05T23:47:34.740Z'
  */
 export const FarFuture = 9_007_199_254_740 // Math.floor(Number.MAX_SAFE_INTEGER / 1000)
@@ -109,7 +113,8 @@ export const FarPast = 347_155_200_000 // Date.UTC(1981, 0, 1)
  * @example EpochMillis.parse(Date.UTC(2026, 9, 15))                // 1792022400000
  * @example EpochMillis.safeParse(1_792_022_400).success            // false: seconds, not ms
  * @example EpochMillis.safeParse(1_792_022_400_000_000).success    // false: microseconds, not ms
- * @example EpochMillis.safeParse(1_792_022_400_000.5).success      // false: whole milliseconds only
+ * @example EpochMillis.safeParse(1_792_022_400_000.5).success
+ *     // false: whole milliseconds only
  * @example EpochMillis.safeParse(Infinity).success                 // false: never a time
  */
 export const EpochMillis = Z.number().check(
@@ -146,7 +151,8 @@ export const LockboxNote = Z.string().check(Z.maxLength(256))
 /**
  * One lockbox as the storage layer holds it: the whisper ciphered under its own lockboxKey, that
  * lockboxKey wrapped under the vaultKey, and the public shell -- boxlabel, note, the times it
- * was first stored and last changed -- a locked vault may show. Nothing in this record opens without the vaultKey.
+ * was first stored and last changed -- a locked vault may show. Nothing in this record opens
+ * without the vaultKey.
  *
  * `revision_id` is minted fresh on every write and bound into both encryptions, so ciphertext
  * moved between revisions (or boxes, or vaults) refuses to open.
@@ -167,7 +173,10 @@ export const Lockbox = Z.object({
    * undefined too, as earlier versions stored it and IndexedDB keeps it.
    */
   note:                Z.optional(LockboxNote),
-  /** When this boxlabel was first stored, an {@link EpochMillis}: every later store carries it forward. */
+  /**
+   * When this boxlabel was first stored, an {@link EpochMillis}: every later store carries it
+   * forward.
+   */
   registered_at:       EpochMillis,
   /**
    * When the whisper last changed, an {@link EpochMillis}: a store whose whisper serializes the
@@ -182,7 +191,8 @@ export type Lockbox = Z.infer<typeof Lockbox>
  * the lockbox has none -- never absent, never undefined, however the record was stored. This is
  * what a VaultDB's `listBoxes` returns and a vault's snapshot holds, readable while locked.
  *
- * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', registered_at, changed_at }).note  // null
+ * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', registered_at,
+ *     changed_at }).note  // null
  */
 export const LockboxSummary = Z.extend(
   Z.omit(Lockbox, { format: true, lockbox_key_wrapped: true, whisper_ciphered: true }),
@@ -207,7 +217,9 @@ export const VaultBundle = Z.object({
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
   vault_id:            Z.string().check(Z.minLength(1)),
   passphrase_epoch:    Z.int().check(Z.positive()),
-  /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, as stored vaults self-describe. */
+  /**
+   * Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, as stored vaults self-describe.
+   */
   key_deriver_label:   Z.string().check(Z.minLength(1)),
   passphrase_salt_b64: Z.string().check(Z.minLength(1)),
   /** The vaultKey, wrapped under the passphraseKey: decrypting this IS the passphrase check. */
@@ -235,7 +247,10 @@ export const DeviceUnlock = Z.object({
   local_unlock_key: cryptoKeyHandle,
   /** The vaultKey, wrapped under the localUnlockKey. */
   vault_key_local_wrapped: Ciphered,
-  /** The instant from which the remembered unlock no longer counts, and the vault asks for the passphrase: an {@link EpochMillis}. */
+  /**
+   * The instant from which the remembered unlock no longer counts, and the vault asks for the
+   * passphrase: an {@link EpochMillis}.
+   */
   ask_passphrase_at: EpochMillis,
 })
 export type DeviceUnlock = Z.infer<typeof DeviceUnlock>

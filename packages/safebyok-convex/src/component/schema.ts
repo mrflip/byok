@@ -14,7 +14,8 @@ export default defineSchema({
     .index('by_scope', ['user_id', 'applabel', 'vaultlabel']),
   /**
    * One Lockbox per boxlabel, as-is, with its vault's scope columns beside it: added on write,
-   * stripped on read. `by_box` serves one box (all four fields) and a vault's boxes (the first three).
+   * stripped on read. `by_box` serves one box (all four fields) and a vault's boxes (the first
+   * three).
    */
   safebyok_lockboxes: defineTable(Lockbox.extend(VaultScope.fields))
     .index('by_box', ['user_id', 'applabel', 'vaultlabel', 'boxlabel']),

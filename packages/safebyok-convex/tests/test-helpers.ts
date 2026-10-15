@@ -38,7 +38,8 @@ export const bySubject: GetUserId = async (ctx) => {
 
 /**
  * A lockbox whose whisper's ciphertext is `bytes` long. Its tag goes into three of its fields, so
- * a replacement weighs exactly `bytes` more or less only under a tag as long as the one it replaces.
+ * a replacement weighs exactly `bytes` more or less only under a tag as long as the one it
+ * replaces.
  */
 export const heavyBox = (boxlabel: string, bytes: number, tag = boxlabel) => (
   boxOf(boxlabel, tag, { whisper_ciphered: { cipher_iv_b64: 'iv', ciphertext_b64: 'c'.repeat(bytes) } })
@@ -52,7 +53,10 @@ export const RealWhispers: Record<string, { whisper: Whisper, note?: string }> =
 
 export const RealPassphrase = 'correct horse battery staple'
 
-/** Opens a vault for `userId` over `store` the way an app does, deriving through the cheap test deriver. */
+/**
+ * Opens a vault for `userId` over `store` the way an app does, deriving through the cheap test
+ * deriver.
+ */
 export const openOver = (store: StringStore, userId = 'u1') => openVault({
   applabel: 'acme', userId, vaultlabel: 'main', vaultDB: localVaultDB(store), deviceDB: memoryDeviceDB(), keyDeriver: testDeriver,
 })

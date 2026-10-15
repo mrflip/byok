@@ -12,7 +12,8 @@ export default defineConfig({
   entry:      ['src/index.ts', 'src/server.ts', 'src/component-api.ts', 'src/component/**/*.ts'],
   format:     ['esm'],
   unbundle:   true,
-  // The component runs in Convex's isolates and the client in browsers; nothing here is either's alone.
+  // The component runs in Convex's isolates and the client in browsers; nothing here is either's
+  // alone.
   platform:   'neutral',
   target:     'es2022',
   dts:        true,

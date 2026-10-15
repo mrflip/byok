@@ -78,7 +78,8 @@ const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
  *
  * @example
  *   const vaultDB = idbVaultDB({ dbName: 'my_app' })
- *   const vault = await openVault({ applabel: 'my_app', userId, vaultlabel: 'main', vaultDB, ...browserOpts({ dbName: 'my_app' }) })
+ *   const vault = await openVault({ applabel: 'my_app', userId, vaultlabel: 'main', vaultDB,
+ *     ...browserOpts({ dbName: 'my_app' }) })
  */
 export const idbVaultDB = (opts: IdbOpts = {}): VaultDB => new IdbVaultDB(opts.dbName ?? 'safebyok')
 
@@ -240,7 +241,9 @@ export const inspectIdb = (opts: IdbOpts & { shelf: IdbShelf }) => {
         .map(([ckey, row]) => ({ ckey, row }))
         .toSorted((one, two) => one.ckey.localeCompare(two.ckey))
     },
-    /** Calls `listener` after any write to the shelf, this tab or another; returns the unsubscribe. */
+    /**
+     * Calls `listener` after any write to the shelf, this tab or another; returns the unsubscribe.
+     */
     subscribe: (listener: () => void): (() => void) => onBell(dbName, opts.shelf, listener),
     /** Remove every row on the shelf. */
     wipe: async (): Promise<void> => {

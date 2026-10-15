@@ -11,7 +11,10 @@
  */
 import { deburr } from 'es-toolkit'
 
-/** A label's shape: lowercase letters, digits and single underscores, a letter first, a letter or digit last */
+/**
+ * A label's shape: lowercase letters, digits and single underscores, a letter first, a letter or
+ * digit last
+ */
 export const Label = { re: /^[a-z](_?[a-z0-9])+$/, min: 2, max: 40 } as const
 
 /**

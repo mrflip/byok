@@ -114,15 +114,15 @@ export type Vault = {
 
   /**
    * Open the vault with its passphrase, remembering the unlock on this device for
-   * `forcePassphraseReentryHours`. On an `absent` vault this first unlock creates it, with this passphrase.
-   * A wrong passphrase throws kind 'wrong_passphrase' and changes nothing -- learned from the
-   * vaultKey envelope refusing to decrypt, never from a comparison.
+   * `forcePassphraseReentryHours`. On an `absent` vault this first unlock creates it, with this
+   * passphrase. A wrong passphrase throws kind 'wrong_passphrase' and changes nothing -- learned
+   * from the vaultKey envelope refusing to decrypt, never from a comparison.
    *
    * A `lock()`, `lockSoon()` or `destroy()` called while the unlock is still under way wins: the
-   * vault stays locked, this device remembers nothing, and the call throws kind 'vault_locked'. A vault the
-   * unlock was creating stays created, locked, under this passphrase. So does a vault destroyed,
-   * made anew, or given a new passphrase on another device meanwhile: the passphrase was proven
-   * against a vault that no longer stands as it was.
+   * vault stays locked, this device remembers nothing, and the call throws kind 'vault_locked'. A
+   * vault the unlock was creating stays created, locked, under this passphrase. So does a vault
+   * destroyed, made anew, or given a new passphrase on another device meanwhile: the passphrase was
+   * proven against a vault that no longer stands as it was.
    */
   unlock(passphrase: string): Promise<void>
   /**
@@ -146,7 +146,8 @@ export type Vault = {
    *
    * @param graceSeconds - How long work in hand has to finish. Default 5.
    *
-   * @example document.addEventListener('visibilitychange', () => { if (document.hidden) { void vault.lockSoon() } })
+   * @example document.addEventListener('visibilitychange', () => {
+   *     if (document.hidden) { void vault.lockSoon() } })
    * @example await vault.lockSoon(0)  // the same as await vault.lock()
    */
   lockSoon(graceSeconds?: number): Promise<void>
@@ -265,10 +266,12 @@ type VaultKeyPair = { transientKey: CryptoKey, sessionKey: CryptoKey }
  * storage's own error and leaves nothing running behind it, so the host simply opens again later.
  *
  * @example
- *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, ...browserOpts() })
+ *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main',
+ *     vaultDB, ...browserOpts() })
  *   vault.getSnapshot().state  // 'absent' | 'locked' | 'unlocked'
  * @example
- *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, deviceDB, keyDeriver })
+ *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main',
+ *     vaultDB, deviceDB, keyDeriver })
  */
 export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const applabel   = parseLabel(opts.applabel)
@@ -282,7 +285,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   // Every reading of the host's clock is checked, this first one so that a clock counting in the
   // wrong unit fails the open rather than some later call.
   readClock(clock)
-  /** A checked reading of the host's clock. One that fails drops the vaultKey first: no deadline can be trusted now. */
+  /**
+   * A checked reading of the host's clock. One that fails drops the vaultKey first: no deadline can
+   * be trusted now.
+   */
   const clockNow = () => {
     try {
       return readClock(clock)
@@ -305,7 +311,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   // How many times this handle has shut. An unlock under way notes the number when it starts, and
   // takes nothing up if a shut has moved it meanwhile: the lock wins.
   let shutsSoFar = 0
-  // The timer lockSoon() leaves to drop the vaultKey, and when it falls due; null when none is pending.
+  // The timer lockSoon() leaves to drop the vaultKey, and when it falls due; null when none is
+  // pending.
   let pendingShut: { timer: ReturnType<typeof setTimeout>, dueAt: number } | null = null
 
   const listeners = new Set<() => void>()
@@ -512,7 +519,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     return true
   }
 
-  /** Mint a fresh localUnlockKey, wrap the vaultKey under it, and remember the unlock on this device. */
+  /**
+   * Mint a fresh localUnlockKey, wrap the vaultKey under it, and remember the unlock on this
+   * device.
+   */
   const rememberDevice = async (unlockedKey: CryptoKey, standing: VaultBundle, until: number) => {
     const localUnlockKey = await makeLocalUnlockKey()
     const wrapped = await wrapKeyUnder(localUnlockKey, unlockedKey, bundleBinding(standing.vault_id, standing.passphrase_epoch, 'vault_key_local_wrapped'))
@@ -551,7 +561,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       && checked.data.ask_passphrase_at <= deadlineAfter(now, reentryMs)
     if (! fits) {
       await deviceDB.eraseUnlock(scope)
-      // Expired, or outdated by a new passphrase or a shorter setting, is routine; unreadable is worth a word.
+      // Expired, or outdated by a new passphrase or a shorter setting, is routine; unreadable is
+      // worth a word.
       if (! checked.success) { forgetUnreadableUnlock() }
       return
     }
@@ -694,7 +705,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       }
       // A shut in all but the key: an unlock under way loses, no new operation starts, and this
       // device forgets its remembered unlock now. Only the vaultKey waits, for work in hand. The
-      // gate closes by having no deadline at all, not one at now, which a clock stepped back reopens.
+      // gate closes by having no deadline at all, not one at now, which a clock stepped back
+      // reopens.
       shutsSoFar += 1
       askPassphraseAt = null
       bump()
@@ -721,7 +733,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       }
       await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }))
       bundle = next
-      // The change has landed, whatever happens now: a shut meanwhile leaves only its unlock untaken.
+      // The change has landed, whatever happens now: a shut meanwhile leaves only its unlock
+      // untaken.
       await takeUpUnlock(proven, next, shutsThen)
       bump()
     },
@@ -758,7 +771,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         const revisionId = randomId()
         const lockboxKey = await makeLockboxKey()
         const now = clockNow()
-        // A store of the whisper already there writes a new revision, and leaves changed_at standing.
+        // A store of the whisper already there writes a new revision, and leaves changed_at
+        // standing.
         const unchanged = prev !== null && await holdsWhisper(unlockedKey, vaultId, prev, checked.data)
         // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
         // reborn elsewhere, or a box written meanwhile by another device, refuses it.
@@ -827,7 +841,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
     close: () => {
       closed = true
-      // A shut in memory only: an unlock under way takes nothing up, and the remembered unlock stays.
+      // A shut in memory only: an unlock under way takes nothing up, and the remembered unlock
+      // stays.
       shutsSoFar += 1
       dropKey()
       unsubscribeDB()
@@ -879,7 +894,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   return vault
 }
 
-/** A thrown value, for a logger: an Error as it is, anything else -- which may be anything at all -- as null. */
+/**
+ * A thrown value, for a logger: an Error as it is, anything else -- which may be anything at all --
+ * as null.
+ */
 const asError = (thrown: unknown): Error | null => (thrown instanceof Error ? thrown : null)
 
 const lockedError = () => new VaultError('vault_locked', 'The vault is locked: ask the user for their passphrase and call unlock().')
@@ -941,7 +959,10 @@ const retryStale = async <ResultT>(attempt: () => Promise<ResultT>, attemptsLeft
   }
 }
 
-/** A note as `store()` is handed one: some text, null for none, or undefined to keep the note standing. */
+/**
+ * A note as `store()` is handed one: some text, null for none, or undefined to keep the note
+ * standing.
+ */
 const noteOption = Z.optional(Z.nullable(LockboxNote))
 
 const parseNote = (candidate: string | null | undefined): string | null | undefined => {
@@ -953,7 +974,10 @@ const parseNote = (candidate: string | null | undefined): string | null | undefi
   return checked.data
 }
 
-/** The note a store writes: the one given, or -- given none -- the one `prev` stands with; null for none. */
+/**
+ * The note a store writes: the one given, or -- given none -- the one `prev` stands with; null for
+ * none.
+ */
 const noteToStore = (given: string | null | undefined, prev: Lockbox | null): string | null => (
   given === undefined ? prev?.note ?? null : given
 )
@@ -989,7 +1013,10 @@ const maxLockboxes = Z._default(Z.int().check(Z.positive()), MaxLockboxes)
  */
 const UnlimitedBytes = Number.MAX_SAFE_INTEGER
 
-/** A limit as an adapter declares one, some bytes or `Infinity` for none, to the finite form the vault keeps. */
+/**
+ * A limit as an adapter declares one, some bytes or `Infinity` for none, to the finite form the
+ * vault keeps.
+ */
 const someBytes = Z.union([Z.number().check(Z.positive()), Z.literal(Infinity)])
 const bytesKept = Z.transform((bytes: number) => Math.min(bytes, UnlimitedBytes))
 const byteLimit = Z.number().check(Z.positive(), Z.lte(UnlimitedBytes))
@@ -999,10 +1026,15 @@ const MsPerHour = 60 * 60 * 1000
 
 /** How long `lockSoon()` lets work in hand finish, unless told otherwise, in seconds. */
 const LockSoonGraceSeconds = 5
-/** The longest grace `lockSoon()` gives, in seconds: the vaultKey outlives a lock by at most this. */
+/**
+ * The longest grace `lockSoon()` gives, in seconds: the vaultKey outlives a lock by at most this.
+ */
 const MaxLockSoonGraceSeconds = 60
 
-/** A grace in seconds, as the host thinks of it, to whole milliseconds. Zod's number refuses NaN and Infinity. */
+/**
+ * A grace in seconds, as the host thinks of it, to whole milliseconds. Zod's number refuses NaN and
+ * Infinity.
+ */
 const graceSecondsGiven = Z._default(Z.number().check(Z.gte(0), Z.lte(MaxLockSoonGraceSeconds)), LockSoonGraceSeconds)
 const secondsToMs = Z.transform((seconds: number) => Math.round(seconds * 1000))
 const graceSeconds = Z.pipe(graceSecondsGiven, secondsToMs)
@@ -1030,7 +1062,10 @@ const hoursToMs = Z.transform((hours: number) => Math.min(Math.round(hours * MsP
 const reentryWindowMs = Z.number().check(Z.gte(1), Z.lte(ForeverMs))
 const forcePassphraseReentryHours = Z.pipe(Z.pipe(reentryHours, hoursToMs), reentryWindowMs)
 
-/** The deadline for a passphrase entered at `nowMs`: `reentryMs` later, in whole ms, but never past {@link FarFuture}. */
+/**
+ * The deadline for a passphrase entered at `nowMs`: `reentryMs` later, in whole ms, but never past
+ * {@link FarFuture}.
+ */
 const deadlineAfter = (nowMs: number, reentryMs: number): number => Math.min(Math.floor(nowMs + reentryMs), FarFuture)
 
 const parseForcePassphraseReentryHours = (candidate: number | undefined): number => {
@@ -1041,7 +1076,10 @@ const parseForcePassphraseReentryHours = (candidate: number | undefined): number
   return checked.data
 }
 
-/** What a Clock must carry. Checked only: openVault keeps the clock it was handed, and checks each reading. */
+/**
+ * What a Clock must carry. Checked only: openVault keeps the clock it was handed, and checks each
+ * reading.
+ */
 const clockShape = Z.object({
   now: Z.custom<Clock['now']>((candidate) => typeof candidate === 'function'),
 })
@@ -1055,9 +1093,9 @@ const parseClock = (candidate: Clock | undefined): Clock => {
 }
 
 /**
- * A clock reading the package accepts: epoch milliseconds from {@link FarPast} to {@link FarFuture},
- * a fraction allowed, as a clock may return one. Floored as it is read, so every time kept is a
- * whole-millisecond {@link EpochMillis}.
+ * A clock reading the package accepts: epoch milliseconds from {@link FarPast} to {@link
+ * FarFuture}, a fraction allowed, as a clock may return one. Floored as it is read, so every time
+ * kept is a whole-millisecond {@link EpochMillis}.
  */
 const clockReading = Z.number().check(Z.gte(FarPast), Z.lte(FarFuture))
 
@@ -1093,7 +1131,10 @@ const parseMaxLockboxes = (candidate: number | undefined): number => {
   return checked.data
 }
 
-/** What a KeyDeriver must carry. Checked only: openVault keeps the deriver it was handed, prototype and all. */
+/**
+ * What a KeyDeriver must carry. Checked only: openVault keeps the deriver it was handed, prototype
+ * and all.
+ */
 const keyDeriverShape = Z.object({
   key_deriver_label: Z.string().check(Z.minLength(1)),
   salt_bytes:        Z.int().check(Z.positive()),
@@ -1110,10 +1151,14 @@ const parseKeyDeriver = (candidate: KeyDeriver | undefined): KeyDeriver => {
   return candidate
 }
 
-/** One of the adapter's declared limits, in the finite form the vault keeps: `Infinity` becomes {@link UnlimitedBytes}. */
+/**
+ * One of the adapter's declared limits, in the finite form the vault keeps: `Infinity` becomes
+ * {@link UnlimitedBytes}.
+ */
 const parseDeclaredBytes = (vaultDB: VaultDB, limitname: 'maxRecordBytes' | 'maxVaultBytes'): number => {
   const checked = declaredBytes.safeParse(vaultDB[limitname])
-  // An adapter that declares no limit, or one written before a limit existed, is refused: never guessed.
+  // An adapter that declares no limit, or one written before a limit existed, is refused: never
+  // guessed.
   if (! checked.success) {
     throw new VaultError('bad_option', `This storage adapter does not declare ${limitname}, a limit every adapter states: update the adapter, or ask its author to.`)
   }
