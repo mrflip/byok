@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach)
-* **Status**: paused 10:18 UTC for an hour at the Coach's word (human/20261015-sprint_big_feats_paused.md)
+* **Status**: threads 1, 2, 5 underway (2 and 5 in review); 4 has its base (#70) and waits for a slot. (Paused 10:18 to 11:19 UTC at the Coach's word.)
 
 ## Read first
 
