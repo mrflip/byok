@@ -364,14 +364,14 @@ const checkRecord = <RecordT>(recordSchema: Z.ZodMiniType<RecordT>, raw: unknown
   return checked.data
 }
 
-// ------------------------------------------ shared by the in-tree adapters, not public surface
+// ---------------------------------------------- localVaultDB's own, not public surface
 
 // Just the fields an expectation compares; a standing row too damaged to show them fails it.
 const StandingBundle = Z.object({ vault_id: Z.string(), passphrase_epoch: Z.number() })
 const StandingBox = Z.object({ revision_id: Z.string() })
 
 /** True when the bundle row standing in storage is the one `expected` names. */
-export const bundleMeetsExpectation = (standingBundle: unknown, expected: BundleExpectation): boolean => {
+const bundleMeetsExpectation = (standingBundle: unknown, expected: BundleExpectation): boolean => {
   const standing = StandingBundle.safeParse(standingBundle)
   return standing.success
     && standing.data.vault_id === expected.vault_id
@@ -379,30 +379,31 @@ export const bundleMeetsExpectation = (standingBundle: unknown, expected: Bundle
 }
 
 /** True when the bundle row standing in storage belongs to the vault `expected` names. */
-export const vaultMeetsExpectation = (standingBundle: unknown, expected: { vault_id: string }): boolean => {
+const vaultMeetsExpectation = (standingBundle: unknown, expected: { vault_id: string }): boolean => {
   const standing = StandingBundle.safeParse(standingBundle)
   return standing.success && standing.data.vault_id === expected.vault_id
 }
 
 /** True when the bundle and lockbox rows standing in storage are the ones `expected` names. */
-export const lockboxMeetsExpectation = (standingBundle: unknown, standingBox: unknown, expected: LockboxExpectation): boolean => {
+const lockboxMeetsExpectation = (standingBundle: unknown, standingBox: unknown, expected: LockboxExpectation): boolean => {
   if (! vaultMeetsExpectation(standingBundle, expected)) { return false }
   if (standingBox === null || standingBox === undefined) { return expected.revision_id === null }
   const box = StandingBox.safeParse(standingBox)
   return box.success && box.data.revision_id === expected.revision_id
 }
 
-// The ckeys both in-tree adapters store rows under: a stored contract, so never reshaped.
+// The ckeys localVaultDB stores rows under, and the device store its unlocks: a stored contract,
+// so never reshaped. safebyok-indexeddb keeps a copy of its own.
 export const scopePath = (scope: VaultScope) => `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}`
-export const bundleCkey = (scope: VaultScope) => `vault:${scopePath(scope)}`
-export const boxCkey = (scope: VaultScope, boxlabel: string) => `box:${scopePath(scope)}:${boxlabel}`
+const bundleCkey = (scope: VaultScope) => `vault:${scopePath(scope)}`
+const boxCkey = (scope: VaultScope, boxlabel: string) => `box:${scopePath(scope)}:${boxlabel}`
 
 /**
  * True for the ckey of a lockbox in `scope`. A prefix alone is not enough: a user_id may hold a
  * colon, so another user's rows can share this scope's prefix -- but never with a bare boxlabel
  * (which holds no colon) after it.
  */
-export const isBoxCkeyOf = (scope: VaultScope, ckey: unknown): ckey is string => {
+const isBoxCkeyOf = (scope: VaultScope, ckey: unknown): ckey is string => {
   const prefix = `box:${scopePath(scope)}:`
   return typeof ckey === 'string' && ckey.startsWith(prefix) && ! ckey.slice(prefix.length).includes(':')
 }

@@ -241,6 +241,9 @@ importers:
       safebyok:
         specifier: workspace:*
         version: link:../../packages/safebyok
+      safebyok-indexeddb:
+        specifier: workspace:*
+        version: link:../../packages/safebyok-indexeddb
       safebyok-react:
         specifier: workspace:*
         version: link:../../packages/safebyok-react
