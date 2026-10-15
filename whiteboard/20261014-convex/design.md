@@ -41,20 +41,22 @@ written as `undefined`, which Convex refuses.
 
 ## Interface map
 
-Verb names follow the rulings where they name one (`versionedUpdate`); the rest are as the
-storage thread settles them.
+The VaultDB verbs are as the storage thread settled them (2026-10-15, thread
+`20261014-storage_verbs`): each public verb validates and calls the adapter's `do*` half, so
+`convexVaultDB` implements `doReadBundle`, `doCreateBundle` and the rest, one Convex function each.
+The rulings' `versionedUpdate` is `updateBundle` and `updateBox`.
 
 | VaultDB verb                 | Convex function                  | Notes                                                       |
 | ---------------------------- | -------------------------------- | ----------------------------------------------------------- |
-| read the bundle              | query `getBundle`                | record minus `_id`, `_creationTime`; or null                |
-| create the bundle            | mutation `createBundle`          | find-or-insert in one transaction: the creation race closes |
-| `versionedUpdate`, bundle    | mutation `updateBundle`          | only if the standing `passphrase_epoch` is the expected one |
-| read one lockbox             | query `getBox`                   |                                                             |
-| list lockboxes               | query `listBoxSummaries`         | projected server-side, keeping `format`; sorted client-side |
-| `versionedUpdate`, lockbox   | mutation `updateBox`             | only if the standing `revision_id` is the expected one, or there is none; refuses when the scope holds no bundle |
-| erase a lockbox              | mutation `eraseBox`              | erase wins: no version expectation                          |
-| erase the vault              | mutation `eraseVault`            | boxes and bundle in one transaction                         |
-| subscribe                    | `onUpdate` on query `watchVault` | `{ vault_id, passphrase_epoch, boxes: [[boxlabel, revision_id]] }`; first emit skipped |
+| `readBundle`                 | query `getBundle`                | record minus `_id`, `_creationTime`; or null                |
+| `createBundle`               | mutation `createBundle`          | find-or-insert in one transaction: the creation race closes |
+| `updateBundle`               | mutation `updateBundle`          | only if the standing `vault_id` and `passphrase_epoch` are the expected ones |
+| `readBox`                    | query `getBox`                   |                                                             |
+| `listBoxes`                  | query `listBoxSummaries`         | projected server-side, keeping `format`; sorted client-side |
+| `updateBox`                  | mutation `updateBox`             | only if the scope's bundle has the expected `vault_id`, and the standing `revision_id` is the expected one (or, for null, there is none); refuses when the scope holds no bundle |
+| `eraseBox`                   | mutation `eraseBox`              | erase wins: no version expectation                          |
+| `eraseVault`                 | mutation `eraseVault`            | boxes and bundle in one transaction                         |
+| `subscribe`                  | `onUpdate` on query `watchVault` | `{ vault_id, passphrase_epoch, boxes: [[boxlabel, revision_id]] }`; first emit skipped |
 | `maxRecordBytes`             | (a constant)                     | 1 MiB                                                       |
 
 Every function first resolves `getUserId(ctx)`, the host's callback: inside a component
@@ -76,7 +78,6 @@ encryption holding the whole whisper in memory several times; encryption time is
 ## Open
 
 * Whisper size cap: built in the core, PR #7 (`maxWhisperBytes`, adapters' `maxRecordBytes`).
-* A box written under one `vault_id` landing in a vault recreated under another: `versionedUpdate`
-  does not see it (both expectations can hold). Checking `vault_id` would close it. The Coach
-  calls it a huge hole; the storage thread closes it.
+* ~~A box written under one `vault_id` landing in a vault recreated under another.~~ Closed by
+  the storage thread: `updateBox` carries a `vault_id` expectation.
 * Component packaging: `convex.config` export and generated types in the package build.
