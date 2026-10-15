@@ -98,7 +98,8 @@ export const sealPassphrase = async (
  *
  * Refuses with kind `absent_unlock` when `unlockId` names no passphrase envelope of the bundle,
  * `unknown_key_deriver` when every envelope it would try was made by a key
- * deriver other than `keyDeriver`, and `wrong_passphrase` when none it tried opens.
+ * deriver other than `keyDeriver`, `corrupt_record` when one it would try has a salt of another
+ * length than `keyDeriver.salt_bytes`, and `wrong_passphrase` when none it tried opens.
  *
  * @returns Both lives of the vaultKey, and the `unlock_id` of the envelope that opened.
  */
@@ -118,6 +119,11 @@ export const openWithPassphrase = async (
   const derivable = aimed.filter((envelope) => envelope.key_deriver_label === keyDeriver.key_deriver_label)
   if (derivable.length === 0) {
     throw new VaultError('unknown_key_deriver', 'This vault was made with a key deriver this package does not carry: update safebyok, or open the vault where it was made.')
+  }
+  // Checked for every envelope before the first derivation, so the outcome never hangs on order:
+  // a salt the deriver's own label says it never made is a damaged record, not a wrong passphrase.
+  if (derivable.some((envelope) => fromB64(envelope.salt_b64).length !== keyDeriver.salt_bytes)) {
+    throw new VaultError('corrupt_record', "One of this vault's passphrases is stored with a salt its key deriver could not have made: the bundle is damaged. It was left as it is.")
   }
   for (const envelope of derivable) {
     const opened = await tryPassphrase(keyDeriver, passphrase, scope, bundle.vault_id, envelope)

@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { Ciphered } from './crypto'
+import { Ciphered, fromB64 } from './crypto'
 
 /**
  * The JSON a whisper is made of. `null` is legal here -- inside an array or object -- because
@@ -207,6 +207,16 @@ export type UnlockMethod = typeof UnlockMethodVals[number]
  */
 export const MaxUnlocks = 8
 
+/** True for base64url text that decodes: a salt that is not cannot be fed to a key deriver. */
+const decodesAsB64 = (text: string): boolean => {
+  try {
+    fromB64(text)
+    return true
+  } catch {
+    return false
+  }
+}
+
 /**
  * A passphrase's way into the vault: the vaultKey wrapped under the passphraseKey that this
  * envelope's passphrase and its own passphraseSalt make. Every field but `vault_key_wrapped` is
@@ -222,7 +232,7 @@ export const PassphraseEnvelope = Z.object({
   /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, as stored vaults self-describe. */
   key_deriver_label: Z.string().check(Z.minLength(1)),
   /** This envelope's passphraseSalt: fresh for every envelope, and for every change of its passphrase. */
-  salt_b64:          Z.string().check(Z.minLength(1)),
+  salt_b64:          Z.string().check(Z.minLength(1), Z.refine(decodesAsB64, "A salt is base64url text")),
   /** The vaultKey, wrapped under the passphraseKey: decrypting this IS the passphrase check. */
   vault_key_wrapped: Ciphered,
 })

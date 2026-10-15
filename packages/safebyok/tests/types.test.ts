@@ -120,6 +120,8 @@ const UnlockListCases = [
   [[TH.envelopeOf('passphrase', { method: 'passkey' as never })],          false,  'a method this version does not know'],
   [[TH.envelopeOf('Not_a_label')],                                         false,  'an unlocklabel outside the label grammar'],
   [[TH.envelopeOf('passphrase', { salt_b64: '' })],                        false,  'an empty salt'],
+  [[TH.envelopeOf('passphrase', { salt_b64: 'not base64!' })],             false,  'a salt that is not base64url text'],
+  [[TH.envelopeOf('passphrase', { salt_b64: 'aaaaa' })],                   false,  'a salt of base64url letters that decode to no whole bytes'],
   [[TH.envelopeOf('passphrase', { unlock_id: '' })],                       false,  'an empty unlock_id'],
 ] as const
 
