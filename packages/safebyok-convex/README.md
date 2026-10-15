@@ -150,6 +150,10 @@ heavier, and every erase, always lands, so a vault over its limits (written befo
 kept) can always shrink, and be erased a lockbox at a time even when it is too large to erase
 whole.
 
+These limits are the component's constants; a host has no knob for them. Deploying client-side
+limits (`maxLockboxes`, `maxWhisperBytes`, the adapter's `maxVaultBytes`) that disagree with the
+component's is undefined behaviour: not a bug we will fix, and not one whose outcome we promise.
+
 ## The functions
 
 Each is one `VaultDB` verb (the core's storage interface). Arguments and results are plain JSON:
