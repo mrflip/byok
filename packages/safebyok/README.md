@@ -264,7 +264,7 @@ render for that, and hands a condition down as `openError`).
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
 | `bad_label`           | a label (or the `userId`) that fails the rules, or an `unlocklabel` the vault already has | Pass labels the app chose; check a user-typed one first with `Label`, and against the snapshot's `unlocks` |
 | `bad_whisper`         | a whisper JSON cannot carry (`undefined`, a function, a class instance) | Store plain JSON; to empty a lockbox, `erase` it |
-| `bad_option`          | an option or argument out of its range: an `openVault` option, an `argon2idDeriver` spec, a `store()` note, a passphrase or callback of the wrong type, a record handed to a `VaultDB` write | Fix the call; the message names what it takes |
+| `bad_option`          | an option or argument out of its range: an `openVault` option, an `argon2idDeriver` spec, a `store()` note, a passphrase or callback of the wrong type, a record handed to a `VaultDB` write; a passkey's answer of the wrong shape, or one already a way in | Fix the call; the message names what it takes |
 | `vault_closed`        | the vault handle was closed                                      | Open the vault again; do not use a handle after `close()` |
 | `unknown_key_deriver` | the vault names a key deriver this handle was not built with     | Update safebyok, or open the vault with the deriver that made it |
 
@@ -276,13 +276,15 @@ Part of normal operation. Each can reach the user; the app decides how.
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
 | `vault_locked`        | a whisper was asked for before the vault was unlocked            | Ask for the passphrase and `unlock()`, then retry (`safebyok-react`'s `withUnlockedVault` does) |
 | `wrong_passphrase`    | the passphrase did not unlock the vault, or was empty            | Ask again                                               |
+| `wrong_passkey`       | the passkey's answer did not unlock the vault, or answered for another salt | Ask the passkey again, or ask for a passphrase  |
+| `passkey_unavailable` | this browser or authenticator cannot answer for a passkey unlock: no WebAuthn, or no PRF extension | Offer the passphrase instead; on `createPasskey`, tell the user this device cannot be a fingerprint unlock |
 | `absent_box`          | no lockbox under that label                                      | Offer to create it, or refresh the list: it may have been erased elsewhere |
 | `absent_vault`        | the vault has never been created, or was deleted elsewhere, and the call will not create it | Unlock with a new passphrase to create it |
-| `absent_unlock`       | no way into the vault has that `unlock_id`: it may have been removed on another device | Look again at the snapshot's `unlocks`, and ask the user which they mean |
+| `absent_unlock`       | no way into the vault has that `unlock_id`, or is the passkey that answered: it may have been removed on another device | Look again at the snapshot's `unlocks`, and ask the user which they mean |
 | `whisper_too_large`   | a whisper over the vault's `maxWhisperBytes`                     | Tell the user it is too large; a host that means to allow more passes a larger `maxWhisperBytes` |
 | `vault_full`          | a new lockbox in a vault already holding its `maxLockboxes`, or a write the storage backend has no room for | Tell the user to erase a lockbox first; the host may raise `maxLockboxes` where the backend allows |
-| `too_many_unlocks`    | a passphrase added to a vault already holding `MaxUnlocks` (8) ways in | Tell the user to remove one first                        |
-| `last_unlock`         | removing the vault's last way in, which would leave nobody able to open it | Add another passphrase first; to be rid of the vault, `destroy()` it |
+| `too_many_unlocks`    | a passphrase or passkey added to a vault already holding `MaxUnlocks` (8) ways in | Tell the user to remove one first             |
+| `last_unlock`         | removing the vault's last passphrase: a vault always keeps one, since a passkey can be lost with its device | Add another passphrase first; to be rid of the vault, `destroy()` it |
 | `corrupt_record`      | a stored record failed validation or decryption verification     | Nothing was changed. Do not retry; tell the user, and see a developer: the record is damaged, was moved, or came from a newer safebyok |
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
 | `not_permitted`       | the storage backend refused this user: signed out, or not theirs to reach | Have the user sign in again                             |

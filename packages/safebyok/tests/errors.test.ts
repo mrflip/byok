@@ -85,6 +85,8 @@ const FamilyCases = [
   // conditions: normal operation, which may reach the user
   ["vault_locked",        "condition", 'a locked vault asks for the passphrase'],
   ["wrong_passphrase",    "condition", 'a mistyped passphrase asks again'],
+  ["wrong_passkey",       "condition", 'a passkey that does not open the vault asks again, or for a passphrase'],
+  ["passkey_unavailable", "condition", 'a browser or authenticator without PRF falls back to the passphrase'],
   ["absent_box",          "condition", 'a lockbox erased elsewhere is a fact of syncing'],
   ["absent_vault",        "condition", 'a vault never made is made by the first unlock'],
   ["absent_unlock",       "condition", 'a passphrase removed on another device is a fact of syncing'],

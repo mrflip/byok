@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { localVaultDB, memoryStore, openVault } from '../src/index'
 import { Ciphered, fromB64, toB64 } from '../src/crypto'
 import { VaultError } from '../src/errors'
-import { Lockbox, VaultBundle, VaultScope, type DeviceUnlock } from '../src/types'
+import { Lockbox, PasskeySaltBytes, VaultBundle, VaultScope, type DeviceUnlock } from '../src/types'
 import * as TH from './test-helpers'
 
 const TweakCases = [
@@ -206,6 +206,26 @@ describe("the fixtures", () => {
     expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
     expect(Object.isFrozen(TH.noBoxYet)).to.be.true
     expect(Object.isFrozen(TH.thisVault)).to.be.true
+  })
+
+  it("passkeyEnvelopeOf: a shape-valid passkey envelope, with any field overridden", () => {
+    const bundle = TH.bundleOf('u1', { unlocks: [TH.envelopeOf('passphrase'), TH.passkeyEnvelopeOf('laptop')] })
+    expect(VaultBundle.safeParse(bundle).success).to.be.true
+    expect(TH.passkeyEnvelopeOf('laptop')).to.include({ method: 'passkey', unlock_id: 'unlock-laptop', credential_id: 'cred-laptop' })
+    expect(TH.passkeyEnvelopeOf('laptop', { credential_id: 'other' }).credential_id).to.eq('other')
+  })
+
+  it("passkeyOf: the same passkey and salt answer the same, another salt or passkey otherwise", async () => {
+    const laptop = await TH.passkeyOf('laptop')
+    expect(laptop.prfBytes).to.have.lengthOf(32)
+    expect(fromB64(laptop.prfSaltB64)).to.have.lengthOf(PasskeySaltBytes)
+    expect(new TextDecoder().decode(fromB64(laptop.credentialId))).to.eq('cred-laptop')
+    expect(await TH.passkeyOf('laptop')).to.deep.equal(laptop)
+    const phone = await TH.passkeyOf('phone')
+    const elsewhere = await TH.passkeyOf('laptop', phone.prfSaltB64)
+    expect(elsewhere.credentialId).to.eq(laptop.credentialId)
+    expect(elsewhere.prfBytes).to.not.deep.equal(laptop.prfBytes)
+    expect(phone.prfBytes).to.not.deep.equal(laptop.prfBytes)
   })
 
   it("boxOf: a shape-valid Lockbox, with any field overridden", () => {

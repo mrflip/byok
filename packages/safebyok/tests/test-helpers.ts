@@ -8,13 +8,13 @@
  * and under vitest: the deriver is worthless against a brute-forcer.
  */
 import { describe, expect, it, vi } from 'vitest'
-import type { Ciphered } from '../src/crypto'
+import { toB64, type Ciphered } from '../src/crypto'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import type { VaultError, VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import { memoryStore } from '../src/string-store'
-import type { DeviceUnlock, Lockbox, PassphraseEnvelope, VaultBundle, VaultScope } from '../src/types'
+import type { DeviceUnlock, Lockbox, PasskeyEnvelope, PasskeyProof, PassphraseEnvelope, VaultBundle, VaultScope } from '../src/types'
 import type { OpenVaultOpts } from '../src/vault'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
 
@@ -105,6 +105,47 @@ export const envelopeOf = (unlocklabel: string, overrides: Partial<PassphraseEnv
   vault_key_wrapped: fakeCiphered(`envelope-${unlocklabel}`),
   ...overrides,
 })
+
+/**
+ * A shape-valid passkey envelope labelled `unlocklabel`, its wrap fake: for storage-layer tests,
+ * which never decrypt. Its unlock_id is `unlock-<unlocklabel>`, its credential_id
+ * `cred-<unlocklabel>`.
+ *
+ * @example passkeyEnvelopeOf('laptop')
+ * @example bundleOf('u1', { unlocks: [envelopeOf('passphrase'), passkeyEnvelopeOf('laptop')] })
+ */
+export const passkeyEnvelopeOf = (unlocklabel: string, overrides: Partial<PasskeyEnvelope> = {}): PasskeyEnvelope => ({
+  method:            'passkey',
+  unlock_id:         `unlock-${unlocklabel}`,
+  unlocklabel,
+  credential_id:     `cred-${unlocklabel}`,
+  // base64 of the literal text 'prfsaltprfsaltprfsaltprfsaltprfs': a fake 32-byte salt, public material anyway
+  prf_salt_b64:      'cHJmc2FsdHByZnNhbHRwcmZzYWx0cHJmc2FsdHByZnM',
+  vault_key_wrapped: fakeCiphered(`envelope-${unlocklabel}`),
+  ...overrides,
+})
+
+/** SHA-256 of `text`'s UTF-8 bytes. */
+const digestOf = async (text: string): Promise<Uint8Array> => (
+  new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
+)
+
+/**
+ * A passkey's answer, as a fake authenticator would give it: for tests, in place of a WebAuthn
+ * call. The credential is `tag`'s own (its id base64url of `cred-<tag>`), the salt a 32-byte one
+ * made from `tag` unless given, and the answer SHA-256 of the credential and salt -- so the same
+ * passkey asked with the same salt answers the same, and with another salt answers otherwise, as
+ * a real PRF does. Worthless as a secret: never hand it to a vault that holds a real one.
+ *
+ * @example await vault.addPasskey('pw', await passkeyOf('laptop'), { unlocklabel: 'laptop' })
+ * @example await vault.unlock(await passkeyOf('laptop'))
+ * @example await passkeyOf('laptop', otherSaltB64)  // the same credential, answering another salt
+ */
+export const passkeyOf = async (tag: string, prfSaltB64?: string): Promise<PasskeyProof> => {
+  const credentialId = toB64(new TextEncoder().encode(`cred-${tag}`))
+  const saltB64 = prfSaltB64 ?? toB64(await digestOf(`salt-${tag}`))
+  return { credentialId, prfSaltB64: saltB64, prfBytes: await digestOf(`${credentialId}:${saltB64}`) }
+}
 
 /**
  * A shape-valid VaultBundle for `userId`'s `main` vault, its one envelope fake: for storage-layer
