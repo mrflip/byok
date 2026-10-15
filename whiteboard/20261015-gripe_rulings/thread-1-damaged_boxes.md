@@ -63,6 +63,12 @@ Branch `20261015-damaged_boxes`, PR [#93](https://github.com/mrflip/safebyok/pul
   - **For thread 4 (replaceable_validators)**: `NameableLockbox` (`vault-db.ts`) checks the
     stored-under boxlabel with `Label`; it should take the host's boxlabel validator too, as
     should `listedOrDamaged`'s `ListedLockbox` check for the note.
+* **Review** (`fixed`): the demo's Enter key now shares the knock button's gate (f938aba); the
+  security note names the two store-over-damaged races (1cbb502); and the docs now say `store()`
+  starts afresh over any record `readBox` refuses, which includes a box listed as sound with a
+  missing or malformed ciphered field. Left open in the PR: closing those races needs an erase
+  guarded by revision in the adapter contract, and a JS adapter still on the old `doListBoxes`
+  contract lists every box as damaged.
 * **For the Coach**:
   - Breaking for hosts (pre-1.0 minor): a host reading `snapshot.boxes[i].note` must check
     `damaged` first; a host's own `VaultDB` maps its listing to `{ boxlabel, lockbox }`.
