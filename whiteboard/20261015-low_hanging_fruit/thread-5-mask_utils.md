@@ -12,20 +12,25 @@ tests, convex 210, react 7, demo 24, root 67).
   `tests/utils.test.ts` (the entry exports exactly `mask`). A real changeset,
   `.changeset/20261015-mask_utils.md` (minor). A `notes/security.md` line. READMEs name the entry.
 * **Decisions taken**:
-  - **`maxLen` kept** (the preplan's recommendation): it bounds the characters shown. `Infinity`
-    turns collapsing off. When `head + stars + tail` would pass `maxLen`, the result is `head`,
-    `***...***`, `tail`; with the defaults that is exactly 15 characters. If a host's `head` and
-    `tail` alone pass `maxLen`, the result still passes it; `maxLen` also wins over `minStars`
-    (a collapsed result shows three stars at each end). Both documented.
+  - **`maxLen` kept** (the preplan's recommendation): it bounds the characters shown, and is a
+    true ceiling. *Decided by the orchestrator on review:* a `maxLen` below `head + tail + 9`
+    (9 = `***...***`) is refused as `bad_option`, naming the three options and the floor, since a
+    collapse could otherwise be longer than the uncollapsed result. When `maxLen` is omitted it
+    defaults to 15, or to `head + tail + 9` if that is more, so `{ head: 4 }` alone works. `Infinity`
+    turns collapsing off. A collapse keeps only the head and tail the give-up rule left for that
+    whisper (tested with large `minStars`), and `maxLen` wins over `minStars`. Tested: the result
+    never exceeds `maxLen`.
   - **"Characters" are graphemes** (`Intl.Segmenter`, granularity `grapheme`): a whisper with an
     emoji, a ZWJ sequence or a combining accent is never cut in half. `Intl.Segmenter` is in
     Node 16+, every current browser and Bun; Hermes (React Native) has lacked it, so where it is
     absent `mask` counts code points (`/./gsu`), which keeps emoji whole and only splits a
     combining mark from its base. The segmenter is built per call, not at module scope, to keep
     the module free of load-time effects (`sideEffects: false`).
-  - **Stripped first**: `\p{Cc}` (newline, return, tab, NUL, DEL, C1) plus `\p{Zl}`/`\p{Zp}`
-    (U+2028/2029). Format characters (`Cf`, e.g. zero-width joiner) are kept: they hold emoji
-    sequences together.
+  - **Stripped first** (*widened on review, decided by the orchestrator*): `\p{Cc}` (newline,
+    return, tab, NUL, DEL, C1), `\p{Zl}`/`\p{Zp}` (U+2028/2029), `\p{Bidi_Control}` (an override
+    in the tail could reorder what the user reads), and U+200B, U+2060, U+FEFF (they take no room
+    on screen yet would count as a character). Kept: U+200D (ZWJ) and U+200C (ZWNJ), variation
+    selectors and tag characters, which emoji and scripts need.
   - **Empty after stripping gives `''`**, not six stars: there is nothing to hide, and stars
     would imply a secret exists. Any non-empty whisper shows at least `minStars` stars, even one
     shorter than `minStars` (so a 3-character whisper is `******`: its length is not revealed).
@@ -36,7 +41,7 @@ tests, convex 210, react 7, demo 24, root 67).
   - **`maskAll` struck**, not exported: `mask(w, { head: 0, tail: 0 })` is the stars-only variant
     and a second name would be a contract for a one-liner. VOCABULARY.md's `mask` paragraph now
     says so and drops "or you can plug in your own" (no seam exists for that).
-  - **Validation**: Zod (`Z.object` with defaults) at the entry, refusing as `VaultError`
+  - **Validation**: Zod (`Z.object` with defaults; matches every other schema in `src/`, the orchestrator asks the Coach to note it) at the entry, refusing as `VaultError`
     `bad_option`; a non-string whisper as `bad_whisper`. Neither message quotes the whisper
     (tested). `mask` pulls in `errors.ts` and `zod` (a peer already); the built `utils.js` is
     4.1 kB before the shared chunk.
@@ -59,5 +64,8 @@ tests, convex 210, react 7, demo 24, root 67).
   together refuse both `Array.from(str)` and `[...str]`, hence the regex.
 * **For thread 8**: a size-budget entry for `import { mask } from 'safebyok/utils'` waits on this
   merging; it ships `errors` and `zod` (core's peer), not the vault.
+* **Also on review**: `Intl` itself is guarded (`typeof Intl === 'undefined'`); `errors.ts` widens the
+  `bad_option` and `bad_whisper` comments; the bulk table's expected values are in `"`; new commits are
+  `api:`-prefixed, and d30cf0d (`utils:`) can be reworded to `api:` when filing.
 * **For the Coach**: the `maskAll` call (struck), `''` for an empty whisper, `maxLen` winning over
-  `minStars`, and the changeset being `minor`.
+  `minStars` and refused below `head + tail + 9`, the strip list, and the changeset being `minor`.
