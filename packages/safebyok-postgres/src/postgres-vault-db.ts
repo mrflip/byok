@@ -306,7 +306,7 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
   async listBoxRecords(scope: VaultScope): Promise<unknown[]> {
     const checked = VaultScope.safeParse(scope)
     if (! checked.success) {
-      throw new VaultError('bad_label', 'A vault scope is an applabel and a vaultlabel that meet the label rules, and a non-empty user_id.')
+      throw new VaultError('bad_label', 'A vault scope is an applabel, a user_id and a vaultlabel, each text.')
     }
     try {
       return await this.doListBoxes(checked.data)

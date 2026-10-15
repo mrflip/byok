@@ -89,7 +89,7 @@ The server half, `app/api/safebyok/route.ts`:
 
 ```ts
 import { Pool } from 'pg'
-import { VaultError } from 'safebyok'
+import { AnyTextValidators, VaultError } from 'safebyok'
 import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultScope } from 'safebyok'
 import { postgresVaultDB } from 'safebyok-postgres'
 import type { PostgresVaultDB } from 'safebyok-postgres'
@@ -98,18 +98,23 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 type Served = (vaultDB: PostgresVaultDB, args: unknown[]) => Promise<unknown>
 
+// What the server takes a name to be: any text. The browser's vault checks names with whichever
+// validators it was opened with, and reads a row they refuse back as damaged; this server's job
+// is to keep each user to their own vault, whatever the names.
+const validators = AnyTextValidators
+
 // The verbs a browser's vault may call -- VaultDB's own, and nothing else -- each passed to the
-// VaultDB, which checks the scope and the boxlabel and refuses another user's vault. A listing
+// VaultDB, which refuses another user's vault. A listing
 // goes as the stored records, which the browser's VaultDB validates.
 const served = new Map<string, Served>([
-  ['readBundle',   (vaultDB, [scope]) => vaultDB.readBundle(scope as VaultScope)],
-  ['createBundle', (vaultDB, [bundle]) => vaultDB.createBundle(bundle as VaultBundle)],
-  ['updateBundle', (vaultDB, [bundle, expected]) => vaultDB.updateBundle(bundle as VaultBundle, expected as BundleExpectation)],
-  ['readBox',      (vaultDB, [scope, boxlabel]) => vaultDB.readBox(scope as VaultScope, boxlabel as string)],
+  ['readBundle',   (vaultDB, [scope]) => vaultDB.readBundle(scope as VaultScope, validators)],
+  ['createBundle', (vaultDB, [bundle]) => vaultDB.createBundle(bundle as VaultBundle, validators)],
+  ['updateBundle', (vaultDB, [bundle, expected]) => vaultDB.updateBundle(bundle as VaultBundle, expected as BundleExpectation, validators)],
+  ['readBox',      (vaultDB, [scope, boxlabel]) => vaultDB.readBox(scope as VaultScope, boxlabel as string, validators)],
   ['listBoxes',    (vaultDB, [scope]) => vaultDB.listBoxRecords(scope as VaultScope)],
-  ['updateBox',    (vaultDB, [scope, lockbox, expected]) => vaultDB.updateBox(scope as VaultScope, lockbox as Lockbox, expected as LockboxExpectation)],
-  ['eraseBox',     (vaultDB, [scope, boxlabel, expected]) => vaultDB.eraseBox(scope as VaultScope, boxlabel as string, expected as EraseExpectation)],
-  ['eraseVault',   (vaultDB, [scope, expected]) => vaultDB.eraseVault(scope as VaultScope, expected as EraseExpectation)],
+  ['updateBox',    (vaultDB, [scope, lockbox, expected]) => vaultDB.updateBox(scope as VaultScope, lockbox as Lockbox, expected as LockboxExpectation, validators)],
+  ['eraseBox',     (vaultDB, [scope, boxlabel, expected]) => vaultDB.eraseBox(scope as VaultScope, boxlabel as string, expected as EraseExpectation, validators)],
+  ['eraseVault',   (vaultDB, [scope, expected]) => vaultDB.eraseVault(scope as VaultScope, expected as EraseExpectation, validators)],
 ])
 
 /** What a request posts: its verb and arguments, or nothing when its body is not a JSON object. */

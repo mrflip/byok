@@ -9,15 +9,17 @@
  * - **Condition**: something the app handles at run time, which may reach the user: ask again,
  *   show a message, retry, or tell them to free room. `vault_locked`, `wrong_passphrase`,
  *   `wrong_passkey`, `passkey_unavailable`, `absent_box`, `absent_vault`, `absent_unlock`,
- *   `whisper_too_large`, `vault_full`, `too_many_unlocks`, `last_unlock`, `corrupt_record`,
+ *   `whisper_too_large`, `lockbox_too_large`, `vault_full`, `too_many_unlocks`, `last_unlock`, `corrupt_record`,
  *   `stale_write`, `not_permitted`, `storage_unavailable`.
  *
  * `vault_full` means a new lockbox in a vault already holding its `maxLockboxes` (a limit the
  * client keeps), and also that storage has no room for the write (a limit of the backend's own,
  * such as the Convex component's or the Postgres server's). Either way the user erases a lockbox,
  * or the host raises `maxLockboxes` where the backend allows. `whisper_too_large` is the user's value over
- * `maxWhisperBytes`, so a condition; `bad_label` is the app's own label, a misuse -- a label the
- * user types is checked first with the exported `Label`.
+ * `maxWhisperBytes`, so a condition, and `lockbox_too_large` the user's whisper and note together
+ * over what storage holds in one record. `bad_label` is a label the app passed that fails the
+ * vault's check, a misuse -- a label the user types is checked first, with `Label` or with the
+ * host's own `validators.boxlabel`.
  *
  * The package README's *Errors* section lists what each kind means and what to do about it.
  */
@@ -29,9 +31,10 @@ export const VaultErrorKindVals = [
   'absent_box',          // no lockbox under that label
   'absent_vault',        // the vault has never been created, and this call will not create it
   'absent_unlock',       // no unlock envelope of that unlock_id, or none of the method asked for
-  'bad_label',           // a label that does not meet the Label rules
+  'bad_label',           // a label, or the userId, that fails the vault's check for it
   'bad_whisper',         // a whisper JSON cannot carry (undefined, a function, a class), or a non-string
   'whisper_too_large',   // a whisper over the vault's maxWhisperBytes
+  'lockbox_too_large',   // a lockbox -- whisper, names and note together -- over what storage holds in one record
   'vault_full',          // a new lockbox in a vault already holding its maxLockboxes, or a write storage has no room for
   'too_many_unlocks',    // a new unlock envelope in a vault already holding MaxUnlocks
   'last_unlock',         // removing the vault's last passphrase, which would leave no sure way in
@@ -102,6 +105,7 @@ export const VaultErrorFamilyForKind = {
   bad_label:           'misuse',
   bad_whisper:         'misuse',
   whisper_too_large:   'condition',
+  lockbox_too_large:   'condition',
   vault_full:          'condition',
   too_many_unlocks:    'condition',
   last_unlock:         'condition',

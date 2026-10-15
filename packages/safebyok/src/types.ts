@@ -57,40 +57,6 @@ export const Whisper: Z.ZodMiniType<Whisper> = Z.union([
 ])
 
 /**
- * A freely chosen identifier (STYLE.md tag glossary): lowercase words of letters and digits
- * joined by single underscores, starting with a letter, two to forty characters. Shared by every
- * label in the package: `applabel`, `vaultlabel`, `boxlabel`. (A scope's `user_id` is the host's
- * auth identity, deliberately not a Label: see {@link UserId}.)
- *
- * @example Label.parse('anthropic_api_key')
- * @example Label.safeParse('ANTHROPIC_API_KEY').success  // false: lowercase only
- * @example Label.safeParse('_nope').success              // false
- */
-export const Label = Z.string().check(
-  Z.maxLength(40, "A label is at most forty characters"),
-  Z.regex(/^[a-z](_?[a-z0-9])+$/, "A label is lowercase words of letters and digits joined by single underscores, starting with a letter"),
-)
-
-/** The longest `user_id` the package accepts, in characters (UTF-16 code units, as JavaScript counts them). */
-export const MaxUserIdChars = 100
-
-/**
- * Validator for a scope's `user_id`: the signed-in user's id from the host's own auth, text of 1
- * to {@link MaxUserIdChars} (100) characters. Not a {@link Label}: it takes whatever form the
- * host's auth issues, colons and capitals and all, and is bounded only in length. Every record
- * that names a scope checks its `user_id` with it, and `openVault` refuses a `userId` that fails
- * it with kind 'bad_label'. A host can check an id with it before opening a vault.
- *
- * @example UserId.parse('user|2fJ8:google')
- * @example UserId.safeParse('').success                // false: an empty id names no one
- * @example UserId.safeParse('u'.repeat(101)).success   // false: 100 characters at most
- */
-export const UserId = Z.string().check(
-  Z.minLength(1, "A user_id names the signed-in user, so it can't be empty"),
-  Z.maxLength(MaxUserIdChars, `A user_id is at most ${String(MaxUserIdChars)} characters`),
-)
-
-/**
  * The latest instant the package accepts, in epoch ms: the microsecond epochalypse, the last
  * millisecond whose epoch *microseconds* still fit a safe integer, 2255-06-05T23:47:34.740Z. No
  * time the vault keeps lies past it, and a stored record holding a later one fails validation;
@@ -152,27 +118,19 @@ export const EpochMillis = Z.number().check(
 /**
  * What names one vault: the host application's label, the authenticated user, and the vault's own
  * label. Two users may each have a vault labelled `main` without collision; so may two apps
- * sharing a backend.
+ * sharing a backend. This checks only that each is text: what text a name may be is the vault's
+ * validators' to say (`Label` and `UserId` by default, from `safebyok/validators`), and every
+ * VaultDB verb checks a scope with them.
  */
 export const VaultScope = Z.object({
-  applabel:   Label,
-  user_id:    UserId,
-  vaultlabel: Label,
+  applabel:   Z.string(),
+  user_id:    Z.string(),
+  vaultlabel: Z.string(),
 })
 export type VaultScope = Z.infer<typeof VaultScope>
 
 /** A WebCrypto key handle, as a record holds one. Never bytes: a handle, and nothing but. */
 const cryptoKeyHandle = Z.custom<CryptoKey>((val) => val instanceof CryptoKey, 'a CryptoKey handle')
-
-/**
- * A lockbox's public note, shown beside it while the vault is locked: text of at most 256
- * characters. Never put secret material here. A host's form can check a note with it before
- * `store()`, which refuses one that fails with kind 'bad_option'.
- *
- * @example LockboxNote.parse('work account')
- * @example LockboxNote.safeParse('n'.repeat(257)).success  // false: 256 characters at most
- */
-export const LockboxNote = Z.string().check(Z.maxLength(256))
 
 /**
  * One lockbox as the storage layer holds it: the whisper ciphered under its own lockboxKey, that
@@ -183,21 +141,22 @@ export const LockboxNote = Z.string().check(Z.maxLength(256))
  * moved between revisions (or boxes, or vaults) refuses to open.
  *
  * Stored fields are underbar_case: this record is written to the storage layer as-is, and it is
- * plain JSON -- any backend that can hold text can hold it.
+ * plain JSON -- any backend that can hold text can hold it. Its boxlabel and note are checked here
+ * only as text; every VaultDB verb checks them with the vault's validators.
  */
 export const Lockbox = Z.object({
   format:              Z.literal('safebyok-lockbox-v1'),
-  boxlabel:            Label,
+  boxlabel:            Z.string(),
   revision_id:         Z.string().check(Z.minLength(1)),
   /** This lockbox's lockboxKey, wrapped under the vaultKey. */
   lockbox_key_wrapped: Ciphered,
   /** The whisper, ciphered under this lockbox's lockboxKey. */
   whisper_ciphered:    Ciphered,
   /**
-   * The lockbox's {@link LockboxNote}. Written only when there is one; read as absent when
-   * undefined too, as earlier versions stored it and IndexedDB keeps it.
+   * The lockbox's public note, as the vault's note check passed it (`LockboxNote` by default).
+   * Written only when there is one; read as absent when undefined too, as IndexedDB keeps it.
    */
-  note:                Z.optional(LockboxNote),
+  note:                Z.optional(Z.string()),
   /** When this boxlabel was first stored, an {@link EpochMillis}: every later store carries it forward. */
   registered_at:       EpochMillis,
   /**
@@ -208,6 +167,9 @@ export const Lockbox = Z.object({
 })
 export type Lockbox = Z.infer<typeof Lockbox>
 
+/** A summary's note: null where the lockbox has none, however that was stored. */
+const summaryNote = Z._default(Z.nullable(Z.string()), null)
+
 /**
  * The public face of a lockbox: everything but its two encrypted fields, with `note` null when
  * the lockbox has none -- never absent, never undefined, however the record was stored. This is
@@ -217,7 +179,7 @@ export type Lockbox = Z.infer<typeof Lockbox>
  */
 export const LockboxSummary = Z.extend(
   Z.omit(Lockbox, { format: true, lockbox_key_wrapped: true, whisper_ciphered: true }),
-  { note: Z._default(Z.nullable(LockboxNote), null) },
+  { note: summaryNote },
 )
 export type LockboxSummary = Z.infer<typeof LockboxSummary>
 
@@ -249,7 +211,7 @@ export const PassphraseEnvelope = Z.object({
   /** Random id minted when the envelope is added, and kept when its passphrase changes. */
   unlock_id:         Z.string().check(Z.minLength(1)),
   /** What the user calls this way in, so they can tell one from another: `home_phrase`, say. */
-  unlocklabel:       Label,
+  unlocklabel:       Z.string().check(Z.minLength(1)),
   /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, or a host's own label. */
   key_deriver_label: Z.string().check(Z.minLength(1)),
   /** This envelope's passphraseSalt: fresh for every envelope, and for every change of its passphrase. */
@@ -278,7 +240,7 @@ export const PasskeyEnvelope = Z.object({
   /** Random id minted when the envelope is added. */
   unlock_id:         Z.string().check(Z.minLength(1)),
   /** What the user calls this way in, so they can tell one from another: `laptop_fingerprint`, say. */
-  unlocklabel:       Label,
+  unlocklabel:       Z.string().check(Z.minLength(1)),
   /** The WebAuthn credential's id, base64url, as `PublicKeyCredential.id` gives it: which passkey to ask. */
   credential_id:     Z.string().check(Z.minLength(1)),
   /** The salt the passkey's PRF is evaluated over: {@link PasskeySaltBytes} random bytes, fresh for every envelope. */
@@ -360,9 +322,9 @@ export type PasskeyProof = {
  */
 export const VaultBundle = Z.object({
   format:              Z.literal('safebyok-vault-v1'),
-  applabel:            Label,
-  user_id:             UserId,
-  vaultlabel:          Label,
+  applabel:            Z.string(),
+  user_id:             Z.string(),
+  vaultlabel:          Z.string(),
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
   vault_id:            Z.string().check(Z.minLength(1)),
   unlock_epoch:        Z.int().check(Z.positive()),
@@ -381,9 +343,9 @@ export type VaultBundle = Z.infer<typeof VaultBundle>
  */
 export const DeviceUnlock = Z.object({
   format:           Z.literal('safebyok-unlock-v1'),
-  applabel:         Label,
-  user_id:          UserId,
-  vaultlabel:       Label,
+  applabel:         Z.string(),
+  user_id:          Z.string(),
+  vaultlabel:       Z.string(),
   vault_id:         Z.string().check(Z.minLength(1)),
   /** The bundle's unlock_epoch when this unlock was remembered; a mismatch voids it. */
   unlock_epoch:     Z.int().check(Z.positive()),

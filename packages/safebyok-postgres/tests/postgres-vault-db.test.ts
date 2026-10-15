@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { PGlite } from '@electric-sql/pglite'
 import type { Client, Pool, PoolClient } from 'pg'
-import { VaultError, memoryDeviceDB, openVault } from 'safebyok'
+import { AnyTextValidators, VaultError, memoryDeviceDB, openVault } from 'safebyok'
 import type { VaultDB } from 'safebyok'
 import * as TH from './test-helpers'
 import { VaultChangeChannel, postgresVaultDB } from '../src/index'
@@ -488,7 +488,7 @@ describe("postgresVaultDB, listBoxRecords", () => {
   it("refuses a malformed scope with bad_label, before the database is asked", async () => {
     const db = await TH.emptyDatabase()
     const spy = TH.spyClient(db)
-    const refusal = await TH.refusalOf(postgresVaultDB({ client: spy.client, userId: 'u1' }).listBoxRecords({ ...u1, vaultlabel: 'not-a-label' }))
+    const refusal = await TH.refusalOf(postgresVaultDB({ client: spy.client, userId: 'u1' }).listBoxRecords({ ...u1, vaultlabel: 42 } as never))
     expect(refusal.kind).to.eq('bad_label')
     expect(spy.sent).to.have.lengthOf(0)
   })
@@ -595,9 +595,9 @@ describe("postgresVaultDB, subscribe", () => {
     const db = await TH.emptyDatabase()
     const longUserId = 'u'.repeat(8000)
     const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.requestFor(db, longUserId).subscribe(TH.scopeOf(longUserId), onChange)
+    const unsubscribe = TH.requestFor(db, longUserId).subscribe(TH.scopeOf(longUserId), onChange, AnyTextValidators)
     await TH.wakeupAtNextTick()
-    await TH.requestFor(db, longUserId).createBundle(TH.bundleOf(longUserId))
+    await TH.requestFor(db, longUserId).createBundle(TH.bundleOf(longUserId), AnyTextValidators)
     await TH.eventually(() => heard.count > 0)
     expect(heard.count).to.eq(1)
     unsubscribe()

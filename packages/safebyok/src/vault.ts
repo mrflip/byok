@@ -1,5 +1,7 @@
 import * as Z from 'zod/mini'
-import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, MaxLockboxes, MaxUnlocks, MaxUserIdChars, MaxWhisperBytes, PasskeySaltBytes, UserId, VaultBundle, VaultScope, Whisper, wallClock, type Clock, type PasskeyProof, type UnlockEnvelope, type UnlockSummary } from './types'
+import { DeviceUnlock, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, PasskeySaltBytes, VaultBundle, type VaultScope, Whisper, wallClock, type Clock, type PasskeyProof, type UnlockEnvelope, type UnlockSummary } from './types'
+import * as Names from './names'
+import { Label, type NameValidator, type VaultValidators } from './validators'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import { MaxSaltBytes, ensureSuppliedSpecKept } from './key-deriver-spec'
@@ -11,7 +13,7 @@ import * as Envelope from './envelope'
 import type { UnlockProof, VaultKeyPair } from './envelope'
 import { stableJsonify } from './stable-jsonify'
 import type { DeviceDB } from './device-db'
-import type { VaultDB } from './vault-db'
+import { jsonBytes, type VaultDB } from './vault-db'
 import { parseLogger, type VaultLogger } from './logger'
 
 /**
@@ -52,8 +54,8 @@ export type OpenVaultOpts = {
   /** The host application's namespace: one backend can serve several apps without collision. */
   applabel:   string
   /**
-   * Stable identifier of the signed-in user, from the host's auth: text of 1 to 100 characters,
-   * as the exported {@link UserId} checks. Never an email.
+   * Stable identifier of the signed-in user, from the host's auth: by default text of 1 to 100
+   * characters, as the exported `UserId` checks, or what `validators.userId` admits. Never an email.
    */
   userId:     string
   /** The vault's own label; an app that keeps one vault per user calls it `main`. */
@@ -110,6 +112,14 @@ export type OpenVaultOpts = {
    * else.
    */
   logger?: VaultLogger | undefined
+  /**
+   * The checks for the vault's names and notes, as a {@link VaultValidators} bag: each field given
+   * replaces ours outright (`Label` for each label, `UserId` for the user, `LockboxNote` for a
+   * note, from `safebyok/validators`), and each left out keeps ours. Each is a Zod schema that
+   * checks synchronously, and only checks: what passes is kept exactly as given. Kind
+   * 'bad_option' for a bag holding anything else, or a field it does not know.
+   */
+  validators?: VaultValidators | undefined
 }
 
 /**
@@ -318,10 +328,12 @@ export type Vault = {
    * `changed_at` only when the whisper differs from the one it replaces: storing the same whisper
    * again writes a new revision, and leaves `changed_at` standing.
    *
-   * `opts.note` is the lockbox's public note, shown while locked: text of at most 256
-   * characters, as the exported {@link LockboxNote} checks, or null for none -- kind
+   * `opts.note` is the lockbox's public note, shown while locked: text the vault's note check
+   * passes (by default `LockboxNote`: at most 256 characters), or null for none -- kind
    * 'bad_option' otherwise. Left out, the lockbox keeps the note it has. Never put secret
-   * material in a note.
+   * material in a note. A lockbox heavier, whisper and names and note together, than storage
+   * holds in one record is refused with kind 'lockbox_too_large'; one that would take the vault
+   * past what its storage holds of one vault, with kind 'vault_full'.
    *
    * @example await vault.store('anthropic_api_key', 'sk-ant-...', { note: 'work account' })
    * @example await vault.store('anthropic_api_key', 'sk-ant-...', { note: null })  // and no note
@@ -383,9 +395,9 @@ const UnreadBundle = Symbol.for('safebyok.unread_bundle')
  *
  * An open that fails -- storage refusing a user not yet signed in, say -- rejects with the
  * storage's own error and leaves nothing running behind it, so the host simply opens again later.
- * Misuse is refused before storage is touched: kind 'bad_label' for a label, or a `userId` that
- * is not non-empty text, and 'bad_option' for any other option, a `vaultDB` or `deviceDB` short
- * of a verb among them.
+ * Misuse is refused before storage is touched: kind 'bad_label' for a label or a `userId` that
+ * fails its check (`validators`), and 'bad_option' for any other option, a `vaultDB` or
+ * `deviceDB` short of a verb among them.
  *
  * @example
  *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, ...browserOpts() })
@@ -395,9 +407,9 @@ const UnreadBundle = Symbol.for('safebyok.unread_bundle')
  */
 export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   if (! isBag(opts)) { throw new VaultError('bad_option', 'openVault takes one bag of options: applabel, userId, vaultlabel, vaultDB, deviceDB and keyDeriver at least.') }
-  const applabel   = parseLabel(opts.applabel)
-  const vaultlabel = parseLabel(opts.vaultlabel)
-  const scope: VaultScope = { applabel, user_id: parseUserId(opts.userId), vaultlabel }
+  const rules = Names.rulesOf(parseValidators(opts.validators))
+  const scope = Names.checkScope(rules, { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
+  const { applabel, vaultlabel } = scope
   const vaultDB = parseVaultDB(opts.vaultDB)
   const deviceDB = parseDeviceDB(opts.deviceDB)
   const reentryMs = parseForcePassphraseReentryHours(opts.forcePassphraseReentryHours)
@@ -419,7 +431,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const keyDeriver = parseKeyDeriver(opts.keyDeriver)
   const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
   const lockboxLimit = parseMaxLockboxes(opts.maxLockboxes, parseDeclared(vaultDB, 'maxLockboxes'))
-  ensureLimitsFit(vaultDB, whisperByteLimit, lockboxLimit)
+  const vaultByteLimit = ensureLimitsFit(vaultDB, whisperByteLimit, lockboxLimit)
 
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
   let boxes: readonly LockboxSummary[] = []
@@ -464,7 +476,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   )
 
   const refresh = async () => {
-    const fresh = await vaultDB.readBundle(scope)
+    const fresh = await vaultDB.readBundle(scope, rules)
     // A change to the unlocks elsewhere (new epoch) or a deletion ends this device's unlock: the
     // vaultKey in hand still works on old rows, but passing as current invites confusion.
     const outlived = vaultKey !== null && bundle !== UnreadBundle && bundle !== null
@@ -474,7 +486,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       await deviceDB.eraseUnlock(scope)
     }
     bundle = fresh
-    boxes = fresh === null ? [] : await vaultDB.listBoxes(scope)
+    boxes = fresh === null ? [] : await vaultDB.listBoxes(scope, rules)
     bump()
   }
 
@@ -548,7 +560,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         throw new VaultError('absent_unlock', "This vault has no way in with that unlock_id: it does not exist, and may have been destroyed on another device. Unlock without an unlockId to create it anew.")
       }
       const { draft, transientKey, sessionKey } = await draftBundle(proof)
-      const settled = await vaultDB.createBundle(draft)
+      const settled = await vaultDB.createBundle(draft, rules)
       bundle = settled
       if (settled.vault_id === draft.vault_id) { return { standing: settled, transientKey, sessionKey } }
       // Another device created the vault between our look and our write: the settled bundle is
@@ -768,16 +780,41 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
 
   /**
-   * Refuse a new lockbox while the vault holds its limit. Counted from the snapshot's boxes, which
-   * every write and every change pushed from storage refreshes, so a store costs no extra read of
-   * the whole vault; a vault that looks full is caught up with storage before it is refused.
+   * What one lockbox counts for against the vault's storage: room for a whisper of
+   * `maxWhisperBytes` (twice that, as {@link StoredBytesPerWhisperByte} says), its fixed-size
+   * fields, and its scope, boxlabel and note as measured, so names and notes of any length are
+   * counted as they are.
    */
-  const ensureRoomFor = async (boxlabel: string) => {
-    const othersCount = () => boxes.filter((summary) => summary.boxlabel !== boxlabel).length
-    if (othersCount() < lockboxLimit) { return }
+  const lockboxWeight = (boxlabel: string, note: string | null = null) => (
+    (whisperByteLimit * StoredBytesPerWhisperByte) + LockboxFixedBytes + jsonBytes([scope, boxlabel, note])
+  )
+
+  /**
+   * Refuse a write that would crowd the vault: a new lockbox while it holds `maxLockboxes`, or any
+   * lockbox heavier than the one it replaces (by {@link lockboxWeight}) that would take the vault
+   * past its storage's `maxVaultBytes`. Counted from the snapshot's boxes, which every write and
+   * every change pushed from storage refreshes, so a store costs no extra read of the whole vault;
+   * a vault that looks full is caught up with storage before it is refused.
+   */
+  const ensureRoomFor = async (boxlabel: string, note: string | null, prev: Lockbox | null) => {
+    const weight = lockboxWeight(boxlabel, note)
+    // A replacement no heavier than what it replaces never makes the vault fuller: it always lands.
+    if (prev !== null && weight <= lockboxWeight(prev.boxlabel, prev.note)) { return }
+    const crowding = () => {
+      const others = boxes.filter((summary) => summary.boxlabel !== boxlabel)
+      if (prev === null && others.length >= lockboxLimit) { return 'count' }
+      const othersWeight = others.reduce((sum, summary) => sum + lockboxWeight(summary.boxlabel, summary.note), 0)
+      return othersWeight + weight > vaultByteLimit ? 'bytes' : null
+    }
+    if (crowding() === null) { return }
     await refresh()
-    if (othersCount() < lockboxLimit) { return }
-    throw new VaultError('vault_full', `This vault already holds its limit of ${String(lockboxLimit)} lockboxes: erase one before storing another. A vault meant to hold more can be opened with a larger maxLockboxes, up to what its storage adapter allows.`)
+    const crowded = crowding()
+    if (crowded === 'count') {
+      throw new VaultError('vault_full', `This vault already holds its limit of ${String(lockboxLimit)} lockboxes: erase one before storing another. A vault meant to hold more can be opened with a larger maxLockboxes, up to what its storage adapter allows.`)
+    }
+    if (crowded === 'bytes') {
+      throw new VaultError('vault_full', `This vault has no room for that lockbox in the ${String(vaultByteLimit)} bytes its storage holds of one vault, counting each lockbox's boxlabel and note and room for a whisper of maxWhisperBytes: erase a lockbox, or store a shorter note or boxlabel.`)
+    }
   }
 
   /**
@@ -793,7 +830,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
 
   const readBoxOrThrow = async (boxlabel: string) => {
-    const lockbox = await vaultDB.readBox(scope, parseLabel(boxlabel))
+    const lockbox = await vaultDB.readBox(scope, Names.check(rules, 'boxlabel', boxlabel), rules)
     if (lockbox === null) { throw new VaultError('absent_box', `No lockbox is labelled '${boxlabel}' in this vault.`) }
     return lockbox
   }
@@ -979,8 +1016,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
     store: async (boxlabel, whisper, storeOpts) => {
       ensureUnlocked()
-      const label = parseLabel(boxlabel)
-      const givenNote = parseNote(storeOpts?.note)
+      const label = Names.check(rules, 'boxlabel', boxlabel)
+      const givenNote = storeOpts?.note === undefined || storeOpts.note === null ? storeOpts?.note : Names.check(rules, 'note', storeOpts.note)
       const checked = Whisper.safeParse(whisper)
       // The refusal never quotes its input: a whisper stays out of error messages.
       if (! checked.success) {
@@ -997,12 +1034,13 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         // A refusal as stale has just caught this device up with storage, which may have relocked
         // it (a vault reborn, or its unlocks changed, elsewhere): then the retry ends here.
         keyInHand()
-        const prev = await vaultDB.readBox(scope, label)
+        const prev = await vaultDB.readBox(scope, label, rules)
         // Erase wins: a box this store began over, and now finds gone, was erased elsewhere, and
         // a retry would silently undo that. The erase is already in the snapshot.
         if (prev === null && boxStood) { return 'erased' }
         boxStood ||= prev !== null
-        if (prev === null) { await ensureRoomFor(label) }
+        const note = noteToStore(givenNote, prev)
+        await ensureRoomFor(label, note, prev)
         // The key and the vault it belongs to, taken together after the last look at storage.
         const unlockedKey = keyInHand()
         const vaultId = currentBundle().vault_id
@@ -1014,7 +1052,6 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
         // reborn elsewhere, or a box written meanwhile by another device, refuses it.
         const expected = { vault_id: vaultId, revision_id: prev?.revision_id ?? null }
-        const note = noteToStore(givenNote, prev)
         const lockbox: Lockbox = {
           format:              'safebyok-lockbox-v1',
           boxlabel:            label,
@@ -1027,7 +1064,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
           changed_at:          unchanged ? prev.changed_at : now,
         }
         try {
-          await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected))
+          await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected, rules))
         } catch (err) {
           if (! isVaultError(err, 'stale_write')) { throw err }
           // The catch-up has just shown what stands now. A device it relocked, or a box it shows
@@ -1055,13 +1092,13 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
     erase: async (boxlabel) => {
       ensureUnlocked()
-      const label = parseLabel(boxlabel)
+      const label = Names.check(rules, 'boxlabel', boxlabel)
       await ensureBoxStands(label)
       keyInHand()
       // Lands only in the vault this device holds keys for, whatever revision of the box stands:
       // a vault destroyed and made anew elsewhere refuses it. That is its only expectation, and
       // trying again could not change it: a stale erase is thrown at once, never retried.
-      await refreshOnStale(vaultDB.eraseBox(scope, label, { vault_id: currentBundle().vault_id }))
+      await refreshOnStale(vaultDB.eraseBox(scope, label, { vault_id: currentBundle().vault_id }, rules))
       await refresh()
     },
 
@@ -1072,7 +1109,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       const doomed = bundle
       await shut()
       if (doomed !== null && doomed !== UnreadBundle) {
-        await refreshOnStale(vaultDB.eraseVault(scope, { vault_id: doomed.vault_id }))
+        await refreshOnStale(vaultDB.eraseVault(scope, { vault_id: doomed.vault_id }, rules))
       }
       await refresh()
     },
@@ -1110,7 +1147,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       logger.warn("A background refresh from storage failed, so what the vault shows may lag behind storage until its next call, which will meet the same trouble and throw it.", { call: 'refresh' }, asError(err))
     }
   }
-  const unsubscribeDB = vaultDB.subscribe(scope, () => { void quietRefresh() })
+  const unsubscribeDB = vaultDB.subscribe(scope, () => { void quietRefresh() }, rules)
 
   try {
     await refresh()
@@ -1279,38 +1316,29 @@ const retryStale = async <ResultT>(attempt: () => Promise<ResultT>, attemptsLeft
   }
 }
 
-/** A note as `store()` is handed one: some text, null for none, or undefined to keep the note standing. */
-const noteOption = Z.optional(Z.nullable(LockboxNote))
-
-const parseNote = (candidate: string | null | undefined): string | null | undefined => {
-  const checked = noteOption.safeParse(candidate)
-  // The refusal never quotes its input: a note is public, but a mistaken one may not be.
-  if (! checked.success) {
-    throw new VaultError('bad_option', "A lockbox's note is text of at most 256 characters, or null for none. It is shown while the vault is locked: never put secret material in it.")
-  }
-  return checked.data
-}
-
 /** The note a store writes: the one given, or -- given none -- the one `prev` stands with; null for none. */
 const noteToStore = (given: string | null | undefined, prev: Lockbox | null): string | null => (
   given === undefined ? prev?.note ?? null : given
 )
 
-const parseLabel = (candidate: string): string => {
-  const checked = Label.safeParse(candidate)
-  if (! checked.success) {
-    throw new VaultError('bad_label', 'A label is 2-40 lowercase letters and digits, words joined by single underscores, starting with a letter.')
-  }
-  return checked.data
-}
+/** A schema a host may hand in `validators`: a Zod 4 schema, classic or mini, which carries `_zod`. */
+const nameValidator = Z.optional(Z.custom<NameValidator>((candidate) => isBag(candidate) && '_zod' in candidate))
 
-// The refusal names the bound, never the id: an id is the host's, and may say more than it should.
-const parseUserId = (candidate: string): string => {
-  const checked = UserId.safeParse(candidate)
-  if (! checked.success) {
-    throw new VaultError('bad_label', `A vault needs the signed-in user: pass the userId from your auth layer, as text of 1 to ${String(MaxUserIdChars)} characters.`)
+/** What `validators` may hold: a schema or undefined for each field it knows, and no other field. */
+const validatorsShape = Z.optional(Z.strictObject({
+  applabel:   nameValidator,
+  vaultlabel: nameValidator,
+  boxlabel:   nameValidator,
+  userId:     nameValidator,
+  note:       nameValidator,
+}))
+
+/** The host's `validators`, checked for shape only: the schemas are the host's, kept as handed in. */
+const parseValidators = (candidate: VaultValidators | undefined): VaultValidators | undefined => {
+  if (! validatorsShape.safeParse(candidate).success) {
+    throw new VaultError('bad_option', 'validators is a bag of Zod schemas, each checking one of applabel, vaultlabel, boxlabel, userId and note: leave out any field to keep its default check.')
   }
-  return checked.data
+  return candidate
 }
 
 /** True when `record` names `scope`: the same app, user and vault. */
@@ -1371,14 +1399,24 @@ const parseDeviceDB = (candidate: DeviceDB): DeviceDB => {
 export const StoredBytesPerWhisperByte = 2
 
 /**
- * Room for a lockbox's stored fields besides its whisper, in bytes of their JSON: its format,
- * boxlabel, revision, note, times, wrapped lockboxKey, the cipherIv and tag of its
- * whisperCiphered, and the scope a backend files it under. At their largest -- a forty-character
- * boxlabel, applabel and vaultlabel, a note of 256 UTF-16 code units and a user_id of 100, each
- * unit at three UTF-8 bytes -- they take under 1700; a vault of many small whispers is mostly these.
- * A JSON-text backend's escapes, six bytes for a control character, are its own way of counting.
+ * The room openVault plans for a lockbox's stored fields besides its whisper, in bytes of their
+ * JSON, when it checks that `maxLockboxes` lockboxes fit the storage's `maxVaultBytes`: its
+ * format, boxlabel, revision, note, times, wrapped lockboxKey, the cipherIv and tag of its
+ * whisperCiphered, and the scope a backend files it under. Under the default validators, at their
+ * largest -- a forty-character boxlabel, applabel and vaultlabel, a note of 256 UTF-16 code units
+ * and a user_id of 100, each unit at three UTF-8 bytes -- they take under 1700. A host's
+ * validators may admit longer names and notes, so each store also weighs its lockbox as it is
+ * ({@link LockboxFixedBytes}); this is only the plan.
  */
 export const LockboxFieldsBytes = 2048
+
+/**
+ * Room for the stored fields every lockbox has at the same size, in bytes of their JSON: its
+ * format, revision, times, wrapped lockboxKey, and the cipherIv and tag of its whisperCiphered,
+ * with every field's name. A store weighs a lockbox as this, its whisper's room, and its scope,
+ * boxlabel and note as measured.
+ */
+export const LockboxFixedBytes = 512
 
 const maxWhisperBytes = Z._default(Z.int().check(Z.positive()), MaxWhisperBytes)
 const maxLockboxes = Z.optional(Z.int().check(Z.positive()))
@@ -1543,15 +1581,17 @@ const parseDeclared = (vaultDB: VaultDB, limitname: keyof typeof DeclaredLimitFo
 /**
  * Refuse limits the storage adapter might not honour: a whisper too large for one of its records,
  * or a vault too large for it to hold, list and erase whole.
+ *
+ * @returns The most the adapter holds of one vault, in the finite form the vault keeps.
  */
-const ensureLimitsFit = (vaultDB: VaultDB, whisperByteLimit: number, lockboxLimit: number) => {
+const ensureLimitsFit = (vaultDB: VaultDB, whisperByteLimit: number, lockboxLimit: number): number => {
   const recordBytes = parseDeclared(vaultDB, 'maxRecordBytes')
   if (whisperByteLimit * StoredBytesPerWhisperByte > recordBytes) {
     throw new VaultError('bad_option', `maxWhisperBytes is over half of the ${String(recordBytes)} bytes this storage adapter holds in one record, so a whisper that large might not store: pass a smaller maxWhisperBytes.`)
   }
   const vaultBytes = parseDeclared(vaultDB, 'maxVaultBytes')
   const lockboxBytes = (whisperByteLimit * StoredBytesPerWhisperByte) + LockboxFieldsBytes
-  if (lockboxLimit * lockboxBytes <= vaultBytes) { return }
+  if (lockboxLimit * lockboxBytes <= vaultBytes) { return vaultBytes }
   const fitting = Math.floor(vaultBytes / lockboxBytes)
   const outcome = fitting === 0
     ? 'At that maxWhisperBytes, not even one lockbox fits: pass a smaller maxWhisperBytes.'

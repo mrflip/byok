@@ -1,7 +1,8 @@
 import { omit } from 'es-toolkit'
 import { describe, expect, it } from 'vitest'
+import * as ZClassic from 'zod'
 import { memoryStore } from '../src/string-store'
-import { VaultDB, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation } from '../src/vault-db'
+import { VaultDB, jsonBytes, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation } from '../src/vault-db'
 import { VaultError } from '../src/errors'
 import type { Lockbox, VaultBundle, VaultScope } from '../src/types'
 import * as Ckeys from '../src/ckeys'
@@ -242,7 +243,7 @@ describe("the abstract VaultDB, around an adapter's half", () => {
 
   it("refuses to subscribe to a malformed scope", () => {
     const vaultDB = new MapVaultDB()
-    expect(() => vaultDB.subscribe({ ...TH.scopeOf('u1'), applabel: 'Acme' }, unheard)).to.throw(/vault scope/)
+    expect(() => vaultDB.subscribe({ ...TH.scopeOf('u1'), applabel: 'Acme' }, unheard)).to.throw(VaultError, /applabel/).with.property('kind', 'bad_label')
   })
 
   it("refuses an onChange that is not a function, so no later write meets it", () => {
@@ -319,4 +320,101 @@ describe("the abstract VaultDB, listing", () => {
     expect(summaries.map((summary) => summary.boxlabel)).to.deep.equal(['anthropic', 'openai'])
     await expect(vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).rejects.toThrow(/did not read back in a shape/)
   })
+})
+
+/** A host's checks admitting labels in any script and longer notes, as openVault hands them to every verb. */
+const AnyScript = {
+  applabel:   ZClassic.string().min(1),
+  vaultlabel: ZClassic.string().min(1),
+  boxlabel:   ZClassic.string().min(1),
+  note:       ZClassic.string().max(1000),
+}
+
+/** A scope no default check admits. */
+const scriptScope = { applabel: 'Acme: אקמה', user_id: 'u1', vaultlabel: 'ราก' } as const
+
+describe("the abstract VaultDB, with the vault's validators", () => {
+  it("checks every name with the validators it is handed, so a vault's own labels pass every verb", async () => {
+    const vaultDB = new MapVaultDB()
+    await vaultDB.createBundle({ ...TH.bundleOf('u1'), ...scriptScope }, AnyScript)
+    await vaultDB.updateBox(scriptScope, TH.boxOf('مفتاح العمل', 'one', { note: 'n'.repeat(500) }), TH.noBoxYet, AnyScript)
+    const lockbox = await vaultDB.readBox(scriptScope, 'مفتاح العمل', AnyScript)
+    expect(lockbox?.note).to.have.lengthOf(500)
+    const summaries = await vaultDB.listBoxes(scriptScope, AnyScript)
+    expect(summaries.map((summary) => summary.boxlabel)).to.deep.equal(['مفتاح العمل'])
+    await vaultDB.eraseBox(scriptScope, 'مفتاح العمل', TH.thisVault, AnyScript)
+    vaultDB.subscribe(scriptScope, unheard, AnyScript)()
+    await vaultDB.eraseVault(scriptScope, TH.thisVault, AnyScript)
+    expect(await vaultDB.readBundle(scriptScope, AnyScript)).to.be.null
+  })
+
+  it("checks with ours when handed none, refusing those same names before its adapter's half sees them", async () => {
+    const vaultDB = new MapVaultDB()
+    await TH.expectRefusal(vaultDB.readBundle(scriptScope), 'bad_label')
+    await TH.expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'مفتاح العمل'), 'bad_label')
+    await TH.expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('مفتاح العمل', 'one'), TH.noBoxYet), 'bad_label')
+    expect(vaultDB.rows.size).to.eq(0)
+  })
+
+  it("refuses, as 'corrupt_record', a stored lockbox whose boxlabel or note the validators refuse, read or listed", async () => {
+    const vaultDB = new MapVaultDB()
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { note: 'n'.repeat(500) }), TH.noBoxYet, AnyScript)
+    await TH.expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'anthropic'), 'corrupt_record')
+    const err = await TH.expectRefusal(vaultDB.listBoxes(TH.scopeOf('u1')), 'corrupt_record')
+    expect(err.message).to.include('validators')
+    // AnyScript admits that note, but no empty boxlabel.
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'), AnyScript)).to.have.lengthOf(1)
+    vaultDB.rows.set(Ckeys.box(TH.scopeOf('u1'), ''), TH.boxOf('', 'two'))
+    await TH.expectRefusal(vaultDB.listBoxes(TH.scopeOf('u1'), AnyScript), 'corrupt_record')
+  })
+
+  it("refuses, as 'bad_option', a lockbox whose note the validators refuse, writing nothing", async () => {
+    const vaultDB = new MapVaultDB()
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    const overlong = TH.boxOf('anthropic', 'one', { note: 'n'.repeat(1001) })
+    await TH.expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), overlong, TH.noBoxYet, AnyScript), 'bad_option')
+    expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.be.null
+  })
+})
+
+/** A MapVaultDB holding at most `maxRecordBytes` in one record. */
+class SmallRecordVaultDB extends MapVaultDB {
+  override readonly maxRecordBytes: number
+
+  constructor(maxRecordBytes: number) {
+    super()
+    this.maxRecordBytes = maxRecordBytes
+  }
+}
+
+describe("the abstract VaultDB, weighing a lockbox", () => {
+  it("refuses, as 'lockbox_too_large', a lockbox heavier with its scope than its backend holds in one record, writing nothing", async () => {
+    const lockbox = TH.boxOf('anthropic', 'one', { note: 'n'.repeat(900) })
+    const recordBytes = jsonBytes({ ...TH.scopeOf('u1'), ...lockbox })
+    const fits = new SmallRecordVaultDB(recordBytes)
+    await fits.createBundle(TH.bundleOf('u1'))
+    await fits.updateBox(TH.scopeOf('u1'), lockbox, TH.noBoxYet, AnyScript)
+    const tight = new SmallRecordVaultDB(recordBytes - 1)
+    await tight.createBundle(TH.bundleOf('u1'))
+    const err = await TH.expectRefusal(tight.updateBox(TH.scopeOf('u1'), lockbox, TH.noBoxYet, AnyScript), 'lockbox_too_large')
+    expect(err.message).to.include(String(recordBytes))
+    expect(err.message).to.not.include('nnnn')
+    expect(await tight.readBox(TH.scopeOf('u1'), 'anthropic', AnyScript)).to.be.null
+  })
+})
+
+describe("jsonBytes", () => {
+  const JsonBytesCases = [
+    ["",                    2,   'empty text is its two quotes'],
+    ["acme",                6,   'ASCII is a byte a character'],
+    ["\u{5D0}",             4,   'Hebrew is two bytes a letter'],
+    ["\u{E01}",             5,   'Thai is three bytes a letter'],
+    ["\u{1F511}",           6,   'a character outside the BMP is four'],
+    ["\n",                  4,   'a control character is its escape'],
+  ] as const
+
+  for (const [val, expected, blurb] of JsonBytesCases) {
+    it(blurb, () => { expect(jsonBytes(val)).to.eq(expected) })
+  }
 })
