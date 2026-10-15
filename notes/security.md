@@ -307,6 +307,10 @@ security expert who knows what questions to ask.
   can use that token when it next runs. The token can create branches and tags and open, edit and
   close pull requests; whether it can also push to or merge into `main` depends on the branch
   protection's allowances for the App, which this repository's files do not record.
+* 2026-10-15: the `publish` job, the only one that can mint an npm token, installs npm 12.2.0
+  from a tarball checked against the sha512 `dist.integrity` recorded in `release.yml`, offline
+  (npm bundles its dependencies), so a changed tarball on the registry stops the job instead of
+  running beside the token. Moving npm means recording the new version's integrity by hand.
 * 2026-10-15: `store()` retries a write storage refused as stale, up to three attempts in all.
   Every attempt reads the box afresh and seals the whisper anew, under its own lockboxKey and
   `revision_id`: a refused attempt's ciphertext is never reused, so no two ciphertexts share a
