@@ -340,7 +340,9 @@ ones, which carry `damaged: false`. The rest of the vault opens and works as eve
 `corrupt_record` otherwise); `erase()` removes it by the name it is listed under, whatever the
 boxlabel check now says, and `store()` writes a fresh lockbox over it -- except under a name the
 check refuses, which `store()` refuses with `bad_label`, writing nothing, since the lockbox it
-made would list as damaged still. Show it as removable:
+made would list as damaged still. A damaged lockbox's boxlabel is whatever text it is stored
+under, which your boxlabel check may refuse: show it as text, never as markup. Show it as
+removable:
 
 ```ts
 for (const box of vault.getSnapshot().boxes) {
