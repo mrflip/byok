@@ -107,3 +107,23 @@ security expert who knows what questions to ask.
   and erasing a vault now take only ckeys whose remainder after the prefix is a bare boxlabel
   (no colon); before, a prefix match alone listed a colon-holding user's lockboxes in another
   user's vault. Exact ckeys cannot collide.
+* 2026-10-15: the Convex component (`packages/safebyok-convex`) authenticates in the host app,
+  not inside the component (where `ctx.auth` does not exist): `SafebyokComponent.api({ getUserId })`
+  builds the nine public functions the host re-exports, and each refuses unless the host's
+  `getUserId(ctx)` returns a non-empty id equal to the scope's or bundle's `user_id`. The
+  component's own functions check no caller and trust their `user_id` argument; Convex lets only
+  the host app call them, so a host that wraps them itself, without this check, exposes every
+  user's rows.
+* 2026-10-15: the Convex component validates records structurally only (fields, types,
+  optionality, the `format` literal); the label grammar, non-empty ids, a positive whole
+  `passphrase_epoch` and a note's length are checked by the client's Zod records, not on the
+  server. A signed-in user can therefore store malformed rows in their own vaults, which their
+  own clients then refuse as `corrupt_record`.
+* 2026-10-15: the Convex component checks each update's and erase's expectation by reading the
+  standing rows inside the same mutation that writes, relying on Convex's serializable
+  transactions; a failed expectation resolves `false` rather than throwing. `createBundle` is a
+  find-or-insert in one mutation; the indexes are not unique, and a second bundle row for one
+  scope would make every later call on that vault fail (`.unique()` throws) rather than pick one.
+* 2026-10-15: the Convex component's refusals carry `ConvexError` data of a fixed `kind`
+  (`not_permitted`) and a fixed message; neither names the user or quotes a record. Its functions
+  log nothing.
