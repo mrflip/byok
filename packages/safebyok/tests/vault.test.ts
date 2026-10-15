@@ -1,10 +1,13 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, Lockbox, LockboxNote, MaxLockboxes, MaxUserIdChars, MaxWhisperBytes, VaultScope, type DeviceUnlock, type Whisper } from '../src/types'
+import * as ZClassic from 'zod'
+import * as Z from 'zod/mini'
+import { ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, Lockbox, MaxLockboxes, MaxWhisperBytes, VaultScope, type DeviceUnlock, type Whisper } from '../src/types'
+import { AnyTextValidators, LockboxNote, MaxUserIdChars } from '../src/validators'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
-import { localVaultDB, type VaultDB } from '../src/vault-db'
+import { jsonBytes, localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore } from '../src/string-store'
-import { LockboxFieldsBytes, StoredBytesPerWhisperByte, openVault, type OpenVaultOpts, type Vault } from '../src/vault'
+import { LockboxFieldsBytes, LockboxFixedBytes, StoredBytesPerWhisperByte, openVault, type OpenVaultOpts, type Vault } from '../src/vault'
 import { cipherBinding, cipherBytes, fromB64, makeLockboxKey, makeVaultKey, randomBytes, wrapKeyUnder } from '../src/crypto'
 import type { KeyDeriver } from '../src/key-deriver'
 import { Argon2idWebV1, MaxSaltBytes } from '../src/key-deriver-spec'
@@ -1159,6 +1162,189 @@ describe("the lockbox limit", () => {
     const err = await TH.expectRefusal(world.open({ vaultDB, maxWhisperBytes: 524_288 }), 'bad_option')
     expect(err.message).to.include('not even one lockbox fits')
     expect(err.message).to.not.include('at most 0')
+  })
+})
+
+/**
+ * What a host keeping labels in any script might pass: any text of 1 to 200 characters for each
+ * label and the note's 2000, written in classic Zod, as most hosts write it.
+ */
+const AnyScript = {
+  applabel:   ZClassic.string().min(1).max(200),
+  vaultlabel: ZClassic.string().min(1).max(200),
+  boxlabel:   ZClassic.string().min(1).max(200),
+  note:       ZClassic.string().max(2000),
+}
+
+/** Labels no default check admits: punctuation the ckeys and binding once leaned on, and Hebrew, Arabic and Thai text. */
+const ScriptLabels = ['OpenAI: work', String.raw`say "hi", \ [ok]`, 'מפתח API של העבודה', 'مفتاح العمل', 'กุญแจงาน', 'Mixed: English, עברית, العربية, ไทย'] as const
+
+describe("the host's validators", () => {
+  it("replace ours outright: a vault keeps labels and notes in any script, and reads each back", async () => {
+    const world = makeWorld({ validators: AnyScript, applabel: 'Acme: אקמה', vaultlabel: 'ราก' })
+    const vault = await world.openUnlocked('pw')
+    for (const [ii, boxlabel] of ScriptLabels.entries()) {
+      await vault.store(boxlabel, `sk-fake-${String(ii)}`, { note: `${boxlabel} — ${'ノート'.repeat(100)}` })
+    }
+    expect(boxlabelsOf(vault)).to.have.members([...ScriptLabels])
+    for (const [ii, boxlabel] of ScriptLabels.entries()) {
+      expect(await vault.read(boxlabel)).to.eq(`sk-fake-${String(ii)}`)
+    }
+    await vault.erase(ScriptLabels[0])
+    expect(boxlabelsOf(vault)).to.not.include(ScriptLabels[0])
+    vault.close()
+    const again = await world.openUnlocked('pw')
+    expect(boxlabelsOf(again)).to.have.lengthOf(ScriptLabels.length - 1)
+  })
+
+  it("take AnyTextValidators whole, as its example shows: any text at all names a vault and its lockboxes", async () => {
+    const world = makeWorld({ validators: AnyTextValidators })
+    const vault = await world.openUnlocked('pw', { applabel: '', userId: '', vaultlabel: 'Main vault' })
+    await vault.store('', 'sk-fake', { note: 'n'.repeat(5000) })
+    await vault.store(String.raw`["box","acme"] \ x`, 'sk-fake-two')
+    expect(await vault.read('')).to.eq('sk-fake')
+    expect(boxlabelsOf(vault)).to.have.lengthOf(2)
+  })
+
+  it("refuse, as ours would, what they refuse: a host narrows the user id to its auth's shape", async () => {
+    const clerkUserId = ZClassic.string().regex(/^user_[A-Za-z0-9]{27}$/)
+    const world = makeWorld({ validators: { userId: clerkUserId } })
+    expect(await world.stateOnOpen({ userId: `user_${'A'.repeat(27)}` })).to.eq('absent')
+    const err = await TH.expectRefusal(world.open({ userId: 'alice@example.com' }), 'bad_label')
+    expect(err.message).to.include('userId')
+    expect(TH.thrownText(err)).to.not.include('alice')
+  })
+
+  it("keep ours for every field a host leaves out", async () => {
+    const world = makeWorld({ validators: { note: AnyScript.note } })
+    const vault = await world.openUnlocked('pw')
+    await TH.expectRefusal(vault.store('Not A Label', 'sk-fake'), 'bad_label')
+    await vault.store('anthropic', 'sk-fake', { note: 'n'.repeat(2000) })
+    await TH.expectRefusal(world.open({ applabel: 'Acme' }), 'bad_label')
+  })
+
+  it("take a mini schema as readily as a classic one", async () => {
+    const world = makeWorld({ validators: { boxlabel: Z.string().check(Z.minLength(1), Z.maxLength(80)) } })
+    const vault = await world.openUnlocked('pw')
+    await vault.store('Anthropic API key', 'sk-fake')
+    expect(await vault.read('Anthropic API key')).to.eq('sk-fake')
+  })
+
+  it("only check: what the vault keeps and binds is what it was handed, never what a schema made of it", async () => {
+    const trimming = { boxlabel: ZClassic.string().trim().toLowerCase().min(1), userId: ZClassic.string().trim().min(1) }
+    const world = makeWorld({ validators: trimming })
+    const vault = await world.openUnlocked('pw', { userId: '  U1  ' })
+    expect(vault.getSnapshot().scope.user_id).to.eq('  U1  ')
+    await vault.store('  Padded Box  ', 'sk-fake')
+    expect(boxlabelsOf(vault)).to.deep.equal(['  Padded Box  '])
+    expect(await vault.read('  Padded Box  ')).to.eq('sk-fake')
+    await TH.expectRefusal(vault.read('padded box'), 'absent_box')
+  })
+
+  it("refuse a note the host's check refuses as 'bad_option', quoting none of it", async () => {
+    const world = makeWorld({ validators: { note: ZClassic.string().max(10) } })
+    const vault = await world.openUnlocked('pw')
+    const err = await TH.expectRefusal(vault.store('anthropic', 'sk-fake', { note: 'sk-not-for-a-note' }), 'bad_option')
+    expect(err.message).to.include('note')
+    expect(TH.thrownText(err)).to.not.include('sk-not-for-a-note')
+    await vault.store('anthropic', 'sk-fake', { note: null })
+  })
+
+  it("never pass a host schema's issues along, which may quote the name", async () => {
+    const quoting = ZClassic.string().refine(() => false, { error: (issue) => `no such label ${String(issue.input)}` })
+    const world = makeWorld({ validators: { boxlabel: quoting } })
+    const vault = await world.openUnlocked('pw')
+    const err = await TH.expectRefusal(vault.store('secret_project_x', 'sk-fake'), 'bad_label')
+    expect(TH.thrownText(err)).to.not.include('secret_project_x')
+  })
+
+  it("refuse an async check, or one that throws, as misuse", async () => {
+    const world = makeWorld()
+    const asyncCheck = ZClassic.string().refine(async () => { await TH.wakeupAtNextTick(); return true })
+    await TH.expectRefusal(world.open({ validators: { applabel: asyncCheck } }), 'bad_option')
+    const throwing = ZClassic.string().refine(() => { throw new Error('the host check fell over') })
+    const vault = await world.openUnlocked('pw', { validators: { boxlabel: throwing } })
+    await TH.expectRefusal(vault.store('anthropic', 'sk-fake'), 'bad_option')
+  })
+
+  it("refuse a bag holding anything but schemas, or a field the bag does not know, before storage is touched", async () => {
+    const world = makeWorld()
+    const readBundle = vi.spyOn(world.vaultDB, 'readBundle')
+    const misfits = ['acme', 42, { boxlabel: 'Label' }, { boxlabel: /^[a-z]+$/ }, { boxLabel: ZClassic.string() }, { userID: ZClassic.string() }]
+    for (const validators of misfits) {
+      const err = await TH.expectRefusal(world.open({ validators: validators as unknown as OpenVaultOpts['validators'] }), 'bad_option')
+      expect(err.message).to.include('validators')
+    }
+    expect(readBundle).not.toHaveBeenCalled()
+    expect(await world.stateOnOpen({ validators: undefined })).to.eq('absent')
+    expect(await world.stateOnOpen({ validators: { boxlabel: undefined } })).to.eq('absent')
+  })
+
+  it("check every lockbox read back: one stored under a name the vault's checks refuse is refused as damaged", async () => {
+    const world = makeWorld()
+    const roomy = await world.openUnlocked('pw', { validators: AnyScript })
+    await roomy.store('anthropic', 'sk-fake', { note: 'n'.repeat(300) })
+    roomy.close()
+    // The default note check refuses a note of 300 characters: narrowing the checks strands it.
+    await TH.expectRefusal(world.open(), 'corrupt_record')
+  })
+})
+
+/** `vaultDB` declaring `maxRecordBytes` as given, and otherwise itself. */
+const declaringRecordBytes = (vaultDB: VaultDB, maxRecordBytes: number): VaultDB => (
+  Object.create(vaultDB, { maxRecordBytes: { value: maxRecordBytes } }) as VaultDB
+)
+
+describe("what a lockbox weighs in storage", () => {
+  it("refuses, as 'lockbox_too_large', a lockbox heavier than storage holds in one record, writing nothing", async () => {
+    const world = makeWorld({ validators: { note: ZClassic.string() } })
+    const vaultDB = declaringRecordBytes(world.vaultDB, 4096)
+    const vault = await world.openUnlocked('pw', { vaultDB, maxWhisperBytes: 1024 })
+    await vault.store('anthropic', 'sk-fake', { note: 'n'.repeat(3000) })
+    const err = await TH.expectRefusal(vault.store('openai', 'sk-fake', { note: 'n'.repeat(4000) }), 'lockbox_too_large')
+    expect(err.message).to.include('4096')
+    expect(boxlabelsOf(vault)).to.deep.equal(['anthropic'])
+  })
+
+  it("refuses, as 'vault_full', a lockbox whose names and note would take the vault past what storage holds of it", async () => {
+    const world = makeWorld({ validators: AnyScript })
+    // Room for three lockboxes of the default fields' plan, each a whisper of 1000 bytes.
+    const vaultDB = declaringVaultBytes(world.vaultDB, 3 * ((1000 * StoredBytesPerWhisperByte) + LockboxFieldsBytes))
+    const vault = await world.openUnlocked('pw', { vaultDB, maxWhisperBytes: 1000, maxLockboxes: 3 })
+    await vault.store('one', 'sk-fake', { note: 'n'.repeat(1500) })
+    await vault.store('two', 'sk-fake', { note: 'n'.repeat(1500) })
+    const err = await TH.expectRefusal(vault.store('three', 'sk-fake', { note: 'n'.repeat(2000) }), 'vault_full')
+    expect(err.message).to.include('shorter note')
+    expect(boxlabelsOf(vault)).to.deep.equal(['one', 'two'])
+    await vault.store('three', 'sk-fake', { note: 'short' })
+    expect(boxlabelsOf(vault)).to.deep.equal(['one', 'three', 'two'])
+  })
+
+  it("never refuses a replacement no heavier than what it replaces, even in a vault over its limit", async () => {
+    const world = makeWorld({ validators: AnyScript })
+    const roomy = await world.openUnlocked('pw')
+    await roomy.store('one', 'sk-fake', { note: 'n'.repeat(1900) })
+    await roomy.store('two', 'sk-fake', { note: 'n'.repeat(1900) })
+    roomy.close()
+    const vaultDB = declaringVaultBytes(world.vaultDB, 2 * ((1000 * StoredBytesPerWhisperByte) + LockboxFieldsBytes))
+    const tight = await world.open({ vaultDB, maxWhisperBytes: 1000, maxLockboxes: 2 })
+    await tight.store('one', 'sk-fake-new')
+    await tight.store('two', 'sk-fake-new', { note: 'shorter' })
+    await TH.expectRefusal(tight.store('two', 'sk-fake-new', { note: 'n'.repeat(1990) }), 'vault_full')
+  })
+
+  for (const whisperBytes of [1, 2, 3, 100, 2048]) {
+    it(`weighs a lockbox of ${String(whisperBytes)} whisper bytes, its names at their longest, at no less than it stores as`, async () => {
+      const row = await heaviestRowOf(whisperBytes)
+      const { applabel, user_id, vaultlabel, boxlabel, note } = row
+      const weight = (whisperBytes * StoredBytesPerWhisperByte) + LockboxFixedBytes + jsonBytes([{ applabel, user_id, vaultlabel }, boxlabel, note])
+      expect(jsonBytes(row)).to.be.at.most(weight)
+    })
+  }
+
+  it("plans no less at openVault than a store weighs a lockbox at the default checks' longest", async () => {
+    const { applabel, user_id, vaultlabel, boxlabel, note } = await heaviestRowOf(1)
+    expect(LockboxFixedBytes + jsonBytes([{ applabel, user_id, vaultlabel }, boxlabel, note])).to.be.at.most(LockboxFieldsBytes)
   })
 })
 

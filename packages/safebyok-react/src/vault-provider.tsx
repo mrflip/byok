@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { isVaultCondition, isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultError, type VaultSnapshot } from 'safebyok'
+import { isVaultCondition, isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultError, type VaultSnapshot, type VaultValidators } from 'safebyok'
 import { PassphraseModal } from './passphrase-modal'
 
 /**
@@ -68,7 +68,9 @@ export const useVaultSnapshot = (): VaultSnapshot => {
 /**
  * Every openVault option, passed through as given (an option left out gets openVault's default),
  * except that `userId` may be null. In a browser, spread `browserOpts()` from `safebyok/browser`
- * for the `keyDeriver` and `deviceDB` openVault asks for.
+ * for the `keyDeriver` and `deviceDB` openVault asks for. The vault reopens whenever an option
+ * changes identity, so build each schema in `validators` once, at module level; the bag around
+ * them may be built in render, as the provider watches each schema rather than the bag.
  */
 export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
   /** The signed-in user from the host's auth, or null when nobody is: then there is no vault. */
@@ -95,7 +97,13 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
  *   </VaultProvider>
  */
 export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps) => {
-  const { applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger } = opts
+  const { applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators } = opts
+  // The vault reopens when a check changes, never for a bag rebuilt in render around the same ones.
+  const applabelCheck = validators?.applabel
+  const vaultlabelCheck = validators?.vaultlabel
+  const boxlabelCheck = validators?.boxlabel
+  const userIdCheck = validators?.userId
+  const noteCheck = validators?.note
   const [vault, setVault] = useState<Vault | null>(null)
   const [asking, setAsking] = useState<{ settle: (unlocked: boolean) => void } | null>(null)
   // Wrapped, so that a rejection carrying any value at all (null, say) still reads as "failed".
@@ -110,7 +118,8 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     let gone = false
     // Listed one by one so the effect re-runs on each; `satisfies` fails the build if an openVault
     // option is ever added and not passed through.
-    const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger } satisfies Record<keyof OpenVaultOpts, unknown>
+    const checks = { applabel: applabelCheck, vaultlabel: vaultlabelCheck, boxlabel: boxlabelCheck, userId: userIdCheck, note: noteCheck } satisfies Record<keyof VaultValidators, unknown>
+    const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators: checks } satisfies Record<keyof OpenVaultOpts, unknown>
     void openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
@@ -130,7 +139,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
       setOpenFailure(null)
       setOpenError(null)
     }
-  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, openAttempt])
+  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt])
 
   const retryOpen = useCallback(() => {
     if (openError !== null) { setOpenAttempt((prev) => prev + 1) }

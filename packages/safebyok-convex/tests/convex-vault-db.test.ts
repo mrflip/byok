@@ -43,15 +43,15 @@ const perUser = (connect: (subject: string | null) => ConvexVaultClient, api: Sa
   return {
     maxRecordBytes: convexVaultDB(connect(null), api).maxRecordBytes,
     maxVaultBytes:  convexVaultDB(connect(null), api).maxVaultBytes,
-    readBundle:     (scope) => as(scope).readBundle(scope),
-    createBundle:   (bundle) => as(bundle).createBundle(bundle),
-    updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
-    readBox:        (scope, boxlabel) => as(scope).readBox(scope, boxlabel),
-    listBoxes:      (scope) => as(scope).listBoxes(scope),
-    updateBox:      (scope, lockbox, expected) => as(scope).updateBox(scope, lockbox, expected),
-    eraseBox:       (scope, boxlabel, expected) => as(scope).eraseBox(scope, boxlabel, expected),
-    eraseVault:     (scope, expected) => as(scope).eraseVault(scope, expected),
-    subscribe:      (scope, onChange) => as(scope).subscribe(scope, onChange),
+    readBundle:     (scope, validators) => as(scope).readBundle(scope, validators),
+    createBundle:   (bundle, validators) => as(bundle).createBundle(bundle, validators),
+    updateBundle:   (bundle, expected, validators) => as(bundle).updateBundle(bundle, expected, validators),
+    readBox:        (scope, boxlabel, validators) => as(scope).readBox(scope, boxlabel, validators),
+    listBoxes:      (scope, validators) => as(scope).listBoxes(scope, validators),
+    updateBox:      (scope, lockbox, expected, validators) => as(scope).updateBox(scope, lockbox, expected, validators),
+    eraseBox:       (scope, boxlabel, expected, validators) => as(scope).eraseBox(scope, boxlabel, expected, validators),
+    eraseVault:     (scope, expected, validators) => as(scope).eraseVault(scope, expected, validators),
+    subscribe:      (scope, onChange, validators) => as(scope).subscribe(scope, onChange, validators),
   }
 }
 

@@ -122,6 +122,8 @@ const OldIso = '2026-10-14T00:00:00.000Z'
 const BundleCases = [
   // both accept:
   [TH.bundleOf('u1'),                                                        true,   true,   'a whole bundle'],
+  // names are any text to both: the vault's validators check them, client side
+  [{ ...TH.bundleOf('u1'), applabel: 'Acme: אקמה', vaultlabel: 'ราก' },       true,   true,   'labels of any text'],
   // both refuse -- what Convex can see:
   [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },                    false,  false,  'a format this package does not know'],
   [{ ...TH.bundleOf('u1'), format: 'safebyok-lockbox-v1' },                  false,  false,  "another record's format"],
@@ -134,7 +136,6 @@ const BundleCases = [
   // Convex refuses, Zod strips: a field neither record has never reaches storage.
   [{ ...TH.bundleOf('u1'), passphrase: 'not-a-real-passphrase' },            true,   false,  'a field the record does not have'],
   // Zod refuses, Convex accepts -- the finer rules are the client's:
-  [{ ...TH.bundleOf('u1'), applabel: 'ACME' },                               false,  true,   'an applabel outside the label grammar'],
   [{ ...TH.bundleOf('u1'), vault_id: '' },                                   false,  true,   'an empty vault_id'],
   [{ ...TH.bundleOf('u1'), passphrase_epoch: 0 },                            false,  true,   'an epoch of zero'],
   [{ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 },                          false,  true,   'a fractional epoch'],
@@ -145,6 +146,8 @@ const LockboxCases = [
   // both accept:
   [TH.boxOf('anthropic_api_key', 'a1'),                                      true,   true,   'a whole lockbox'],
   [boxWithoutNote,                                                           true,   true,   'a lockbox with no note'],
+  [{ ...TH.boxOf('مفتاح العمل', 'a1') },                                    true,   true,   'a boxlabel of any text'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), note: 'n'.repeat(5000) },       true,   true,   'a note of any length'],
   // both refuse:
   [{ ...TH.boxOf('anthropic_api_key', 'a1'), note: null },                   false,  false,  'a null note'],
   [{ ...TH.boxOf('anthropic_api_key', 'a1'), format: 'safebyok-vault-v1' },  false,  false,  "another record's format"],
@@ -152,8 +155,6 @@ const LockboxCases = [
   [{ ...TH.boxOf('anthropic_api_key', 'a1'), changed_at: '1792022400000' },  false,  false,  'a changed_at written as text'],
   [{ ...boxWithoutTimes, created_at: OldIso, updated_at: OldIso },           false,  false,  'a lockbox from before its times were named registered_at and changed_at'],
   // Zod refuses, Convex accepts:
-  [{ ...TH.boxOf('Anthropic Key', 'a1') },                                   false,  true,   'a boxlabel outside the label grammar'],
-  [{ ...TH.boxOf('anthropic_api_key', 'a1'), note: 'n'.repeat(257) },        false,  true,   'a note over 256 characters'],
   [{ ...TH.boxOf('anthropic_api_key', 'a1'), revision_id: '' },              false,  true,   'an empty revision_id'],
   [{ ...TH.boxOf('anthropic_api_key', 'a1'), changed_at: Infinity },         false,  true,   'a changed_at that never comes'],
 ] as const

@@ -88,6 +88,7 @@ const FamilyCases = [
   ["absent_box",          "condition", 'a lockbox erased elsewhere is a fact of syncing'],
   ["absent_vault",        "condition", 'a vault never made is made by the first unlock'],
   ["whisper_too_large",   "condition", "an oversized whisper is the user's value, not the code"],
+  ["lockbox_too_large",   "condition", "a lockbox too heavy for one record is the user's whisper and note, not the code"],
   ["vault_full",          "condition", 'a full vault tells the user to erase a lockbox'],
   ["corrupt_record",      "condition", 'a damaged record is told to the user, not thrown at the developer'],
   ["stale_write",         "condition", 'another device writing first is a fact of syncing'],
