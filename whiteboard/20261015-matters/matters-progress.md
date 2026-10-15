@@ -4,9 +4,9 @@
 
 | # | Thread            | Status                     |
 | - | ----------------- | -------------------------- |
-| 1 | hkdf_info         | in review (#97)            |
+| 1 | hkdf_info         | filed #97                  |
 | 2 | release_age       | filed #96                  |
-| 3 | passkey_button_ux | in review (#98)            |
+| 3 | passkey_button_ux | resumed: review's fixes    |
 | 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | waiting on the gripes line |
 | 6 | race_helper       | waiting on thread 5        |
@@ -32,11 +32,22 @@
 * **Thread 1 (#97).** Bound every written field it could find: the passkey's HKDF info is its
   wrap's whole binding; envelopes bind `registered_at`; lockboxes their whole public header; a
   remembered unlock its deadline. Pulled roadmap 3's "every field in the binding" forward for
-  lockboxes (thread 4 noted it in TODO).
+  lockboxes (thread 4 noted it in TODO). *Review:* fixed two overclaims in docs (security.md
+  missed `method`; "every field" wasn't, since `unlock_epoch` and the unlock list stay unbound);
+  confirmed the encoding is injective, info = AAD is sound, and nothing that changes without
+  re-encryption is bound. Left: a tampered bundle reads as `wrong_passphrase` (now a matter); an
+  `undefined` binding part drops silently; the lockbox format is bound twice. The Argon2
+  derivation stays unbound (a matter).
+* **Thread 3 (#98), flagged.** A bug on main, not the thread's: `withUnlockedVault` hangs on an
+  unmount or an overlapping ask, and on a user switch the dialog returns over the next user's
+  vault holding the old user's settle. Resumed (normal mode, but the Coach's "productionized"
+  answer covers it) with the fix and the passkey button's focus and live region.
 
 *Orchestrator:* for `/turbochat`, learned while running it: a new table row goes in as blocks
 (`insert`, `"as":"blocks"`, a `row` of `cell`s, at `side: "end"` of the table), with placeholder
 text in each cell; then each placeholder paragraph is replaced with markdown that carries its chip.
 A markdown row inserted after a row is refused (`shape_mismatch`). The doc mirror of this sprint is
 a status tab linking to these files, not a full copy: the doc takes only inline text, and
-re-sending the plan whole costs more than the Coach's token budget wants.
+re-sending the plan whole costs more than the Coach's token budget wants. After inserting rows,
+their cells' ids follow the row id in order (row r: cells r+1, r+3, r+6; their paragraphs one
+after each), so the fill needs no read.
