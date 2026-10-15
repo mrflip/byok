@@ -177,16 +177,16 @@ export abstract class VaultDB {
   /**
    * Public faces of every lockbox in the vault -- ciphered fields stripped, `note` null where a
    * lockbox has none, sorted by boxlabel -- valid while locked. A lockbox whose record does not
-   * read back as one, or names another boxlabel than it is stored under, is listed as a
-   * {@link DamagedLockbox} rather than refused, so one bad record never hides the rest; one stored
-   * under something that is not a boxlabel, which no verb could reach, is left out.
+   * read back as one, names another boxlabel than it is stored under, or is stored under a
+   * boxlabel or with a note `validators` refuse (written under other checks), is listed as a
+   * {@link DamagedLockbox} rather than refused, so one bad record never hides the rest.
    */
   async listBoxes(scope: VaultScope, validators?: VaultValidators): Promise<(LockboxSummary | DamagedLockbox)[]> {
     const rules = Names.rulesOf(validators)
     const asked = Names.checkScope(rules, scope)
     const stored = await fromStorage(() => this.doListBoxes(asked))
     return stored
-      .filter((entry) => isNameable(rules, entry))
+      .filter((entry) => isNameable(entry))
       .map((entry) => listedOrDamaged(rules, entry))
       .toSorted((one, two) => one.boxlabel.localeCompare(two.boxlabel))
   }
@@ -321,18 +321,22 @@ const staleErase = () => new VaultError('stale_write', 'The vault changed in sto
  */
 const ListedLockbox = Z.omit(Lockbox, { lockbox_key_wrapped: true, whisper_ciphered: true })
 
-/** True when a listed lockbox is stored under a boxlabel the verbs accept, so they can reach it. */
-const isNameable = (rules: Names.NameRules, stored: StoredLockbox): boolean => Names.admits(rules, 'boxlabel', stored.boxlabel)
+/**
+ * True when a listed lockbox is stored under text, which reaches it whatever the vault's checks:
+ * a vault erases or stores over a box by the name it was stored under, even one its boxlabel
+ * check now refuses.
+ */
+const isNameable = (stored: StoredLockbox): boolean => typeof (stored as { boxlabel?: unknown }).boxlabel === 'string'
 
 /**
  * One nameable stored lockbox as the listing shows it: its summary, or -- when its record fails
- * the check, names another boxlabel than it is stored under, or holds a note the vault's checks
- * refuse, as `readBox` would refuse it -- a {@link DamagedLockbox} under the boxlabel it is
- * stored under.
+ * the check, names another boxlabel than it is stored under, or is stored under a boxlabel or
+ * with a note the vault's checks refuse, as `readBox` would refuse it -- a
+ * {@link DamagedLockbox} under the boxlabel it is stored under.
  */
 const listedOrDamaged = (rules: Names.NameRules, { boxlabel, lockbox }: StoredLockbox): LockboxSummary | DamagedLockbox => {
   const checked = ListedLockbox.safeParse(lockbox)
-  const sound = checked.success && checked.data.boxlabel === boxlabel
+  const sound = checked.success && checked.data.boxlabel === boxlabel && Names.admits(rules, 'boxlabel', boxlabel)
     && (checked.data.note === undefined || Names.admits(rules, 'note', checked.data.note))
   return sound ? LockboxSummary.parse(checked.data) : { boxlabel, damaged: true }
 }

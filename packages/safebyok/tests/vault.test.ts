@@ -1289,6 +1289,39 @@ describe("the host's validators", () => {
     const narrow = await world.open()
     expect(narrow.getSnapshot().boxes).to.deep.equal([{ boxlabel: 'anthropic', damaged: true }])
     await TH.expectRefusal(narrow.read('anthropic'), 'corrupt_record')
+    await narrow.unlock('pw')
+    await narrow.store('anthropic', 'sk-new')
+    expect(TH.summaryOf(narrow.getSnapshot().boxes[0])?.note).to.be.null
+    expect(await narrow.read('anthropic')).to.eq('sk-new')
+  })
+
+  it("lists a lockbox stored under a boxlabel narrowed checks refuse as damaged, and erase() removes it by that name", async () => {
+    const world = makeWorld()
+    const roomy = await world.openUnlocked('pw', { validators: AnyScript })
+    await roomy.store('OpenAI: work', 'sk-fake')
+    await roomy.store('anthropic', 'sk-ant-fake')
+    roomy.close()
+    const narrow = await world.openUnlocked('pw')
+    expect(narrow.getSnapshot().boxes.map((box) => [box.boxlabel, box.damaged])).to.deep.equal([['anthropic', false], ['OpenAI: work', true]])
+    await TH.expectRefusal(narrow.read('OpenAI: work'), 'bad_label')
+    await narrow.erase('OpenAI: work')
+    expect(world.dbStore.read(u1BoxCkey('OpenAI: work'))).to.be.null
+    expect(boxlabelsOf(narrow)).to.deep.equal(['anthropic'])
+  })
+
+  it("stores over a lockbox under a refused boxlabel by that name, and still refuses a new one, writing nothing", async () => {
+    const world = makeWorld()
+    const roomy = await world.openUnlocked('pw', { validators: AnyScript })
+    await roomy.store('OpenAI: work', 'sk-fake', { note: 'personal account' })
+    roomy.close()
+    const narrow = await world.openUnlocked('pw')
+    await narrow.store('OpenAI: work', 'sk-new')
+    const again = await world.openUnlocked('pw', { validators: AnyScript })
+    expect(await again.read('OpenAI: work')).to.eq('sk-new')
+    expect(TH.summaryOf(again.getSnapshot().boxes[0])?.note).to.be.null
+    await TH.expectRefusal(narrow.store('Other: box', 'sk-fake'), 'bad_label')
+    await TH.expectRefusal(narrow.erase('Other: box'), 'bad_label')
+    expect(world.dbStore.read(u1BoxCkey('Other: box'))).to.be.null
   })
 })
 

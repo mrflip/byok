@@ -101,7 +101,9 @@ await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team acc
   field, never quoting the name or your schema's issues. A schema must check synchronously; one
   that is async or throws is refused as `bad_option`, carrying nothing of what it threw.
 * **Every name is checked everywhere**, records read back included. Narrow a check later and a
-  lockbox stored under a name the new one refuses reads back as `corrupt_record`.
+  lockbox stored under a name or note the new one refuses is listed as damaged (see *Damaged
+  lockboxes*): `erase()` and `store()` still reach it by the name it was stored under, while a
+  new lockbox under a refused name is refused.
 * **Sizes follow the names.** Each `store()` weighs its lockbox -- whisper, names and note -- and
   refuses one heavier than the backend holds in a record (`lockbox_too_large`), or one that
   would take the vault past what the backend holds of a vault (`vault_full`).
@@ -331,11 +333,12 @@ open. A refused open leaves nothing running behind it, so the host simply opens 
 ### Damaged lockboxes
 
 A lockbox whose stored record does not read back -- not JSON, a malformed note or time, a
-record naming another boxlabel than the one it is stored under, or one from a newer safebyok --
-is listed in the snapshot as damaged, `{ boxlabel, damaged: true }`, sorted among the sound
+record naming another boxlabel than the one it is stored under, one from a newer safebyok, or
+one stored under a boxlabel or with a note the vault's `validators` now refuse -- is listed in the snapshot as damaged, `{ boxlabel, damaged: true }`, sorted among the sound
 ones, which carry `damaged: false`. The rest of the vault opens and works as ever. `read()` and
-`use()` refuse a damaged lockbox with `corrupt_record`; `erase()` removes it, and `store()`
-writes a fresh lockbox over it. Show it as removable:
+`use()` refuse a damaged lockbox (`bad_label` for one under a name the checks refuse,
+`corrupt_record` otherwise); `erase()` removes it, and `store()` writes a fresh lockbox over it,
+each by the name it is listed under, whatever the boxlabel check now says. Show it as removable:
 
 ```ts
 for (const box of vault.getSnapshot().boxes) {

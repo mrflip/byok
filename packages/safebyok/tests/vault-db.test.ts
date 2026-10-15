@@ -199,8 +199,8 @@ const ListedRecordCases = [
   ["anthropic",  { ...TH.boxOf('anthropic', 'one'), note: 'n'.repeat(257) }, [["anthropic", true]],   'a record with an overlong note as damaged'],
   ["anthropic",  null,                                                       [["anthropic", true]],   'a null record as damaged'],
   ["anthropic",  'not a lockbox',                                            [["anthropic", true]],   'a record that is not an object as damaged'],
-  // unreachable by any verb, so left out:
-  ["Anthropic",  TH.boxOf('anthropic', 'one'),                               [],                      'nothing for a record stored under what is not a boxlabel'],
+  // stored under a name the checks refuse, so stored under other checks: damaged, and still named
+  ["Anthropic",  TH.boxOf('Anthropic', 'one'),                               [["Anthropic", true]],   'a record stored under a boxlabel the checks refuse as damaged, under that name'],
 ] as const
 
 describe("the abstract VaultDB, around an adapter's half", () => {
@@ -230,6 +230,15 @@ describe("the abstract VaultDB, around an adapter's half", () => {
       expect(listed.map((box) => [box.boxlabel, box.damaged])).to.deep.equal(expected)
     })
   }
+
+  it("leaves out an entry an adapter hands up without a boxlabel as text, which no verb could name", async () => {
+    class UnnamingVaultDB extends MapVaultDB {
+      protected override doListBoxes() {
+        return Promise.resolve([{ boxlabel: 42, lockbox: TH.boxOf('anthropic', 'one') }] as unknown as StoredLockbox[])
+      }
+    }
+    expect(await new UnnamingVaultDB().listBoxes(TH.scopeOf('u1'))).to.deep.equal([])
+  })
 
   it("accepts a listing projected server-side, without ciphered fields, so long as it keeps format", async () => {
     const vaultDB = new MapVaultDB()
@@ -399,12 +408,12 @@ describe("the abstract VaultDB, with the vault's validators", () => {
     const err = await TH.expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'anthropic'), 'corrupt_record')
     expect(err.message).to.include('validators')
     expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.deep.equal([{ boxlabel: 'anthropic', damaged: true }])
-    // AnyScript admits that note, but no empty boxlabel.
+    // AnyScript admits that note, but no empty boxlabel: a box stored under one lists as damaged.
     const [admitted] = await vaultDB.listBoxes(TH.scopeOf('u1'), AnyScript)
     expect(TH.summaryOf(admitted)?.note).to.have.lengthOf(500)
     vaultDB.rows.set(Ckeys.box(TH.scopeOf('u1'), ''), TH.boxOf('', 'two'))
     const listed = await vaultDB.listBoxes(TH.scopeOf('u1'), AnyScript)
-    expect(listed.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
+    expect(listed.map((box) => [box.boxlabel, box.damaged])).to.deep.equal([['', true], ['anthropic', false]])
   })
 
   it("refuses, as 'bad_option', a lockbox whose note the validators refuse, writing nothing", async () => {
