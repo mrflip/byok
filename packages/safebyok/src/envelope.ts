@@ -98,7 +98,8 @@ export const sealPassphrase = async (
  *
  * Refuses with kind `absent_unlock` when `unlockId` names no passphrase envelope of the bundle,
  * `unknown_key_deriver` when every envelope it would try was made by a key
- * deriver other than `keyDeriver`, and `wrong_passphrase` when none it tried opens.
+ * deriver other than `keyDeriver`, `corrupt_record` when one it would try has a salt that is not
+ * base64url, or not `keyDeriver.salt_bytes` long, and `wrong_passphrase` when none it tried opens.
  *
  * @returns Both lives of the vaultKey, and the `unlock_id` of the envelope that opened.
  */
@@ -119,11 +120,26 @@ export const openWithPassphrase = async (
   if (derivable.length === 0) {
     throw new VaultError('unknown_key_deriver', 'This vault was made with a key deriver this package does not carry: update safebyok, or open the vault where it was made.')
   }
+  // Checked for every envelope before the first derivation, so the outcome never hangs on order:
+  // a salt the deriver's own label says it never made is a damaged record, not a wrong passphrase.
+  // (Here rather than in the record's schema, which every entry point's bundle carries whole.)
+  if (derivable.some((envelope) => saltBytesOf(envelope)?.length !== keyDeriver.salt_bytes)) {
+    throw new VaultError('corrupt_record', "One of this vault's passphrases is stored with a salt its key deriver could not have made: the bundle is damaged. It was left as it is.")
+  }
   for (const envelope of derivable) {
     const opened = await tryPassphrase(keyDeriver, passphrase, scope, bundle.vault_id, envelope)
     if (opened !== null) { return { ...opened, unlockId: envelope.unlock_id } }
   }
   throw new VaultError('wrong_passphrase', "That passphrase didn't unlock the vault. Check for typos and try again.")
+}
+
+/** An envelope's passphraseSalt as bytes, or null when its `salt_b64` is not base64url. */
+const saltBytesOf = (envelope: PassphraseEnvelope): Uint8Array | null => {
+  try {
+    return fromB64(envelope.salt_b64)
+  } catch {
+    return null
+  }
 }
 
 /** Both lives of the vaultKey out of one passphrase envelope, or null when it will not open. */

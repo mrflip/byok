@@ -1,7 +1,7 @@
 # Thread 2: unlock_envelopes (2026-10-15)
 
 Branch `20261015-unlock_envelopes`, PR not yet filed, stacked on #63. Justify green: root 105,
-core 754 (was 705), Convex 269 (was 265), React 28, demo 61; `pnpm size` within the raised limits.
+core 759 (was 705), Convex 269 (was 265), React 28, demo 61; `pnpm size` within the raised limits.
 
 * **Built**:
   - **The stored bundle** (`types.ts`): `key_deriver_label`, `passphrase_salt_b64` and
@@ -50,6 +50,15 @@ core 754 (was 705), Convex 269 (was 265), React 28, demo 61; `pnpm size` within 
   - **Mixed derivers**: envelopes by another deriver are passed over; `unknown_key_deriver` only
     when none is left to try (relevant once `kdf_configs` lets hosts choose configurations).
   - Format literal kept at `safebyok-vault-v1`, as earlier pre-1.0 reshapes did.
+  - **After review** (the thread-reviewer's `ca94bf5`: an aimed `unlock` on a vault destroyed
+    elsewhere created a new vault; now `absent_unlock`), two **YOLO calls of the orchestrator's**:
+    an envelope whose `salt_b64` does not decode, or is not the deriver's `salt_bytes` long,
+    refuses the unlock as `corrupt_record` before any derivation -- noble throws a plain Error under 8 bytes, which
+    would otherwise escape and stop the search. And a blank proof passphrase is refused at once in
+    `addPassphrase`, `removeUnlock` and `changePassphrase`, as `unlock` refuses one.
+    *Deviation*: the decode check sits in `envelope.ts`, at unlock, not in the schema at read as
+    asked: in the schema it pulled `@scure/base` into every entry (top-level zod schemas are kept
+    by the bundler, unmarked pure), `idbDeviceDB` +1.1 kB and `browserOpts` +1 kB over budget.
 * **Deviations**: the size budget rose (`openVault` 16.5 to 17.5 kB, everything 24 to 24.5 kB;
   measured 17.21 and 24.22). No `eslint-disable` or `ts-expect-error` added in `src/`; tests
   keep one `sonarjs/no-hardcoded-passwords` disable on a fake salt, as before.
@@ -69,6 +78,9 @@ core 754 (was 705), Convex 269 (was 265), React 28, demo 61; `pnpm size` within 
   - The gripe_fixes sprint's hunks in `vault.ts` (`keyDeriverShape`, `LockboxFieldsBytes`, the
     two "pretending" comments) are untouched here; `rememberDevice` and `rememberedUnlock` lines
     changed only in their binding call (`localBinding`), which `vaultdb_validation` may also touch.
+* **Open questions (minor, in the PR too)**: a taken `unlocklabel` refuses as `bad_label`
+  (misuse) rather than a condition; envelopes of another deriver are passed over silently; small
+  cleanups the review left.
 * **For the Coach**:
   - The proof-for-every-change rule (above) departs from the plan's "adding requires an unlocked
     vault": confirm.
