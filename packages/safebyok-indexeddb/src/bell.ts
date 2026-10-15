@@ -16,9 +16,13 @@ const channelName = (dbName: string) => `safebyok-idb:${dbName}:vault_db`
 
 // Each listener is called on its own, after the ringing code has run on: one that throws is
 // reported as the platform reports any uncaught error, and neither silences the others nor
-// fails the write that rang.
+// fails the write that rang. One unsubscribed before its turn comes is not called.
 const callEach = (listeners: Set<() => void> | undefined) => {
-  listeners?.forEach((listener) => { queueMicrotask(listener) })
+  listeners?.forEach((listener) => {
+    queueMicrotask(() => {
+      if (listeners.has(listener)) { listener() }
+    })
+  })
 }
 
 /**
