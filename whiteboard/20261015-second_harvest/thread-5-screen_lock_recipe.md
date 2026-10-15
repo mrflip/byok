@@ -1,6 +1,6 @@
 # Thread 5: screen_lock_recipe (2026-10-15)
 
-Branch `20261015-screen_lock_recipe`, cut from [#55](https://github.com/mrflip/safebyok/pull/55)'s tip `fda3462` (#53 merged); PR not yet filed, stacked on #55. Reviewed: the reviewer added df343ac, e88105f and 1fec5b8 (below). Justify: green (root 105, safebyok 381, safebyok-convex 219, safebyok-react 16, demo 28); `pnpm size` within every limit.
+Branch `20261015-screen_lock_recipe`, cut from [#55](https://github.com/mrflip/safebyok/pull/55)'s tip `fda3462` (#53 merged); PR [#60](https://github.com/mrflip/safebyok/pull/60), stacked on #55. Reviewed: the reviewer added df343ac, e88105f and 1fec5b8 (below). Justify: green (root 105, safebyok 381, safebyok-convex 219, safebyok-react 16, demo 28); `pnpm size` within every limit.
 
 * **Built**:
   - `vault.ts`: `Vault.lockSoon(graceSeconds?)`, default 5, at most 60 (`bad_option` otherwise: Zod's number refuses `NaN` and `Infinity`). With a key held and a grace above 0 it moves the shut counter (an unlock or passphrase change under way loses), clears `askPassphraseAt` (null: the gate closes by having no deadline, so a wall clock stepped back in the grace cannot reopen it -- the reviewer's df343ac; it first set it to now), schedules `shutAfter(graceMs)`, bumps, and erases the device record. With no key, or a grace of 0, it is `lock()`. The timer only drops the key (`dropKey()`: nulls `vaultKey` and `askPassphraseAt`, clears the timer) and bumps.
