@@ -43,8 +43,10 @@ security expert who knows what questions to ask.
   (`byok-stub-vault-v0`, `byok-stub-unlock-v0`) are not read by the new code: they existed only
   in the demo and were never published.
 * 2026-10-14: Argon2id (the pinned `argon2id_web_v1` spec) runs through `@noble/hashes` -- pure
-  JS, audited, no WASM -- at about half a second per derivation in V8. AES-256-GCM encryption,
-  key wrapping and randomness come from WebCrypto (`crypto.subtle`, `crypto.getRandomValues`).
+  JS, no WASM; the library's one audit (Cure53, January 2022, at 1.0.0) left its `argon2` out of
+  scope, as its README says, so the Argon2id itself is unaudited -- at about half a second per
+  derivation in V8. AES-256-GCM encryption, key wrapping and randomness come from WebCrypto
+  (`crypto.subtle`, `crypto.getRandomValues`).
 * 2026-10-14: the key deriver is a seam (`OpenVaultOpts.keyDeriver`): the pinned Argon2id deriver
   was the default until 2026-10-15 (below), tests substitute a cheap SHA-256 deriver, and a
   stored vault records its deriver's label and refuses to unlock under any other.
@@ -505,7 +507,8 @@ security expert who knows what questions to ask.
 * 2026-10-15: **a second implementation behind one label.** `safebyok-argon2-wasm` runs Argon2id
   through `hash-wasm` (4.12.0, MIT, no dependencies; its Argon2 is C written for it after Go's
   `x/crypto/argon2`, compiled to WebAssembly and embedded in its JavaScript; widely used, but
-  with no published audit, where `@noble/hashes` has one), under the same specs and
+  with no published audit, as the core's `@noble/hashes` Argon2id has none: its README says its
+  one audit left `argon2` out of scope), under the same specs and
   labels as the core's `@noble/hashes` deriver, `argon2id_web_v1` included. It checks a spec with
   the core's own `parseKeyDeriverSpec`, so its bounds are the core's by construction; hash-wasm's
   own limits (a salt of at least 8 bytes, memory of at least 8 KiB a lane, below 4 GiB) are no
