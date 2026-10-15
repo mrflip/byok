@@ -49,13 +49,25 @@ safebyok-react 51, safebyok-convex 270, demo 125). `pnpm size` within budget.
 * **Review follow-up (YOLO, the orchestrator's directive)**: old remembered unlocks are swept.
   `idbDeviceDB`'s `readUnlock` and `eraseUnlock` run `keys()` on the device shelf and `delMany`
   every ckey that `Ckeys.isUnlock` (new) refuses. No old value is ever read, and a test spies on
-  `IDBObjectStore.get`, `getAll` and `openCursor` to prove it. The first open after an upgrade
-  sweeps, so `lock()` still forgets every unlock on the device. `memoryDeviceDB` keeps nothing past
-  the page and needs no sweep. `isBoxIn`'s doc block states its invariant: every `box` tuple has
+  `IDBObjectStore.get`, `getAll` and `openCursor` to prove it. The sweep runs at an open that
+  finds the vault, or at any lock. Under `idbVaultDB` or `localVaultDB` the first open after an
+  upgrade finds no vault and reads no unlock, so the old row waits for the first lock or the next
+  open after an unlock. Either way, `lock()` still forgets every unlock on the device.
+  `memoryDeviceDB` keeps nothing past the page and needs no sweep. The second review (d1b8549,
+  b6a48a1, 82fc581, dd1ffa2, 8ae0dc2) made four changes. `eraseUnlock` now deletes the scope's own
+  unlock before sweeping. The sweep rings the device shelf's bell. The `eraseAll` test proves
+  something again. The doc blocks of `isUnlock` and the sweep now say what they do. `isBoxIn`'s doc block states its invariant: every `box` tuple has
   exactly five elements.
 * **For the Coach**
-  - The old `unlock:…` rows no longer linger: they are swept unread at the first open (above).
-    Old vault rows hold only ciphertext and stay, and the changeset says how to wipe them.
+  - The old `unlock:…` rows no longer linger. They are swept unread at an open that finds the
+    vault, or at any lock (above). Old vault rows hold only ciphertext and stay, and the changeset
+    says how to wipe them.
+  - Four minor points from the second review are open on the PR:
+    - the sweep's timing: should `writeUnlock` sweep too, so the first unlock after an upgrade
+      clears the old row at once?
+    - a `keys()` call on every read and erase;
+    - two versions of the package open at once on one origin would evict each other's unlocks;
+    - the sweep is permanent code that exists only for an old shape.
   - Upgrading a host on `idbVaultDB` or `localVaultDB` strands its users' vaults. They read
     `absent`, and the next unlock makes a new, empty one. That is per the plan, and the changeset
     says so plainly.
