@@ -65,8 +65,10 @@ security expert who knows what questions to ask.
   mutation's transaction.
 * 2026-10-15: `idbVaultDB` performs its versioned updates (and `createBundle`) as a read, then a
   separate write, in two IndexedDB transactions: another tab writing in between can still be
-  buried, or two tabs can each create a bundle. Doing it inside one IndexedDB transaction is a
-  ruled TODO, not yet built.
+  buried, or two tabs can each create a bundle. Its `eraseVault` likewise lists the vault's rows
+  in one transaction and deletes them in another: a lockbox another tab writes in between
+  survives the erase, orphaned without a bundle. Doing these inside one IndexedDB transaction is
+  a ruled TODO, not yet built.
 * 2026-10-14: a lockbox's ciphertext length reveals its whisper's length to the backend: there is
   no padding yet (TODO). `store()` refuses a whisper over `maxWhisperBytes` of JSON, an
   `openVault` option defaulting to `MaxWhisperBytes` (40444), checked on write only.

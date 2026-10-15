@@ -136,7 +136,9 @@ class IdbVaultDB extends VaultDB {
     this.ring()
   }
 
-  // One delMany is one IndexedDB transaction: the vault goes whole, or not at all.
+  // The listing and the deletion are two IndexedDB transactions: a box another tab writes in
+  // between survives, orphaned (notes/security.md). The delMany itself is one transaction, so
+  // the rows listed go together, or none of them do.
   protected async doEraseVault(scope: VaultScope): Promise<void> {
     const ckeys = await keys(this.shelf())
     const doomed = ckeys.filter((ckey) => isBoxCkeyOf(scope, ckey))
