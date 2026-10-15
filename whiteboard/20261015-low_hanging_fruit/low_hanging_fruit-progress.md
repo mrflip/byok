@@ -12,7 +12,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 2  | `explicit_options` | thread 1 | pending |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | underway |
+| 5  | `mask_utils` | `origin/main` | in review |
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
@@ -43,6 +43,14 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   section says so (pulled in from thread 9 at filing). `storage_unavailable` now reaches the boundary
   although its message says "try again shortly" (Coach, below). A failed open still leaks
   openVault's watch until `open_vault_unsubscribe` lands.
+* *Orchestrator:* **Thread 5** (`safebyok/utils`, `mask`): **for thread 2 and any new entry**:
+  tsdown's `exports: true` does not write `typesVersions`, and attw's node10 check fails the build
+  until the entry is added there by hand, beside `idb`'s. **For thread 8**: `mask` pulls in
+  `errors.ts` and `zod` but not the vault (built `utils.js` 4.1 kB); its budget waits on thread 5
+  merging. Decisions: graphemes via `Intl.Segmenter`, code points where it is missing (Hermes);
+  `maskAll` struck (`mask(w, { head: 0, tail: 0 })` is the stars-only form); `maxLen` wins over
+  `minStars`; an empty whisper gives `''`. Commit prefixes: `utils:` and `react:` are not in
+  PROCESS.md's table -- an entry point is `api:`, the React package `client:`.
 * *Orchestrator:* **The main checkout moves under reviewers.** Another agent's uncommitted work
   there became [#30](https://github.com/mrflip/safebyok/pull/30) mid-review. Both reviewers traced
   it and carried on rightly. Reviewers: a change whose HEAD, reflog and stash are untouched,
