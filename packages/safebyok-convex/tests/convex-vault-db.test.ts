@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { anyApi } from 'convex/server'
 import { ConvexError } from 'convex/values'
-import { VaultError, memoryDeviceDB, openVault } from 'safebyok'
+import { VaultError, openVault } from 'safebyok'
 import * as TH from './test-helpers'
 import { convexVaultDB } from '../src/index'
 import { toConvexLockbox } from '../src/convex-vault-db'
@@ -63,7 +63,6 @@ for (const [clientTitle, connect] of ClientCases) {
 }
 
 const u1 = TH.scopeOf('u1')
-const thisVault = { vault_id: 'vault-id-u1' }
 
 describe("toConvexLockbox", () => {
   const { note: _note, ...noteless } = TH.boxOf('anthropic_api_key', 'a1')
@@ -121,7 +120,7 @@ describe("convexVaultDB, as it is made", () => {
 const nearlyFull = async (vaultDB: ReturnType<typeof convexVaultDB>) => {
   await vaultDB.createBundle(TH.bundleOf('u1'))
   for (let ii = 0; ii < 8; ii++) {
-    await vaultDB.updateBox(u1, TH.heavyBox(`heavy_${String(ii)}`, 900_000), { vault_id: 'vault-id-u1', revision_id: null })
+    await vaultDB.updateBox(u1, TH.heavyBox(`heavy_${String(ii)}`, 900_000), TH.noBoxYet)
   }
 }
 
@@ -133,9 +132,9 @@ describe("convexVaultDB, refusing", () => {
     ['updateBundle', (vaultDB) => vaultDB.updateBundle(TH.bundleOf('u1', { passphrase_epoch: 2 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 })],
     ['readBox',      (vaultDB) => vaultDB.readBox(u1, 'anthropic_api_key')],
     ['listBoxes',    (vaultDB) => vaultDB.listBoxes(u1)],
-    ['updateBox',    (vaultDB) => vaultDB.updateBox(u1, TH.boxOf('anthropic_api_key', 'a1'), { vault_id: 'vault-id-u1', revision_id: null })],
-    ['eraseBox',     (vaultDB) => vaultDB.eraseBox(u1, 'anthropic_api_key', thisVault)],
-    ['eraseVault',   (vaultDB) => vaultDB.eraseVault(u1, thisVault)],
+    ['updateBox',    (vaultDB) => vaultDB.updateBox(u1, TH.boxOf('anthropic_api_key', 'a1'), TH.noBoxYet)],
+    ['eraseBox',     (vaultDB) => vaultDB.eraseBox(u1, 'anthropic_api_key', TH.thisVault)],
+    ['eraseVault',   (vaultDB) => vaultDB.eraseVault(u1, TH.thisVault)],
   ]
 
   for (const [clientTitle, connect] of ClientCases) {
@@ -184,7 +183,7 @@ describe("convexVaultDB, refusing", () => {
       const deployment = deploy()
       const vaultDB = convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok)
       await nearlyFull(vaultDB)
-      const refusal = await TH.expectRefusal(vaultDB.updateBox(u1, TH.heavyBox('one_too_many', 200_000), { vault_id: 'vault-id-u1', revision_id: null }), 'vault_full')
+      const refusal = await TH.expectRefusal(vaultDB.updateBox(u1, TH.heavyBox('one_too_many', 200_000), TH.noBoxYet), 'vault_full')
       expect(refusal.message).to.eq('This vault is full: erase a lockbox to make room, then try again.')
       expect(refusal.cause).to.be.instanceOf(ConvexError)
       const listed = await vaultDB.listBoxes(u1)
@@ -353,9 +352,7 @@ describe("convexVaultDB.subscribe", () => {
 })
 
 /** The README's example: a vault opened over the app's own Convex client. */
-const openOver = (client: ConvexVaultClient, api: SafebyokApi) => openVault({
-  applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: convexVaultDB(client, api), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver,
-})
+const openOver = (client: ConvexVaultClient, api: SafebyokApi) => openVault(TH.memoryVaultOpts({ vaultDB: convexVaultDB(client, api) }))
 
 describe("a vault over convexVaultDB, opened before sign-in", () => {
   for (const [clientTitle, connect] of ClientCases) {
