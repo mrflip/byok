@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { VaultDB } from '../src/vault-db'
-import { boxOf, bundleOf, scopeOf } from './helpers'
+import * as TH from './test-helpers'
 
 /**
  * A VaultDB as the suite sees it: its public verbs only. Structural, so an adapter extending
@@ -30,7 +30,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
   /** A fresh adapter whose `u1` scope holds a bundle, as every lockbox write needs. */
   const withBundle = async () => {
     const vaultDB = await makeVaultDB()
-    await vaultDB.createBundle(bundleOf('u1'))
+    await vaultDB.createBundle(TH.bundleOf('u1'))
     return vaultDB
   }
   const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null }
@@ -39,102 +39,102 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
   describe(`${adapterTitle}, as a VaultDB: the bundle`, () => {
     it("has none until one is created, then reads it back whole", async () => {
       const vaultDB = await makeVaultDB()
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
-      expect(await vaultDB.createBundle(bundleOf('u1'))).to.deep.equal(bundleOf('u1'))
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
+      expect(await vaultDB.createBundle(TH.bundleOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
     })
 
     it("createBundle yields to a bundle already standing: the second device gets the first's back", async () => {
       const vaultDB = await withBundle()
-      const latecomer = { ...bundleOf('u1'), vault_id: 'the-second-arrival' }
-      expect(await vaultDB.createBundle(latecomer)).to.deep.equal(bundleOf('u1'))
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
+      const latecomer = { ...TH.bundleOf('u1'), vault_id: 'the-second-arrival' }
+      expect(await vaultDB.createBundle(latecomer)).to.deep.equal(TH.bundleOf('u1'))
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
     })
 
     it("updateBundle lands while the standing bundle is the one proven against", async () => {
       const vaultDB = await withBundle()
-      const next = { ...bundleOf('u1'), passphrase_epoch: 2 }
+      const next = { ...TH.bundleOf('u1'), passphrase_epoch: 2 }
       await vaultDB.updateBundle(next, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(next)
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(next)
     })
 
     it("updateBundle refuses over a passphrase_epoch since moved on, writing nothing", async () => {
       const vaultDB = await withBundle()
-      const theirs = { ...bundleOf('u1'), passphrase_epoch: 2, updated_at: '2026-10-15T00:00:00.000Z' }
+      const theirs = { ...TH.bundleOf('u1'), passphrase_epoch: 2, updated_at: '2026-10-15T00:00:00.000Z' }
       await vaultDB.updateBundle(theirs, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
-      const mine = { ...bundleOf('u1'), passphrase_epoch: 2, updated_at: '2026-10-16T00:00:00.000Z' }
+      const mine = { ...TH.bundleOf('u1'), passphrase_epoch: 2, updated_at: '2026-10-16T00:00:00.000Z' }
       await expectRefusal(vaultDB.updateBundle(mine, { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'stale_write')
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(theirs)
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(theirs)
     })
 
     it("updateBundle refuses over a vault made anew under another vault_id", async () => {
       const vaultDB = await withBundle()
-      const next = { ...bundleOf('u1'), vault_id: 'vault-id-gone', passphrase_epoch: 2 }
+      const next = { ...TH.bundleOf('u1'), vault_id: 'vault-id-gone', passphrase_epoch: 2 }
       await expectRefusal(vaultDB.updateBundle(next, { vault_id: 'vault-id-gone', passphrase_epoch: 1 }), 'stale_write')
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
     })
 
     it("updateBundle refuses where no bundle stands: an update never creates", async () => {
       const vaultDB = await makeVaultDB()
-      await expectRefusal(vaultDB.updateBundle(bundleOf('u1'), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'stale_write')
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
+      await expectRefusal(vaultDB.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'stale_write')
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
     })
   })
 
   describe(`${adapterTitle}, as a VaultDB: lockboxes`, () => {
     it("has no lockbox until one is written, then reads it back whole", async () => {
       const vaultDB = await withBundle()
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(boxOf('anthropic', 'one'))
+      expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.be.null
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), noBoxYet)
+      expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'one'))
     })
 
     it("replaces a lockbox over the revision it read", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-one' })
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(boxOf('anthropic', 'two'))
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), noBoxYet)
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-one' })
+      expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'two'))
     })
 
     it("refuses a write over a revision it never read, writing nothing", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), noBoxYet)
       // A second device that saw no box, and one that saw some other revision, both lose.
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'two'), noBoxYet), 'stale_write')
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-other' }), 'stale_write')
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(boxOf('anthropic', 'one'))
+      await expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'two'), noBoxYet), 'stale_write')
+      await expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-other' }), 'stale_write')
+      expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'one'))
     })
 
     it("erase wins: a write over a revision erased meanwhile refuses, and the box stays gone", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
-      await vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault)
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-one' }), 'stale_write')
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), noBoxYet)
+      await vaultDB.eraseBox(TH.scopeOf('u1'), 'anthropic', thisVault)
+      await expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-one' }), 'stale_write')
+      expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.be.null
     })
 
     it("refuses a write into a scope that holds no bundle", async () => {
       const vaultDB = await makeVaultDB()
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet), 'stale_write')
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
+      await expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), noBoxYet), 'stale_write')
+      expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.be.null
     })
 
     it("refuses a box sealed for a vault since destroyed and made anew, though no box stands in either", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.eraseVault(scopeOf('u1'), thisVault)
-      await vaultDB.createBundle({ ...bundleOf('u1'), vault_id: 'vault-id-reborn' })
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'stale'), noBoxYet), 'stale_write')
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'fresh'), { vault_id: 'vault-id-reborn', revision_id: null })
-      const reborn = await vaultDB.readBox(scopeOf('u1'), 'anthropic')
+      await vaultDB.eraseVault(TH.scopeOf('u1'), thisVault)
+      await vaultDB.createBundle({ ...TH.bundleOf('u1'), vault_id: 'vault-id-reborn' })
+      await expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'stale'), noBoxYet), 'stale_write')
+      expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.be.null
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'fresh'), { vault_id: 'vault-id-reborn', revision_id: null })
+      const reborn = await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')
       expect(reborn?.revision_id).to.eq('rev-fresh')
     })
 
     it("lists summaries sorted by boxlabel, with format and both ciphered fields stripped", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('openai', 'two'), noBoxYet)
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
-      const summaries = await vaultDB.listBoxes(scopeOf('u1'))
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('openai', 'two'), noBoxYet)
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), noBoxYet)
+      const summaries = await vaultDB.listBoxes(TH.scopeOf('u1'))
       expect(summaries.map((box) => box.boxlabel)).to.deep.equal(['anthropic', 'openai'])
       expect(summaries[0]).to.deep.equal({
         boxlabel:    'anthropic',
@@ -147,76 +147,76 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
 
     it("keeps each scope to itself: same boxlabel, two users, no collision", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.createBundle(bundleOf('u2'))
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
-      await vaultDB.updateBox(scopeOf('u2'), boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
-      const oneBox = await vaultDB.readBox(scopeOf('u1'), 'anthropic')
-      const twoBox = await vaultDB.readBox(scopeOf('u2'), 'anthropic')
+      await vaultDB.createBundle(TH.bundleOf('u2'))
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), noBoxYet)
+      await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
+      const oneBox = await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')
+      const twoBox = await vaultDB.readBox(TH.scopeOf('u2'), 'anthropic')
       expect(oneBox?.revision_id).to.eq('rev-one')
       expect(twoBox?.revision_id).to.eq('rev-two')
-      expect(await vaultDB.listBoxes(scopeOf('u2'))).to.have.lengthOf(1)
+      expect(await vaultDB.listBoxes(TH.scopeOf('u2'))).to.have.lengthOf(1)
     })
 
     it("refuses a write expecting another user's vault_id", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.createBundle(bundleOf('u2'))
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u2', revision_id: null }), 'stale_write')
+      await vaultDB.createBundle(TH.bundleOf('u2'))
+      await expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u2', revision_id: null }), 'stale_write')
     })
   })
 
   describe(`${adapterTitle}, as a VaultDB: erasing`, () => {
     it("eraseBox removes one box without touching its neighbours, and is quiet when there is none", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('openai', 'two'), noBoxYet)
-      await vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault)
-      await vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault)
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
-      expect(await vaultDB.readBox(scopeOf('u1'), 'openai')).to.not.be.null
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), noBoxYet)
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('openai', 'two'), noBoxYet)
+      await vaultDB.eraseBox(TH.scopeOf('u1'), 'anthropic', thisVault)
+      await vaultDB.eraseBox(TH.scopeOf('u1'), 'anthropic', thisVault)
+      expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.be.null
+      expect(await vaultDB.readBox(TH.scopeOf('u1'), 'openai')).to.not.be.null
     })
 
     it("eraseBox from a stale handle refuses: a vault destroyed and made anew keeps its box", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.eraseVault(scopeOf('u1'), thisVault)
-      await vaultDB.createBundle({ ...bundleOf('u1'), vault_id: 'vault-id-reborn' })
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'reborn'), { vault_id: 'vault-id-reborn', revision_id: null })
-      await expectRefusal(vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault), 'stale_write')
-      const kept = await vaultDB.readBox(scopeOf('u1'), 'anthropic')
+      await vaultDB.eraseVault(TH.scopeOf('u1'), thisVault)
+      await vaultDB.createBundle({ ...TH.bundleOf('u1'), vault_id: 'vault-id-reborn' })
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'reborn'), { vault_id: 'vault-id-reborn', revision_id: null })
+      await expectRefusal(vaultDB.eraseBox(TH.scopeOf('u1'), 'anthropic', thisVault), 'stale_write')
+      const kept = await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')
       expect(kept?.revision_id).to.eq('rev-reborn')
     })
 
     it("eraseBox refuses in a scope that holds no bundle, even with no box to erase", async () => {
       const vaultDB = await makeVaultDB()
-      await expectRefusal(vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault), 'stale_write')
+      await expectRefusal(vaultDB.eraseBox(TH.scopeOf('u1'), 'anthropic', thisVault), 'stale_write')
     })
 
     it("eraseVault removes the bundle and every box of that scope, and nothing else", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.createBundle(bundleOf('u2'))
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
-      await vaultDB.updateBox(scopeOf('u2'), boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
-      await vaultDB.eraseVault(scopeOf('u1'), thisVault)
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
-      expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
-      expect(await vaultDB.readBundle(scopeOf('u2'))).to.not.be.null
-      expect(await vaultDB.readBox(scopeOf('u2'), 'anthropic')).to.not.be.null
+      await vaultDB.createBundle(TH.bundleOf('u2'))
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), noBoxYet)
+      await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
+      await vaultDB.eraseVault(TH.scopeOf('u1'), thisVault)
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
+      expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
+      expect(await vaultDB.readBundle(TH.scopeOf('u2'))).to.not.be.null
+      expect(await vaultDB.readBox(TH.scopeOf('u2'), 'anthropic')).to.not.be.null
     })
 
     it("eraseVault from a stale handle refuses: a vault made anew survives, bundle and boxes", async () => {
       const vaultDB = await withBundle()
-      await vaultDB.eraseVault(scopeOf('u1'), thisVault)
-      const reborn = { ...bundleOf('u1'), vault_id: 'vault-id-reborn' }
+      await vaultDB.eraseVault(TH.scopeOf('u1'), thisVault)
+      const reborn = { ...TH.bundleOf('u1'), vault_id: 'vault-id-reborn' }
       await vaultDB.createBundle(reborn)
-      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'reborn'), { vault_id: 'vault-id-reborn', revision_id: null })
-      await expectRefusal(vaultDB.eraseVault(scopeOf('u1'), thisVault), 'stale_write')
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(reborn)
-      expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(1)
+      await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'reborn'), { vault_id: 'vault-id-reborn', revision_id: null })
+      await expectRefusal(vaultDB.eraseVault(TH.scopeOf('u1'), thisVault), 'stale_write')
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(reborn)
+      expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(1)
     })
 
     it("eraseVault refuses where no bundle stands: there is no vault of that vault_id to erase", async () => {
       const vaultDB = await makeVaultDB()
-      await expectRefusal(vaultDB.eraseVault(scopeOf('u1'), thisVault), 'stale_write')
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
+      await expectRefusal(vaultDB.eraseVault(TH.scopeOf('u1'), thisVault), 'stale_write')
+      expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
     })
   })
 
@@ -228,17 +228,17 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
 
     it("subscribe hands back an unsubscribe that can be called", async () => {
       const vaultDB = await makeVaultDB()
-      const unsubscribe = vaultDB.subscribe(scopeOf('u1'), unheard)
+      const unsubscribe = vaultDB.subscribe(TH.scopeOf('u1'), unheard)
       expect(unsubscribe).to.be.a('function')
       unsubscribe()
     })
 
     it("refuses a malformed scope or boxlabel before storage sees it", async () => {
       const vaultDB = await withBundle()
-      await expectRefusal(vaultDB.readBundle({ ...scopeOf('u1'), vaultlabel: 'not-a-label' }), 'bad_label')
-      await expectRefusal(vaultDB.readBox(scopeOf('u1'), 'not:a:label'), 'bad_label')
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('Not_a_label', 'one'), noBoxYet), 'bad_label')
-      await expectRefusal(vaultDB.eraseBox({ ...scopeOf('u1'), user_id: '' }, 'anthropic', thisVault), 'bad_label')
+      await expectRefusal(vaultDB.readBundle({ ...TH.scopeOf('u1'), vaultlabel: 'not-a-label' }), 'bad_label')
+      await expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'not:a:label'), 'bad_label')
+      await expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('Not_a_label', 'one'), noBoxYet), 'bad_label')
+      await expectRefusal(vaultDB.eraseBox({ ...TH.scopeOf('u1'), user_id: '' }, 'anthropic', thisVault), 'bad_label')
     })
   })
 }

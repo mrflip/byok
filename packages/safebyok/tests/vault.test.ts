@@ -5,11 +5,11 @@ import { memoryDeviceDB } from '../src/device-db'
 import { localVaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts } from '../src/vault'
-import { testDeriver, tweakB64 } from './helpers'
+import * as TH from './test-helpers'
 
 /**
  * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, and an
- * opener. Unlocks derive through the cheap testDeriver, so the suite is not a benchmark of
+ * opener. Unlocks derive through the cheap TH.testDeriver, so the suite is not a benchmark of
  * Argon2id; the real deriver has its own tests in key-deriver.test.ts.
  */
 const makeWorld = () => {
@@ -20,7 +20,7 @@ const makeWorld = () => {
   const clock = { now: () => nowMs }
   const advance = (byMs: number) => { nowMs += byMs }
   const open = (overrides?: Partial<OpenVaultOpts>) => (
-    openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB, clock, keyDeriver: testDeriver, ...overrides })
+    openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB, clock, keyDeriver: TH.testDeriver, ...overrides })
   )
   return { dbStore, vaultDB, deviceDB, clock, advance, open }
 }
@@ -433,7 +433,7 @@ describe("tampering", () => {
     await vault.store('anthropic', 'sk-fake')
     const ckey = world.dbStore.ckeys().find((candidate) => candidate.startsWith('box:'))
     const row = JSON.parse(world.dbStore.read(ckey ?? '') ?? '{}') as { whisper_ciphered: { ciphertext_b64: string } }
-    row.whisper_ciphered.ciphertext_b64 = tweakB64(row.whisper_ciphered.ciphertext_b64)
+    row.whisper_ciphered.ciphertext_b64 = TH.tweakB64(row.whisper_ciphered.ciphertext_b64)
     world.dbStore.write(ckey ?? '', JSON.stringify(row))
     const err = await expectRefusal(vault.read('anthropic'), 'corrupt_record')
     expect(err.message).to.not.include('sk-fake')
@@ -526,7 +526,7 @@ describe("the key deriver seam", () => {
     const world = makeWorld()
     const vault = await world.open()
     await vault.unlock('pw')
-    const alienDeriver = { ...testDeriver, key_deriver_label: 'someone_elses_deriver_v9' }
+    const alienDeriver = { ...TH.testDeriver, key_deriver_label: 'someone_elses_deriver_v9' }
     const alien = await world.open({ deviceDB: memoryDeviceDB(), keyDeriver: alienDeriver })
     await expectRefusal(alien.unlock('pw'), 'unknown_key_deriver')
   })
@@ -685,7 +685,7 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
       await vaultTwo.unlock('pw two')
       await vaultTwo.store('anthropic', 'sk-ant-fake-new')
       // Let vaultOne's background refreshes, rung by the writes above, settle on the reborn vault.
-      await new Promise((resolve) => { setTimeout(resolve, 0) })
+      await TH.wakeupAtNextTick()
     }
     await expectRefusal(vaultOne.destroy(), 'stale_write')
     expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
