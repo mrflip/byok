@@ -102,7 +102,8 @@ pnpm test            # vitest, every package; pnpm test:coverage likewise
 pnpm lint            # eslint, every package
 pnpm typecheck       # tsc --noEmit, every package
 pnpm build           # tsdown: ESM + CJS + declarations into each dist/, checked by publint and attw
-pnpm size            # the tree-shaking budget: size-limit over the built core, per import shape (.size-limit.json); CI runs it after the build
+pnpm size            # the tree-shaking budget: size-limit over the built core, per import
+                     # shape (.size-limit.json); CI runs it after the build
 pnpm --filter safebyok test        # one package, any script (or `pnpm test` in its directory);
                                    # it builds the packages it depends on first
 pnpm --filter safebyok add <dep>   # a package's dependency; `pnpm add -w` is for root tooling only
