@@ -1,0 +1,176 @@
+# safebyok-graphql
+
+safebyok's storage over [GraphQL](https://graphql.org), in two halves:
+
+* **On your server**, `safebyok-graphql/server`: **`VaultSchemaSdl`**, the schema as SDL, and
+  **`vaultResolvers`**, its resolvers, each root field one verb of a VaultDB made per request for
+  the signed-in user -- [`safebyok-postgres`](../safebyok-postgres)'s, or one of your own. They
+  drop into any GraphQL server beside your own schema.
+* **In the browser**, `safebyok-graphql`: **`graphqlVaultDB(client)`**, the VaultDB over your
+  app's [urql](https://commerce.nearform.com/open-source/urql/) Client, to hand `openVault`.
+
+Your server and your database hold ciphertext and a few public fields; neither ever sees a
+whisper, a passphrase, or any key that opens one.
+
+## Install
+
+```sh
+pnpm add safebyok safebyok-graphql safebyok-postgres
+pnpm add @urql/core graphql      # if your app has neither already
+```
+
+`safebyok`, `@urql/core` and `graphql` are peer dependencies: your app installs them, so the
+adapter and your app share one copy of each. The browser's half needs `@urql/core` (for its types;
+it calls only your Client), and the server's half needs `graphql` -- your GraphQL server has it
+already -- so that its refusals are the GraphQLErrors your server knows. Neither half needs the
+other's.
+
+## The recipe: Yoga on Next.js, Postgres behind
+
+The package's tests run this recipe whole (`tests/yoga-recipe.test.ts`), against the same suite
+every VaultDB passes, with Yoga's error masking on.
+
+The server half, `app/api/graphql/route.ts`:
+
+```ts
+import { Pool } from 'pg'
+import { createSchema, createYoga } from 'graphql-yoga'
+import { postgresVaultDB } from 'safebyok-postgres'
+import { VaultSchemaSdl, vaultResolvers } from 'safebyok-graphql/server'
+import { listen } from './listen'   // safebyok-postgres's README: one pg connection LISTENing for the server
+
+const pool = new Pool({ connectionString: process.env.DATABASE_URL })
+
+/** What each request's resolvers know of it: the user your own auth signed in, or null. */
+type VaultContext = { userId: string | null }
+
+const schema = createSchema<VaultContext>({
+  typeDefs:  [appTypeDefs, VaultSchemaSdl],
+  resolvers: [appResolvers, vaultResolvers({ vaultDBFor: ({ userId }: VaultContext) => postgresVaultDB({ client: pool, userId, listen }) })],
+})
+
+const { handleRequest } = createYoga<object, VaultContext>({
+  schema,
+  graphqlEndpoint: '/api/graphql',
+  // Made per request, for the user your own auth signed in -- never one the request names.
+  context:         async ({ request }) => ({ userId: await signedInUserId(request) }),
+  fetchAPI:        { Response },
+})
+
+export { handleRequest as GET, handleRequest as POST }
+```
+
+`signedInUserId` is your own: the user id from the request's verified session cookie, or null.
+
+The browser half, handed to `openVault` as its `vaultDB`:
+
+```ts
+import { Client, fetchExchange } from '@urql/core'
+import { graphqlVaultDB } from 'safebyok-graphql'
+
+const client = new Client({ url: '/api/graphql', exchanges: [fetchExchange], fetchSubscriptions: true })
+const vault = await openVault({ ...browserOpts(), applabel: 'acme', userId, vaultlabel: 'main', vaultDB: graphqlVaultDB(client) })
+```
+
+Your app's own Client serves, cache exchange and all: every query the vault sends is
+`network-only`, so the cache never answers for a vault.
+
+* **Authenticate by your session**, the cookie `fetch` sends to its own origin, and never by a
+  user id in the operation. The scope a browser names is checked against that user by the VaultDB
+  (`not_permitted` for anyone else's).
+* **`fetchSubscriptions: true`** sends the vault's subscription over the same route, as
+  server-sent events, which Yoga serves as it stands. Without it, or another way to send
+  subscriptions, nothing is pushed: the vault refreshes after its own writes, and learns of other
+  devices' when it next reads.
+
+## The server half
+
+```ts
+vaultResolvers({ vaultDBFor: (context) => postgresVaultDB({ client: pool, userId: context.userId, listen }) })
+```
+
+* **`vaultDBFor(context)`** makes the VaultDB for one request, from your server's context for it.
+  It is called for every vault field resolved, so keep it cheap: `postgresVaultDB` connects to
+  nothing. Over a websocket, the context is the connection's, so its user is the one signed in
+  when it opened.
+* **Who may reach a vault** is the VaultDB's to say. `postgresVaultDB`, made for the signed-in
+  user, refuses every other user's vault, and any while signed out, before asking the database
+  anything.
+* **A refusal crosses as a GraphQL error**: its message the VaultError's calm one, its
+  `extensions.kind` its kind, and nothing else -- never the VaultError's `cause`, your driver's
+  own error, which may name your database or quote a row. That stays on your server, as the
+  GraphQL error's `cause`, for your own logs. Anything else a VaultDB throws crosses as
+  `storage_unavailable`.
+* **`safebyokVaultChanged`** sends the vault's scope after every write to it, as the VaultDB's
+  `subscribe` hears them -- for `postgresVaultDB`, through its `listen`, one of which serves every
+  VaultDB your server makes -- and stops listening when the subscriber goes. Changes that come
+  while a subscriber is still busy with the last one go as one.
+
+### In another GraphQL server
+
+`vaultResolvers` returns a plain resolver map -- `Query`, `Mutation`, and `Subscription` with
+`subscribe` and `resolve` -- the shape Yoga, Apollo Server, Mercurius and graphql-tools'
+`makeExecutableSchema` take. `VaultSchemaSdl` defines `type Query`, `type Mutation` and `type
+Subscription` of its own; hand it in a list beside your own type definitions, and the server
+merges them. The tests run it in Yoga and in `makeExecutableSchema` (which Apollo Server is built
+on); Apollo and Mercurius themselves are untested.
+
+Everything the schema adds is named `safebyok...` (a root field) or `Safebyok...` (a type), so
+it meets nothing of yours.
+
+### Serving a VaultDB of your own
+
+The resolvers need a **`ServedVaultDB`**: the VaultDB verbs a browser's vault calls, and
+`listBoxRecords(scope)`, which lists a vault's lockboxes as stored records, its two ciphered
+fields left out. A VaultDB's own `listBoxes` gives summaries instead -- the shape a vault shows,
+without `format` -- which the browser's VaultDB may not hand back from its own listing.
+`safebyok-postgres`'s VaultDB is a ServedVaultDB as it stands; nothing here is tied to Postgres.
+
+## The browser half
+
+`graphqlVaultDB(client)` is a VaultDB, each verb one operation through `client`.
+
+* **A refusal crosses**: the server's VaultError comes back as the same VaultError, kind and
+  message. Anything else -- the network down, a server not serving this schema -- refuses with
+  kind `storage_unavailable`, urql's own error as its `cause`.
+* **It holds a record to 1 MiB**, as the Postgres VaultDB behind it does, and a vault to no size
+  of its own.
+* **A subscription that fails** (the server refusing it, the socket dropping) is not retried, and
+  nothing is told: the vault goes on refreshing after its own writes.
+
+## What crosses the wire
+
+Every record crosses **field by field**, each its own GraphQL field under the name it is stored
+by, exactly as safebyok wrote it:
+
+| Type                    | Carries                                                                     |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `SafebyokVaultBundle`   | every field of the `VaultBundle`                                            |
+| `SafebyokLockbox`       | every field of the `Lockbox`; a lockbox with no note, a null `note`         |
+| `SafebyokListedLockbox` | a lockbox as a listing has it: every field but the two encrypted ones       |
+| `SafebyokCiphered`      | an encrypted value: its `cipher_iv_b64` and its `ciphertext_b64`            |
+| `SafebyokVaultScope`    | which vault: `applabel`, `user_id`, `vaultlabel`                            |
+
+Each has an input type twin (`SafebyokVaultBundleInput`, and so on), and each expectation one
+of its own.
+
+* **Text is a `String`**, a count (`passphrase_epoch`) an `Int`, and a time a `Float` -- epoch
+  milliseconds, a whole number past what GraphQL's 32-bit `Int` holds.
+* **The bundle's `unlocks`** is a list of `SafebyokUnlockEnvelope`, each one opaque JSON, its
+  `method` saying its shape: the adapter carries an envelope as it is, never looking inside, as
+  the Postgres table stores the list as one `jsonb`. A new way to unlock reaches the browser with
+  no change here.
+* **Encrypted**: each whisper (`whisper_ciphered`), each lockboxKey (`lockbox_key_wrapped`), and
+  the vaultKey under each way in (inside each envelope). **In the open**: everything else, as
+  [`safebyok-postgres`](../safebyok-postgres#what-is-stored) lists it.
+
+## Developing this package
+
+`pnpm justify` here runs its lint, typecheck, tests and build, with publint and
+arethetypeswrong. The tests run the whole round trip in-process: an urql Client running each
+operation against the schema (urql's execute exchange, and in the Yoga recipe Yoga itself over
+fetch), the resolvers, and `safebyok-postgres`'s VaultDB over [PGlite](https://pglite.dev), a
+real Postgres compiled to WebAssembly. No database or GraphQL server is needed. They build the
+core and `safebyok-postgres` first (`pnpm build:deps`) and read them through their `dist/`;
+the typecheck and lint read them from source. `tests/yoga-recipe.test.ts` runs this README's
+recipe, and changes with it.

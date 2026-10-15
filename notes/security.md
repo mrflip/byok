@@ -432,3 +432,18 @@ security expert who knows what questions to ask.
   core's VaultDB validates them. A driver's error rides as `cause` and may quote key columns, or
   (a malformed record refused by a NOT NULL) the whole failing row, its ciphertext included; the
   README's route recipe sends the browser only a refusal's kind and message.
+* 2026-10-15: `safebyok-graphql` carries the verbs over GraphQL and authorizes nothing itself:
+  each resolver calls the VaultDB `vaultDBFor(context)` makes for the request, so the rule is
+  `postgresVaultDB`'s (or the host's own ServedVaultDB's), fed the user the host's auth verified.
+  A refusal crosses as a fresh GraphQLError holding only the VaultError's message and
+  `extensions.kind`; the VaultError (and through it the driver's error) is kept as that error's
+  unenumerable `cause`, set after construction, never as its `originalError`: Yoga masks an error
+  whose original is not a GraphQLError, and in development mode sends the original's message,
+  stack and `cause` to the browser. Anything a VaultDB throws that is not a VaultError crosses as
+  `storage_unavailable`. Unlock envelopes cross as opaque JSON that GraphQL does not check; only
+  the core's VaultDB validation does, so a user can write a malformed envelope into their own
+  vault and no one else's. The browser's urql Client may keep vault records (ciphertext and public
+  fields) in its document cache, though every vault query is `network-only` and never answered
+  from it. A subscription's user is fixed when it starts (over a websocket, when the connection
+  opened), so a session revoked meanwhile keeps hearing the vault's scope -- never a record --
+  until the subscription ends.
