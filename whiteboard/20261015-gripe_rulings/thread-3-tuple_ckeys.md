@@ -46,11 +46,16 @@ safebyok-react 51, safebyok-convex 270, demo 125). `pnpm size` within budget.
     `user_id`, because labels are still gated. Once thread 4 lifts the gate, add label cases to it
     (a vaultlabel or boxlabel holding `:`, `"`, `\`, `,`, `[`, `]`).
     `tests/ckeys.test.ts` already covers every position at the encoding level.
+* **Review follow-up (YOLO, the orchestrator's directive)**: old remembered unlocks are swept.
+  `idbDeviceDB`'s `readUnlock` and `eraseUnlock` run `keys()` on the device shelf and `delMany`
+  every ckey that `Ckeys.isUnlock` (new) refuses. No old value is ever read, and a test spies on
+  `IDBObjectStore.get`, `getAll` and `openCursor` to prove it. The first open after an upgrade
+  sweeps, so `lock()` still forgets every unlock on the device. `memoryDeviceDB` keeps nothing past
+  the page and needs no sweep. `isBoxIn`'s doc block states its invariant: every `box` tuple has
+  exactly five elements.
 * **For the Coach**
-  - An old `unlock:…` row lingers in IndexedDB after upgrade, holding the vaultKey wrapped under
-    the localUnlockKey. `lock()` no longer reaches it and no read expires it. I left it, per "no
-    shims before 1.0". The changeset says how to wipe it, and `eraseAll()` now clears it. A sweep
-    of non-tuple rows in `idbDeviceDB` is the alternative, if you want it.
+  - The old `unlock:…` rows no longer linger: they are swept unread at the first open (above).
+    Old vault rows hold only ciphertext and stay, and the changeset says how to wipe them.
   - Upgrading a host on `idbVaultDB` or `localVaultDB` strands its users' vaults. They read
     `absent`, and the next unlock makes a new, empty one. That is per the plan, and the changeset
     says so plainly.
