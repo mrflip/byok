@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **Threads at once**: up to 3
 * **Issued by**: the Coach (flip), via `/sprint`
-* **Status**: threads 1-3 filed (#17, #18, #19); thread 4 underway
+* **Status**: threads 1-3 filed (#17, #18, #19); thread 4 in review
 
 ## The request, verbatim
 

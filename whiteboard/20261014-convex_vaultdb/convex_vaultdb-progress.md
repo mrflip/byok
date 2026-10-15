@@ -1,6 +1,6 @@
 # Sprint convex_vaultdb: progress
 
-**Status**: threads 1-3 filed (#17, #18, #19); thread 4 underway
+**Status**: threads 1-3 filed (#17, #18, #19); thread 4 in review
 
 The orchestrator's document: newer than the plan wherever they disagree. Each worker's own
 account is in `thread-<N>-<label>.md` on its branch.
@@ -12,7 +12,7 @@ account is in `thread-<N>-<label>.md` on its branch.
 | 1      | convex_skills    | `20261014-convex_skills`     | origin/main        | filed [#17](https://github.com/mrflip/safebyok/pull/17) (no review: docs only) |
 | 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18), tip 0e67d7a (erase ruling in, two reviews) |
 | 3      | convex_component | `20261014-convex_component`  | #18 at 0e67d7a     | filed [#19](https://github.com/mrflip/safebyok/pull/19), tip b8145dc (review: clean) |
-| 4      | convex_client    | `20261014-convex_client`     | #19 at b8145dc     | underway |
+| 4      | convex_client    | `20261014-convex_client`     | #19 at b8145dc     | in review (tip e030487) |
 
 ## What the threads have taught
 
@@ -130,3 +130,12 @@ into host logs, and on dev to the client (security.md); `./test` assumes vitest/
 **vault-size ceiling** (no write-side cap; for the Coach before publishing); no server check of `vault_id`
 constancy, epoch increase or fresh `revision_id` (matches the core); `watchVault` reads whole documents (Convex
 cannot project); `boxes` validated as `string[][]` (no tuple validator); wrappers restate the validators (style).
+
+*Orchestrator, thread 4 ready:* `convexVaultDB(client, api.safebyok)` from the package root, over either client by
+structural type (no `convex/react` import in `src/`). **Deviation:** every `watchVault` result refreshes, the first
+included, because a `ConvexReactClient` already watching the query sends no first result, and the first result
+may carry a write the opening read missed (design.md records it). Tests run the real, unmodified clients over a fake
+WebSocket into `convex-test`; this cannot prove concurrency, real invalidation, `setAuth`/token refresh, or
+reconnect. **For the Coach:** (1) the tests' `ConvexReactClient` brings `react` in as a dev dependency. The Coach
+asked why; the options are keep, move that test to safebyok-react, or drop it. (2) Should a vault lock itself when
+storage refuses `not_permitted`, as after a sign-out? (3) Accept the first-emit deviation?
