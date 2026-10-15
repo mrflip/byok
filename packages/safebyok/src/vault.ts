@@ -670,7 +670,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   const readBoxOrThrow = async (boxlabel: string) => {
     const lockbox = await vaultDB.readBox(scope, Names.check(rules, 'boxlabel', boxlabel), rules)
-    if (lockbox === null) { throw new VaultError('absent_box', `No lockbox is labelled '${boxlabel}' in this vault.`) }
+    // The refusal never quotes the boxlabel: a host's validators may admit any text, a mistaken paste among it.
+    if (lockbox === null) { throw new VaultError('absent_box', 'No lockbox stands under that boxlabel in this vault: its snapshot lists the ones it holds.') }
     return lockbox
   }
 

@@ -769,11 +769,11 @@ describe("store and read", () => {
     await TH.expectRefusal(vault.store('not a label', 'whatever'), 'bad_label')
   })
 
-  it("reads of an absent box say which label came up empty", async () => {
-    const world = makeWorld()
+  it("reads of an absent box refuse without quoting the boxlabel, which may be any text a host admits", async () => {
+    const world = makeWorld({ validators: AnyTextValidators })
     const vault = await world.openUnlocked('pw')
-    const err = await TH.expectRefusal(vault.read('nothing_here'), 'absent_box')
-    expect(err.message).to.include('nothing_here')
+    const err = await TH.expectRefusal(vault.read('sk-fake-pasted-by-mistake'), 'absent_box')
+    expect(err.message).not.to.include('sk-fake-pasted-by-mistake')
   })
 })
 
