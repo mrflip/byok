@@ -1,6 +1,6 @@
 # Thread 3: remembered_deadline (2026-10-15)
 
-Branch `20261015-remembered_deadline`, PR not yet filed, stacked on
+Branch `20261015-remembered_deadline`, PR [#58](https://github.com/mrflip/safebyok/pull/58), stacked on
 [#57](https://github.com/mrflip/safebyok/pull/57) (`20261015-epoch_bounds`, `b943b34`), which
 stands on main after [#53](https://github.com/mrflip/safebyok/pull/53) merged. Justify: green (root 105, safebyok 372, safebyok-convex 219, safebyok-react 15, demo 28).
 
