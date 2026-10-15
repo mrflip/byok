@@ -10,7 +10,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 1 | kdf_configs        | #66 tip `5fefc90`     | filed [#68](https://github.com/mrflip/safebyok/pull/68) |
 | 2 | vaultdb_validation | #66 tip `5fefc90`     | filed [#70](https://github.com/mrflip/safebyok/pull/70) |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
-| 4 | ci_tooling         | #66 tip `5fefc90`     | underway |
+| 4 | ci_tooling         | #66 tip `5fefc90`     | in review |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
 | 6 | thin_tests         | #70 tip `d874db3`     | underway |
 | 7 | test_helpers       | thread 6's tip        | pending (after 6 files) |
@@ -91,3 +91,13 @@ at `830e2ed` during the pause (justify green at `1070c86` below it) and has resu
 findings so far: Dependabot's `directory: /` already covers `packages/*` and `demos/*` (no config
 change); justify ~35 s -> ~20 s warm, with a `SAFEBYOK_SKIP_BUILD_DEPS` env var that the root's
 build and test set so each package builds once. Thread 6 was cut from #70's tip after the pause.
+
+*Orchestrator:* thread 4, ci_tooling, is `ready` (tip `0fd009a`). For later threads: the root's
+`justify` installs once and runs lint, typecheck and test across the workspace four packages at a
+time; root `build`/`test` set `SAFEBYOK_SKIP_BUILD_DEPS=1` so each package's `build:deps` is
+skipped and every package builds once, in order. A package tested alone still builds its
+dependencies. It realigned the `types.test.ts` tables and four Convex `validators.test.ts` rows,
+and fixed `wakeupAtNextTick`'s `@example` (doc block only) -- thread 7, leave those lines be.
+For the Coach: a Dependabot PR that moves a public package's runtime dependency now fails CI
+until a changeset is pushed to its branch (after which Dependabot stops rebasing it); the
+Version PR's skip trusts the `changeset-release/` branch name (predates).
