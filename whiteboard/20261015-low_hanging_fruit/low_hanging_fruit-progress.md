@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 6 building; 8 filing; 1, 2, 3, 4, 5, 9, 10, 11 filed; 7 waits on 6. Newer than the plan wherever the two disagree.
+**Status**: 6 building; 1, 2, 3, 4, 5, 8, 9, 10, 11 filed; 7 waits on 6. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -15,7 +15,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37) |
 | 6  | `boundary_audit` | thread 2 (#40, ea3dc98) | underway |
 | 7  | `stale_write_retry` | thread 6 | pending |
-| 8  | `size_budget` | thread 2 (#40, ea3dc98) | filing |
+| 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
 | 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
@@ -101,7 +101,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   decided (YOLO): a `maxLen` below `head + tail + 9` is refused, so the result never exceeds
   `maxLen` (omitted `maxLen` defaults to `max(15, head + tail + 9)`); bidi controls, U+200B,
   U+2060 and U+FEFF are stripped. Second review: fixed (grapheme-counted ceiling test; the changeset names the floor and strip).
-* **Thread 8** (`size_budget`): `.size-limit.json` at the **root**, not the core -- size-limit
+* **Thread 8** (`size_budget`, [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40): `.size-limit.json` at the **root**, not the core -- size-limit
   excludes a package's peers, and zod (the core's peer) is most of the bundle, so a core-level
   config would measure `openVault` at 7 kB and never show the zod-mini thread's gain. Brotli
   figures (limit ~7-8% above): everything 35.6 kB, `openVault` 29.3, `stableJsonify` 25.1 (zod's
