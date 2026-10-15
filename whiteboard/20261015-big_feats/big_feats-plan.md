@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach)
-* **Status**: thread 2 filed (#71); threads 1, 5 in review; 3 underway; 4 has its base (#70) and waits for a slot
+* **Status**: threads 2, 5 filed (#71, #73); 1 filing; 3, 4 underway; 6 waits for a slot (base #73)
 
 ## Read first
 
@@ -83,6 +83,15 @@ still has not filed, the orchestrator cuts this from #63 instead, and the derive
 *Touches*: a new `packages/safebyok-argon2-wasm/`, `.changeset/config.json`, the lockfile,
 `notes/security.md` (a second implementation behind one label). *Depends on*: kdf_configs.
 *Look-ahead*: nothing later builds on it.
+
+*Review:* `fixed`. Four fixes: a lone-surrogate passphrase among the byte-for-byte cases, the
+test's hex encoder replaced by `Buffer`, an index test pinning the exports, and a
+`notes/security.md` line that hash-wasm never zeroes its working memory. The equivalence held on
+every point checked (parameters, variant and version, lane rounding, UTF-8), and a bundle of
+either wasm export carries no noble. Left, minor: the 1 GiB refusal still names `@noble/hashes`;
+`parseKeyDeriverSpec` takes a `KeyDeriverSpec`, not `unknown`; hash-wasm caches a failed compile,
+and older Safari may need `'unsafe-eval'`; `pnpm size` builds the core twice; a duplicated test
+helper. Not checked: real browsers' CSP behaviour.
 
 ### 2. unlock_envelopes
 
@@ -208,6 +217,17 @@ and files "Stacked on #<thread 2>". *Look-ahead*: **thread 6 runs this VaultDB b
 its change notifications out as GraphQL subscriptions: export the per-request factory and the
 change hook in a shape a resolver can call, and keep its errors VaultErrors with kinds a wire can
 carry.
+
+*Review:* `fixed`. Two doc fixes: PGlite's `listen` must be called on its PGlite (passed bare,
+it loses `this` and the VaultDB silently hears nothing), and `notes/security.md` says a driver's
+`cause` can quote a whole failing row, ciphertext included. Atomicity, bound parameters,
+`not_permitted` before every query, a scope-only NOTIFY and secret-free messages all held
+(concurrency reasoned from Postgres's semantics: PGlite has one connection). The README recipe's
+malformed body now answers 400, at the orchestrator's word. Left, minor: a rejected `listen` is
+dropped silently; route-borne records unvalidated past scope and boxlabel; the NOTIFY scope
+visible to any role; `listBoxRecords` copies the core's messages; `placeholderOf`'s plain Error.
+Filed as [#73](https://github.com/mrflip/safebyok/pull/73), rebased onto #71 with its columns
+moved to the `unlocks` shape.
 
 ### 6. graphql_vaultdb
 
