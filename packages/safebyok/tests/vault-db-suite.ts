@@ -145,6 +145,15 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       })
     })
 
+    it("reads back a lockbox with no note field as stored, and lists it with a null note", async () => {
+      const vaultDB = await withBundle()
+      const { note: _note, ...noteless } = boxOf('anthropic', 'one')
+      await vaultDB.updateBox(scopeOf('u1'), noteless, noBoxYet)
+      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(noteless)
+      const [summary] = await vaultDB.listBoxes(scopeOf('u1'))
+      expect(summary?.note).to.be.null
+    })
+
     it("keeps each scope to itself: same boxlabel, two users, no collision", async () => {
       const vaultDB = await withBundle()
       await vaultDB.createBundle(bundleOf('u2'))

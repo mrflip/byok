@@ -1,5 +1,5 @@
 import * as Z from 'zod'
-import { Label, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import {
@@ -123,8 +123,15 @@ export type Vault = {
    * now shows in the snapshot, and a vault destroyed or made anew elsewhere relocks this device
    * -- a stale session never writes into a vault reborn under new keys. Retrying a stale write
    * replaces what the other device wrote.
+   *
+   * `opts.note` is the lockbox's public note, shown while locked: text of at most 256
+   * characters, or null for none -- kind 'bad_option' otherwise. Left out, the lockbox keeps the
+   * note it has. Never put secret material in a note.
+   *
+   * @example await vault.store('anthropic_api_key', 'sk-ant-...', { note: 'work account' })
+   * @example await vault.store('anthropic_api_key', 'sk-ant-...', { note: null })  // and no note
    */
-  store(boxlabel: string, whisper: Whisper, opts?: { note?: string | undefined }): Promise<void>
+  store(boxlabel: string, whisper: Whisper, opts?: { note?: string | null | undefined }): Promise<void>
   /** The whisper in `boxlabel`. Requires unlocked; kind 'absent_box' when there is none. */
   read(boxlabel: string): Promise<Whisper>
   /**
@@ -468,6 +475,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     store: async (boxlabel, whisper, storeOpts) => {
       ensureUnlocked()
       const label = parseLabel(boxlabel)
+      const givenNote = parseNote(storeOpts?.note)
       const checked = Whisper.safeParse(whisper)
       // The refusal never quotes its input: a whisper stays out of error messages.
       if (! checked.success) {
@@ -488,15 +496,15 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
       // reborn elsewhere, or a box written meanwhile by another device, refuses it.
       const expected = { vault_id: vaultId, revision_id: prev?.revision_id ?? null }
-      const note = storeOpts?.note ?? prev?.note
+      const note = noteToStore(givenNote, prev)
       const lockbox: Lockbox = {
         format:              'safebyok-lockbox-v1',
         boxlabel:            label,
         revision_id:         revisionId,
         lockbox_key_wrapped: await wrapKeyUnder(unlockedKey, lockboxKey, boxBinding(vaultId, label, revisionId, 'lockbox_key_wrapped')),
         whisper_ciphered:    await cipherBytes(lockboxKey, whisperBytes, boxBinding(vaultId, label, revisionId, 'whisper_ciphered')),
-        // A box with no note has no note field: never an undefined one, which IndexedDB would keep.
-        ...(note !== undefined && { note }),
+        // A box with no note is stored with no note field: never a null or undefined one.
+        ...(note !== null && { note }),
         created_at:          prev?.created_at ?? now,
         updated_at:          now,
       }
@@ -573,6 +581,23 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   bump()
   return vault
 }
+
+/** A note as `store()` is handed one: some text, null for none, or undefined to keep the note standing. */
+const noteOption = LockboxNote.nullable().optional()
+
+const parseNote = (candidate: string | null | undefined): string | null | undefined => {
+  const checked = noteOption.safeParse(candidate)
+  // The refusal never quotes its input: a note is public, but a mistaken one may not be.
+  if (! checked.success) {
+    throw new VaultError('bad_option', "A lockbox's note is text of at most 256 characters, or null for none. It is shown while the vault is locked: never put secret material in it.")
+  }
+  return checked.data
+}
+
+/** The note a store writes: the one given, or -- given none -- the one `prev` stands with; null for none. */
+const noteToStore = (given: string | null | undefined, prev: Lockbox | null): string | null => (
+  given === undefined ? prev?.note ?? null : given
+)
 
 const parseLabel = (candidate: string): string => {
   const checked = Label.safeParse(candidate)

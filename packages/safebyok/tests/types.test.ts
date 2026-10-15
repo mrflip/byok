@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Label, Lockbox, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
 import { boxOf, bundleOf, scopeOf } from './helpers'
 
 const WhisperCases = [
@@ -110,4 +110,48 @@ describe("Lockbox", () => {
   for (const [candidate, expected, blurb] of LockboxCases) {
     it(blurb, () => { expect(Lockbox.safeParse(candidate).success).to.eq(expected) })
   }
+})
+
+const NoteCases = [
+  // regular usage:
+  ["work account",         true,   'a few words'],
+  ["",                     true,   'even empty text'],
+  ["n".repeat(256),        true,   'two hundred fifty-six characters is the ceiling'],
+  // refused:
+  ["n".repeat(257),        false,  'two hundred fifty-seven is one too many'],
+  [null,                   false,  'null: a lockbox with no note stores no note field'],
+  [42,                     false,  'a number is not a note'],
+] as const
+
+describe("LockboxNote", () => {
+  for (const [candidate, expected, blurb] of NoteCases) {
+    it(blurb, () => { expect(LockboxNote.safeParse(candidate).success).to.eq(expected) })
+  }
+
+  it("hands a note back as it is", () => { expect(LockboxNote.parse('work account')).to.eq('work account') })
+})
+
+const { format: _format, lockbox_key_wrapped: _wrapped, whisper_ciphered: _ciphered, ...notelessSummary } = notelessBox
+const SummaryNoteCases = [
+  // however a lockbox's lack of a note was stored, its summary says null:
+  [notelessSummary,                                  null,            'a lockbox stored with no note field, as one is today'],
+  [{ ...notelessSummary, note: undefined },          null,            'a lockbox an earlier version stored with an undefined note'],
+  [{ ...notelessSummary, note: null },               null,            'a summary already null, parsed again'],
+  // and a note is kept as it is:
+  [{ ...notelessSummary, note: 'work account' },     "work account",  'a lockbox with a note'],
+] as const
+
+describe("LockboxSummary", () => {
+  for (const [candidate, expected, blurb] of SummaryNoteCases) {
+    it(blurb, () => { expect(LockboxSummary.parse(candidate).note).to.eq(expected) })
+  }
+
+  it("refuses a note over 256 characters, as a stored lockbox does", () => {
+    expect(LockboxSummary.safeParse({ ...notelessSummary, note: 'n'.repeat(257) }).success).to.be.false
+  })
+
+  it("strips the two ciphered fields and the format from a whole lockbox", () => {
+    const summary = LockboxSummary.parse(boxOf('anthropic_api_key', 'a1'))
+    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'created_at', 'updated_at'])
+  })
 })

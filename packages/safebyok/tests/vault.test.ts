@@ -294,6 +294,71 @@ describe("store and read", () => {
   })
 })
 
+/** The stored row of the lockbox `boxlabel`, as the backend holds it. */
+const storedRowOf = (world: ReturnType<typeof makeWorld>, boxlabel: string): Record<string, unknown> => (
+  JSON.parse(world.dbStore.read(`box:acme:u1:main:${boxlabel}`) ?? 'null') as Record<string, unknown>
+)
+
+describe("the note", () => {
+  it("is null in the summary of a lockbox that has none: never absent, never undefined", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    const [summary] = vault.getSnapshot().boxes
+    expect(summary).to.have.property('note')
+    expect(summary?.note).to.be.null
+  })
+
+  it("is stored as no field at all when there is none, as it always was", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    await vault.store('openai', 'sk-fake', { note: null })
+    expect(storedRowOf(world, 'anthropic')).to.not.have.property('note')
+    expect(storedRowOf(world, 'openai')).to.not.have.property('note')
+  })
+
+  it("null clears a note; leaving it out keeps the one standing", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-one', { note: 'work account' })
+    await vault.store('anthropic', 'sk-two', { note: undefined })
+    expect(vault.getSnapshot().boxes[0]?.note).to.eq('work account')
+    await vault.store('anthropic', 'sk-three', { note: null })
+    expect(vault.getSnapshot().boxes[0]?.note).to.be.null
+    expect(storedRowOf(world, 'anthropic')).to.not.have.property('note')
+    await vault.store('anthropic', 'sk-four')
+    expect(vault.getSnapshot().boxes[0]?.note).to.be.null
+  })
+
+  it("takes the 256 characters a stored lockbox holds, and the summary hands back the same", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    const longest = 'n'.repeat(256)
+    await vault.store('anthropic', 'sk-fake', { note: longest })
+    expect(vault.getSnapshot().boxes[0]?.note).to.eq(longest)
+  })
+
+  it("refuses a note the stored lockbox could not hold, with kind 'bad_option', writing nothing and quoting none of it", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    const tooLong = `sk-ant-SUPERSECRET${'n'.repeat(256)}`
+    const err = await expectRefusal(vault.store('anthropic', 'sk-fake', { note: tooLong }), 'bad_option')
+    expect(err.message).to.not.include('SUPERSECRET')
+    await expectRefusal(vault.store('anthropic', 'sk-fake', { note: 42 as unknown as string }), 'bad_option')
+    expect(world.dbStore.ckeys().filter((ckey) => ckey.startsWith('box:'))).to.have.lengthOf(0)
+    // The vault is none the worse: it still lists, stores, and opens again.
+    await vault.store('anthropic', 'sk-fake', { note: 'fits' })
+    const again = await world.open()
+    expect(again.getSnapshot().boxes.map((summary) => summary.note)).to.deep.equal(['fits'])
+  })
+})
+
 /**
  * `vaultDB` declaring `maxVaultBytes` as given, and otherwise itself: the in-tree local adapters
  * set no limit on a vault, and the limit's check wants one that does.

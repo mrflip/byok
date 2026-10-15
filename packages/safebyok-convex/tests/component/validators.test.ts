@@ -5,7 +5,7 @@ import { v } from 'convex/values'
 import type { GenericValidator, Infer } from 'convex/values'
 import * as Records from 'safebyok'
 import type {
-  BundleExpectation as CoreBundleExpectation, EraseExpectation as CoreEraseExpectation, LockboxExpectation as CoreLockboxExpectation, LockboxSummary,
+  BundleExpectation as CoreBundleExpectation, EraseExpectation as CoreEraseExpectation, LockboxExpectation as CoreLockboxExpectation,
 } from 'safebyok'
 import {
   BundleExpectation, Ciphered, EraseExpectation, ListedLockbox, Lockbox, LockboxExpectation, VaultBundle, VaultScope,
@@ -83,7 +83,9 @@ describe("the Convex validators, field for field with the core's Zod records", (
     // Convex's takes a note or none, every lockbox the core writes; the core's also reads an
     // undefined note, as earlier versions stored it.
     expectTypeOf<Infer<typeof Lockbox>>().toExtend<Records.Lockbox>()
-    expectTypeOf<Omit<Infer<typeof ListedLockbox>, 'format'>>().toExtend<LockboxSummary>()
+    // A listing is the stored record less its ciphered fields; the core's summary of it nulls a
+    // missing note, so it is the stored record's shape a listing must meet.
+    expectTypeOf<Omit<Infer<typeof ListedLockbox>, 'format'>>().toExtend<Omit<Records.Lockbox, 'format' | 'lockbox_key_wrapped' | 'whisper_ciphered'>>()
     expectTypeOf<Infer<typeof BundleExpectation>>().toEqualTypeOf<CoreBundleExpectation>()
     expectTypeOf<Infer<typeof LockboxExpectation>>().toEqualTypeOf<CoreLockboxExpectation>()
     expectTypeOf<Infer<typeof EraseExpectation>>().toEqualTypeOf<CoreEraseExpectation>()

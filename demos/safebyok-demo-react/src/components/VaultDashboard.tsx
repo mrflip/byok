@@ -55,7 +55,7 @@ export const VaultDashboard = () => {
       const saved = await withUnlockedVault(async () => {
         // The cast hands validation to the vault: typing "null" in the box parses to a bare
         // null, and the store's refusal lands in the gripe below.
-        await vault.store(form.boxlabelText.trim(), parseWhisperText(form.whisperText)!, { note: form.noteText.trim() || undefined })
+        await vault.store(form.boxlabelText.trim(), parseWhisperText(form.whisperText)!, { note: form.noteText.trim() || null })
         return true
       })
       if (saved !== null) { setForm(null) }
