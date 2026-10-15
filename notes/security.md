@@ -166,7 +166,9 @@ security expert who knows what questions to ask.
   no scope, label, `userId` or other option value goes to the logger; an `err` is the
   `VaultError` the vault would otherwise have thrown (its `cause` the host's own clock or adapter
   error, as `VaultError` already carries it) or the adapter's own error, never a record or a
-  validator's issues. A test sweeps every call for the fake passphrase, whisper, note, stored
+  validator's issues. A host's own error goes as the host made it, unread and unscrubbed, and the
+  default console logger prints it, though a storage client's error may quote the request it
+  failed. A test sweeps every call for the fake passphrase, whisper, note, stored
   ciphertexts and salts, down through each error's causes.
 * 2026-10-15: with no `logger`, the vault logs to the console: `src/console-logger.ts` is the one
   module in `src/` that touches it, under a file-wide `eslint-disable no-console` (the Coach's

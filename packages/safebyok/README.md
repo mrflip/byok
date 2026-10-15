@@ -157,9 +157,11 @@ else is refused as `bad_option`.
 
 Each call is a plain-language `message`; a `story` naming the vault call it happened in
 (`{ call: 'lockSoon' }`); and, when there is one, the error behind it, a `VaultError` or your own
-(your clock's, your storage adapter's). None of the three ever holds a whisper, a passphrase, a
-key, a ciphertext or an option's value, not even the `userId` or the labels: a host with several
-vaults gives each its own logger, bound to whatever context it wants in its logs. Today a vault
+(your clock's, your storage adapter's). The vault puts no whisper, passphrase, key, ciphertext or
+option's value in any of the three, not even the `userId` or the labels: a host with several
+vaults gives each its own logger, bound to whatever context it wants in its logs. An error of your
+own goes as your code made it, as itself or as a `VaultError`'s `cause`, so what it quotes (a
+storage client's error may quote the request it failed) is yours to keep clean. Today a vault
 says four things:
 
 * `warn`: `lockSoon()` could not read the clock, so it locked at once, without a grace.

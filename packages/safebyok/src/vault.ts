@@ -90,9 +90,10 @@ export type OpenVaultOpts = {
   /**
    * Where the vault says what it has nobody to throw to -- a lock that skipped its grace, a
    * background refresh that failed, a remembered unlock it could not read -- as a
-   * {@link VaultLogger}: `log`, `warn` and `error` functions. Default: the console. Never handed
-   * secret material or an option's value; whatever it throws is ignored. Pass functions that do
-   * nothing for quiet. Kind 'bad_option' for anything else.
+   * {@link VaultLogger}: `log`, `warn` and `error` functions. Default: the console. The vault hands
+   * it no secret material or option's value (a host's own error goes as the host made it); whatever
+   * it throws is ignored. Pass functions that do nothing for quiet. Kind 'bad_option' for anything
+   * else.
    */
   logger?: VaultLogger | undefined
 }

@@ -8,8 +8,9 @@ import { consoleLogger } from './console-logger'
  * as `logger`; with none, the vault writes to the console. Each call has a plain-language
  * `message`, a `story` of a few facts to filter on (`call`, the vault call it happened in), and
  * the error behind it, when there is one: a VaultError, or the host's own (its clock's, its
- * storage adapter's). None of the three ever carries a whisper, a passphrase, a key, a ciphertext
- * or the value of an option.
+ * storage adapter's). The vault puts no whisper, passphrase, key, ciphertext or option's value in
+ * any of the three; an error of the host's own goes as the host's code made it, as itself or as a
+ * VaultError's `cause`, so what it quotes is the host's to keep clean.
  *
  * A logger that throws, or returns a promise that rejects, is ignored: logging never breaks a
  * lock, an open or a store. A host's logger typed `story?: Record<string, any>` fits, and so does
