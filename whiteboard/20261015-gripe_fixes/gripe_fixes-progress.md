@@ -31,5 +31,3 @@ settles the `withUnlockedVault` promise (follow-up: changes `onDone`'s contract)
 window reads "1 minute"; the dialog's 168 default and recomputed `ForeverMs` can drift from the
 core, which a core accessor for the window would end; the modal test's local helpers are thread
 7's to consider.
-
-*Orchestrator:* thread 3 (react_dialog) is `ready`: `PassphraseModal` takes an optional `reentryHours` prop that `VaultProvider` fills from its `forcePassphraseReentryHours`. No core accessor exists for the window, so a host rendering the dialog by hand repeats the value; a later core accessor would end that (thread 3 left `vault.ts` to threads 1 and 2).
