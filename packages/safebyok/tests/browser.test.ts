@@ -8,7 +8,8 @@ import { inspectIdb } from '../src/idb'
 import { memoryStore } from '../src/string-store'
 import { localVaultDB } from '../src/vault-db'
 import { openVault } from '../src/vault'
-import { scopeOf, unlockOf } from './helpers'
+import { scopeOf } from '../src/testing'
+import * as TH from './test-helpers'
 
 const freshDbName = () => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
 
@@ -25,7 +26,7 @@ describe("browserOpts", () => {
 
   it("keeps the device store's records in the database it names", async () => {
     const dbName = freshDbName()
-    await browserOpts({ dbName }).deviceDB.writeUnlock(await unlockOf('u1'))
+    await browserOpts({ dbName }).deviceDB.writeUnlock(await TH.unlockOf('u1'))
     const rows = await inspectIdb({ dbName, shelf: 'device_db' }).rows()
     expect(rows.map((row) => row.ckey)).to.deep.equal(['unlock:acme:u1:main'])
     expect(await browserOpts().deviceDB.readUnlock(scopeOf('u1'))).to.be.null

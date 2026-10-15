@@ -56,6 +56,8 @@ const ChaiTerminators = [
 export default defineConfig([
   globalIgnores([
     'coverage/**',
+    // Built output, at any depth: a stale root dist/ from before the core moved is still on disk.
+    '**/dist/**',
     // Agents' worktrees: another checkout's code, linted there if anywhere.
     '.claude/worktrees/**',
     // Workspace packages: each lints itself, with its own config.
@@ -323,7 +325,7 @@ export default defineConfig([
   // == [Tests] ==
   {
     name: 'safebyok-workspace/tests',
-    files: ['tests/**/*.ts'],
+    files: ['tests/**/*.ts', 'src/testing/**/*.ts'],
     extends: [vitest.configs.recommended],
     rules: {
       'vitest/no-disabled-tests': 'warn',
@@ -356,7 +358,7 @@ export default defineConfig([
   // expression that does nothing.
   {
     name: 'safebyok-workspace/tests-chai',
-    files: ['tests/**/*.ts'],
+    files: ['tests/**/*.ts', 'src/testing/**/*.ts'],
     plugins: { 'chai-expect': chaiExpect, 'chai-friendly': chaiFriendly },
     rules: {
       'vitest/valid-expect':                       'off',

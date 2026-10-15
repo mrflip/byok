@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
-import { boxOf, bundleOf, scopeOf } from './helpers'
+import { boxOf, bundleOf, scopeOf } from '../src/testing'
 
 const WhisperCases = [
   // every JSON shape a whisper may take:

@@ -1,6 +1,6 @@
 # 2026-10-15: Strict configs -- the IDE/tsc split was dist/, not strictness; three questions
 
-Branch `20261015-strict_configs`, PR filed from it (link in chat).
+Branch `20261015-strict_configs`, merged as #29; the follow-up is `20261015-testing_entry`, PR [#38](https://github.com/mrflip/safebyok/pull/38).
 
 **What the Coach saw.** VSCode flagged a type-only `VaultBundle` import and untyped arrow
 parameters that `tsc` and lint passed. Not a strictness gap: every package read `safebyok` through
@@ -21,15 +21,18 @@ schema to reading it, and the writer no longer writes it.
 
 1. ~~Keep the eslint configs in step mechanically?~~ Parked in TODO.md, *RAGEBAIT*: a generator
    script if drift ever causes an uncaught bug.
-2. **Tests still run against `dist/`.** Typecheck and lint read source; vitest still resolves
-   `safebyok` through the build (`pretest`). Adding the condition to vitest's `resolve.conditions`
-   would make the tests live too and drop the build step, at the cost of no longer testing the
-   built package from a sibling. Left as is.
-3. **`pnpm publish` only.** `publishConfig.exports` is a pnpm feature. CI is covered: the
-   release workflow packs with `pnpm pack`, then `scripts/release.ts` stages the tarball with
-   `npm stage publish`, and now refuses one that still carries `@safebyok/source`, as it already
-   refused a `workspace:` range. What is left is a hand `npm publish` from a package directory.
-   The guard for that is a check in `prepublishOnly` that the publisher is pnpm (its
-   `npm_config_user_agent` starts `pnpm/`); a tarball publish runs no lifecycle script, so CI's
-   staging is untouched. Either a one-line check, hand-rolled, or `only-allow pnpm` (by pnpm's
-   authors, but its message talks about installing): your call.
+2. ~~Tests still run against `dist/`.~~ Decided: they stay on `dist/`.
+3. ~~`pnpm publish` only.~~ Done: each public package's `prepublishOnly` runs
+   `scripts/require-pnpm.ts` first, which refuses unless `npm_config_user_agent` starts `pnpm/`.
+   Checked: `npm publish` from a directory runs `prepublishOnly`; `npm publish <tarball>`, as the
+   release workflow stages, runs no script at all, so CI is untouched.
+
+## Since
+
+* **The lint shush** (a fake salt's `no-hardcoded-passwords`) approved; it now lives once, in the
+  core's `bundleOf`.
+* **`safebyok/testing`**, a new public entry point: `testDeriver`, `fakeCiphered`, `scopeOf`,
+  `bundleOf`, `boxOf` and `describeVaultDB`. The binding and the Convex adapter import it
+  instead of a copied deriver, copied fixtures, and relative paths into the core's `tests/`.
+  vitest is an optional peer. Changeset: `safebyok` minor. `notes/security.md` records that the
+  published package now exports a deliberately weak deriver.

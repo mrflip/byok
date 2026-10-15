@@ -3,7 +3,7 @@ import {
   cipherBinding, cipherBytes, decipherBytes, fromB64,
   makeLocalUnlockKey, makeLockboxKey, makeVaultKey, randomBytes, randomId, toB64, unwrapKeyUnder, wrapKeyUnder,
 } from '../src/crypto'
-import { tweakB64 } from './helpers'
+import * as TH from './test-helpers'
 
 const utf8 = (text: string) => new TextEncoder().encode(text)
 
@@ -72,7 +72,7 @@ describe("cipher and decipher", () => {
     const wrongKey = await makeLockboxKey()
     const binding = cipherBinding('test')
     const ciphered = await cipherBytes(rightKey, utf8('sk-ant-fake'), binding)
-    const bent = { ...ciphered, ciphertext_b64: tweakB64(ciphered.ciphertext_b64) }
+    const bent = { ...ciphered, ciphertext_b64: TH.tweakB64(ciphered.ciphertext_b64) }
     await expect(decipherBytes(rightKey, bent, binding)).rejects.toThrow()
     await expect(decipherBytes(wrongKey, ciphered, binding)).rejects.toThrow()
   })

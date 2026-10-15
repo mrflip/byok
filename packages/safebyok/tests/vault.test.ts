@@ -6,7 +6,8 @@ import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts, type Vault } from '../src/vault'
 import type { KeyDeriver } from '../src/key-deriver'
-import { scopeOf, testDeriver } from './helpers'
+import { scopeOf, testDeriver } from '../src/testing'
+import * as TH from './test-helpers'
 
 /**
  * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, and an
@@ -750,7 +751,7 @@ describe("tampering", () => {
     await vault.store('anthropic', 'sk-fake')
     const ckey = world.dbStore.ckeys().find((candidate) => candidate.startsWith('box:'))
     const row = JSON.parse(world.dbStore.read(ckey ?? '') ?? '{}') as { whisper_ciphered: { ciphertext_b64: string } }
-    row.whisper_ciphered.ciphertext_b64 = `A${row.whisper_ciphered.ciphertext_b64.slice(1)}`
+    row.whisper_ciphered.ciphertext_b64 = TH.tweakB64(row.whisper_ciphered.ciphertext_b64)
     world.dbStore.write(ckey ?? '', JSON.stringify(row))
     const err = await expectRefusal(vault.read('anthropic'), 'corrupt_record')
     expect(err.message).to.not.include('sk-fake')
@@ -1041,7 +1042,7 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
       await vaultTwo.unlock('pw two')
       await vaultTwo.store('anthropic', 'sk-ant-fake-new')
       // Let vaultOne's background refreshes, rung by the writes above, settle on the reborn vault.
-      await new Promise((resolve) => { setTimeout(resolve, 0) })
+      await TH.wakeupAtNextTick()
     }
     await expectRefusal(vaultOne.destroy(), 'stale_write')
     expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')

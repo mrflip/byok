@@ -206,3 +206,12 @@ security expert who knows what questions to ask.
   `vault_locked` before any whisper is sealed for the new vault. A retry overwrites what the
   other device wrote (last writer wins), as a host's own retry did, except that a box erased
   elsewhere is not brought back (an erase wins: `stale_write` at once); `erase()` is never retried.
+* 2026-10-15: the published package has a `safebyok/testing` entry point exporting
+  `testDeriver`, a KeyDeriver that is one SHA-256 of passphrase and salt, labelled
+  `test_digest_v0`. `openVault` accepts any KeyDeriver, so nothing stops a host passing it to a
+  real vault; a bundle records the label of the deriver that sealed it. The entry imports vitest,
+  an optional peer, and is not imported by `safebyok` or `safebyok/idb`.
+* 2026-10-15: the public packages' `exports` carry a `@safebyok/source` condition pointing at
+  `src/`, for the workspace's own tooling; `pnpm pack` ships `publishConfig.exports` (dist only)
+  instead. `scripts/release.ts` refuses a tarball that still carries the condition, and each
+  public package's `prepublishOnly` refuses a publish not run by pnpm.
