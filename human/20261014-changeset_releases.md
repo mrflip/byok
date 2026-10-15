@@ -1,7 +1,8 @@
-# 2026-10-14: Releases go through changesets -- four settings, one changeset, and what the first release will prove
+# 2026-10-14: Releases go through changesets -- what is left before the first release, and what it will prove
 
-PR not yet filed (thread 3 of sprint pr_releases, stacked on
-[#16](https://github.com/mrflip/safebyok/pull/16)).
+[#22](https://github.com/mrflip/safebyok/pull/22) (thread 3 of sprint pr_releases), rebased onto
+main after [#15](https://github.com/mrflip/safebyok/pull/15) and
+[#16](https://github.com/mrflip/safebyok/pull/16) merged.
 
 **What landed.** Every PR that changes a public package carries a changeset (CI asks; `pnpm
 changeset --empty` for none). Every push to main runs `release.yml`: while changesets wait, it
@@ -12,18 +13,19 @@ merged, it justifies, packs each package npm lacks with pnpm, stages each tarbal
 `safebyok-react` version in lockstep; a test refuses a public package left out. `pnpm bump` and
 bumpp are gone. PROCESS.md, *Releases*, has the cycle.
 
+**Done (2026-10-15):** "Allow GitHub Actions to create and approve pull requests" is on, so the
+`version` job can open the Version PR; and the "versions are frozen" tag ruleset now covers
+`refs/tags/safebyok*@*` beside `refs/tags/v*`, so the per-package tags are frozen too.
+
 **Before the first release, only you can:**
 
-1. **Turn on "Allow GitHub Actions to create and approve pull requests"** (Settings, Actions,
-   General). It is off today, and without it the Version PR cannot be opened.
-2. **Write the first changeset**: `pnpm changeset`, pick both packages, `minor` gives `0.1.0` from
-   `0.0.0`. No branch of this sprint holds one.
-3. **Close and reopen the Version PR before merging it.** A PR opened by the workflow's token runs
+1. **Write the first changeset**: `pnpm changeset`, pick both packages, `minor` gives `0.1.0` from
+   `0.0.0`. No branch of this sprint holds one (#22 carries only an empty one, which bumps
+   nothing).
+2. **Close and reopen the Version PR before merging it.** A PR opened by the workflow's token runs
    no workflows, so its required checks (CI and CodeQL) would wait forever; a human reopening it
    starts them. The lasting fix is a GitHub App token for the `version` job: say if you want it.
-4. **Extend the "versions are frozen" tag ruleset**, which covers `refs/tags/v*`, to the new tag
-   names (`refs/tags/safebyok*@*`), or tell me to go back to one `v<version>` tag per release.
-5. Worth doing: limit the `npm` environment to the `main` branch (today any branch may use it).
+3. Worth doing: limit the `npm` environment to the `main` branch (today any branch may use it).
 
 **What only the first release can verify:**
 

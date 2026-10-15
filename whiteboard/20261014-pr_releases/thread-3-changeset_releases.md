@@ -1,8 +1,10 @@
 # Thread 3: changesets, one release script, the rewritten workflow (2026-10-14)
 
-Branch `20261014-changeset_releases`, PR not yet filed, stacked on
-[#16](https://github.com/mrflip/safebyok/pull/16). Justify: root green -- root's own 3 files / 66
-tests, core 10 / 143 + build, convex (none), binding 1 / 7 + build, demo 3 / 24.
+Branch `20261014-changeset_releases`, [#22](https://github.com/mrflip/safebyok/pull/22), rebased
+onto main after [#15](https://github.com/mrflip/safebyok/pull/15) and
+[#16](https://github.com/mrflip/safebyok/pull/16) merged. Justify after the rebase: root green --
+root's own 3 files / 67 tests, core 10 / 237 + build, convex 6 / 210, binding 1 / 7 + build, demo
+3 / 24.
 
 * **Built**: `.changeset/` (config, README); root devDependencies `@changesets/cli` ^3.0.3 and
   `@changesets/changelog-github` ^1.0.1 (bumpp and `pnpm bump` removed); root scripts `changeset`,
@@ -31,7 +33,7 @@ tests, core 10 / 143 + build, convex (none), binding 1 / 7 + build, demo 3 / 24.
   caching, no persisted git credentials.
 * **Per-package tags** (`safebyok@0.1.0`) and one GitHub release per package, changesets' monorepo
   naming, not the preplan's single `v<version>`: each release then carries its own package's
-  CHANGELOG. The Coach's tag ruleset covers `v*` only: flagged.
+  CHANGELOG. The Coach has widened the tag ruleset from `v*` to cover `safebyok*@*` too.
 * **`fixed` lists names**, `[["safebyok", "safebyok-react"]]`, with `release.ts check` and a test
   refusing a public package left out, a name that is not public, a public demo, two groups, or
   public versions that disagree. A package still at `0.0.0` may differ (it joins the group's
@@ -68,15 +70,18 @@ tests, core 10 / 143 + build, convex (none), binding 1 / 7 + build, demo 3 / 24.
   caret right: a new minor of the binding needs the new minor of the core.
 * `pnpm pack` of the binding is now a root test (`packedManifest`): it asserts no `workspace:`
   range survives.
-* **This PR's own changeset check fails until #15 and #16 merge**: their package changes count
-  against main. It passes once this branch is rebased onto them.
-* GitHub: Actions may not create PRs on this repo yet; the `npm` environment has no reviewers and
-  no branch limit; required checks include CodeQL, so the Version PR needs a human reopen.
+* **This PR's own changeset check failed until #15 and #16 merged**: their package changes counted
+  against main. Rebased onto them, the branch changes no public package; it carries an empty
+  changeset (`.changeset/releases-bootstrap.md`) all the same, which bumps nothing.
+* GitHub: Actions may now create PRs on this repo (the Coach turned it on); the `npm` environment
+  has no reviewers and no branch limit; required checks include CodeQL, so the Version PR needs a
+  human reopen.
 * Not run: `npm stage` in any form (no dry run either: local npm is 11.19, and nothing here
   should talk to the registry as a publisher). actionlint 1.7.12 passes both workflows.
 
 ## For the Coach
 
-See `human/20261014-changeset_releases.md`: four settings (Actions may open PRs; the first
-changeset; reopen the Version PR to run CI; the tag ruleset), and what the first release proves.
+See `human/20261014-changeset_releases.md`: what is left (the first changeset; reopen the Version
+PR to run CI; optionally limit the `npm` environment to main), and what the first release proves.
+Done by the Coach: Actions may open PRs, and the tag ruleset covers `safebyok*@*`.
 Open question: a GitHub App token, so CI runs on the Version PR without the reopen.
