@@ -63,6 +63,9 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
  * when an action run through withUnlockedVault finds the vault locked. The dialog is unstyled markup under the
  * `modal-scrim` / `modal` class names; the host's stylesheet dresses it.
  *
+ * If openVault rejects -- a bad label or option, or storage trouble no user action fixes -- the
+ * provider throws that very error while rendering, for the nearest error boundary to catch.
+ *
  * @example
  *   <VaultProvider applabel="acme" vaultlabel="main" userId={session?.userId ?? null}
  *     vaultDB={vaultDB} deviceDB={deviceDB}>
@@ -73,6 +76,8 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   const { applabel, vaultlabel, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes } = opts
   const [vault, setVault] = useState<Vault | null>(null)
   const [asking, setAsking] = useState<{ settle: (unlocked: boolean) => void } | null>(null)
+  // Wrapped, so that a rejection carrying any value at all (null, say) still reads as "failed".
+  const [openFailure, setOpenFailure] = useState<{ err: unknown } | null>(null)
 
   useEffect(() => {
     if (userId === null) { return undefined }
@@ -81,15 +86,19 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     // Listed one by one so the effect re-runs on each; `satisfies` fails the build if an openVault
     // option is ever added and not passed through.
     const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes } satisfies Record<keyof OpenVaultOpts, unknown>
-    void openVault(openOpts).then((opened) => {
+    openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
       setVault(opened)
+    }, (err: unknown) => {
+      if (gone) { return }
+      setOpenFailure({ err })
     })
     return () => {
       gone = true
       handle?.close()
       setVault(null)
+      setOpenFailure(null)
     }
   }, [userId, applabel, vaultlabel, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes])
 
@@ -103,6 +112,11 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
       return await action()
     }
   }, [])
+
+  // Thrown here, in render, so the nearest error boundary (or the dev overlay) shows it. Whatever
+  // openVault rejects with before the vault exists is misuse or storage trouble no user action
+  // fixes. Every hook has run by now, so the throw leaves the rules of hooks alone.
+  if (openFailure !== null) { throw openFailure.err }
 
   return (
     <VaultContext.Provider value={{ vault, withUnlockedVault }}>
