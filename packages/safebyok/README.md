@@ -63,6 +63,34 @@ to its platform -- and such an app should not also ship this one (about 15 kB mi
 main entry names no default and imports nothing from `safebyok/browser`, and the package is
 marked `sideEffects: false`: what you never import never ships.
 
+## Key derivation
+
+The passphraseKey is made by Argon2id at a keyDeriverSpec: its parameters under a
+`key_deriver_label`, which every vault stores. A label must always mean the same parameters, or
+vaults made on one device stop opening on another. There are three ways to choose:
+
+* **The supplied spec**, `Argon2idWebV1`: 64 MiB, 3 passes, 1 lane, a 16-byte salt and a 32-byte
+  key. Its deriver, `argon2idWebV1Deriver`, is what `browserOpts()` hands over. Use it unless you
+  have a reason not to.
+* **A spec of your own**, through `argon2idDeriver`:
+
+  ```ts
+  const keyDeriver = argon2idDeriver({ ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', memory_kib: 131_072 })
+  ```
+
+  Give it a label of your own, and never change its parameters once a vault is made under it.
+  It refuses (`bad_option`) what Argon2id cannot run -- a salt under 8 bytes or over 65536,
+  memory under 8 KiB a lane or over 1 GiB, no passes or lanes, a key other than 32 bytes -- and
+  allows weak parameters that run: those are yours to judge.
+* **Another implementation of a spec** (WebAssembly, or native to your platform): spread the spec
+  into your deriver, `{ ...Argon2idWebV1, deriveKeyBytes }`, keeping its label, and test that it
+  derives the same bytes as ours. `openVault` refuses a deriver that wears a supplied spec's label
+  without carrying exactly its parameters; it cannot check the bytes, so that test is yours.
+
+Any `keyDeriver` needs a `salt_bytes` from 1 to 65536 (the most `crypto.getRandomValues` hands out
+at once), and must hand back 32 bytes from `deriveKeyBytes`; `openVault` and `unlock()` refuse one
+that does not, with `bad_option`.
+
 ## Locking
 
 An unlocked vault stays unlocked until its remembered unlock expires
@@ -200,7 +228,7 @@ render for that, and hands a condition down as `openError`).
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
 | `bad_label`           | a label (or the `userId`) that fails the rules                   | Pass labels the app chose; check a user-typed one first with `Label` |
 | `bad_whisper`         | a whisper JSON cannot carry (`undefined`, a function, a class instance) | Store plain JSON; to empty a lockbox, `erase` it |
-| `bad_option`          | an `openVault` option, or a `store()` note, out of its range     | Fix the option; the message names it                    |
+| `bad_option`          | an `openVault` option, an `argon2idDeriver` spec, or a `store()` note, out of its range | Fix the option; the message names it                    |
 | `vault_closed`        | the vault handle was closed                                      | Open the vault again; do not use a handle after `close()` |
 | `unknown_key_deriver` | the vault names a key deriver this handle was not built with     | Update safebyok, or open the vault with the deriver that made it |
 

@@ -4,8 +4,10 @@
  * holds ciphertext only. The IndexedDB adapters live in their own entry point, `safebyok/idb`,
  * and the browser's defaults for openVault's options in another, `safebyok/browser`.
  */
-export { Argon2idWebV1, argon2idWebV1Deriver } from './key-deriver'
-export type { KeyDeriver, KeyDeriverSpec } from './key-deriver'
+export { Argon2idWebV1 } from './key-deriver-spec'
+export type { KeyDeriverSpec } from './key-deriver-spec'
+export { argon2idDeriver, argon2idWebV1Deriver } from './key-deriver'
+export type { KeyDeriver } from './key-deriver'
 export { openVault } from './vault'
 export type { OpenVaultOpts, Vault, VaultSnapshot, VaultState } from './vault'
 export type { VaultLogger } from './logger'

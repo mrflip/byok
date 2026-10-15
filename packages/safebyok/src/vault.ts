@@ -2,6 +2,7 @@ import * as Z from 'zod/mini'
 import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
+import { MaxSaltBytes, PassphraseKeyBytes, ensureSuppliedSpecKept } from './key-deriver-spec'
 import {
   cipherBinding, cipherBytes, decipherBytes, fromB64, importWrappingKeyBytes,
   makeLocalUnlockKey, makeLockboxKey, makeVaultKey, randomBytes, randomId, toB64, wrapKeyUnder, unwrapKeyUnder,
@@ -385,8 +386,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     if (standing.key_deriver_label !== keyDeriver.key_deriver_label) {
       throw new VaultError('unknown_key_deriver', 'This vault was made with a key deriver this package does not carry: update safebyok, or open the vault where it was made.')
     }
-    const passphraseKeyBytes = await keyDeriver.deriveKeyBytes(passphrase, fromB64(standing.passphrase_salt_b64))
-    const passphraseKey = await importWrappingKeyBytes(passphraseKeyBytes)
+    const passphraseKey = await derivePassphraseKey(keyDeriver, passphrase, fromB64(standing.passphrase_salt_b64))
     const binding = bundleBinding(standing.vault_id, standing.passphrase_epoch, 'vault_key_passphrase_wrapped')
     try {
       // The transient is only ever the wrapped argument of a wrap; WebCrypto refuses an empty
@@ -404,7 +404,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const vaultId = randomId()
     const saltBytes = randomBytes(keyDeriver.salt_bytes)
     const freshKey = await makeVaultKey()
-    const passphraseKey = await importWrappingKeyBytes(await keyDeriver.deriveKeyBytes(passphrase, saltBytes))
+    const passphraseKey = await derivePassphraseKey(keyDeriver, passphrase, saltBytes)
     const binding = bundleBinding(vaultId, 1, 'vault_key_passphrase_wrapped')
     const envelope = await wrapKeyUnder(passphraseKey, freshKey, binding)
     const sessionKey = await unwrapKeyUnder(passphraseKey, envelope, binding, { extractable: false, usage: ['wrapKey', 'unwrapKey'] })
@@ -712,7 +712,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       const proven = await unwrapWithPassphrase(standing, oldPassphrase)
       const saltBytes = randomBytes(keyDeriver.salt_bytes)
       const epoch = standing.passphrase_epoch + 1
-      const passphraseKey = await importWrappingKeyBytes(await keyDeriver.deriveKeyBytes(newPassphrase, saltBytes))
+      const passphraseKey = await derivePassphraseKey(keyDeriver, newPassphrase, saltBytes)
       const next: VaultBundle = {
         ...standing,
         passphrase_epoch:    epoch,
@@ -1096,7 +1096,7 @@ const parseMaxLockboxes = (candidate: number | undefined): number => {
 /** What a KeyDeriver must carry. Checked only: openVault keeps the deriver it was handed, prototype and all. */
 const keyDeriverShape = Z.object({
   key_deriver_label: Z.string().check(Z.minLength(1)),
-  salt_bytes:        Z.int().check(Z.positive()),
+  salt_bytes:        Z.int().check(Z.gte(1), Z.lte(MaxSaltBytes)),
   deriveKeyBytes:    Z.custom<KeyDeriver['deriveKeyBytes']>((candidate) => typeof candidate === 'function'),
 })
 
@@ -1105,9 +1105,24 @@ const parseKeyDeriver = (candidate: KeyDeriver | undefined): KeyDeriver => {
     throw new VaultError('bad_option', "openVault needs a keyDeriver: in a browser, spread browserOpts() from 'safebyok/browser' into its options.")
   }
   if (! keyDeriverShape.safeParse(candidate).success) {
-    throw new VaultError('bad_option', 'keyDeriver is not a KeyDeriver: it needs a key_deriver_label, a salt_bytes and a deriveKeyBytes function.')
+    throw new VaultError('bad_option', 'keyDeriver is not a KeyDeriver: it needs a key_deriver_label, a salt_bytes from 1 to 65536 and a deriveKeyBytes function.')
   }
+  ensureSuppliedSpecKept(candidate)
   return candidate
+}
+
+/** What a KeyDeriver must hand back: the bytes of a 256-bit key, and nothing shorter. */
+const passphraseKeyBytes = Z.custom<Uint8Array>((candidate) => (
+  ArrayBuffer.isView(candidate) && candidate.byteLength === PassphraseKeyBytes
+))
+
+/** The passphraseKey `keyDeriver` makes of `passphrase` and its salt: 32 bytes, no other. */
+const derivePassphraseKey = async (keyDeriver: KeyDeriver, passphrase: string, saltBytes: Uint8Array): Promise<CryptoKey> => {
+  const checked = passphraseKeyBytes.safeParse(await keyDeriver.deriveKeyBytes(passphrase, saltBytes))
+  if (! checked.success) {
+    throw new VaultError('bad_option', 'keyDeriver handed back something other than 32 key bytes: a passphraseKey is a 256-bit key.')
+  }
+  return importWrappingKeyBytes(checked.data)
 }
 
 /** One of the adapter's declared limits, in the finite form the vault keeps: `Infinity` becomes {@link UnlimitedBytes}. */
