@@ -31,7 +31,7 @@ const ClientCases: [string, (deployment: Deployment, subject: string | null) => 
 for (const [clientTitle, connect] of ClientCases) {
   TH.describeVaultDB(`convexVaultDB over a ${clientTitle}`, () => {
     const deployment = deploy()
-    return TH.perUser((userId) => convexVaultDB(connect(deployment, userId || null), deployment.api.safebyok))
+    return TH.perUser((userId) => convexVaultDB(connect(deployment, userId === '' ? null : userId), deployment.api.safebyok))
   })
 }
 

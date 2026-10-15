@@ -17,3 +17,13 @@ workspaceConcurrency: 1
 allowBuilds:
   esbuild: false
   unrs-resolver: true
+
+# Supply chain: pnpm installs no version of anything, transitive dependencies included, until it has
+# been public for seven days (minutes), and refuses rather than falling back to a younger version
+# (strict). A version we must take sooner is an exception: PROCESS.md, *Dependencies*, says how it
+# is made, and each one is recorded in notes/security.md.
+minimumReleaseAge: 10080
+minimumReleaseAgeStrict: true
+minimumReleaseAgeExclude:
+  # Ages past seven days at 2026-10-16T23:01Z: delete this line and re-range the pin (notes/security.md).
+  - convex-test@0.0.61
