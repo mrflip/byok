@@ -357,6 +357,12 @@ implementation.
   a favor. A host that needs it can write one against the `KeyDeriver` seam. If it is ever
   packaged, it is its own package with the iteration count in the label.
 
+* **A finer unlock race analyser.** A `lock()` that lands while an `unlock()` is still under way
+  wins, whatever the circumstances. A more sophisticated unlock race analyser might tell "goons
+  are here, lock the vault" from "typed my passphrase at 6d23h59m": a lock the user meant from
+  one that merely fell due (the seven-day deadline, say) while the user was typing the
+  passphrase that would have renewed it.
+
 ## RAGEBAIT
 
 * If the eslint configs cut from the core's (`packages/safebyok/eslint.config.mjs`) drift enough to
