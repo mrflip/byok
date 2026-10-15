@@ -2,7 +2,7 @@ import { omit } from 'es-toolkit'
 import { describe, expect, it } from 'vitest'
 import * as ZClassic from 'zod'
 import { memoryStore } from '../src/string-store'
-import { VaultDB, jsonBytes, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation } from '../src/vault-db'
+import { VaultDB, jsonBytes, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation, type StoredLockbox } from '../src/vault-db'
 import { VaultError } from '../src/errors'
 import type { Lockbox, VaultBundle, VaultScope } from '../src/types'
 import * as Ckeys from '../src/ckeys'
@@ -35,9 +35,10 @@ class MapVaultDB extends VaultDB {
 
   protected doReadBox(scope: VaultScope, boxlabel: string) { return Promise.resolve(this.rows.get(Ckeys.box(scope, boxlabel)) ?? null) }
 
-  protected doListBoxes(scope: VaultScope) {
+  protected doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
     const isBox = Ckeys.isBoxIn(scope)
-    return Promise.resolve([...this.rows].filter(([ckey]) => isBox(ckey)).map(([, row]) => row))
+    const listed = [...this.rows].filter(([ckey]) => isBox(ckey)).map(([ckey, row]) => ({ boxlabel: Ckeys.boxlabelOf(ckey), lockbox: row }))
+    return Promise.resolve(listed.filter((stored): stored is StoredLockbox => stored.boxlabel !== null))
   }
 
   protected doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation) {
@@ -120,11 +121,24 @@ describe("localVaultDB", () => {
     store.write(u1BoxCkey('openai'), notelessRow)
     const vaultDB = localVaultDB(store)
     const summaries = await vaultDB.listBoxes(TH.scopeOf('u1'))
-    expect(summaries.map((summary) => summary.note)).to.deep.equal(['a test box', null])
+    expect(summaries.map((box) => TH.summaryOf(box)?.note)).to.deep.equal(['a test box', null])
     const prev = await vaultDB.readBox(TH.scopeOf('u1'), 'openai')
     expect(prev).to.deep.equal(noteless)
     await vaultDB.updateBox(TH.scopeOf('u1'), noteless, { vault_id: 'vault-id-u1', revision_id: 'rev-two' })
     expect(store.read(u1BoxCkey('openai'))).to.eq(notelessRow)
+  })
+
+  it("lists a row that is not JSON as damaged, under the boxlabel it is stored under, beside the sound ones", async () => {
+    const store = memoryStore()
+    const scope = TH.scopeOf('u1')
+    store.write(Ckeys.bundle(scope), JSON.stringify(TH.bundleOf('u1')))
+    store.write(Ckeys.box(scope, 'openai'), JSON.stringify(TH.boxOf('openai', 'two')))
+    store.write(Ckeys.box(scope, 'anthropic'), '{"not": json')
+    const listed = await localVaultDB(store).listBoxes(scope)
+    expect(listed[0]).to.deep.equal({ boxlabel: 'anthropic', damaged: true })
+    expect(listed[1]).to.include({ boxlabel: 'openai', revision_id: 'rev-two', damaged: false })
+    // Listed, never repaired: the row is still there for forensics.
+    expect(store.read(Ckeys.box(scope, 'anthropic'))).to.eq('{"not": json')
   })
 
   it("stores each record as its JSON, under the JSON of its kind and scope", async () => {
@@ -177,6 +191,20 @@ describe("localVaultDB", () => {
   })
 })
 
+/** Records an adapter may hand up from its listing, under the boxlabel each is stored under, and how each lists. */
+const ListedRecordCases = [
+  // sound:
+  ["anthropic",  TH.boxOf('anthropic', 'one'),                               [["anthropic", false]],  'a sound lockbox as its summary'],
+  // damaged, listed so they can be erased:
+  ["anthropic",  TH.boxOf('other_box', 'one'),                               [["anthropic", true]],   'a record naming another boxlabel as damaged, under the one it is stored under'],
+  ["anthropic",  { ...TH.boxOf('anthropic', 'one'), changed_at: 'later' },   [["anthropic", true]],   'a record with a malformed time as damaged'],
+  ["anthropic",  { ...TH.boxOf('anthropic', 'one'), note: 'n'.repeat(257) }, [["anthropic", true]],   'a record with an overlong note as damaged'],
+  ["anthropic",  null,                                                       [["anthropic", true]],   'a null record as damaged'],
+  ["anthropic",  'not a lockbox',                                            [["anthropic", true]],   'a record that is not an object as damaged'],
+  // unreachable by any verb, so left out:
+  ["Anthropic",  TH.boxOf('anthropic', 'one'),                               [],                      'nothing for a record stored under what is not a boxlabel'],
+] as const
+
 describe("the abstract VaultDB, around an adapter's half", () => {
   it("validates what the adapter returns: a wrong-shaped record is refused, not repaired", async () => {
     const vaultDB = new MapVaultDB()
@@ -190,19 +218,29 @@ describe("the abstract VaultDB, around an adapter's half", () => {
   it("lists a lockbox an earlier version kept with an undefined note, as IndexedDB does, with a null note", async () => {
     const vaultDB = new MapVaultDB()
     vaultDB.rows.set(Ckeys.box(TH.scopeOf('u1'), 'anthropic'), { ...TH.boxOf('anthropic', 'one'), note: undefined })
-    const [summary] = await vaultDB.listBoxes(TH.scopeOf('u1'))
+    const [listed] = await vaultDB.listBoxes(TH.scopeOf('u1'))
+    const summary = TH.summaryOf(listed)
     expect(summary).to.have.property('note')
     expect(summary?.note).to.be.null
   })
+
+  for (const [boxlabel, record, expected, blurb] of ListedRecordCases) {
+    it(`lists ${blurb}`, async () => {
+      const vaultDB = new MapVaultDB()
+      vaultDB.rows.set(Ckeys.box(TH.scopeOf('u1'), boxlabel), record)
+      const listed = await vaultDB.listBoxes(TH.scopeOf('u1'))
+      expect(listed.map((box) => [box.boxlabel, box.damaged])).to.deep.equal(expected)
+    })
+  }
 
   it("accepts a listing projected server-side, without ciphered fields, so long as it keeps format", async () => {
     const vaultDB = new MapVaultDB()
     const projected = omit(TH.boxOf('anthropic', 'one'), ['lockbox_key_wrapped', 'whisper_ciphered'])
     vaultDB.rows.set(Ckeys.box(TH.scopeOf('u1'), 'anthropic'), projected)
     const summaries = await vaultDB.listBoxes(TH.scopeOf('u1'))
-    expect(summaries[0]?.revision_id).to.eq('rev-one')
+    expect(TH.summaryOf(summaries[0])?.revision_id).to.eq('rev-one')
     vaultDB.rows.set(Ckeys.box(TH.scopeOf('u1'), 'anthropic'), omit(projected, ['format']))
-    await expect(vaultDB.listBoxes(TH.scopeOf('u1'))).rejects.toThrow(/did not read back in a shape/)
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.deep.equal([{ boxlabel: 'anthropic', damaged: true }])
   })
 
   it("turns an adapter's own failure into kind 'storage_unavailable', keeping it as the cause", async () => {
@@ -356,17 +394,19 @@ describe("the abstract VaultDB, with the vault's validators", () => {
     expect(vaultDB.rows.size).to.eq(0)
   })
 
-  it("refuses, as 'corrupt_record', a stored lockbox whose boxlabel or note the validators refuse, read or listed", async () => {
+  it("refuses, as 'corrupt_record', a stored lockbox whose note the validators refuse when read, and lists it as damaged", async () => {
     const vaultDB = new MapVaultDB()
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { note: 'n'.repeat(500) }), TH.noBoxYet, AnyScript)
-    await TH.expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'anthropic'), 'corrupt_record')
-    const err = await TH.expectRefusal(vaultDB.listBoxes(TH.scopeOf('u1')), 'corrupt_record')
+    const err = await TH.expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'anthropic'), 'corrupt_record')
     expect(err.message).to.include('validators')
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.deep.equal([{ boxlabel: 'anthropic', damaged: true }])
     // AnyScript admits that note, but no empty boxlabel.
-    expect(await vaultDB.listBoxes(TH.scopeOf('u1'), AnyScript)).to.have.lengthOf(1)
+    const [admitted] = await vaultDB.listBoxes(TH.scopeOf('u1'), AnyScript)
+    expect(TH.summaryOf(admitted)?.note).to.have.lengthOf(500)
     vaultDB.rows.set(Ckeys.box(TH.scopeOf('u1'), ''), TH.boxOf('', 'two'))
-    await TH.expectRefusal(vaultDB.listBoxes(TH.scopeOf('u1'), AnyScript), 'corrupt_record')
+    const listed = await vaultDB.listBoxes(TH.scopeOf('u1'), AnyScript)
+    expect(listed.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
   })
 
   it("refuses, as 'bad_option', a lockbox whose note the validators refuse, writing nothing", async () => {

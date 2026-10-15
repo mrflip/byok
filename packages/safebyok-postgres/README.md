@@ -164,7 +164,10 @@ export class RouteVaultDB extends VaultDB {
     return true
   }
   protected doReadBox(scope: VaultScope, boxlabel: string) { return this.call('readBox', scope, boxlabel) }
-  protected async doListBoxes(scope: VaultScope) { return await this.call('listBoxes', scope) as unknown[] }
+  protected async doListBoxes(scope: VaultScope) {
+    const lockboxes = await this.call('listBoxes', scope) as { boxlabel: string }[]
+    return lockboxes.map((lockbox) => ({ boxlabel: lockbox.boxlabel, lockbox }))
+  }
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation) {
     await this.call('updateBox', scope, lockbox, expected)
     return true

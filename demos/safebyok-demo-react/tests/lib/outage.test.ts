@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isVaultError, localVaultDB, memoryStore } from 'safebyok'
+import { Ckeys, isVaultError, localVaultDB, memoryStore } from 'safebyok'
 import * as TH from 'safebyok/testing'
 import { OutageVaultDB, makeOutage } from '../../src/lib/outage'
 
@@ -39,6 +39,21 @@ describe("makeOutage", () => {
 
 // While the switch is up, it is an adapter like any other, and owes the suite every adapter owes.
 TH.describeVaultDB('OutageVaultDB, while up', () => new OutageVaultDB(localVaultDB(memoryStore()), makeOutage()))
+
+describe("OutageVaultDB, while up", () => {
+  it("lists a lockbox its inner adapter finds damaged as damaged, and the sound ones as they are", async () => {
+    const store = memoryStore()
+    const vaultDB = new OutageVaultDB(localVaultDB(store), makeOutage())
+    await vaultDB.createBundle(bundle)
+    await vaultDB.updateBox(scope, TH.boxOf('openai', 'two'), TH.noBoxYet)
+    store.write(Ckeys.box(TH.scopeOf('u1'), 'anthropic'), '{"not": json')
+    // missing its whisper: the inner list finds it sound, and only a whole read finds it damaged
+    const { whisper_ciphered: _gone, ...whisperless } = TH.boxOf('cohere', 'three')
+    store.write(Ckeys.box(TH.scopeOf('u1'), 'cohere'), JSON.stringify(whisperless))
+    const listed = await vaultDB.listBoxes(scope)
+    expect(listed.map((box) => [box.boxlabel, box.damaged])).to.deep.equal([['anthropic', true], ['cohere', true], ['openai', false]])
+  })
+})
 
 // Each refusal is checked against the host's own copy of the package too: the provider branches
 // on isVaultError, which goes by class.

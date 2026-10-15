@@ -2,7 +2,7 @@ import { getFunctionName } from 'convex/server'
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
 import { ConvexError } from 'convex/values'
 import { VaultDB, VaultError } from 'safebyok'
-import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultScope } from 'safebyok'
+import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, StoredLockbox, VaultBundle, VaultScope } from 'safebyok'
 import type { Infer } from 'convex/values'
 import { MaxVaultLockboxes } from './component/tallies'
 import type { Lockbox as LockboxRecord } from './component/validators'
@@ -124,8 +124,10 @@ class ConvexVaultDB extends VaultDB {
     return refusing(() => this.client.query(this.api.getBox, { scope, boxlabel }))
   }
 
-  protected doListBoxes(scope: VaultScope): Promise<unknown[]> {
-    return refusing(() => this.client.query(this.api.listBoxSummaries, { scope }))
+  // Each row is stored under its own boxlabel column, so that is the boxlabel it is listed under.
+  protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
+    const rows = await refusing(() => this.client.query(this.api.listBoxSummaries, { scope }))
+    return rows.map((row) => ({ boxlabel: row.boxlabel, lockbox: row }))
   }
 
   protected doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {

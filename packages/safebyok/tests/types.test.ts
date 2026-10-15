@@ -168,9 +168,10 @@ describe("LockboxSummary", () => {
     expect(LockboxSummary.safeParse({ ...notelessSummary, note: 42 }).success).to.be.false
   })
 
-  it("strips the two ciphered fields and the format from a whole lockbox", () => {
+  it("strips the two ciphered fields and the format from a whole lockbox, and marks it undamaged", () => {
     const summary = LockboxSummary.parse(TH.boxOf('anthropic_api_key', 'a1'))
-    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'registered_at', 'changed_at'])
+    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'registered_at', 'changed_at', 'damaged'])
+    expect(summary.damaged).to.be.false
   })
 })
 

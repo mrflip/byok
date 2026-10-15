@@ -1,4 +1,4 @@
-import { AnyTextValidators, VaultDB, VaultError, type BundleExpectation, type EraseExpectation, type Lockbox, type LockboxExpectation, type VaultBundle, type VaultScope } from 'safebyok'
+import { AnyTextValidators, VaultDB, VaultError, isVaultError, type BundleExpectation, type EraseExpectation, type Lockbox, type LockboxExpectation, type StoredLockbox, type VaultBundle, type VaultScope } from 'safebyok'
 
 /**
  * DEMO JANK: a pretend backend outage, switched on and off from the backend inspection panel, so
@@ -94,12 +94,22 @@ export class OutageVaultDB extends VaultDB {
 
   // The inner list hands back public summaries, without the `format` this adapter's own list
   // verb checks for, so each lockbox is read whole; one erased between the list and its read is
-  // simply gone.
-  protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
+  // simply gone. One the inner verbs refuse as damaged goes up as a stand-in that no lockbox
+  // matches, so this adapter's own list marks it damaged too.
+  protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
     this.refuseWhileDown()
-    const summaries = await this.inner.listBoxes(scope, AnyTextValidators)
-    const lockboxes = await Promise.all(summaries.map((summary) => this.inner.readBox(scope, summary.boxlabel, AnyTextValidators)))
-    return lockboxes.filter((lockbox) => lockbox !== null)
+    const listed = await this.inner.listBoxes(scope, AnyTextValidators)
+    const stored = await Promise.all(listed.map(async ({ boxlabel }) => ({ boxlabel, lockbox: await this.wholeOrDamaged(scope, boxlabel) })))
+    return stored.filter(({ lockbox }) => lockbox !== null)
+  }
+
+  private async wholeOrDamaged(scope: VaultScope, boxlabel: string): Promise<unknown> {
+    try {
+      return await this.inner.readBox(scope, boxlabel, AnyTextValidators)
+    } catch (err) {
+      if (! isVaultError(err, 'corrupt_record')) { throw err }
+      return 'damaged'
+    }
   }
 
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
