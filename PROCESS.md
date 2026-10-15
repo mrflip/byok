@@ -121,13 +121,14 @@ numbers and the CHANGELOGs; `.github/workflows/release.yml` does the rest.
   of it. Private packages and demos are never versioned or released. Until 1.0, a minor bump may
   break the public surface, and its changeset says how. Between releases, main's version is the
   last one released: the next is not knowable until release time.
-* **The Version PR**, "Version the packages for release", is rebuilt from main's tip by every push
-  to main while changesets wait: the bumps, the CHANGELOG entries and the spent changesets, as one
-  `rel:` commit. It is the bot's: nobody rebases, edits or merges it but the Coach. The release
+* **The Version PR**, named for the release it makes ("Release 0.2.0: safebyok, ..."), is rebuilt
+  from main's tip by every push to main while changesets wait: the bumps, the CHANGELOG entries
+  and the spent changesets, as one `rel:` commit named the same way. It is the bot's: nobody rebases, edits or merges it but the Coach. The release
   workflow writes it with the repository's GitHub App, so CI runs on it as on any PR.
 * **Merging it is the release.** `release.yml` then checks the lockstep group, runs
   `pnpm justify`, packs each package whose version npm lacks, stages each tarball, and tags each
-  package staged (`safebyok@0.2.0`) with a GitHub release from its CHANGELOG. A prerelease
+  package staged (`safebyok@0.2.0`) with a GitHub release from its CHANGELOG, the core's marked
+  the repository's latest. A prerelease
   version goes out under the `next` dist-tag; `pnpm changeset pre enter beta` starts prereleases
   and `pnpm changeset pre exit` ends them.
 * **Staged, not published.** The workflow's npm trusted publisher may only `npm stage publish`.
