@@ -381,6 +381,16 @@ the validation is replaceable** -- a default check (a length cap, no control cha
 whatever the ckey stringifier above needs) that a host can swap for its own auth provider's id
 shape. Same seam family as the label validator; decide them together.
 
+### A lockbox row that breaks the listing locks the vault out
+
+Found by [#87](https://github.com/mrflip/safebyok/pull/87)'s review: a stored lockbox row that
+fails the listing's check (not JSON, a malformed note or timestamp) makes `listBoxes`, so every
+`refresh()` and every `openVault`, throw `corrupt_record`. With no handle, neither `erase()` nor
+`destroy()` can reach it; the only way back is clearing storage by hand. Decide: should the
+listing skip a bad row, or list it marked as damaged so `erase()` can remove it (and the snapshot
+can show it)? Either way, `erase()` should not report `corrupt_record` after its own delete has
+landed because a different box broke the refresh that follows.
+
 ### A conflict-handler hook
 
 Ruled "with the retry work": a way for a host to hear about an erase-versus-update collision

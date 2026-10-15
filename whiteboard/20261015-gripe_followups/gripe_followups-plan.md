@@ -6,7 +6,7 @@
 * **At once**: 2 threads
 * **Issued by**: flip (the Coach), answering the open questions gripe_fixes left
   (`human/20261015-sprint_gripe_fixes_done.md`, on `main` since #82)
-* **Status**: threads 1 and 2 underway
+* **Status**: done -- one merge line main → #87 → #85 → #83; see `human/20261015-sprint_gripe_followups_done.md`
 
 ## Read first
 
@@ -81,7 +81,7 @@ default this design would let a host replace.
 
 ## Merge line
 
-At wrap-up: main → #(1) → #(2) → the sprint PR (squashed, on top).
+main → [#87](https://github.com/mrflip/safebyok/pull/87) (thread 1) → [#85](https://github.com/mrflip/safebyok/pull/85) (thread 2) → [#83](https://github.com/mrflip/safebyok/pull/83), the sprint PR, squashed on top.
 
 ## For the Coach
 
