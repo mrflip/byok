@@ -455,7 +455,7 @@ const jsonOrPlaceholder = (val: unknown): string => {
  * VaultDB from the built package (`safebyok`) qualifies as readily as one extending `src/`.
  */
 export type VaultDBVerbs = Pick<VaultDB,
-  'maxRecordBytes' | 'maxVaultBytes' | 'readBundle' | 'createBundle' | 'updateBundle' | 'readBox' | 'listBoxes' | 'updateBox' | 'eraseBox' | 'eraseVault' | 'subscribe'
+  'maxRecordBytes' | 'maxVaultBytes' | 'maxLockboxes' | 'readBundle' | 'createBundle' | 'updateBundle' | 'readBox' | 'listBoxes' | 'updateBox' | 'eraseBox' | 'eraseVault' | 'subscribe'
 >
 
 /**
@@ -741,6 +741,7 @@ export const perUser = (vaultDBFor: (userId: string) => VaultDBVerbs): VaultDBVe
   return {
     maxRecordBytes: anyone.maxRecordBytes,
     maxVaultBytes:  anyone.maxVaultBytes,
+    maxLockboxes:   anyone.maxLockboxes,
     readBundle:     (scope) => as(scope).readBundle(scope),
     createBundle:   (bundle) => as(bundle).createBundle(bundle),
     updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),

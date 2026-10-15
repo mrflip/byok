@@ -408,6 +408,7 @@ const servingOnly = (userId: string, store: StringStore): TH.VaultDBVerbs => {
   return {
     maxRecordBytes: shared.maxRecordBytes,
     maxVaultBytes:  shared.maxVaultBytes,
+    maxLockboxes:   shared.maxLockboxes,
     readBundle:     async (scope) => { permitted(scope); return await shared.readBundle(scope) },
     createBundle:   async (bundle) => { permitted(bundle); return await shared.createBundle(bundle) },
     updateBundle:   async (bundle, expected) => { permitted(bundle); await shared.updateBundle(bundle, expected) },
@@ -448,7 +449,7 @@ describe("perUser", () => {
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.createBundle(TH.bundleOf('u2'))
     await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
-    await vaultDB.updateBundle({ ...TH.bundleOf('u2'), passphrase_epoch: 2 }, { vault_id: 'vault-id-u2', passphrase_epoch: 1 })
+    await vaultDB.updateBundle({ ...TH.bundleOf('u2'), unlock_epoch: 2 }, { vault_id: 'vault-id-u2', unlock_epoch: 1 })
     vaultDB.subscribe(TH.scopeOf('u2'), () => undefined)()
     await vaultDB.eraseBox(TH.scopeOf('u2'), 'anthropic', { vault_id: 'vault-id-u2' })
     expect(await servingOnly('u2', store).listBoxes(TH.scopeOf('u2'))).to.have.lengthOf(0)
@@ -472,8 +473,9 @@ describe("perUser", () => {
       ...servingOnly(userId, store),
       maxRecordBytes: userId === 'anyone' ? 4096 : 1,
       maxVaultBytes:  userId === 'anyone' ? 65_536 : 1,
+      maxLockboxes:   userId === 'anyone' ? 250 : 1,
     })
-    expect(TH.perUser(limitedBy)).to.include({ maxRecordBytes: 4096, maxVaultBytes: 65_536 })
+    expect(TH.perUser(limitedBy)).to.include({ maxRecordBytes: 4096, maxVaultBytes: 65_536, maxLockboxes: 250 })
   })
 
   it("passes on a refusal from the user's VaultDB", async () => {
