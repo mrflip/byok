@@ -11,7 +11,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 2 | vaultdb_validation | #66 tip `dfdbbec`     | in review |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
 | 4 | ci_tooling         | #66 tip `5fefc90`     | underway |
-| 5 | docs_refresh       | #66 tip `5fefc90`     | underway |
+| 5 | docs_refresh       | #66 tip `5fefc90`     | filing (no review: documents only) |
 | 6 | thin_tests         | #66 tip `dfdbbec`     | pending |
 | 7 | test_helpers       | thread 6's tip        | pending |
 | 8 | comment_width      | #66 tip, after 1-7    | pending |
@@ -63,3 +63,9 @@ that client** rather than on Zod letting a field through.
 (#68) takes it to 16.19 and thread 2 to 16.27, each from 15.9. Together they likely pass 16.5, so
 whichever merges second will fail `pnpm size` in CI and needs either a raised budget (the Coach's
 word) or a trim. Thread 8 and anything else touching `vault.ts` should not add to the bundle.
+
+*Orchestrator:* thread 5, docs_refresh, is `ready` and goes straight to filing: its diff is
+`notes/security.md`, `VOCABULARY.md` and two reworded comments in `vault.ts`, so no thread review.
+It added a "Names, records and times" section to VOCABULARY and removed the `whisperSchemaVersion`
+row (nothing exports or stores it). **Thread 8**: VOCABULARY's table rows run past 100 columns and
+cannot wrap -- the comment-width rule must leave Markdown alone (it is about source comments).
