@@ -120,7 +120,8 @@ export type Vault = {
    * The write lands only if storage still holds what this device last read: the same vault, and
    * the same revision of this lockbox (or still none). When another device got in first, the
    * store catches up with storage and tries again, over what that device wrote -- the last
-   * writer wins -- for three attempts in all. Only after the third is refused does the call throw
+   * writer wins -- for three attempts in all. A box that stood when the store began and is gone
+   * on the retry was erased elsewhere, and an erase wins: that throws kind 'stale_write' at once. Only after the third is refused does the call throw
    * kind 'stale_write', the snapshot showing the box as it now stands. A retry that finds the vault
    * destroyed or made anew elsewhere, or its passphrase changed, finds this device relocked
    * instead, and throws kind 'vault_locked' without writing: a stale session never writes into a
@@ -498,11 +499,16 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       }
       // Each attempt reads the box afresh and seals the whisper anew, under a lockboxKey and a
       // revision of its own; only the write that follows is ever repeated.
-      await retryStale(async () => {
+      let boxStood = false
+      const outcome = await retryStale(async () => {
         // A refusal as stale has just caught this device up with storage, which may have relocked
         // it (a vault reborn, or its passphrase changed, elsewhere): then the retry ends here.
         ensureUnlocked()
         const prev = await vaultDB.readBox(scope, label)
+        // Erase wins: a box this store began over, and now finds gone, was erased elsewhere, and
+        // a retry would silently undo that. The erase is already in the snapshot.
+        if (prev === null && boxStood) { return 'erased' }
+        boxStood ||= prev !== null
         if (prev === null) { await ensureRoomFor(label) }
         // The key and the vault it belongs to, taken together after the last look at storage.
         const unlockedKey = ensureUnlocked()
@@ -526,7 +532,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
           updated_at:          now,
         }
         await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected))
+        return 'written'
       })
+      if (outcome === 'erased') {
+        throw new VaultError('stale_write', 'That lockbox was erased on another device while this one was storing into it, so nothing was written: an erase wins. Store it again if it should exist after all.')
+      }
       await refresh()
     },
 
@@ -614,12 +624,12 @@ const MaxWriteAttempts = 3
  * in all; any other refusal, and the last stale one, is thrown as it came. The attempt must do its
  * own reading, for each try to be made from what storage holds now.
  */
-const retryStale = async (attempt: () => Promise<void>, attemptsLeft = MaxWriteAttempts): Promise<void> => {
+const retryStale = async <ResultT>(attempt: () => Promise<ResultT>, attemptsLeft = MaxWriteAttempts): Promise<ResultT> => {
   try {
-    await attempt()
+    return await attempt()
   } catch (err) {
     if (attemptsLeft <= 1 || ! isVaultError(err, 'stale_write')) { throw err }
-    await retryStale(attempt, attemptsLeft - 1)
+    return await retryStale(attempt, attemptsLeft - 1)
   }
 }
 

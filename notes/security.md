@@ -192,4 +192,5 @@ security expert who knows what questions to ask.
   binding. The retry's first act is to require unlocked, so a refusal that caught the device up
   with a vault reborn elsewhere (or a changed passphrase) relocks it and ends the retry as
   `vault_locked` before any whisper is sealed for the new vault. A retry overwrites what the
-  other device wrote (last writer wins), as a host's own retry did; `erase()` is never retried.
+  other device wrote (last writer wins), as a host's own retry did, except that a box erased
+  elsewhere is not brought back (an erase wins: `stale_write` at once); `erase()` is never retried.
