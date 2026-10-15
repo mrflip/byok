@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest'
 import { getDocumentSize } from 'convex/values'
 import type { Id } from '../../src/component/_generated/dataModel'
 import { MaxVaultLockboxBytes, MaxVaultLockboxes, refuses, weigh } from '../../src/component/tallies'
-import { boxOf, componentTest, scopeOf } from '../helpers'
+import { boxOf, scopeOf } from 'safebyok/testing'
+import { componentTest } from '../helpers'
 
 const MiB = 1024 * 1024
 
