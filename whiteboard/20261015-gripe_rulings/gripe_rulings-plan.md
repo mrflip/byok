@@ -138,6 +138,10 @@ in `vault-db.ts` and `vault.ts`, resolved by its worker at the restack.
   without RTF now throws to the host's error boundary, as before the thread.) The plan's guard was the
   orchestrator's addition, not the Coach's. Also: "Locks on this device in ..." when creating a
   vault, "Locks again ..." on an ordinary unlock.
+* **Thread 3 sweeps old unlock rows** (flagged review of #92): after the ckey change an old
+  `unlock:…` row, holding the localUnlockKey handle and the vaultKey wrapped under it, would
+  outlive `lock()`. CLAUDE.md asks an old record to fail safe; deleting non-tuple rows on the
+  device shelf at the first `readUnlock` reads nothing old, so it is a fail-safe, not a migration.
 
 ## For the Coach
 
