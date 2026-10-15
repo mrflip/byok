@@ -120,19 +120,19 @@ describe("PassphraseModal", () => {
   describe("how long it says an unlock lasts", () => {
     const WindowCases = [
       // regular usage:
-      [undefined,         'Stays unlocked on this device for 7 days.',         'the default window is seven days'],
-      [24,                'Stays unlocked on this device for 1 day.',          'one day is singular'],
-      [72,                'Stays unlocked on this device for 3 days.',         'whole days read as days'],
-      [8,                 'Stays unlocked on this device for 8 hours.',        'hours that do not make a day read as hours'],
-      [1,                 'Stays unlocked on this device for 1 hour.',         'one hour is singular'],
-      [36,                'Stays unlocked on this device for 36 hours.',       'a day and a half reads as hours'],
-      [0.25,              'Stays unlocked on this device for 15 minutes.',     'a fraction of an hour reads as minutes'],
-      [Infinity,          'Stays unlocked on this device until you lock it.',  'Infinity means until locked'],
+      [undefined,         "Stays unlocked on this device for 7 days.",         'the default window is seven days'],
+      [24,                "Stays unlocked on this device for 1 day.",          'one day is singular'],
+      [72,                "Stays unlocked on this device for 3 days.",         'whole days read as days'],
+      [8,                 "Stays unlocked on this device for 8 hours.",        'hours that do not make a day read as hours'],
+      [1,                 "Stays unlocked on this device for 1 hour.",         'one hour is singular'],
+      [36,                "Stays unlocked on this device for 36 hours.",       'a day and a half reads as hours'],
+      [0.25,              "Stays unlocked on this device for 15 minutes.",     'a fraction of an hour reads as minutes'],
+      [Infinity,          "Stays unlocked on this device until you lock it.",  'Infinity means until locked'],
       // edge cases:
-      [1 / 60,            'Stays unlocked on this device for 1 minute.',       'one minute is singular'],
-      [0.0001,            'Stays unlocked on this device for 1 minute.',       'a window under a minute rounds up to one'],
-      [1.5,               'Stays unlocked on this device for 90 minutes.',     'an hour and a half reads as minutes'],
-      [1e9,               'Stays unlocked on this device until you lock it.',  'a window longer than the vault can count means until locked'],
+      [1 / 60,            "Stays unlocked on this device for 1 minute.",       'one minute is singular'],
+      [0.0001,            "Stays unlocked on this device for 1 minute.",       'a window under a minute rounds up to one'],
+      [1.5,               "Stays unlocked on this device for 90 minutes.",     'an hour and a half reads as minutes'],
+      [1e9,               "Stays unlocked on this device until you lock it.",  'a window longer than the vault can count means until locked'],
     ] as const
 
     for (const [hours, expected, blurb] of WindowCases) {
