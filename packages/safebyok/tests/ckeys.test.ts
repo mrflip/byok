@@ -115,6 +115,30 @@ describe("Ckeys, over every split of one awkward string", () => {
   })
 })
 
+describe("Ckeys.boxlabelOf", () => {
+  it("reads the boxlabel back from a lockbox's ckey, whatever text it holds", () => {
+    expect(Ckeys.boxlabelOf(Ckeys.box(u1, 'anthropic'))).to.eq('anthropic')
+    expect(Ckeys.boxlabelOf(Ckeys.box(u1, ''))).to.eq('')
+    expect(Ckeys.boxlabelOf(Ckeys.box(u1, 'OpenAI: "work", [1]\n\u{D800}'))).to.eq('OpenAI: "work", [1]\n\u{D800}')
+  })
+
+  const Unreachable = [
+    ['["box","acme","u1","main",',               'text that is not JSON'],
+    ['["box","acme","u1","main"]',               'a tuple too short'],
+    ['["box","acme","u1","main","x","y"]',       'a tuple too long'],
+    ['["box","acme","u1","main",42]',            'a boxlabel that is not text'],
+    ['["unlock","acme","u1","main","x"]',        'another kind'],
+    ['["box","acme","u1","main", "x"]',          'a space box() never writes'],
+    [String.raw`["box","acme","u1","main","\u0078"]`, 'an escape box() never writes'],
+    ['{"box":"x"}',                              'an object'],
+  ] as const
+  for (const [ckey, blurb] of Unreachable) {
+    it(`gives null, never throwing, for ${blurb}`, () => {
+      expect(Ckeys.boxlabelOf(ckey)).to.be.null
+    })
+  }
+})
+
 describe("Ckeys.isUnlock", () => {
   it("knows an unlock's ckey, for any scope", () => {
     expect(Ckeys.isUnlock(Ckeys.unlock(u1))).to.be.true

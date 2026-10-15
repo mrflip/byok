@@ -62,15 +62,18 @@ export const isBoxIn = (scope: VaultScope): ((ckey: unknown) => ckey is string) 
 
 /**
  * The boxlabel a lockbox's ckey files it under: the last element of its tuple. For a ckey
- * {@link isBoxIn} accepts; null for one whose text is not a lockbox's tuple after all, which no
- * boxlabel can reach.
+ * {@link isBoxIn} accepts; null for any text {@link box} would not give -- not a lockbox's tuple
+ * after all, or that tuple spelled another way (a space, an escape) -- which no boxlabel reaches.
  *
  * @example boxlabelOf(box(scope, 'anthropic'))  // 'anthropic'
  */
 export const boxlabelOf = (ckey: string): string | null => {
   const parts = decode(ckey)
-  const boxlabel = Array.isArray(parts) && parts.length === 5 ? parts[4] as unknown : null
-  return typeof boxlabel === 'string' ? boxlabel : null
+  if (! Array.isArray(parts)) { return null }
+  const tuple: unknown[] = parts
+  const isBoxTuple = tuple.length === 5 && tuple[0] === 'box' && tuple.every((part): part is string => typeof part === 'string')
+  // Only the very text box() gives is read back by a verb that asks for the boxlabel.
+  return isBoxTuple && encode(tuple) === ckey ? tuple[4] ?? null : null
 }
 
 /**
