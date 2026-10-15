@@ -150,6 +150,8 @@ describe("VaultProvider", () => {
   })
 
   it("passes every openVault option through, as given", async () => {
+    // A fixed instant the vault accepts as a time: after 1981, before FarFuture.
+    const ClockMs = Date.UTC(2026, 9, 15)
     const seen: { vault: Vault | null } = { vault: null }
     const Grab = () => {
       const { vault } = useVault()
@@ -158,7 +160,7 @@ describe("VaultProvider", () => {
     }
     render(
       <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())} deviceDB={memoryDeviceDB()}
-        keyDeriver={testDeriver} clock={{ now: () => 1000 }} forcePassphraseReentryHours={1} maxWhisperBytes={8} maxLockboxes={1}>
+        keyDeriver={testDeriver} clock={{ now: () => ClockMs }} forcePassphraseReentryHours={1} maxWhisperBytes={8} maxLockboxes={1}>
         <Grab />
       </VaultProvider>,
     )
@@ -167,8 +169,8 @@ describe("VaultProvider", () => {
     if (vault === null) { throw new Error('the provider opened no vault') }
 
     await vault.unlock('correct horse battery staple')
-    // One hour, 3,600,000 ms, after the clock's 1000.
-    expect(vault.getSnapshot().askPassphraseAt).to.eq(3_601_000)
+    // One hour, 3,600,000 ms, after the clock's time.
+    expect(vault.getSnapshot().askPassphraseAt).to.eq(ClockMs + 3_600_000)
     // 'sk-fake' is nine bytes of JSON, one over the limit given.
     let refusal: unknown = null
     try {
