@@ -23,8 +23,8 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 ## What the threads have taught
 
 * *Orchestrator:* **`pnpm changeset` names files at random on main.** PROCESS.md's
-  `.changeset/YYYYMMDD-<label>.md` naming comes from `scripts/changeset.ts`, which is not on
-  main yet (it is uncommitted work in the main checkout). Rename yours by hand to
+  `.changeset/YYYYMMDD-<label>.md` naming comes from `scripts/changeset.ts`, which arrives with
+  [#30](https://github.com/mrflip/safebyok/pull/30). Rename yours by hand to
   `.changeset/20261015-<label>.md` so the PRs match the rule that is coming.
 * *Orchestrator:* **Thread 4** found almost nothing to change outside the stored fields: the demo's
   account `created_at` and one test clock. `DeviceUnlock.expires_at` and `expiresAt` were
