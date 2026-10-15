@@ -3,11 +3,12 @@ import { defineTestApp } from 'convex-test'
 import { defineSchema } from 'convex/server'
 import { v } from 'convex/values'
 import type { GenericValidator, Infer } from 'convex/values'
-import type { BundleExpectation as CoreBundleExpectation, LockboxExpectation as CoreLockboxExpectation, LockboxSummary } from 'safebyok'
-import * as Records from '../../../../src/types'
-import { Ciphered as CoreCiphered } from '../../../../src/crypto'
+import * as Records from 'safebyok'
+import type {
+  BundleExpectation as CoreBundleExpectation, EraseExpectation as CoreEraseExpectation, LockboxExpectation as CoreLockboxExpectation, LockboxSummary,
+} from 'safebyok'
 import {
-  BundleExpectation, Ciphered, ListedLockbox, Lockbox, LockboxExpectation, VaultBundle, VaultScope,
+  BundleExpectation, Ciphered, EraseExpectation, ListedLockbox, Lockbox, LockboxExpectation, VaultBundle, VaultScope,
 } from '../../src/component/validators'
 import { boxOf, bundleOf } from '../helpers'
 
@@ -61,7 +62,7 @@ const convexShape = (validator: GenericValidator): Shape => {
 const listedZod = Records.Lockbox.omit({ lockbox_key_wrapped: true, whisper_ciphered: true })
 
 const ShapeCases = [
-  [CoreCiphered,         Ciphered,      'Ciphered: the shared encrypted-value shape'],
+  [Records.Ciphered,     Ciphered,      'Ciphered: the shared encrypted-value shape'],
   [Records.VaultScope,   VaultScope,    'VaultScope: what names one vault'],
   [Records.VaultBundle,  VaultBundle,   'VaultBundle: every field, ciphered envelope nested'],
   [Records.Lockbox,      Lockbox,       'Lockbox: every field, note optional, both ciphered fields nested'],
@@ -83,6 +84,7 @@ describe("the Convex validators, field for field with the core's Zod records", (
     expectTypeOf<Omit<Infer<typeof ListedLockbox>, 'format'>>().toMatchTypeOf<LockboxSummary>()
     expectTypeOf<Infer<typeof BundleExpectation>>().toEqualTypeOf<CoreBundleExpectation>()
     expectTypeOf<Infer<typeof LockboxExpectation>>().toEqualTypeOf<CoreLockboxExpectation>()
+    expectTypeOf<Infer<typeof EraseExpectation>>().toEqualTypeOf<CoreEraseExpectation>()
   })
 })
 

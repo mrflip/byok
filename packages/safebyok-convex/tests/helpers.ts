@@ -1,13 +1,12 @@
 import { anyApi } from 'convex/server'
 import { convexTest } from 'convex-test'
-import { localVaultDB, memoryDeviceDB, memoryStore, openVault } from 'safebyok'
-import type { Lockbox, StringStore, VaultBundle, VaultScope, Whisper } from 'safebyok'
+import { Lockbox, VaultBundle, localVaultDB, memoryDeviceDB, memoryStore, openVault } from 'safebyok'
+import type { StringStore, VaultScope, Whisper } from 'safebyok'
 import type { ComponentApi } from '../src/component-api'
 import { modules, schema } from '../src/test'
-// From the core by relative path, as no public export offers them: its cheap test deriver (one
-// SHA-256 in place of Argon2id), and the Zod records (`safebyok` exports VaultBundle as a type only).
+// The core's cheap test deriver, by relative path (it is test-only, not public): one SHA-256 in
+// place of Argon2id.
 import { testDeriver } from '../../../tests/helpers'
-import * as Records from '../../../src/types'
 
 /** The component's functions, called directly as a root app's: no host wrapper, no auth. */
 export const vaults = anyApi.vaults as unknown as ComponentApi['vaults']
@@ -76,13 +75,13 @@ export const realRecords = async (userId = 'u1') => {
   }
   vault.close()
   const rows = store.ckeys().map((ckey) => ({ ckey, record: JSON.parse(store.read(ckey) ?? 'null') as unknown }))
-  const bundleRow = rows.find((row) => Records.VaultBundle.safeParse(row.record).success)
+  const bundleRow = rows.find((row) => VaultBundle.safeParse(row.record).success)
   if (! bundleRow) { throw new Error('the core stored no bundle') }
   return {
     bundleCkey: bundleRow.ckey,
-    bundle:     Records.VaultBundle.parse(bundleRow.record),
+    bundle:     VaultBundle.parse(bundleRow.record),
     boxes:      rows.flatMap((row) => {
-      const checked = Records.Lockbox.safeParse(row.record)
+      const checked = Lockbox.safeParse(row.record)
       return checked.success ? [{ ckey: row.ckey, lockbox: checked.data }] : []
     }),
   }
