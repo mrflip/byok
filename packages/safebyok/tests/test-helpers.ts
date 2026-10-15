@@ -220,7 +220,8 @@ export type AsyncVerbOf<Target> = {
  * @param verb - The method, one returning a promise.
  * @param meanwhile - What to run first, and wait for.
  *
- * @example TH.beforeNextCall(vaultDB, 'updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
+ * @example
+ *   TH.beforeNextCall(vaultDB, 'updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
  */
 export const beforeNextCall = <Target extends object>(target: Target, verb: AsyncVerbOf<Target> & string, meanwhile: () => Promise<unknown>): void => {
   // Typed loosely from here: the caller's types were checked at the signature.

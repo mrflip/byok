@@ -89,7 +89,7 @@ const expectShown = (state: string) => waitFor(() => { expect(shownState()).to.e
 /** Waits until the Probe shows `outcome` for its last action, failing if it never does. */
 const expectOutcome = (outcome: string) => waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq(outcome) })
 
-/** Puts a lockbox through the Probe into a vault not yet made, choosing `passphrase` in the dialog. */
+/** Puts a lockbox through the Probe into a vault not yet made, choosing `passphrase` for it. */
 const putThroughNewVault = async (passphrase: string) => {
   fireEvent.click(screen.getByText('put'))
   fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: passphrase } })
