@@ -7,7 +7,10 @@
     ],
     "types": [
       "node"
-    ]
+    ],
+    // The root's scripts run under Node, which needs the `.ts` on one script's import of another.
+    // Root only: the packages extend tsconfig.base.json, not this file, and never import that way.
+    "allowImportingTsExtensions": true
   },
   "include": [
     "scripts",

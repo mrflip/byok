@@ -26,7 +26,7 @@
     "justify": "pnpm lint:root && pnpm typecheck:root && pnpm test:root && pnpm -r --stream justify",
     "demo:react": "pnpm --filter 'safebyok-demo-react^...' build && pnpm --filter safebyok-demo-react dev",
     "newb": "scripts/newb",
-    "changeset": "changeset",
+    "changeset": "node scripts/changeset.ts",
     "release:version": "changeset version && pnpm install --lockfile-only",
     "release:check": "node scripts/release.ts check",
     "release:stage": "node scripts/release.ts stage"

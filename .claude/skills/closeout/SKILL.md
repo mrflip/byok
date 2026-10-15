@@ -30,6 +30,22 @@ ground rather than your recollection, and give it one status:
 * **underway** -- a subagent or background task is still on it;
 * **blocked** / **not started** -- and why.
 
+Check each changeset this session's branches add, too
+(`git diff --name-only --diff-filter=A origin/main...<branch> -- .changeset/`):
+
+* **Its name** is its thread's, `YYYYMMDD-<label>.md`, or `-2`, `-3` after it for a second or
+  third. `pnpm changeset` names it so; a random name (`wacky-deserts-start.md`) means it was
+  written around the script, or off the thread's branch.
+* **Its contents** say what the branch does now, not what it first meant to: every public package
+  it changes, a bump that fits, and a sentence that matches what landed. An empty changeset is
+  only for a branch that changes no public package (tooling, tests, docs).
+
+Mend a wrong one in the thread's worktree. The mend may amend the commit that added it rather
+than stack a new one: `git commit --amend` when that is the tip; otherwise
+`git commit --fixup=<sha>`, then `GIT_SEQUENCE_EDITOR=true git rebase -i --autosquash <base>`.
+Push with an explicit lease (PROCESS.md, *The history we keep*). Until its changeset is right, an
+item is not **done**.
+
 Then every subagent and background task this session started: `ListAgents` and the task list
 (including `Workflow` runs and `run_in_background` shells). Each one has either reported or
 been stopped. One still running is **underway**: say so and wait for it, or ask the Coach
