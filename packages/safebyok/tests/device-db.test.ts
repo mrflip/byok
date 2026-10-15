@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { memoryDeviceDB } from '../src/device-db'
 import type { DeviceUnlock } from '../src/types'
-import { scopeOf, unlockOf } from './helpers'
+import { scopeOf } from '../src/testing'
+import { unlockOf } from './helpers'
 
 describe("memoryDeviceDB", () => {
   it("round-trips a remembered unlock -- localUnlockKey handle included -- and reads null where none exists", async () => {

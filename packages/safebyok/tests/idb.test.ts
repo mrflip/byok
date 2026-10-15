@@ -4,8 +4,8 @@ import 'fake-indexeddb/auto'
 import { describe, expect, it, vi } from 'vitest'
 import { createStore, set } from 'idb-keyval'
 import { idbDeviceDB, idbVaultDB, inspectIdb } from '../src/idb'
-import { boxOf, bundleOf, scopeOf, unlockOf } from './helpers'
-import { describeVaultDB } from './vault-db-suite'
+import { boxOf, bundleOf, describeVaultDB, scopeOf } from '../src/testing'
+import { unlockOf } from './helpers'
 
 // Each world gets its own database so tests never see each other's rows.
 const freshDbName = () => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
