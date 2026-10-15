@@ -82,6 +82,15 @@ tests, convex 213, react 7, demo 24, root 91).
      is 'make the string safe to butcher, then butcher, then check it is safe'. Add to the
      documentation for mask is that 'mask is intended for plain text. Calling it with arbitrary
      blobs may give unusual behavior'". This answered "Keep stripping right-to-left letters?".
+  4. "yes note in #37": `mask`'s doc block, the core README and VOCABULARY.md now say, as a known
+     limitation, that `mask` strips every combining mark (`\p{M}`), so scripts that write vowels
+     as marks lose them (Hindi नमस्ते comes out as नमसत; Thai สวัสดี as สวสด; Tamil, Bengali,
+     Khmer, and Latin accents with no precomposed form alike). Marks are stripped because they
+     stack without limit and smear across lines, and a mark left at a cut would land on the
+     stars; API keys are ASCII. This closes the `\p{M}` item under *For the Coach*.
+  5. "Add a NOTYET to TODO for maskCarefully": a bullet under `## NOT YET` in TODO.md: a variant
+     that keeps at most one or two marks per base character, with a final scan that also drops a
+     mark orphaned at a cut edge.
   **The orchestrator's reading of 3, which is what was built** (for the Coach to correct): stop
   stripping right-to-left letters and numbers (this **reverses sprint decision 13**); keep
   stripping every bidi control and direction mark and every invisible; restructure `mask` into
