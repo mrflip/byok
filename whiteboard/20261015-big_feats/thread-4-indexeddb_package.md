@@ -1,6 +1,6 @@
 # Thread 4: indexeddb_package (2026-10-15)
 
-Branch `20261015-indexeddb_package`, PR not yet filed, stacked on #70 (gripe_fixes
+Branch `20261015-indexeddb_package`, PR #77, stacked on #70 (gripe_fixes
 `vaultdb_validation`, cut at `d874db3`). Justify: green -- root 105, safebyok 734, safebyok-convex
 267, safebyok-indexeddb 101, safebyok-react 28, demo 62; publint, attw and `pnpm size` clean.
 
