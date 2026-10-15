@@ -1,7 +1,7 @@
 # Thread 4: the Convex client adapter (2026-10-15)
 
 Branch `20261014-convex_client`, PR not yet filed, stacked on #19. Justify: root green (268 tests,
-build, attw, publint); `packages/safebyok-convex` green (lint, typecheck, 207 tests).
+build, attw, publint); `packages/safebyok-convex` green (lint, typecheck, 210 tests).
 
 * **Built**, all in `packages/safebyok-convex/`:
   - `src/convex-vault-db.ts`: `convexVaultDB(client, api)`, a `VaultDB` (the core's class, from
@@ -73,23 +73,32 @@ build, attw, publint); `packages/safebyok-convex` green (lint, typecheck, 207 te
     hears it gone). The stored row holds no whisper or passphrase. Ran stably 8 times in a row
     and 3 at once.
 
-* **Discoveries**:
-  - A real `ConvexError` arrives client-side with `data` intact, and a message that quotes the
-    data JSON (never a record, for safebyok's refusals).
-  - `ConvexClient.onUpdate` always delivers a first result. `watchQuery(...).onUpdate` delivers
-    one only when that client was not already watching the query.
-  - Signing out leaves an unlocked vault's vaultKey in memory, though every call is refused
-    (README and security notes say to close the vault).
+* **Discoveries**: a real `ConvexError` arrives client-side with `data` intact, its message
+  quoting that data. `ConvexClient.onUpdate` always delivers a first result;
+  `watchQuery(...).onUpdate` delivers one only when that client was not already watching.
 
-* **For the Coach**:
-  - **Minor:** should the vault lock itself when storage refuses `not_permitted` (a sign-out)?
-    Today it holds the vaultKey until it locks, expires or closes. That is a core change to
-    `vault.ts`, not made here.
-  - **Minor:** the deviation above (no first-emit skip). Say if you would rather have the skip
-    back, accepting the two gaps.
-  - **For a demo over Convex** (a follow-up): it needs a deployment (`npx convex dev`, yours to
-    run), a `convex/` with the README's `convex.config.ts` and `safebyok.ts`, an auth provider
-    (or a dev `getUserId`), and `VITE_CONVEX_URL`. The app passes its `ConvexReactClient` to
-    `convexVaultDB` and opens the vault only once `useConvexAuth().isAuthenticated`.
-  - **For CI** (a follow-up, after #15): `pnpm build` at the root, then `pnpm justify` in
-    `packages/safebyok-convex`. It needs no network or deployment, and takes about 3 s.
+* **Review** (`fixed`, two commits): `0de3501` makes `refusing` take a thunk, since
+  `ConvexReactClient.query` can throw a held refusal synchronously, which skipped the mapping;
+  `40d6331` makes the unsubscribe act once, since Convex counts watchers down per call, so a
+  double close ended another watch on the same client. Both are tested.
+
+* **For the Coach** (the PR's *Open questions*; none built):
+  1. The unsubscribe's once-guard is a hand-written three-line `let subscribed` flag: a state flag,
+     not a reusable utility, so no dependency was added. Overrule under library-first if you like.
+  2. `openVault` (core, `src/vault.ts`) subscribes before its first read and never unsubscribes if
+     the open fails, so a vault opened before sign-in leaves a live Convex watch. A small core
+     follow-up is recommended.
+  3. `safebyok` is a dependency of safebyok-convex, not a peer, but the error mapping relies on
+     `VaultError` being the app's own class (`instanceof`). That matters once published; a peer is
+     recommended.
+  4. Should the vault lock itself when storage refuses `not_permitted` (a sign-out)?
+  5. The test-only `react` dev dependency, for a real `ConvexReactClient`: keep it (recommended),
+     move that test to safebyok-react, or drop it.
+  6. Accept the first-emit deviation, or bring the skip back with its two gaps?
+  7. A vault's size ceiling, inherited from #19.
+  - **A Convex demo** would need a deployment (`npx convex dev`, yours to run), a `convex/` with
+    the README's `convex.config.ts` and `safebyok.ts`, an auth provider (or a dev `getUserId`), and
+    `VITE_CONVEX_URL`. The app passes its `ConvexReactClient` and opens the vault once
+    `useConvexAuth().isAuthenticated`.
+  - **CI** (after #15): `pnpm build` at the root, then `pnpm justify` in `packages/safebyok-convex`.
+    No network or deployment needed; about 3 s.
