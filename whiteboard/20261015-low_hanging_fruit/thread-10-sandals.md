@@ -64,15 +64,16 @@ root 3 files / 72 tests; core 11 / 249; convex 6 / 213; react 1 / 7; demo 3 / 24
     dependency, needs a Coach's yes. I would do (1) when the next thread touches the scripts.
 
 * **For the Coach**:
-  - **A bug the review found, deliberately not fixed here.** The new root scripts end in
-    `exit $(( root || $? ))`, and pnpm appends extra arguments after the script text. So
-    `pnpm lint --fix` or `pnpm test -- -t name` loses its arguments under dash, and under
-    bash-as-`sh` (macOS) exits 1 with `exit: too many arguments` even when everything passed.
-    Nothing in the repo or CI passes arguments today. The reviewer's suggested fix, for each of
-    `lint`, `typecheck`, `test`, `test:coverage` and `justify`:
+  - **Fixed at the Coach's word, after the first filing.** The review found that the root scripts
+    ended in `exit $(( root || $? ))`, which lost extra arguments (`pnpm lint --fix`) under dash and
+    exited 1 with `exit: too many arguments` under bash-as-`sh`. The worker did not apply the
+    reviewer's refused edit; the Coach then approved it, and the last commit on the branch rewrites
+    `lint`, `typecheck`, `test`, `test:coverage` and `justify` as
     `both() { pnpm lint:root; root=$?; pnpm -r --no-bail --stream lint "$@"; exit $(( root || $? )); }; both`.
-    The reviewer's edit was refused by a permission check, so it was not applied, and the
-    orchestrator told me not to apply it either: it is the Coach's to rule on.
+    Proved: arguments appended as pnpm does reach `pnpm -r` (dash and bash `--posix`, with a stub
+    `pnpm`); exit 0 when all pass, 1 when the root fails (a `var` in `scripts/`), 1 when a package
+    fails (a failing core test); `pnpm justify` green. The root step itself still gets no
+    arguments.
   - Overlap with `/workspace/byok-strict_configs`, which rewrites the same eslint configs and root
     scripts: expect conflicts in `package.json` (the five script lines), the two React
     `eslint.config.mjs` header comments, and the root `eslint.config.mjs` ignore list. Whichever
