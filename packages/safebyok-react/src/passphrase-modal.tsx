@@ -50,7 +50,8 @@ const unlockedFor = (reentryWindowMs: number, creating: boolean): string => {
  *
  * How long an unlock lasts it reads from the vault itself (its `reentryWindowMs`, the
  * `forcePassphraseReentryHours` it was opened with): 'Locks again on this device in 7 days', 'in 15
- * minutes', 'Stays unlocked on this device until you lock it' for `Infinity`. Nobody need tell the
+ * minutes', 'Stays unlocked on this device until you lock it' for `Infinity`; while it creates the
+ * vault, 'Locks on this device in 7 days', with nothing yet to lock again. Nobody need tell the
  * dialog the window again.
  *
  * @example
