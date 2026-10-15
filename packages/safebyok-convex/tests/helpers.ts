@@ -2,7 +2,7 @@ import { anyApi, defineSchema } from 'convex/server'
 import { convexTest, defineTestApp } from 'convex-test'
 import { Lockbox, VaultBundle, localVaultDB, memoryDeviceDB, memoryStore, openVault } from 'safebyok'
 import type { StringStore, Whisper } from 'safebyok'
-import { testDeriver } from 'safebyok/testing'
+import { boxOf, testDeriver } from 'safebyok/testing'
 import type { ComponentApi } from '../src/component-api'
 import { toConvexLockbox } from '../src/convex-vault-db'
 import { SafebyokComponent } from '../src/server'
@@ -32,6 +32,14 @@ export const bySubject: GetUserId = async (ctx) => {
   const identity = await ctx.auth.getUserIdentity()
   return identity?.subject ?? null
 }
+
+/**
+ * A lockbox whose whisper's ciphertext is `bytes` long. Its tag goes into three of its fields, so
+ * a replacement weighs exactly `bytes` more or less only under a tag as long as the one it replaces.
+ */
+export const heavyBox = (boxlabel: string, bytes: number, tag = boxlabel) => (
+  boxOf(boxlabel, tag, { whisper_ciphered: { cipher_iv_b64: 'iv', ciphertext_b64: 'c'.repeat(bytes) } })
+)
 
 /** The whispers a real vault is made with: obvious fakes, never real keys. */
 export const RealWhispers: Record<string, { whisper: Whisper, note?: string }> = {
