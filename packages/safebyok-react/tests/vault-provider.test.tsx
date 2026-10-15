@@ -255,15 +255,16 @@ describe("VaultProvider", () => {
       expect(isVaultError(caught[0], 'bad_option')).to.be.true
     })
 
-    it("throws an error that is no VaultError to the boundary: an adapter's bug, not a condition", async () => {
+    it("throws a rejection that is no VaultError to the boundary: only a VaultError can be a condition", async () => {
       hushConsole()
       const world = makeWorld()
-      const bug = new TypeError('adapter.readBundle is not a function')
-      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(bug)
+      // Mocked past VaultDB's public verb, which would wrap a raw throw as storage_unavailable.
+      const stray = new TypeError('something is not a function')
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(stray)
       const caught: unknown[] = []
       world.mount('u1', caught)
       await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('boundary') })
-      expect(caught[0]).to.eq(bug)
+      expect(caught[0]).to.eq(stray)
     })
 
     const ConditionCases = [
