@@ -7,8 +7,14 @@ Convex 265, React 28, demo 61.
 * **Built**: `@stylistic/max-len` is on in the five lint configs (root, core, React, Convex, demo)
   and on this base 123 comment lines past 100 columns were found: 116 (in 40 files, the configs among them) are rewrapped, and
   seven `eslint-disable` directive lines are left (the rule ignores them). STYLE.md has one bullet saying so. Empty changeset.
-* **Two commits to read apart**: `140f0f4` is the reflow alone (rule still off, justify green);
-  `323334a` is the rule, STYLE.md and the changeset. Redoing the reflow later means redoing the first.
+* **Commits to read apart**: `140f0f4` is the reflow of the sources alone (rule still off, justify
+  green); `323334a` is the rule, STYLE.md, the changeset **and the configs' own comment rewraps**
+  (the `eslint.config.mjs` files' long comments ride here, not in `140f0f4`); `9554c7f` is the
+  review's fix (below). Redoing the reflow later means redoing `140f0f4`, and the configs' rewraps
+  are redone by the same scripts.
+* **Review fix**: the reflow had split `{@link FarFuture}` across two lines above `clockReading` in
+  `vault.ts`, which TypeScript reads as a link to nothing. The recipe now ends with
+  `inline-tags.mjs`, which lists every open inline tag at a line end.
 
 ## The rule, and what it catches
 
@@ -42,8 +48,9 @@ Convex 265, React 28, demo 61.
   broke ugly (JSX, a ternary, `refuses(...)`) were fixed by hand.
 * **A too-long one-line `/** text */`** opens to `/**`, ` * text`, ` */` -- the form every multi-line
   block here already takes.
-* **Verified pure reflow**: a script strips comment markers and whitespace from every changed file
-  at `HEAD` and now, and the two match (`verify.mjs` in the recipe).
+* **Verified pure reflow**: `verify.mjs` parses every changed file at the base and now with
+  TypeScript and compares code tokens and comment words; they match everywhere except the configs
+  (where the rule was added). It cannot see a wrap that splits an inline tag: `inline-tags.mjs` does.
 * **STYLE.md** got the one bullet; it is a Markdown hunk the docs thread (#69) may also touch.
 
 ## The recipe, for redoing after the rest merge
@@ -52,7 +59,8 @@ Convex 265, React 28, demo 61.
 2. Collect violations as JSON (`lint.sh` in `comment_width-reflow-recipe.md`).
 3. `node reflow.mjs $S/*.json`, re-lint, then `node reflow-ex.mjs $S/*.json` on what remains;
    `node unwrap.mjs $(git diff --name-only)` if the directive `ignorePattern` was ever absent.
-4. Fix by eye what broke ugly; run `verify.mjs`; `pnpm justify`.
+4. Fix by eye what broke ugly; run `node verify.mjs <base-ref>` and `node inline-tags.mjs` from the
+   repo root (both must be clean, `verify.mjs` apart from the configs); then `pnpm justify`.
 The scripts are in `comment_width-reflow-recipe.md` beside this file. Total time on this base: minutes.
 New comments from the other threads were told to stay within 100 columns, so the second run should
 be small.
@@ -72,3 +80,7 @@ be small.
   faster than resolving them.
 * Decide whether trailing comments should be held to 100 too (would take a code-length rule,
   which the formatter should own).
+* Open on the PR as well: a long `// @ts-expect-error` line is flagged by the rule (only eslint
+  directives are exempted, as recorded above); STYLE.md says an example's continuation is "indented
+  two spaces" but the wraps here use four columns from the `@example` tag (two more than a plain
+  example's code lines) -- one of them should move; trailing comments past 100 are not caught.

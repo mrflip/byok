@@ -127,8 +127,10 @@ console.log(skipped.join('\n'))
 ## reflow-ex.mjs -- @example lines and the code under them (run second)
 
 Same input. Breaks at a space outside quotes, the continuation indented two more spaces; a trailing
-`// result` comment goes on a line of its own first. Review the output by eye: JSX and ternaries
-may break at an ugly place, and want a hand fix (this thread fixed five).
+`// result` comment goes on a line of its own first. A violation that is not a ` * ` block line (a
+`//` line, a one-line `/** */`) is reported and left, so run `reflow.mjs` first; anything still
+reported is for the hand. Review the output by eye: JSX and ternaries may break at an ugly place,
+and want a hand fix (this thread fixed five).
 
 ```js
 import fs from 'node:fs'
@@ -156,6 +158,7 @@ for (const [file, lns] of Object.entries(byFile)) {
   for (const ln of [...new Set(lns)].sort((aa, bb) => bb - aa)) {
     let cur = ln - 1
     const mm = lines[cur].match(/^(\s*\* )(\s*)(@example )?(.*)$/)
+    if (! mm) { console.log(`not a block-comment line, left for reflow.mjs or the hand: ${file}:${ln}`); continue }
     const pre = mm[1], lead = mm[2], tag = mm[3] ?? ''
     const cont = pre + lead + (tag ? '  ' : '') + '  '
     // a trailing result comment goes first
@@ -191,18 +194,82 @@ for (const file of process.argv.slice(2)) {
 }
 ```
 
-## verify.mjs -- nothing but whitespace and comment markers changed
+## verify.mjs -- only whitespace and comment markers changed
+
+What it proves, and what it does not, is in its header. It parses each changed file with
+TypeScript and compares the code tokens exactly and the comment words (markers removed). The
+configs' own differences are expected: the rule is added there. Mutation-tested: a changed comment
+word, and a changed code token, are each reported.
 
 ```js
+// Usage, from the repo root: node verify.mjs [<base-ref>]   (default HEAD~; compares changed files)
+// Proves, per changed .ts/.tsx/.mjs file: the sequence of code tokens (kind and text) is identical,
+// and the sequence of comment words (comment markers and leading `*` removed) is identical.
+// Does NOT prove: that a wrap kept an inline tag whole (see inline-tags.mjs), that the wrap reads
+// well. A comment at the very end of a block or file, or trailing a token, is read as the leading
+// comment of the token after it, which compares the same in both versions. JSX text and string
+// contents are tokens, so a changed space inside one differs.
+import { execFileSync } from 'node:child_process'
+import { createRequire } from 'node:module'
+import fs from 'node:fs'
+const ts = createRequire(`${process.cwd()}/package.json`)('typescript')
+const base = process.argv[2] ?? 'HEAD~'
+
+const commentWords = (raw) => raw.replace(/^\/\*\*?|^\/\//, '').replace(/\*\/$/, '').replace(/^\s*\*/gm, '').split(/\s+/).filter(Boolean)
+
+const scan = (file, text) => {
+  const kindOfFile = file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS
+  const source = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, true, file.endsWith('.mjs') ? ts.ScriptKind.JS : kindOfFile)
+  const tokens = []
+  const words = []
+  const visit = (node) => {
+    if (node.kind >= ts.SyntaxKind.FirstJSDocNode && node.kind <= ts.SyntaxKind.LastJSDocNode) { return }
+    const kids = node.getChildren(source)
+    if (kids.length === 0) {
+      // a leaf token: its leading comments, then its own text (JSX text keeps its whitespace)
+      ts.forEachLeadingCommentRange(text, node.getFullStart(), (pos, end) => { words.push(...commentWords(text.slice(pos, end))) })
+      if (node.kind !== ts.SyntaxKind.EndOfFileToken) { tokens.push(`${node.kind}:${node.getText(source)}`) }
+    } else { kids.forEach(visit) }
+  }
+  visit(source)
+  return { tokens, words }
+}
+
+const files = execFileSync('git', ['diff', '--name-only', base], { encoding: 'utf8' }).trim().split('\n')
+  .filter((ff) => /\.(ts|tsx|mjs)$/.test(ff))
+let bad = 0
+for (const file of files) {
+  const before = scan(file, execFileSync('git', ['show', `${base}:${file}`], { encoding: 'utf8', maxBuffer: 1e8 }))
+  const after = scan(file, fs.readFileSync(file, 'utf8'))
+  for (const part of ['tokens', 'words']) {
+    if (before[part].join('\n') !== after[part].join('\n')) { console.log(`DIFFERS (${part}): ${file}`); bad += 1 }
+  }
+}
+console.log(`checked ${files.length} files, ${bad} differences`)
+process.exit(bad === 0 ? 0 : 1)
+```
+
+## inline-tags.mjs -- no inline tag left open at a line end (run last)
+
+The review of this thread caught `{@link` ending a line with its target on the next, which
+TypeScript reads as a link to nothing. `verify.mjs` cannot see it (the words are the same), so run
+this after any reflow and wrap each hit by hand so the tag stays whole. Zero hits on this branch.
+
+```js
+// Usage, from the repo root: node inline-tags.mjs
+// Lists every comment line, in every tracked .ts/.tsx/.mjs file, that opens an inline tag such as
+// `{@link` and does not close it with `}` on the same line. TypeScript reads a `{@link` split from
+// its target as a link to nothing (the trap the thread 8 review caught); a hit is wrapped by hand.
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
-const norm = (src) => src.split('\n').map((ll) => ll.replace(/^\s*(\/\*\*?|\*\/|\*|\/\/)\s?/, (m) => /\*\/\s*$/.test(m) ? m : '')).join(' ').replace(/\s*\*\/\s*/g, ' ').replace(/\/\*\*\s*/g, ' ').replace(/\s+/g, '')
-for (const file of execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' }).trim().split('\n')) {
-  if (file === 'STYLE.md' || file.endsWith('eslint.config.mjs')) { continue }
-  const old = execFileSync('git', ['show', `HEAD:${file}`], { encoding: 'utf8', maxBuffer: 1e8 })
-  // compare with all comment prefixes removed char-for-char, whitespace dropped
-  const strip = (ss) => ss.replace(/\*\//g, '').replace(/\/\*\*|\/\*|\/\/|^\s*\*/gm, '').replace(/\s+/g, '')
-  if (strip(old) !== strip(fs.readFileSync(file, 'utf8'))) { console.log('DIFFERS', file) }
+const files = execFileSync('git', ['ls-files'], { encoding: 'utf8' }).trim().split('\n')
+  .filter((ff) => /\.(ts|tsx|mjs)$/.test(ff) && ! ff.includes('_generated'))
+let hits = 0
+for (const file of files) {
+  fs.readFileSync(file, 'utf8').split('\n').forEach((line, idx) => {
+    if (/^\s*(\/\/|\/?\*)/.test(line) && /\{@\w+[^}]*$/.test(line)) { console.log(`${file}:${idx + 1}: ${line.trim()}`); hits += 1 }
+  })
 }
-console.log('checked')
+console.log(`${hits} open inline tags`)
+process.exit(hits === 0 ? 0 : 1)
 ```
