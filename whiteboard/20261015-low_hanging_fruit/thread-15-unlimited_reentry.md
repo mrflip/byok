@@ -1,6 +1,6 @@
 # Thread 15: unlimited_reentry (2026-10-15)
 
-Branch `20261015-unlimited_reentry`, cut from origin/main at 374d3d4; PR not yet filed. Reviewed: three commits (c5b8861 clamp on read, 67f0597 tests, 2689275 security note). Justify: green (root 98, safebyok 333, safebyok-convex 219, safebyok-react 15, demo 28).
+Branch `20261015-unlimited_reentry`, cut from origin/main at 374d3d4; PR [#53](https://github.com/mrflip/safebyok/pull/53). Reviewed: three commits (c5b8861 clamp on read, 67f0597 tests, 2689275 security note). Justify: green (root 98, safebyok 333, safebyok-convex 219, safebyok-react 15, demo 28).
 
 The Coach's ruling on [#40](https://github.com/mrflip/safebyok/pull/40)'s question about an upper cap on `forcePassphraseReentryHours`: "allow unlimited, u do u". Thread 2's file explains the option's origin.
 
