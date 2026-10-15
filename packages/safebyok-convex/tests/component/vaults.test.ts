@@ -536,7 +536,7 @@ describe("a vault's weight limit", () => {
 // again). So the component holds every vault to MaxVaultLockboxes lockboxes and
 // MaxVaultLockboxBytes bytes of them, whatever its client asks, and convexVaultDB declares half the
 // read budget, 8 MiB, as its maxVaultBytes. openVault admits a maxLockboxes only while that many
-// lockboxes at maxWhisperBytes each, plus 1 KiB apiece for their other fields, fit in half of the
+// lockboxes, each counted at twice maxWhisperBytes plus 2 KiB for its other fields, fit in the
 // 8 MiB: at most 101 of the largest default whisper (40444 bytes of JSON, about 54 KB stored),
 // and at most 1365 of 2 KiB whispers. The tests below fill a vault to each of those, and to each
 // of the component's own limits, with the longest labels and notes, and erase it.

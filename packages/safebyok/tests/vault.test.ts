@@ -1,10 +1,11 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ForcePassphraseReentryHours, FarFuture, FarPast, LockboxNote, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, FarFuture, FarPast, Lockbox, LockboxNote, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
-import { openVault, type OpenVaultOpts, type Vault } from '../src/vault'
+import { LockboxFieldsBytes, StoredBytesPerWhisperByte, openVault, type OpenVaultOpts, type Vault } from '../src/vault'
+import { cipherBinding, cipherBytes, makeLockboxKey, makeVaultKey, randomBytes, wrapKeyUnder } from '../src/crypto'
 import type { KeyDeriver } from '../src/key-deriver'
 import * as TH from './test-helpers'
 
@@ -26,6 +27,14 @@ const makeWorld = () => {
   )
   return { dbStore, vaultDB, deviceDB, clock, advance, logged, open }
 }
+
+/** Storage adapters openVault refuses: missing, or short of a verb the vault calls. */
+const MisfitStores: readonly (readonly [Partial<OpenVaultOpts>, string])[] = [
+  [{ vaultDB: undefined as unknown as OpenVaultOpts['vaultDB'] },                         'a missing vaultDB'],
+  [{ vaultDB: { readBundle: () => Promise.resolve(null) } as unknown as OpenVaultOpts['vaultDB'] }, 'a vaultDB with only some of its verbs'],
+  [{ deviceDB: undefined as unknown as OpenVaultOpts['deviceDB'] },                       'a missing deviceDB'],
+  [{ deviceDB: { ...memoryDeviceDB(), eraseAll: 'never' } as unknown as OpenVaultOpts['deviceDB'] }, 'a deviceDB whose eraseAll is no function'],
+]
 
 const HourMs = 60 * 60 * 1000
 const SevenDaysMs = 7 * 24 * HourMs
@@ -71,6 +80,33 @@ describe("openVault", () => {
   it("refuses to open without a signed-in user", async () => {
     const world = makeWorld()
     await expectRefusal(world.open({ userId: '' }), 'bad_label')
+  })
+
+  it("refuses a userId that is not text, as no signed-in user", async () => {
+    const world = makeWorld()
+    for (const userId of [42, null, undefined, { id: 'u1' }]) {
+      await expectRefusal(world.open({ userId: userId as unknown as string }), 'bad_label')
+    }
+  })
+
+  it("refuses a call with no bag of options at all", async () => {
+    for (const opts of [undefined, null, 'acme']) {
+      await expectRefusal(openVault(opts as unknown as OpenVaultOpts), 'bad_option')
+    }
+  })
+
+  for (const [opts, blurb] of MisfitStores) {
+    it(`refuses ${blurb} with kind 'bad_option', before it touches storage`, async () => {
+      const world = makeWorld()
+      const err = await expectRefusal(world.open(opts), 'bad_option')
+      expect(err.message).to.match(/vaultDB is not a VaultDB|deviceDB is not a DeviceDB/)
+    })
+  }
+
+  it("takes a store of the host's own that carries every verb, prototype and all", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ vaultDB: Object.create(world.vaultDB) as OpenVaultOpts['vaultDB'], deviceDB: uncheckingDeviceDB().deviceDB })
+    expect(vault.getSnapshot().state).to.eq('absent')
   })
 })
 
@@ -239,6 +275,15 @@ describe("unlock and lock", () => {
     expect(vault.getSnapshot().state).to.eq('locked')
     const again = await world.open()
     expect(again.getSnapshot().state).to.eq('locked')
+  })
+
+  it("refuses a passphrase that is not text with kind 'bad_option', and stays as it was", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    for (const passphrase of [undefined, null, 1234, ['pw']]) {
+      await expectRefusal(vault.unlock(passphrase as unknown as string), 'bad_option')
+    }
+    expect(vault.getSnapshot().state).to.eq('absent')
   })
 })
 
@@ -545,6 +590,9 @@ const SpoiledUnlocks = [
   [(row: Record<string, unknown>) => ({ ...row, ask_passphrase_at: FarFuture + 1 }),          'a deadline past FarFuture'],
   [({ ask_passphrase_at: kept, ...row }: Record<string, unknown>) => ({ ...row, ask_passphrase_at: (kept as number) - 0.5 }), 'a deadline with a fraction of a millisecond'],
   [() => 'not a record at all',                                                               'a row that is not a record'],
+  [(row: Record<string, unknown>) => ({ ...row, user_id: 'u2' }),                             "a record naming another user's vault"],
+  [(row: Record<string, unknown>) => ({ ...row, applabel: 'other_app' }),                     "a record naming another app's vault"],
+  [(row: Record<string, unknown>) => ({ ...row, vaultlabel: 'spare' }),                       'a record naming another of the same user\'s vaults'],
 ] as const
 
 describe("the remembered unlock, from a host's own DeviceDB", () => {
@@ -570,6 +618,17 @@ describe("the remembered unlock, from a host's own DeviceDB", () => {
       expect(device.rows.size).to.eq(0)
     })
   }
+
+  it("says through the logger that a record naming another scope was forgotten", async () => {
+    const world = makeWorld()
+    const device = uncheckingDeviceDB()
+    const vault = await world.open({ deviceDB: device.deviceDB })
+    await vault.unlock('pw one')
+    device.spoilRow((row) => ({ ...row, user_id: 'u2' }))
+    await world.open({ deviceDB: device.deviceDB })
+    expect(world.logged.map((call) => call.level)).to.deep.equal(['warn'])
+    expect(world.logged[0]?.message).to.include('could not be read')
+  })
 })
 
 const RoundTrips: readonly (readonly [Whisper, string])[] = [
@@ -913,6 +972,29 @@ const declaringVaultBytes = (vaultDB: VaultDB, maxVaultBytes: unknown): VaultDB 
   Object.create(vaultDB, { maxVaultBytes: { value: maxVaultBytes } }) as VaultDB
 )
 
+/**
+ * A lockbox row as a backend files it, with every field but the whisper at its largest: the
+ * longest labels, a note of 256 UTF-16 code units at three UTF-8 bytes each, a user_id of 512
+ * bytes, the latest times, and real ciphertext of `whisperBytes` random bytes.
+ */
+const heaviestRowOf = async (whisperBytes: number) => {
+  const binding = cipherBinding('a test binding')
+  const lockboxKey = await makeLockboxKey()
+  return {
+    applabel:            'a'.repeat(40),
+    user_id:             'u'.repeat(512),
+    vaultlabel:          'v'.repeat(40),
+    format:              'safebyok-lockbox-v1',
+    boxlabel:            'b'.repeat(40),
+    revision_id:         crypto.randomUUID(),
+    lockbox_key_wrapped: await wrapKeyUnder(await makeVaultKey(), lockboxKey, binding),
+    whisper_ciphered:    await cipherBytes(lockboxKey, randomBytes(whisperBytes), binding),
+    note:                '\u{4E00}'.repeat(256),
+    registered_at:       FarFuture,
+    changed_at:          FarFuture,
+  }
+}
+
 /** Boxlabels in the snapshot, in order. */
 const boxlabelsOf = (vault: Vault) => vault.getSnapshot().boxes.map((summary) => summary.boxlabel)
 
@@ -1033,6 +1115,15 @@ describe("the lockbox limit", () => {
     await expectRefusal(world.open({ vaultDB, maxLockboxes: 4093, maxWhisperBytes: 1 }), 'bad_option')
   })
 
+  for (const whisperBytes of [1, 2, 3, 100, 2048, MaxWhisperBytes]) {
+    it(`counts room enough for a lockbox of ${String(whisperBytes)} whisper bytes, its other fields at their largest`, async () => {
+      const row = await heaviestRowOf(whisperBytes)
+      expect(Lockbox.safeParse(row).success).to.be.true
+      const rowBytes = new TextEncoder().encode(JSON.stringify(row)).length
+      expect(rowBytes).to.be.at.most((whisperBytes * StoredBytesPerWhisperByte) + LockboxFieldsBytes)
+    })
+  }
+
   it("refuses a maxLockboxes that is not a whole number above zero", async () => {
     const world = makeWorld()
     for (const nonsense of [0, -1, 1.5, NaN]) {
@@ -1117,6 +1208,13 @@ describe("use", () => {
     await vault.store('anthropic', 'sk-fake')
     await expect(vault.use('anthropic', () => Promise.reject(new Error('the API said no')))).rejects.toThrow('the API said no')
   })
+
+  it("refuses a callback that is not a function before it opens the lockbox", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    const err = await expectRefusal(vault.use('anthropic', 'not a callback' as unknown as () => void), 'bad_option')
+    expect(err.message).to.include('callback function')
+  })
 })
 
 describe("erase and destroy", () => {
@@ -1190,6 +1288,14 @@ describe("scoping", () => {
 })
 
 describe("the snapshot and its subscribers", () => {
+  it("refuses a listener that is not a function as it subscribes, so no later change meets it", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    expect(() => vault.subscribe('not a listener' as unknown as () => void)).to.throw(VaultError, /listener function/)
+    await vault.unlock('pw')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+  })
+
   it("keeps its identity until something changes", async () => {
     const world = makeWorld()
     const vault = await world.open()
@@ -1282,6 +1388,16 @@ describe("tampering", () => {
 })
 
 describe("changePassphrase", () => {
+  it("refuses an old or new passphrase that is not text with kind 'bad_option', changing nothing", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('old passphrase')
+    await expectRefusal(vault.changePassphrase(undefined as unknown as string, 'new passphrase'), 'bad_option')
+    await expectRefusal(vault.changePassphrase('old passphrase', 42 as unknown as string), 'bad_option')
+    const fresh = await world.open({ deviceDB: memoryDeviceDB() })
+    await fresh.unlock('old passphrase')
+  })
+
   it("retires the old passphrase, admits the new, and keeps every lockbox readable", async () => {
     const world = makeWorld()
     const vault = await world.open()

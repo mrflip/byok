@@ -84,8 +84,9 @@ export abstract class VaultDB {
    * together -- or `Infinity` when it sets no such limit. Declare what the backend can still
    * list and erase whole: a backend that reads a vault in one transaction under a read budget
    * declares the share of that budget its heaviest verb leaves. A vault refuses to open when its
-   * `maxLockboxes` lockboxes at `maxWhisperBytes` each, with room for encoding and each
-   * lockbox's other fields, might not fit in half of it. A backend that also enforces a limit
+   * `maxLockboxes` lockboxes might not fit in it, each counted at twice `maxWhisperBytes` (room
+   * for encoding and for the backend's own counting) and 2 KiB for its other fields, which covers
+   * them at their largest. A backend that also enforces a limit
    * of its own sets it above what this admits, and refuses a lockbox write past it with a
    * VaultError of kind `vault_full`. A backend that does not hold to the limit it declares, or
    * a vault opened with limits that disagree with its backend's, is undefined behaviour: not a
