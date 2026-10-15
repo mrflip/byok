@@ -69,3 +69,51 @@ export class VaultError extends Error {
 export const isVaultError = (err: unknown, kind?: VaultErrorKind): err is VaultError => (
   err instanceof VaultError && (kind === undefined || err.kind === kind)
 )
+
+/**
+ * The two families a VaultError kind belongs to, told apart by who must act. `misuse` is a
+ * programming error, the host developer's to fix: let it reach an error boundary or the dev
+ * overlay, never show it to the user, never retry. `condition` is something the app handles at
+ * run time, which may reach the user: ask again, show a message, retry.
+ */
+export const VaultErrorFamilyVals = ['misuse', 'condition'] as const
+export type VaultErrorFamily = typeof VaultErrorFamilyVals[number]
+
+/**
+ * Which family each kind belongs to: every kind in {@link VaultErrorKindVals}, exactly once.
+ *
+ * @example VaultErrorFamilyForKind.bad_option           // 'misuse'
+ * @example VaultErrorFamilyForKind.storage_unavailable  // 'condition'
+ */
+export const VaultErrorFamilyForKind = {
+  vault_locked:        'condition',
+  wrong_passphrase:    'condition',
+  absent_box:          'condition',
+  absent_vault:        'condition',
+  bad_label:           'misuse',
+  bad_whisper:         'misuse',
+  whisper_too_large:   'condition',
+  vault_full:          'condition',
+  bad_option:          'misuse',
+  vault_closed:        'misuse',
+  corrupt_record:      'condition',
+  unknown_key_deriver: 'misuse',
+  stale_write:         'condition',
+  not_permitted:       'condition',
+  storage_unavailable: 'condition',
+} as const satisfies Readonly<Record<VaultErrorKind, VaultErrorFamily>>
+
+/**
+ * True when `err` is a VaultError of the `condition` family: one the app may show the user, or
+ * retry. Anything else -- misuse, an error that is not a VaultError, a thrown non-error -- is
+ * false, and belongs with an error boundary.
+ *
+ * @example
+ *   try { await vault.store(boxlabel, whisper) } catch (err) {
+ *     if (! isVaultCondition(err)) { throw err }
+ *     showGripe(err.message)
+ *   }
+ */
+export const isVaultCondition = (err: unknown): err is VaultError => (
+  isVaultError(err) && VaultErrorFamilyForKind[err.kind] === 'condition'
+)
