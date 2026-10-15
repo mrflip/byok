@@ -157,3 +157,12 @@ security expert who knows what questions to ask.
   `scripts/release.ts` refuses a tarball whose `package.json` still holds a `workspace:` range,
   and quotes only npm's error code and summary, never the rest of what npm printed. No release
   job caches dependencies or persists git credentials.
+* 2026-10-15: the published package has a `safebyok/testing` entry point exporting
+  `testDeriver`, a KeyDeriver that is one SHA-256 of passphrase and salt, labelled
+  `test_digest_v0`. `openVault` accepts any KeyDeriver, so nothing stops a host passing it to a
+  real vault; a bundle records the label of the deriver that sealed it. The entry imports vitest,
+  an optional peer, and is not imported by `safebyok` or `safebyok/idb`.
+* 2026-10-15: the public packages' `exports` carry a `@safebyok/source` condition pointing at
+  `src/`, for the workspace's own tooling; `pnpm pack` ships `publishConfig.exports` (dist only)
+  instead. `scripts/release.ts` refuses a tarball that still carries the condition, and each
+  public package's `prepublishOnly` refuses a publish not run by pnpm.

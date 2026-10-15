@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { memoryStore } from 'safebyok'
-import { RealPassphrase, RealWhispers, boxOf, bundleOf, componentTest, openOver, realRecords, scopeOf, vaults } from '../helpers'
+import { boxOf, bundleOf, scopeOf } from 'safebyok/testing'
+import { RealPassphrase, RealWhispers, componentTest, openOver, realRecords, vaults } from '../helpers'
 
 const u1 = scopeOf('u1')
 const thisVault = { vault_id: 'vault-id-u1' }

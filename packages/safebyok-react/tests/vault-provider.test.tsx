@@ -1,21 +1,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
+import { isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type Vault } from 'safebyok'
+import { testDeriver } from 'safebyok/testing'
 import { useEffect, useState } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot } from '../src/vault-provider'
-
-/** A cheap deriver (one SHA-256) so the suite is not a benchmark of Argon2id. */
-const testDeriver: KeyDeriver = {
-  key_deriver_label: 'test_digest_v0',
-  salt_bytes:        16,
-  deriveKeyBytes: async (passphrase, saltBytes) => {
-    const passphraseBytes = new TextEncoder().encode(passphrase)
-    const joined = new Uint8Array(passphraseBytes.length + saltBytes.length)
-    joined.set(passphraseBytes)
-    joined.set(saltBytes, passphraseBytes.length)
-    return new Uint8Array(await crypto.subtle.digest('SHA-256', joined))
-  },
-}
 
 /** A probe component exercising the binding the way a host app would. */
 const Probe = () => {

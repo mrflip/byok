@@ -10,7 +10,7 @@ import type {
 import {
   BundleExpectation, Ciphered, EraseExpectation, ListedLockbox, Lockbox, LockboxExpectation, VaultBundle, VaultScope,
 } from '../../src/component/validators'
-import { boxOf, bundleOf } from '../helpers'
+import { boxOf, bundleOf } from 'safebyok/testing'
 
 /**
  * A record's shape, as both validator libraries can be read: which fields, which optional, and

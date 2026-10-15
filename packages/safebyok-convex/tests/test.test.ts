@@ -3,7 +3,7 @@ import { defineTestApp } from 'convex-test'
 import { defineSchema } from 'convex/server'
 import { SafebyokComponent } from '../src/server'
 import { register } from '../src/test'
-import { bundleOf, scopeOf } from './helpers'
+import { bundleOf, scopeOf } from 'safebyok/testing'
 
 describe("register", () => {
   it("installs the component under the name a host gave it, and hands back its functions", async () => {
