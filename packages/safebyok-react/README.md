@@ -13,8 +13,8 @@ otherwise write itself.
 * `useVaultSnapshot()` -- the live snapshot via `useSyncExternalStore`.
 * `PassphraseModal` -- the default dialog: unstyled markup under `modal-scrim` / `modal` class
   names for the host's stylesheet to dress. It says how long an unlock lasts on the device -- "for
-  7 days", "for 15 minutes", "until you lock it" -- from the `forcePassphraseReentryHours` the
-  provider opened the vault with (a hand-rendered dialog takes it as `reentryHours`). A wrong
+  7 days", "for 15 minutes", "until you lock it" -- read from the vault itself (its
+  `reentryWindowMs`, the `forcePassphraseReentryHours` it was opened with). A wrong
   passphrase, or any other condition the unlock meets (storage out of reach), shows in the dialog
   in place; misuse is thrown while rendering, to your error boundary.
 

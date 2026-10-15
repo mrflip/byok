@@ -1,9 +1,9 @@
 import { useState, type SubmitEvent } from 'react'
-import { FarFuture, FarPast, ForcePassphraseReentryHours, VaultError, isVaultCondition, isVaultError, type Vault } from 'safebyok'
+import { ForeverMs, isVaultCondition, isVaultError, type Vault } from 'safebyok'
 
 const MinutesPerHour = 60
 const MinutesPerDay = 24 * MinutesPerHour
-const MsPerHour = 3_600_000
+const MsPerMinute = 60_000
 
 /** A count with its unit spelled out and pluralized: 'minute' to '15 minutes', in English. */
 const counted = (count: number, unit: 'day' | 'hour' | 'minute'): string => (
@@ -11,17 +11,13 @@ const counted = (count: number, unit: 'day' | 'hour' | 'minute'): string => (
 )
 
 /**
- * What the dialog promises about how long an unlock lasts, from the vault's
- * `forcePassphraseReentryHours`: a whole number of days, else of hours, else of minutes; and a
- * window as long as the vault can count (`Infinity` hours among them) reads as lasting until the
- * user locks it.
+ * What the dialog promises about how long an unlock lasts, from the vault's `reentryWindowMs`: a
+ * whole number of days, else of hours, else of minutes; and the longest window a vault keeps
+ * (`ForeverMs`, which `Infinity` hours becomes) reads as lasting until the user locks it.
  */
-const unlockedFor = (reentryHours: number): string => {
-  if (Number.isNaN(reentryHours) || reentryHours <= 0) {
-    throw new VaultError('bad_option', 'PassphraseModal\'s reentryHours is a number of hours greater than zero; Infinity means never. Pass the forcePassphraseReentryHours the vault was opened with.')
-  }
-  if (reentryHours * MsPerHour >= FarFuture - FarPast) { return 'Stays unlocked on this device until you lock it.' }
-  const minutes = Math.max(1, Math.round(reentryHours * MinutesPerHour))
+const unlockedFor = (reentryWindowMs: number): string => {
+  if (reentryWindowMs >= ForeverMs) { return 'Stays unlocked on this device until you lock it.' }
+  const minutes = Math.max(1, Math.round(reentryWindowMs / MsPerMinute))
   if (minutes % MinutesPerDay === 0) { return `Stays unlocked on this device for ${counted(minutes / MinutesPerDay, 'day')}.` }
   if (minutes % MinutesPerHour === 0) { return `Stays unlocked on this device for ${counted(minutes / MinutesPerHour, 'hour')}.` }
   return `Stays unlocked on this device for ${counted(minutes, 'minute')}.`
@@ -41,18 +37,16 @@ const unlockedFor = (reentryHours: number): string => {
  * try again or cancel. Misuse, or anything that is no VaultError, is thrown while rendering, for
  * the nearest error boundary above the dialog to catch.
  *
- * `reentryHours` is the `forcePassphraseReentryHours` the vault was opened with, for the dialog's
- * promise about how long an unlock lasts: 'for 7 days', 'for 15 minutes', 'until you lock it' for
- * `Infinity`. VaultProvider passes it; a host rendering the dialog by hand does too, when it
- * opened the vault with anything but the default ({@link ForcePassphraseReentryHours}).
+ * How long an unlock lasts it reads from the vault itself (its `reentryWindowMs`, the
+ * `forcePassphraseReentryHours` it was opened with): 'for 7 days', 'for 15 minutes', 'until you
+ * lock it' for `Infinity`. Nobody need tell the dialog the window again.
  *
  * @example
- *   <PassphraseModal vault={vault} reentryHours={0.25} onDone={(unlocked) => { setAsking(false) }} />
+ *   <PassphraseModal vault={vault} onDone={(unlocked) => { setAsking(false) }} />
  */
-export const PassphraseModal = ({ vault, onDone, reentryHours = ForcePassphraseReentryHours }: {
-  vault:         Vault
-  onDone:        (unlocked: boolean) => void
-  reentryHours?: number | undefined
+export const PassphraseModal = ({ vault, onDone }: {
+  vault:  Vault
+  onDone: (unlocked: boolean) => void
 }) => {
   const [passphrase, setPassphrase] = useState('')
   const [gripe, setGripe] = useState<string | null>(null)
@@ -95,7 +89,7 @@ export const PassphraseModal = ({ vault, onDone, reentryHours = ForcePassphraseR
           onChange={(evt) => { setPassphrase(evt.target.value); setGripe(null) }}
         />
         {gripe !== null && <p className="gripe">{gripe}</p>}
-        <p className="quiet">{unlockedFor(reentryHours)}</p>
+        <p className="quiet">{unlockedFor(vault.reentryWindowMs)}</p>
         <div className="row">
           <button type="submit">{creating ? 'Create vault' : 'Unlock'}</button>
           <button type="button" onClick={() => { onDone(false) }}>Cancel</button>
