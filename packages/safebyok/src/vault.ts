@@ -1,7 +1,7 @@
 import * as Z from 'zod'
 import { Label, LockboxSummary, type Lockbox, MaxLockboxes, MaxWhisperBytes, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
-import { argon2idWebV1Deriver, type KeyDeriver } from './key-deriver'
+import type { KeyDeriver } from './key-deriver'
 import {
   cipherBinding, cipherBytes, decipherBytes, fromB64, importWrappingKeyBytes,
   makeLocalUnlockKey, makeLockboxKey, makeVaultKey, randomBytes, randomId, toB64, wrapKeyUnder, unwrapKeyUnder,
@@ -41,15 +41,16 @@ export type OpenVaultOpts = {
   vaultlabel: string
   vaultDB:    VaultDB
   deviceDB:   DeviceDB
+  /**
+   * What turns a passphrase into passphraseKey bytes: in a browser, the pinned Argon2id deriver
+   * that `browserOpts()` from `safebyok/browser` supplies. See {@link KeyDeriver} for the narrow
+   * reasons to substitute. Asked for outright, so an app that passes another never ships this one.
+   */
+  keyDeriver: KeyDeriver
   /** How long an unlock is remembered on this device. Default: seven days. */
   rememberForMs?: number | undefined
   /** Time source for expiry; tests inject one. Default: the wall clock. */
   clock?: Clock | undefined
-  /**
-   * What turns a passphrase into passphraseKey bytes. Default -- and the right answer -- is the
-   * pinned Argon2id deriver; see {@link KeyDeriver} for the narrow reasons to substitute.
-   */
-  keyDeriver?: KeyDeriver | undefined
   /**
    * The largest whisper `store()` accepts, in bytes of its JSON. Default: {@link MaxWhisperBytes},
    * 40444. Checked on write only, so lowering it never strands a whisper already stored. At most
@@ -171,8 +172,10 @@ type VaultKeyPair = { transientKey: CryptoKey, sessionKey: CryptoKey }
  * actually wanted.
  *
  * @example
- *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, deviceDB })
+ *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, ...browserOpts() })
  *   vault.getSnapshot().state  // 'absent' | 'locked' | 'unlocked'
+ * @example
+ *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, deviceDB, keyDeriver })
  */
 export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const applabel   = parseLabel(opts.applabel)
@@ -182,7 +185,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const { vaultDB, deviceDB } = opts
   const rememberForMs = opts.rememberForMs ?? SevenDaysMs
   const clock = opts.clock ?? wallClock
-  const keyDeriver = opts.keyDeriver ?? argon2idWebV1Deriver
+  const keyDeriver = parseKeyDeriver(opts.keyDeriver)
   const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
   const lockboxLimit = parseMaxLockboxes(opts.maxLockboxes)
   ensureLimitsFit(vaultDB, whisperByteLimit, lockboxLimit)
@@ -606,6 +609,23 @@ const parseMaxLockboxes = (candidate: number | undefined): number => {
     throw new VaultError('bad_option', 'maxLockboxes is a whole number of lockboxes, greater than zero.')
   }
   return checked.data
+}
+
+/** What a KeyDeriver must carry. Checked only: openVault keeps the deriver it was handed, prototype and all. */
+const keyDeriverShape = Z.object({
+  key_deriver_label: Z.string().min(1),
+  salt_bytes:        Z.number().int().positive(),
+  deriveKeyBytes:    Z.custom<KeyDeriver['deriveKeyBytes']>((candidate) => typeof candidate === 'function'),
+})
+
+const parseKeyDeriver = (candidate: KeyDeriver | undefined): KeyDeriver => {
+  if (candidate === undefined) {
+    throw new VaultError('bad_option', "openVault needs a keyDeriver: in a browser, spread browserOpts() from 'safebyok/browser' into its options.")
+  }
+  if (! keyDeriverShape.safeParse(candidate).success) {
+    throw new VaultError('bad_option', 'keyDeriver is not a KeyDeriver: it needs a key_deriver_label, a salt_bytes and a deriveKeyBytes function.')
+  }
+  return candidate
 }
 
 /**

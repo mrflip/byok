@@ -58,7 +58,7 @@ has. Hand it to `openVault`:
 ```ts
 import { ConvexClient } from 'convex/browser'
 import { openVault } from 'safebyok'
-import { idbDeviceDB } from 'safebyok/idb'
+import { browserOpts } from 'safebyok/browser'
 import { convexVaultDB } from 'safebyok-convex'
 import { api } from '../convex/_generated/api'
 
@@ -68,7 +68,7 @@ convex.setAuth(fetchToken) // your auth provider's token, as for any Convex call
 const vault = await openVault({
   applabel: 'acme', userId, vaultlabel: 'main',
   vaultDB:  convexVaultDB(convex, api.safebyok),
-  deviceDB: idbDeviceDB(),
+  ...browserOpts(), // the key deriver and device store a browser wants
 })
 ```
 

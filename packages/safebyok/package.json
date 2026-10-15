@@ -74,6 +74,11 @@
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
+    "./browser": {
+      "@safebyok/source": "./src/browser.ts",
+      "import": "./dist/browser.js",
+      "require": "./dist/browser.cjs"
+    },
     "./idb": {
       "@safebyok/source": "./src/idb.ts",
       "import": "./dist/idb.js",
@@ -92,6 +97,9 @@
   },
   "typesVersions": {
     "*": {
+      "browser": [
+        "./dist/browser.d.cts"
+      ],
       "idb": [
         "./dist/idb.d.cts"
       ]
@@ -102,6 +110,10 @@
       ".": {
         "import": "./dist/index.js",
         "require": "./dist/index.cjs"
+      },
+      "./browser": {
+        "import": "./dist/browser.js",
+        "require": "./dist/browser.cjs"
       },
       "./idb": {
         "import": "./dist/idb.js",

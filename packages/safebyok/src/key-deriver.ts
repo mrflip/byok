@@ -46,9 +46,10 @@ export type KeyDeriver = {
 }
 
 /**
- * The default KeyDeriver: Argon2id at the pinned {@link Argon2idWebV1} spec, through
+ * The KeyDeriver to use: Argon2id at the pinned {@link Argon2idWebV1} spec, through
  * `@noble/hashes` (audited, pure JS, runs wherever the host app does). The async form yields to
- * the event loop as it works, so a browser unlock does not freeze the page.
+ * the event loop as it works, so a browser unlock does not freeze the page. `browserOpts()`, from
+ * `safebyok/browser`, hands it to openVault; outside a browser, pass it as `keyDeriver` yourself.
  *
  * @example
  *   const keyBytes = await argon2idWebV1Deriver.deriveKeyBytes('correct horse battery staple', passphraseSalt)

@@ -32,6 +32,11 @@ security expert who knows what questions to ask.
 * 2026-10-14: the key deriver is a seam (`OpenVaultOpts.keyDeriver`): the pinned Argon2id deriver
   is the default, tests substitute a cheap SHA-256 deriver, and a stored vault records its
   deriver's label and refuses to unlock under any other.
+* 2026-10-15: `openVault` has no default key deriver: `keyDeriver` is required, and
+  `browserOpts()` (the `safebyok/browser` entry) supplies the pinned Argon2id one. An app that
+  passes none is refused with `bad_option`, never quietly given one, and the core's main entry
+  imports neither Argon2id nor `safebyok/browser`. Substituting a deriver still commits every
+  vault made under it to its label, as above.
 * 2026-10-14: every encryption binds its context as AES-GCM additional data
   (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus passphraseEpoch
   for key wraps and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
