@@ -7,7 +7,7 @@ import { convexVaultDB } from '../src/index'
 import { toConvexLockbox } from '../src/convex-vault-db'
 import type { ConvexVaultClient, SafebyokApi } from '../src/index'
 import { fakeDeployment } from './fake-deployment'
-import { RealPassphrase, boxOf, bundleOf, scopeOf } from './helpers'
+import { RealPassphrase, boxOf, bundleOf, heavyBox, scopeOf } from './helpers'
 // The core's behaviour suite and its cheap test deriver, by relative path: both test-only, not public.
 import { describeVaultDB } from '../../safebyok/tests/vault-db-suite'
 import type { VaultDBVerbs } from '../../safebyok/tests/vault-db-suite'
@@ -133,6 +133,14 @@ describe("convexVaultDB, as it is made", () => {
   })
 })
 
+/** `vaultDB`'s `u1` vault, made and filled with eight lockboxes of 900,000 bytes: a little under the component's limit. */
+const nearlyFull = async (vaultDB: ReturnType<typeof convexVaultDB>) => {
+  await vaultDB.createBundle(bundleOf('u1'))
+  for (let ii = 0; ii < 8; ii++) {
+    await vaultDB.updateBox(u1, heavyBox(`heavy_${String(ii)}`, 900_000), { vault_id: 'vault-id-u1', revision_id: null })
+  }
+}
+
 describe("convexVaultDB, refusing", () => {
   /** One call of each verb that reaches the deployment, on `u1`'s vault. */
   const EveryVerb: [string, (vaultDB: ReturnType<typeof convexVaultDB>) => Promise<unknown>][] = [
@@ -187,6 +195,39 @@ describe("convexVaultDB, refusing", () => {
     await vi.waitFor(() => { expect(watched).toHaveBeenCalled() })
     const refusal = await refusalOf(convexVaultDB(reactClient, deployment.api.safebyok).readBundle(u1))
     expect(refusal.kind).to.eq('not_permitted')
+  })
+
+  for (const [clientTitle, connect] of ClientCases) {
+    it(`refuses a lockbox the component has no room for over a ${clientTitle} as vault_full`, async () => {
+      const deployment = deploy()
+      const vaultDB = convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok)
+      await nearlyFull(vaultDB)
+      const refusal = await refusalOf(vaultDB.updateBox(u1, heavyBox('one_too_many', 200_000), { vault_id: 'vault-id-u1', revision_id: null }))
+      expect(refusal.kind).to.eq('vault_full')
+      expect(refusal.message).to.eq('This vault is full: erase a lockbox to make room, then try again.')
+      expect(refusal.cause).to.be.instanceOf(ConvexError)
+      const listed = await vaultDB.listBoxes(u1)
+      expect(listed.map((summary) => summary.boxlabel)).to.not.include('one_too_many')
+    })
+  }
+
+  it("has a vault's store() refuse as vault_full a lockbox the component has no room for, under the vault's own maxLockboxes", async () => {
+    const deployment = deploy()
+    const client = deployment.client('u1')
+    const vault = await openOver(client, deployment.api.safebyok)
+    await vault.unlock(RealPassphrase)
+    // Lockboxes the vault never opens, leaving less room than one whisper of 40,000 bytes takes.
+    const vaultDB = convexVaultDB(client, deployment.api.safebyok)
+    const bundle = await vaultDB.readBundle(u1)
+    const vaultId = bundle?.vault_id ?? ''
+    for (const [ii, bytes] of [...Array.from({ length: 8 }, () => 900_000), 120_000].entries()) {
+      await vaultDB.updateBox(u1, heavyBox(`heavy_${String(ii)}`, bytes), { vault_id: vaultId, revision_id: null })
+    }
+    const refusal = await refusalOf(vault.store('anthropic_api_key', 'x'.repeat(40_000)))
+    expect(refusal.kind).to.eq('vault_full')
+    expect(refusal.message).to.eq('This vault is full: erase a lockbox to make room, then try again.')
+    expect(vault.getSnapshot().boxes.map((box) => box.boxlabel)).to.not.include('anthropic_api_key')
+    vault.close()
   })
 
   it("makes any other failure storage_unavailable, keeping Convex's error as the cause", async () => {

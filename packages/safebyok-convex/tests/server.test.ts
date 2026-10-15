@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { ConvexError } from 'convex/values'
 import type { SafebyokErrorData } from '../src/server'
-import { boxOf, bundleOf, bySubject, hostWith, scopeOf } from './helpers'
+import { boxOf, bundleOf, bySubject, heavyBox, hostWith, scopeOf } from './helpers'
 
 const { api, createTest } = hostWith(bySubject)
 
@@ -59,6 +59,16 @@ describe("SafebyokComponent.api, for the vault's own user", () => {
     expect(await asU1.query(api.safebyok.watchVault, { scope: u1 })).to.deep.equal({
       vault_id: 'vault-id-u1', passphrase_epoch: 1, boxes: [['anthropic_api_key', 'rev-a1']],
     })
+  })
+
+  it("passes on the component's refusal of a lockbox it has no room for, as it came", async () => {
+    const t = await seeded()
+    const asU1 = t.withIdentity({ subject: 'u1' })
+    for (let ii = 0; ii < 8; ii++) {
+      await asU1.mutation(api.safebyok.updateBox, { scope: u1, lockbox: heavyBox(`heavy_${String(ii)}`, 900_000), expected: { vault_id: 'vault-id-u1', revision_id: null } })
+    }
+    const refusal = await refusalOf(asU1.mutation(api.safebyok.updateBox, { scope: u1, lockbox: heavyBox('one_too_many', 200_000), expected: { vault_id: 'vault-id-u1', revision_id: null } }))
+    expect(refusal).to.deep.equal({ kind: 'vault_full', message: 'This vault is full: erase a lockbox to make room, then try again.' })
   })
 
   it("resolves a failed expectation false, not as a refusal", async () => {

@@ -73,6 +73,14 @@ export const boxOf = (boxlabel: string, tag: string, overrides: Partial<Infer<ty
   ...overrides,
 })
 
+/**
+ * A lockbox whose whisper's ciphertext is `bytes` long. Its tag goes into three of its fields, so
+ * a replacement weighs exactly `bytes` more or less only under a tag as long as the one it replaces.
+ */
+export const heavyBox = (boxlabel: string, bytes: number, tag = boxlabel) => (
+  boxOf(boxlabel, tag, { whisper_ciphered: { cipher_iv_b64: 'iv', ciphertext_b64: 'c'.repeat(bytes) } })
+)
+
 /** The whispers a real vault is made with: obvious fakes, never real keys. */
 export const RealWhispers: Record<string, { whisper: Whisper, note?: string }> = {
   anthropic_api_key: { whisper: 'sk-ant-test-not-a-real-key', note: 'work account' },

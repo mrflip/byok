@@ -1,4 +1,5 @@
 import { defineSchema, defineTable } from 'convex/server'
+import { v } from 'convex/values'
 import { Lockbox, VaultBundle, VaultScope } from './validators'
 
 /**
@@ -17,4 +18,17 @@ export default defineSchema({
    */
   safebyok_lockboxes: defineTable(Lockbox.extend(VaultScope.fields))
     .index('by_box', ['user_id', 'applabel', 'vaultlabel', 'boxlabel']),
+  /**
+   * One tally per vault: how many lockboxes it holds and what they weigh as Convex counts bytes,
+   * kept in step by every lockbox write and erase, so a write checks the vault's limits without
+   * reading the vault. Filed under its bundle's row, so a vault made anew starts a tally of its
+   * own. A vault with no tally yet -- one written before tallies were kept -- is counted at its
+   * next lockbox write.
+   */
+  safebyok_vault_tallies: defineTable({
+    bundle_id:     v.id('safebyok_bundles'),
+    lockbox_count: v.number(),
+    lockbox_bytes: v.number(),
+  })
+    .index('by_bundle', ['bundle_id']),
 })

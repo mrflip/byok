@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
+import { ConvexError, getDocumentSize } from 'convex/values'
 import { LockboxSummary, memoryStore } from 'safebyok'
-import { RealPassphrase, RealWhispers, boxOf, bundleOf, componentTest, openOver, realRecords, scopeOf, vaults } from '../helpers'
+import { MaxVaultLockboxBytes, MaxVaultLockboxes } from '../../src/component/tallies'
+import { RealPassphrase, RealWhispers, boxOf, bundleOf, componentTest, heavyBox, openOver, realRecords, scopeOf, vaults } from '../helpers'
 
 const u1 = scopeOf('u1')
 const thisVault = { vault_id: 'vault-id-u1' }
@@ -334,18 +336,225 @@ const memoryStoreHolding = (real: Awaited<ReturnType<typeof realRecords>>) => {
   return store
 }
 
-// A Convex transaction may read 16 MiB. Listing and signing read the vault once, but erasing it
-// reads every lockbox twice (each delete reads its row again), so convexVaultDB declares half of
-// that, 8 MiB, as its maxVaultBytes. openVault admits a maxLockboxes only while that many
+// --------------------------------------------------------------------------- the vault's limits
+
+/** The tally the component keeps for `scope`'s vault, or null when it keeps none. */
+const keptTally = (t: ReturnType<typeof componentTest>, scope = u1) => t.run(async (ctx) => {
+  const bundle = await ctx.db.query('safebyok_bundles')
+    .withIndex('by_scope', (idx) => idx.eq('user_id', scope.user_id).eq('applabel', scope.applabel).eq('vaultlabel', scope.vaultlabel))
+    .unique()
+  if (bundle === null) { return null }
+  const kept = await ctx.db.query('safebyok_vault_tallies').withIndex('by_bundle', (idx) => idx.eq('bundle_id', bundle._id)).unique()
+  return kept && { lockbox_count: kept.lockbox_count, lockbox_bytes: kept.lockbox_bytes }
+})
+
+/** What `scope`'s vault really holds: its lockbox rows, counted, and weighed as Convex reads them. */
+const weighedTally = (t: ReturnType<typeof componentTest>, scope = u1) => t.run(async (ctx) => {
+  const rows = await ctx.db.query('safebyok_lockboxes')
+    .withIndex('by_box', (idx) => idx.eq('user_id', scope.user_id).eq('applabel', scope.applabel).eq('vaultlabel', scope.vaultlabel))
+    .collect()
+  return { lockbox_count: rows.length, lockbox_bytes: rows.reduce((sum, row) => sum + getDocumentSize(row), 0) }
+})
+
+/** Lockboxes stored straight into `u1`'s vault, as a component that kept no tallies left them. */
+const writeUntallied = (t: ReturnType<typeof componentTest>, lockboxes: ReturnType<typeof boxOf>[]) => t.run(async (ctx) => {
+  await Promise.all(lockboxes.map((lockbox) => ctx.db.insert('safebyok_lockboxes', { ...u1, ...lockbox })))
+})
+
+/** The refusal's data, when a call is refused with a ConvexError; fails the test if it was not. */
+const refusalOf = async (call: Promise<unknown>): Promise<unknown> => {
+  try {
+    await call
+  } catch (err) {
+    if (err instanceof ConvexError) { return err.data }
+    throw err
+  }
+  throw new Error('the call was not refused')
+}
+
+/** The refusal's data, when `u1`'s vault refuses `lockbox` with a ConvexError. */
+const refusedWrite = (t: ReturnType<typeof componentTest>, lockbox: ReturnType<typeof boxOf>, expected: { vault_id: string, revision_id: string | null }) => (
+  refusalOf(t.mutation(vaults.updateBox, { scope: u1, lockbox, expected }))
+)
+
+const VaultFull = { kind: 'vault_full', message: 'This vault is full: erase a lockbox to make room, then try again.' }
+
+/** The expectation a replacement of the box tagged `tag` carries. */
+const over = (tag: string) => ({ vault_id: 'vault-id-u1', revision_id: `rev-${tag}` })
+
+describe("a vault's tally", () => {
+  it("stays true across new lockboxes, replacements and erases", async () => {
+    const t = await withBundle()
+    const steps = [
+      () => t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a1'), expected: noBoxYet }),
+      () => t.mutation(vaults.updateBox, { scope: u1, lockbox: heavyBox('anthropic_api_key', 5000, 'a2'), expected: over('a1') }),
+      () => t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('openai_api_key', 'o1'), expected: noBoxYet }),
+      () => t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a3'), expected: over('a2') }),
+      () => t.mutation(vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault }),
+      () => t.mutation(vaults.eraseBox, { scope: u1, boxlabel: 'never_stored', expected: thisVault }),
+    ]
+    const counts = []
+    for (const step of steps) {
+      await step()
+      const kept = await keptTally(t)
+      expect(kept).to.deep.equal(await weighedTally(t))
+      counts.push(kept?.lockbox_count)
+    }
+    expect(counts).to.deep.equal([1, 1, 2, 2, 1, 1])
+  })
+
+  it("stays true across writes and erases running at once", async () => {
+    const t = await withBundle()
+    const boxlabels = Array.from({ length: 12 }, (_, ii) => `box_${String(ii)}`)
+    await Promise.all(boxlabels.map((boxlabel) => t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf(boxlabel, boxlabel), expected: noBoxYet })))
+    await Promise.all(boxlabels.slice(0, 5).map((boxlabel) => t.mutation(vaults.eraseBox, { scope: u1, boxlabel, expected: thisVault })))
+    expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
+    expect(await keptTally(t)).to.have.property('lockbox_count', 7)
+  })
+
+  it("goes with its vault when the vault is erased, and a vault made anew keeps one of its own", async () => {
+    const t = await withBundle()
+    await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
+    await t.mutation(vaults.eraseVault, { scope: u1, expected: thisVault })
+    expect(await t.run((ctx) => ctx.db.query('safebyok_vault_tallies').collect())).to.deep.equal([])
+    //
+    await t.mutation(vaults.createBundle, { bundle: bundleOf('u1', { vault_id: 'vault-id-anew' }) })
+    await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('openai_api_key', 'o1'), expected: { vault_id: 'vault-id-anew', revision_id: null } })
+    expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
+    expect(await keptTally(t)).to.have.property('lockbox_count', 1)
+  })
+
+  it("is kept apart for each vault", async () => {
+    const t = await withBundle()
+    await t.mutation(vaults.createBundle, { bundle: bundleOf('u2') })
+    await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'mine'), expected: noBoxYet })
+    await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('openai_api_key', 'mine'), expected: noBoxYet })
+    await t.mutation(vaults.updateBox, { scope: scopeOf('u2'), lockbox: boxOf('anthropic_api_key', 'theirs'), expected: { vault_id: 'vault-id-u2', revision_id: null } })
+    expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
+    expect(await keptTally(t, scopeOf('u2'))).to.deep.equal(await weighedTally(t, scopeOf('u2')))
+    expect(await keptTally(t, scopeOf('u2'))).to.have.property('lockbox_count', 1)
+  })
+
+  it("is counted, for a vault written before tallies were kept, at its next lockbox write, the vault reading as ever until then", async () => {
+    const t = await withBundle()
+    await writeUntallied(t, [boxOf('anthropic_api_key', 'a1'), boxOf('openai_api_key', 'o1')])
+    expect(await keptTally(t)).to.be.null
+    const listed = await t.query(vaults.listBoxSummaries, { scope: u1 })
+    expect(listed.map((summary) => summary.boxlabel)).to.deep.equal(['anthropic_api_key', 'openai_api_key'])
+    expect(await t.query(vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(boxOf('anthropic_api_key', 'a1'))
+    //
+    await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a2'), expected: over('a1') })
+    expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
+    expect(await keptTally(t)).to.have.property('lockbox_count', 2)
+  })
+
+  it("is not counted by an erase, which never reads the whole vault", async () => {
+    const t = await withBundle()
+    await writeUntallied(t, [boxOf('anthropic_api_key', 'a1'), boxOf('openai_api_key', 'o1')])
+    await t.mutation(vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault })
+    expect(await keptTally(t)).to.be.null
+    await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('github_token', 'g1'), expected: noBoxYet })
+    expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
+    expect(await keptTally(t)).to.have.property('lockbox_count', 2)
+  })
+})
+
+/** A backend whose `u1` vault holds eight lockboxes of 900,000 bytes: a little under its limit. */
+const nearlyFull = async () => {
+  const t = await withBundle()
+  for (let ii = 0; ii < 8; ii++) {
+    await t.mutation(vaults.updateBox, { scope: u1, lockbox: heavyBox(`heavy_${String(ii)}`, 900_000), expected: noBoxYet })
+  }
+  const { lockbox_bytes: lockboxBytes } = await weighedTally(t)
+  return { t, room: MaxVaultLockboxBytes - lockboxBytes }
+}
+
+describe("a vault's weight limit", () => {
+  it("refuses a new lockbox that would take the vault past it, writing nothing, and says so calmly", async () => {
+    const { t, room } = await nearlyFull()
+    const ante = { rows: await allRows(t), tally: await keptTally(t) }
+    const refusal = await refusedWrite(t, heavyBox('one_too_many', room), noBoxYet)
+    expect(refusal).to.deep.equal(VaultFull)
+    expect(JSON.stringify(refusal)).to.not.include('one_too_many')
+    expect({ rows: await allRows(t), tally: await keptTally(t) }).to.deep.equal(ante)
+  })
+
+  it("lets in a new lockbox that fits", async () => {
+    const { t } = await nearlyFull()
+    expect(await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })).to.be.true
+    expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
+  })
+
+  it("lets a replacement grow the vault up to it exactly, then refuses one byte more, and lets a lighter one in", async () => {
+    const { t, room } = await nearlyFull()
+    const grown = heavyBox('heavy_0', 900_000 + room, 'grown_0')
+    expect(await t.mutation(vaults.updateBox, { scope: u1, lockbox: grown, expected: over('heavy_0') })).to.be.true
+    expect(await keptTally(t)).to.deep.equal({ lockbox_count: 8, lockbox_bytes: MaxVaultLockboxBytes })
+    //
+    const overgrown = heavyBox('heavy_1', 900_001, 'grown_1')
+    expect(await refusedWrite(t, overgrown, over('heavy_1'))).to.deep.equal(VaultFull)
+    expect(await t.mutation(vaults.updateBox, { scope: u1, lockbox: heavyBox('heavy_1', 800_000, 'shrunk1'), expected: over('heavy_1') })).to.be.true
+    expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
+  })
+
+  it("refuses a vault past it nothing that shrinks it, and lets it be erased a lockbox at a time", async () => {
+    const t = componentTest(true)
+    await t.mutation(vaults.createBundle, { bundle: bundleOf('u1') })
+    // Nine of 900,000 bytes, written before tallies were kept: past the limit, still readable whole.
+    await writeUntallied(t, Array.from({ length: 9 }, (_, ii) => heavyBox(`heavy_${String(ii)}`, 900_000)))
+    expect(await refusedWrite(t, boxOf('anthropic_api_key', 'a1'), noBoxYet)).to.deep.equal(VaultFull)
+    const overgrown = heavyBox('heavy_0', 900_001, 'grown_0')
+    expect(await refusedWrite(t, overgrown, over('heavy_0'))).to.deep.equal(VaultFull)
+    expect(await t.mutation(vaults.updateBox, { scope: u1, lockbox: heavyBox('heavy_0', 800_000, 'shrunk0'), expected: over('heavy_0') })).to.be.true
+    expect(await keptTally(t)).to.be.null
+    //
+    expect(await t.mutation(vaults.eraseBox, { scope: u1, boxlabel: 'heavy_1', expected: thisVault })).to.be.true
+    expect(await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })).to.be.true
+    expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
+  })
+
+  it("keeps a vault already too large to read whole erasable, a lockbox at a time, its writes refused as full", async () => {
+    const t = componentTest(true)
+    await t.mutation(vaults.createBundle, { bundle: bundleOf('u1') })
+    // Twenty of 900,000 bytes, more than one transaction may read: four writes, each within its limits.
+    for (let batch = 0; batch < 4; batch++) {
+      await writeUntallied(t, Array.from({ length: 5 }, (_, ii) => heavyBox(`heavy_${String((batch * 5) + ii)}`, 900_000)))
+    }
+    await expect(t.query(vaults.listBoxSummaries, { scope: u1 })).rejects.toThrow(/Read too much data/)
+    expect(await refusedWrite(t, boxOf('anthropic_api_key', 'a1'), noBoxYet)).to.deep.equal(VaultFull)
+    for (let ii = 0; ii < 20; ii++) {
+      expect(await t.mutation(vaults.eraseBox, { scope: u1, boxlabel: `heavy_${String(ii)}`, expected: thisVault })).to.be.true
+    }
+    expect(await t.mutation(vaults.eraseVault, { scope: u1, expected: thisVault })).to.be.true
+    const { bundles, lockboxes } = await allRows(t)
+    expect({ bundles, lockboxes }).to.deep.equal({ bundles: [], lockboxes: [] })
+  })
+})
+
+// A Convex transaction may read 16 MiB and 32,000 documents, and write 16,000 documents. Listing
+// and signing read the vault once, but erasing it reads every row twice (each delete reads its row
+// again). So the component holds every vault to MaxVaultLockboxes lockboxes and
+// MaxVaultLockboxBytes bytes of them, whatever its client asks, and convexVaultDB declares half the
+// read budget, 8 MiB, as its maxVaultBytes. openVault admits a maxLockboxes only while that many
 // lockboxes at maxWhisperBytes each, plus 1 KiB apiece for their other fields, fit in half of the
 // 8 MiB: at most 101 of the largest default whisper (40444 bytes of JSON, about 54 KB stored),
-// and at most 1365 of 2 KiB whispers. The tests below fill a vault past each, with the longest
-// labels and notes, and erase it.
+// and at most 1365 of 2 KiB whispers. The tests below fill a vault to each of those, and to each
+// of the component's own limits, with the longest labels and notes, and erase it.
 
-/** A backend whose `u1` vault holds `count` lockboxes, each a whisper of `whisperBytes` and the heaviest public shell. */
-const fillVault = async (count: number, whisperBytes: number) => {
+/** A bundle as heavy as a Convex document may be, near enough: the most an erase reads beside the lockboxes. */
+const wholeDocumentBundle = () => {
+  const bundle = bundleOf('u1')
+  const padding = 'a'.repeat(1_048_576 - getDocumentSize(bundle) - 64)
+  return bundleOf('u1', { passphrase_salt_b64: bundle.passphrase_salt_b64 + padding })
+}
+
+/**
+ * A backend whose `u1` vault holds `count` lockboxes, each a whisper of `whisperBytes` and the
+ * heaviest public shell -- or as many as the component lets in before it refuses one as full.
+ */
+const fillVault = async (count: number, whisperBytes: number, bundle = bundleOf('u1')) => {
   const t = componentTest(true)
-  await t.mutation(vaults.createBundle, { bundle: bundleOf('u1') })
+  await t.mutation(vaults.createBundle, { bundle })
   const whisperCiphered = { cipher_iv_b64: 'i'.repeat(16), ciphertext_b64: 'c'.repeat(Math.ceil((whisperBytes + 16) * 4 / 3)) }
   const lockboxKeyWrapped = { cipher_iv_b64: 'i'.repeat(16), ciphertext_b64: 'k'.repeat(64) }
   // 256 characters of four UTF-8 bytes each: the most a note can weigh.
@@ -353,9 +562,19 @@ const fillVault = async (count: number, whisperBytes: number) => {
   for (let ii = 0; ii < count; ii++) {
     const boxlabel = `b${String(ii).padStart(39, '0')}`
     const lockbox = boxOf(boxlabel, crypto.randomUUID(), { whisper_ciphered: whisperCiphered, lockbox_key_wrapped: lockboxKeyWrapped, note })
-    await t.mutation(vaults.updateBox, { scope: u1, lockbox, expected: noBoxYet })
+    if (! await landsOrIsFull(t, lockbox)) { return { t, filledCount: ii } }
   }
-  return t
+  return { t, filledCount: count }
+}
+
+/** True when `lockbox` lands in `u1`'s vault as a new box, false when the vault refuses it as full. */
+const landsOrIsFull = async (t: ReturnType<typeof componentTest>, lockbox: ReturnType<typeof boxOf>) => {
+  try {
+    return await t.mutation(vaults.updateBox, { scope: u1, lockbox, expected: noBoxYet })
+  } catch (err) {
+    if (err instanceof ConvexError && (err.data as { kind?: unknown }).kind === 'vault_full') { return false }
+    throw err
+  }
 }
 
 /** What listing, watching and erasing the `u1` vault find: each a whole transaction over it. */
@@ -368,13 +587,35 @@ const listWatchErase = async (t: ReturnType<typeof componentTest>) => {
 }
 
 describe("a large vault, within Convex's per-transaction limits", () => {
-  it("lists, signs and erases 140 of the largest lockboxes, well past the 101 the core admits", async () => {
-    const t = await fillVault(140, 40_444)
-    expect(await listWatchErase(t)).to.deep.equal({ listedCount: 140, watchedCount: 140, erased: true, leftCount: 0 })
+  it("lists, signs and erases the 101 of the largest lockboxes the core admits", async () => {
+    const { t, filledCount } = await fillVault(101, 40_444)
+    expect(filledCount).to.eq(101)
+    expect(await listWatchErase(t)).to.deep.equal({ listedCount: 101, watchedCount: 101, erased: true, leftCount: 0 })
   })
 
   it("lists, signs and erases the 1365 lockboxes of 2 KiB whispers the core admits", async () => {
-    const t = await fillVault(1365, 2048)
+    const { t, filledCount } = await fillVault(1365, 2048)
+    expect(filledCount).to.eq(1365)
     expect(await listWatchErase(t)).to.deep.equal({ listedCount: 1365, watchedCount: 1365, erased: true, leftCount: 0 })
+  }, 30_000)
+
+  it("refuses the largest lockboxes past its weight limit, and erases the vault so filled beside a bundle of a whole document", async () => {
+    const { t, filledCount } = await fillVault(200, 40_444, wholeDocumentBundle())
+    expect(filledCount).to.be.within(102, 199)
+    const kept = await keptTally(t)
+    expect(kept).to.deep.equal(await weighedTally(t))
+    expect(kept?.lockbox_bytes).to.be.within(MaxVaultLockboxBytes - 60_000, MaxVaultLockboxBytes)
+    expect(await listWatchErase(t)).to.deep.equal({ listedCount: filledCount, watchedCount: filledCount, erased: true, leftCount: 0 })
+  })
+
+  it("refuses a lockbox past its count limit, never a replacement, and erases the vault so filled", async () => {
+    const t = componentTest(true)
+    await t.mutation(vaults.createBundle, { bundle: bundleOf('u1') })
+    await writeUntallied(t, Array.from({ length: MaxVaultLockboxes }, (_, ii) => boxOf(`b${String(ii).padStart(4, '0')}`, String(ii))))
+    expect(await refusedWrite(t, boxOf('one_too_many', 'x'), noBoxYet)).to.deep.equal(VaultFull)
+    expect(await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('b0000', 'replaced'), expected: over('0') })).to.be.true
+    expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
+    expect(await keptTally(t)).to.have.property('lockbox_count', MaxVaultLockboxes)
+    expect(await listWatchErase(t)).to.deep.equal({ listedCount: MaxVaultLockboxes, watchedCount: MaxVaultLockboxes, erased: true, leftCount: 0 })
   }, 30_000)
 })
