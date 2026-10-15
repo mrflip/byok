@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: threads 1, 3, 4 underway. Newer than the plan wherever the two disagree.
+**Status**: threads 1, 3, 5 underway; 4 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -10,9 +10,9 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | -- | ------ | ---- | ------ |
 | 1  | `vault_size_cap` | `origin/main` | underway |
 | 2  | `explicit_options` | thread 1 | pending |
-| 3  | `provider_open_rejection` | `origin/main` | in review |
-| 4  | `epoch_millis` | `origin/main` | in review |
-| 5  | `mask_utils` | `origin/main` | pending |
+| 3  | `provider_open_rejection` | `origin/main` | filing |
+| 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
+| 5  | `mask_utils` | `origin/main` | underway |
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
@@ -29,8 +29,28 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 * *Orchestrator:* **Thread 4** found almost nothing to change outside the stored fields: the demo's
   account `created_at` and one test clock. `DeviceUnlock.expires_at` and `expiresAt` were
   already numbers. Thread 2's rename of `expiresAt` inherits a number.
+  *Review:* clean, no fixes. Left, minor: the demo reads account rows with `JSON.parse(...) as
+  Account` (an old row keeps an ISO `created_at`; nothing reads it); `createAuth` takes no
+  `clock` option, so its test checks a window.
 * *Orchestrator:* **Thread 3**: `VaultProvider` now throws a rejected `openVault` during render.
   A host needs an error boundary around it; the React README line saying so rides with thread
   3 at filing. Threads 1 and 2 add and require provider props: thread 3 left the props and the
   `satisfies` line alone, so their rebase is mechanical. The `open_vault_unsubscribe` work is
   still on pre-move paths (`src/vault.ts`) and needs repathing before it can land.
+  *Review:* fixed -- two tests added (a `null` rejection reaches the boundary; one after sign-out
+  is ignored). Left: once the provider throws, its boundary unmounts it, so recovery needs the
+  host to reset the boundary (`key={userId}`): the README line says so (sent back to the worker
+  at filing, with the thread file's correction). `storage_unavailable` now reaches the boundary
+  although its message says "try again shortly" (Coach, below). A failed open still leaks
+  openVault's watch until `open_vault_unsubscribe` lands.
+* *Orchestrator:* **The main checkout moves under reviewers.** Another agent's uncommitted work
+  there became [#30](https://github.com/mrflip/safebyok/pull/30) mid-review. Both reviewers traced
+  it and carried on rightly. Reviewers: a change whose HEAD, reflog and stash are untouched,
+  matching a pushed branch of another agent's, is not the review's.
+
+## For the Coach
+
+* **`storage_unavailable` in the React provider** (thread 3): the preplan said every pre-vault
+  rejection is misuse or unfixable storage trouble, so it is thrown to the boundary; its own
+  message says "try again shortly". Worth a look when the misuse-versus-condition split
+  (TODO.md, *Error families*) comes up.
