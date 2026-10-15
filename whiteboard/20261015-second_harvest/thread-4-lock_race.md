@@ -1,6 +1,6 @@
 # Thread 4: lock_race (2026-10-15)
 
-Branch `20261015-lock_race`, cut from [#53](https://github.com/mrflip/safebyok/pull/53)'s tip `544088d`; PR not yet filed, stacked on #53. Reviewed: the reviewer added d17691b (the bundle-moved race, below). Justify: green (root 105, safebyok 350, safebyok-convex 219, safebyok-react 16, demo 28); `pnpm size` within every limit.
+Branch `20261015-lock_race`, cut from [#53](https://github.com/mrflip/safebyok/pull/53)'s tip `544088d`; PR [#55](https://github.com/mrflip/safebyok/pull/55), stacked on #53. Reviewed: the reviewer added d17691b (the bundle-moved race, below). Justify: green (root 105, safebyok 350, safebyok-convex 219, safebyok-react 16, demo 28); `pnpm size` within every limit.
 
 * **Built**:
   - `vault.ts`: a per-handle counter, `shutsSoFar`, and `shut()`, the one path every lock takes (`lock()` and `destroy()` today): it moves the counter, nulls the vaultKey and `askPassphraseAt`, and erases the device record. `unlock()` and `changePassphrase()` note the counter when they start. `takeUpUnlock()` is now the one place a vaultKey is taken up: it checks the counter, writes the device record, checks again (erasing the record it just wrote if a shut landed meanwhile), and only then sets `vaultKey` and `askPassphraseAt`. `unlock()` also checks right after its opening look at storage, so a lock landing there spares the derivation and never makes an absent vault.
