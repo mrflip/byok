@@ -115,7 +115,10 @@ if (passkey !== null) { await vault.unlock(passkey) }
   `createPasskey` refuses with kind `passkey_unavailable` when it does not (as do older
   browsers, and some authenticators). Offer the passphrase then.
 * **A dismissed prompt resolves null**, from either helper: WebAuthn reports a dismissal, a timeout
-  and "none of these passkeys is on this device" alike, on purpose.
+  and "none of these passkeys is on this device" alike, on purpose. A `createPasskey` whose second
+  touch (on authenticators that answer only when asked again) is dismissed, or whose authenticator
+  has no PRF, has still made a passkey: it stays on the authenticator, useless to the vault, until
+  the user deletes it.
 * **These passkeys are not logins.** Each is a new credential under a random user handle, so it
   never replaces a passkey your sign-in uses; its challenge is random and nothing on your server
   checks it. If you pass `rp.id` to `createPasskey`, pass the same `rpId` to `askPasskey` (and to

@@ -53,9 +53,9 @@ export type AskPasskeyOpts = {
  *
  * Resolves null when the user dismisses the prompt (or lets it time out). Refuses with kind
  * 'passkey_unavailable' when the browser has no WebAuthn, or the authenticator does not offer the
- * PRF extension -- in which case the passkey it made is useless to the vault, and stays on the
- * authenticator until the user deletes it -- and 'bad_option' when the relying party's `id` does
- * not fit this page.
+ * PRF extension, and 'bad_option' when the relying party's `id` does not fit this page. A passkey
+ * made but never answered for -- no PRF, or the second touch dismissed -- is useless to the
+ * vault, and stays on the authenticator until the user deletes it.
  *
  * @example
  *   const passkey = await createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName: fullName } })
