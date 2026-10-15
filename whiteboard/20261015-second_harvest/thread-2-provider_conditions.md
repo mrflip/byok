@@ -1,7 +1,7 @@
 # Thread 2: provider_conditions (2026-10-15)
 
 Branch `20261015-provider_conditions`, PR not yet filed, cut from `origin/main` (`23e38a2`).
-Justify: green (root 105; core 362, convex 219, react 26, demo 61 tests; `pnpm size` within
+Justify: green (root 105; core 363, convex 219, react 26, demo 61 tests; `pnpm size` within
 every limit).
 
 * **Built**:
@@ -15,8 +15,8 @@ every limit).
     `isVaultError`; `index.ts`): `VaultErrorFamilyVals` (`misuse`, `condition`),
     `VaultErrorFamilyForKind` (a `satisfies Record<VaultErrorKind, VaultErrorFamily>` table, so
     a new kind fails the build until it is given a family) and `isVaultCondition(err)`. The table
-    agrees kind for kind with [#50](https://github.com/mrflip/safebyok/pull/50)'s doc block and
-    README tables. Tests in a new `tests/errors.test.ts`.
+    agrees kind for kind with [#54](https://github.com/mrflip/safebyok/pull/54)'s doc block and
+    README tables (#54 is #50 re-filed, stacked on #46). Tests in a new `tests/errors.test.ts`.
   - *`VaultProvider` hands conditions down* (`packages/safebyok-react/src/vault-provider.tsx`):
     the context gains `openError: VaultError | null` and `retryOpen()`. A rejection that
     `isVaultCondition` lands in `openError` (vault stays null); misuse and anything not a
@@ -30,9 +30,11 @@ every limit).
     and an `OutageVaultDB` wrapping the IndexedDB adapter (it passes `describeVaultDB` while up,
     and refuses every read and write as `storage_unavailable` while down). The backend panel has
     a checkbox. `VaultDashboard` renders "Can't reach your vault." with the error's message and a
-    Retry button in place of "Opening vault…".
-  - Changeset `.changeset/20261015-provider_conditions.md`: `safebyok` and `safebyok-react`
-    minor (the lockstep group moves together anyway).
+    Retry button in place of "Opening vault…"; a `corrupt_record` says the record is damaged,
+    with no Retry, since a retry cannot mend it.
+  - Changeset `.changeset/20261015-provider_conditions.md`: `safebyok` patch (additive plus a
+    bug fix; before 1.0 a minor reads as a break), `safebyok-react` minor.
+  - A `notes/security.md` entry: `corrupt_record` at open now reaches the app in place.
 * **Decisions taken**:
   - Names: `openError` and `retryOpen` (the plan left them to me). `openError` is typed
     `VaultError`, since only a VaultError can be a condition.
@@ -42,7 +44,7 @@ every limit).
     the binding needs only the one test.
   - A non-VaultError rejection goes to the boundary: an adapter that throws a raw error has a
     bug (`VaultDB`'s public verbs already wrap a raw throw as `storage_unavailable`).
-  - `corrupt_record` lands in `openError` too, though a retry will not mend it: #50 makes it a
+  - `corrupt_record` lands in `openError` too, though a retry will not mend it: #54 makes it a
     condition, and the README tells the host to branch on `openError.kind`.
 * **Pulled forward**: the core fix for the leaked watch, from the never-filed
   `open_vault_unsubscribe` worktree (`/workspace/byok-open_vault_unsubscribe`, uncommitted, on
@@ -53,19 +55,31 @@ every limit).
 * **Deviations**: the plan's *Touches* list did not name `vault.ts`; the fix above needed it. The
   hunk is the last lines of `openVault` and a paragraph in its doc block, away from the unlock
   lines threads 3-5 change.
-* **Discoveries** (for whoever lands second, this or #50):
+* **Reviewer**: added `cbf5128`: a failed open's self-close is guarded, so an adapter whose
+  unsubscribe throws cannot replace the open's own error (with a test). Asked for, and done: the
+  changeset's patch bump, the security note, the demo's no-Retry for `corrupt_record`, and the
+  renamed provider test (it mocks the public `readBundle`, so it tests a rejection that is no
+  VaultError, not an adapter bug).
+* **Open questions** (follow-ups, not this thread):
+  - The deviceDB's failures at open (`readUnlock` throwing) reach the provider raw, not as a
+    VaultError, so they go to the boundary rather than `openError`. Wrapping them as
+    `storage_unavailable` in `openVault` (the reviewer's finding (a)) would hand them down in
+    place instead.
+  - `tallyWatches` is written twice (core `vault.test.ts`, react `vault-provider.test.tsx`); it
+    could move into `safebyok/testing`.
+* **Discoveries** (#54 is unmerged, stacked on #46; this branch rebases onto main once both land):
   - Both add `packages/safebyok/tests/errors.test.ts`, so the rebase meets an add/add conflict:
     keep both files' `describe`s and merge the imports. Worth adding then: a test that
-    `VaultErrorFamilyForKind` agrees with #50's README tables.
+    `VaultErrorFamilyForKind` agrees with #54's README tables.
   - Both rewrite the React README's *When opening fails* paragraph: take this thread's version
-    (which supersedes #50's parenthesis, whose claim that conditions "reach the boundary here
+    (which supersedes #54's parenthesis, whose claim that conditions "reach the boundary here
     too" stops being true).
-  - #50's TODO.md rewrite of *Error families* says the provider question is "still open"; this
-    thread closes it. I left TODO.md alone to keep out of #50's hunk: after both land, that
+  - #54's TODO.md rewrite of *Error families* says the provider question is "still open"; this
+    thread closes it. I left TODO.md alone to keep out of #54's hunk: after both land, that
     entry should go.
-  - `errors.ts` itself merges cleanly: #50 changes the top doc block and the `vault_full`
+  - `errors.ts` itself merges cleanly: #54 changes the top doc block and the `vault_full`
     comment; this thread only appends at the bottom.
-  - #50's core README *Misuse* intro says `VaultProvider` "rethrows a failed `openVault`
+  - #54's core README *Misuse* intro says `VaultProvider` "rethrows a failed `openVault`
     during render": after both land, that should say "misuse at open".
 * **For the Coach**:
   - A React host that relied on its error boundary to catch storage trouble at open now gets
