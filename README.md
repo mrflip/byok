@@ -14,6 +14,9 @@ This repository is a pnpm workspace. Its packages:
   `VaultDB` adapter that speaks to it.
 * [`safebyok-postgres`](packages/safebyok-postgres) -- Postgres storage: the tables, and the
   server-side `VaultDB` over them, through the driver your app already has.
+* [`safebyok-graphql`](packages/safebyok-graphql) -- GraphQL storage: the schema and resolvers
+  your server runs over a `VaultDB` such as the Postgres one, and the `VaultDB` over an urql
+  Client that calls them from the browser.
 * [`safebyok-demo-react`](demos/safebyok-demo-react) -- a playground app; never published.
 
 `pnpm install`, then `pnpm justify` lints, typechecks, tests and builds every package.
