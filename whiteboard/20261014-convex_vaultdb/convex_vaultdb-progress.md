@@ -1,6 +1,6 @@
 # Sprint convex_vaultdb: progress
 
-**Status**: threads 1, 2 filed (#17, #18); thread 3 in review
+**Status**: threads 1-3 filed (#17, #18, #19); thread 4 underway
 
 The orchestrator's document: newer than the plan wherever they disagree. Each worker's own
 account is in `thread-<N>-<label>.md` on its branch.
@@ -11,8 +11,8 @@ account is in `thread-<N>-<label>.md` on its branch.
 | ------ | ---------------- | ---------------------------- | ------------------ | -------- |
 | 1      | convex_skills    | `20261014-convex_skills`     | origin/main        | filed [#17](https://github.com/mrflip/safebyok/pull/17) (no review: docs only) |
 | 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18), tip 0e67d7a (erase ruling in, two reviews) |
-| 3      | convex_component | `20261014-convex_component`  | #18 at 0e67d7a     | in review (tip 336af77) |
-| 4      | convex_client    | `20261014-convex_client`     | thread 3, on filing | pending  |
+| 3      | convex_component | `20261014-convex_component`  | #18 at 0e67d7a     | filed [#19](https://github.com/mrflip/safebyok/pull/19), tip b8145dc (review: clean) |
+| 4      | convex_client    | `20261014-convex_client`     | #19 at b8145dc     | underway |
 
 ## What the threads have taught
 
@@ -121,3 +121,12 @@ returns. The decisions that shape the client:
   type-equality test. design.md carries the refusal conventions, the size bound, and packaging as settled for
   the workspace (a publishable `dist/` is the release threads').
 * **Open for the Coach:** should the component enforce the label grammar server-side (structural only today)?
+
+*Review (thread 3, [#19](https://github.com/mrflip/safebyok/pull/19)):* `clean`, no fixes. Confirmed: each mutation matches
+the core's `do*` semantics in its own transaction; the auth wrapper refuses signed-out and other users with fixed
+messages; the validators match the Zod records; every read is indexed, `user_id` leading. Taken at filing (docs):
+Convex's own argument-validation errors quote the refused arguments (user_id, notes, ciphertext; never plaintext)
+into host logs, and on dev to the client (security.md); `./test` assumes vitest/Vite (README). Left, minor: the
+**vault-size ceiling** (no write-side cap; for the Coach before publishing); no server check of `vault_id`
+constancy, epoch increase or fresh `revision_id` (matches the core); `watchVault` reads whole documents (Convex
+cannot project); `boxes` validated as `string[][]` (no tuple validator); wrappers restate the validators (style).
