@@ -23,6 +23,7 @@
     "test:root": "vitest run",
     "test:coverage": "pnpm test:root && pnpm -r --stream test:coverage",
     "build": "pnpm -r --stream build",
+    "size": "pnpm --filter safebyok build && size-limit",
     "justify": "pnpm lint:root && pnpm typecheck:root && pnpm test:root && pnpm -r --stream justify",
     "demo:react": "pnpm --filter 'safebyok-demo-react^...' build && pnpm --filter safebyok-demo-react dev",
     "newb": "scripts/newb",
