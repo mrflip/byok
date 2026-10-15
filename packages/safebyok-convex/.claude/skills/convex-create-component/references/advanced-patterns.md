@@ -1,5 +1,11 @@
 # Advanced Component Patterns
 
+> **Changed for safebyok-convex** from get-convex/agent-skills at `191a5c33` (Apache-2.0; the
+> changes are listed in `../../README.md`): the schema-derived validator example's handler now
+> takes the `args` it uses. That example still reads a `users` table from inside the component,
+> which the boundary rules in `../SKILL.md` forbid for an app-owned table: take it as an
+> illustration of `schema.doc(...).omit().extend()` only.
+
 Additional patterns for Convex components that go beyond the basics covered in
 the main skill file.
 
@@ -54,7 +60,7 @@ const vNotification = schema.doc("notifications").omit("userId").extend({
 export const getNotification = internalQuery({
   args: { id: schema.id("notifications") },
   returns: v.nullable(vNotification),
-  handler: async (ctx) => {
+  handler: async (ctx, args) => {
     const notification = await ctx.db.get("notifications", args.id);
     if (!notification) return null;
     const { userId, ...rest } = notification;
