@@ -28,3 +28,14 @@ export const tweakB64 = (b64: string): string => {
   const replacer = b64.startsWith('a') ? 'b' : 'a'
   return replacer + b64.slice(1)
 }
+
+/**
+ * Resolve after the macrotask queue has turned once: every promise already settled has run its
+ * continuation, and so has any timer due now. For tests that let background work (a refresh rung
+ * by a write) settle before they look.
+ *
+ * @returns A promise for the next tick.
+ *
+ * @example await wakeupAtNextTick() // background refreshes have landed
+ */
+export const wakeupAtNextTick = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })

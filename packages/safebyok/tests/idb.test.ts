@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createStore, set } from 'idb-keyval'
 import { idbDeviceDB, idbVaultDB, inspectIdb } from '../src/idb'
 import { boxOf, bundleOf, describeVaultDB, scopeOf } from '../src/testing'
-import { unlockOf } from './helpers'
+import * as TH from './test-helpers'
 
 // Each world gets its own database so tests never see each other's rows.
 const freshDbName = () => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
@@ -59,7 +59,7 @@ describe("idbDeviceDB", () => {
   it("keeps a DeviceUnlock by structured clone, non-extractable localUnlockKey and all", async () => {
     const deviceDB = idbDeviceDB({ dbName: freshDbName() })
     expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
-    const unlock = await unlockOf('u1')
+    const unlock = await TH.unlockOf('u1')
     await deviceDB.writeUnlock(unlock)
     const kept = await deviceDB.readUnlock(scopeOf('u1'))
     expect(kept?.vault_id).to.eq('vault-id-u1')
@@ -69,8 +69,8 @@ describe("idbDeviceDB", () => {
 
   it("erases one unlock, and eraseAll forgets every one", async () => {
     const deviceDB = idbDeviceDB({ dbName: freshDbName() })
-    await deviceDB.writeUnlock(await unlockOf('u1'))
-    await deviceDB.writeUnlock(await unlockOf('u2'))
+    await deviceDB.writeUnlock(await TH.unlockOf('u1'))
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
     await deviceDB.eraseUnlock(scopeOf('u1'))
     expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
     expect(await deviceDB.readUnlock(scopeOf('u2'))).to.not.be.null
