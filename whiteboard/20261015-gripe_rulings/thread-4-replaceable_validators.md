@@ -59,6 +59,10 @@ stacked on [#92](https://github.com/mrflip/safebyok/pull/92). Justify: green (ro
   - A wrapper that calls another VaultDB's *public* verbs (the demo's, Convex's test `perUser`)
     loses the bag unless it forwards it.
   - `String.raw` with a backslash before the closing backtick is a parse error. Twice.
+* **Review** (`fixed`): bbd20c3 stops `absent_box` from quoting the boxlabel. a5428ba refuses a
+  throwing host schema with no `cause`, since a refine may quote a pasted key. The reviewer's
+  minor findings are in the PR's open questions. Sizes after: `everything` 25.31 kB, `openVault`
+  17.36 kB.
 * **For the Coach** (also in the PR's *Open questions*)
   - `lockbox_too_large` as a new kind, or fold it into `vault_full`?
   - Narrowing the checks later strands boxes as `corrupt_record`. A listing that throws locks the
@@ -66,4 +70,4 @@ stacked on [#92](https://github.com/mrflip/safebyok/pull/92). Justify: green (ro
   - Should `AnyTextValidators` refuse lone surrogates, for Convex's sake?
   - Surface beyond the plan: `AnyTextValidators`, `LabelPattern`, `MaxLabelChars`,
     `MaxNoteChars`.
-  - Size: +0.81 kB `everything`, +0.69 kB `openVault`.
+  - Size: +0.84 kB `everything`, +0.73 kB `openVault`.
