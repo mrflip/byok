@@ -10,7 +10,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
 | 1 | argon2_wasm       | #68 (kdf_configs) `80ac694`            | filed #74                      |
 | 2 | unlock_envelopes  | main (#63 merged; was `ea4b93d`)       | filed #71                      |
 | 3 | passkey_unlock    | #71 `983bd0c`                          | underway                       |
-| 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | underway                       |
+| 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | in review                      |
 | 5 | postgres_vaultdb  | #71 `983bd0c` (rebased from `ea4b93d`) | filed #73                      |
 | 6 | graphql_vaultdb   | #73 `d55eb9c`                          | underway                       |
 
@@ -75,3 +75,11 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
     base before filing (unpushed, so allowed). If its base has not moved by then, it files
     stacked on the base as it is.
   - The sprint branch itself was cut from `ea4b93d`, and is rebased onto main at wrap-up.
+* *Orchestrator:* **Thread 4 (indexeddb_package), ready.** It pulled forward the TODO side quest
+  "IndexedDB `versionedUpdate` truly atomic": every write verb is now one readwrite transaction,
+  with four race tests that fail against the old adapter. Strike that side quest from TODO at
+  wrap-up. It also splits `inspectIdb` into `inspectIdbDeviceDB` (core) and `inspectIdbVaultDB`
+  (package), a public-surface break, and settles roadmap 3's "decision on `safebyok/idb`". Old
+  vaults keep reading: same database, store, ckeys and channel. Expect one-line conflicts with #73
+  in `.changeset/config.json` and the root README's package list. CLAUDE.md's *Layout* lists only
+  the old packages here and on #73 (#74 added its own line): a sweep after they land.
