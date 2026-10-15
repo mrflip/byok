@@ -29,6 +29,10 @@ const thrownBy = (run: () => void): unknown => {
 
 const HeadTails: readonly (readonly [number, number])[] = [[0, 0], [0, 1], [1, 0], [2, 4], [4, 0]]
 
+const graphemesOf = (text: string): string[] => (
+  Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), (part) => part.segment)
+)
+
 type MaskCase = readonly [whisper: string, opts: MaskOpts | undefined, expected: string, blurb: string]
 
 describe("mask", () => {
@@ -102,16 +106,19 @@ describe("mask", () => {
     expect(mask('sk-ant-abcd1234')).to.eq(mask('sk-ant-abcd1234'))
   })
 
-  it("never returns more characters than maxLen", () => {
-    const whisper = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  it("never returns more characters than maxLen, counting an emoji or an accented letter as one", () => {
+    const whispers = ['abcdefghijklmnopqrstuvwxyz0123456789', `${Family}${KeyEmoji}${EAcute}x`.repeat(9)].map((text) => graphemesOf(text))
     const combos = [9, 10, 15, 20, 36, Infinity].flatMap((maxLen) => (
       HeadTails.flatMap(([head, tail]) => (
         [0, 6, 20, 40].map((minStars) => ({ head, tail, minStars, maxLen }))
       ))
     )).filter((opts) => opts.maxLen >= opts.head + opts.tail + 9)
     for (const opts of combos) {
-      for (const len of [0, 1, 5, 12, 20, 36]) {
-        expect(mask(whisper.slice(0, len), opts).length).to.be.at.most(opts.maxLen)
+      for (const chars of whispers) {
+        for (const len of [0, 1, 5, 12, 20, 36]) {
+          const masked = mask(chars.slice(0, len).join(''), opts)
+          expect(graphemesOf(masked).length).to.be.at.most(opts.maxLen)
+        }
       }
     }
   })
