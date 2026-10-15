@@ -200,7 +200,7 @@ render for that, and hands a condition down as `openError`).
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
 | `bad_label`           | a label (or the `userId`) that fails the rules                   | Pass labels the app chose; check a user-typed one first with `Label` |
 | `bad_whisper`         | a whisper JSON cannot carry (`undefined`, a function, a class instance) | Store plain JSON; to empty a lockbox, `erase` it |
-| `bad_option`          | an `openVault` option, or a `store()` note, out of its range     | Fix the option; the message names it                    |
+| `bad_option`          | an option or argument out of its range: an `openVault` option, a `store()` note, a passphrase or callback of the wrong type, a record handed to a `VaultDB` write | Fix the call; the message names what it takes |
 | `vault_closed`        | the vault handle was closed                                      | Open the vault again; do not use a handle after `close()` |
 | `unknown_key_deriver` | the vault names a key deriver this handle was not built with     | Update safebyok, or open the vault with the deriver that made it |
 

@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxWhisperBytes, VaultBundle, VaultScope, Whisper, wallClock, type Clock } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import {
@@ -109,14 +109,18 @@ export type OpenVaultOpts = {
 export type Vault = {
   /** Current snapshot; same object until something changes (useSyncExternalStore-ready). */
   getSnapshot: () => VaultSnapshot
-  /** Calls `listener` after every snapshot change; returns the unsubscribe. */
+  /**
+   * Calls `listener` after every snapshot change; returns the unsubscribe. Kind 'bad_option' for
+   * a listener that is not a function.
+   */
   subscribe: (listener: () => void) => () => void
 
   /**
    * Open the vault with its passphrase, remembering the unlock on this device for
    * `forcePassphraseReentryHours`. On an `absent` vault this first unlock creates it, with this passphrase.
    * A wrong passphrase throws kind 'wrong_passphrase' and changes nothing -- learned from the
-   * vaultKey envelope refusing to decrypt, never from a comparison.
+   * vaultKey envelope refusing to decrypt, never from a comparison. A passphrase that is not text
+   * is misuse: kind 'bad_option'.
    *
    * A `lock()`, `lockSoon()` or `destroy()` called while the unlock is still under way wins: the
    * vault stays locked, this device remembers nothing, and the call throws kind 'vault_locked'. A vault the
@@ -206,7 +210,8 @@ export type Vault = {
   read(boxlabel: string): Promise<Whisper>
   /**
    * Hand the whisper to `callback` and return its result: the shape that discourages parking a
-   * secret in state. Requires unlocked.
+   * secret in state. Requires unlocked; kind 'bad_option', before anything is read, for a
+   * `callback` that is not a function.
    *
    * @example await vault.use('anthropic_api_key', (whisper) => callAnthropic(whisper))
    */
@@ -263,6 +268,9 @@ type VaultKeyPair = { transientKey: CryptoKey, sessionKey: CryptoKey }
  *
  * An open that fails -- storage refusing a user not yet signed in, say -- rejects with the
  * storage's own error and leaves nothing running behind it, so the host simply opens again later.
+ * Misuse is refused before storage is touched: kind 'bad_label' for a label, or a `userId` that
+ * is not non-empty text, and 'bad_option' for any other option, a `vaultDB` or `deviceDB` short
+ * of a verb among them.
  *
  * @example
  *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, ...browserOpts() })
@@ -271,11 +279,12 @@ type VaultKeyPair = { transientKey: CryptoKey, sessionKey: CryptoKey }
  *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, deviceDB, keyDeriver })
  */
 export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
+  if (! isBag(opts)) { throw new VaultError('bad_option', 'openVault takes one bag of options: applabel, userId, vaultlabel, vaultDB, deviceDB and keyDeriver at least.') }
   const applabel   = parseLabel(opts.applabel)
   const vaultlabel = parseLabel(opts.vaultlabel)
-  if (! opts.userId) { throw new VaultError('bad_label', 'A vault needs the signed-in user: pass the userId from your auth layer.') }
-  const scope: VaultScope = { applabel, user_id: opts.userId, vaultlabel }
-  const { vaultDB, deviceDB } = opts
+  const scope: VaultScope = { applabel, user_id: parseUserId(opts.userId), vaultlabel }
+  const vaultDB = parseVaultDB(opts.vaultDB)
+  const deviceDB = parseDeviceDB(opts.deviceDB)
   const reentryMs = parseForcePassphraseReentryHours(opts.forcePassphraseReentryHours)
   const logger = parseLogger(opts.logger)
   const clock = parseClock(opts.clock)
@@ -543,8 +552,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const kept = await deviceDB.readUnlock(scope)
     if (kept === null) { return }
     const checked = DeviceUnlock.safeParse(kept)
+    // A record naming some other scope is out of place, as unreadable as a mangled one.
+    const readable = checked.success && isOfScope(checked.data, scope)
     const now = clockNow()
-    const fits = checked.success
+    const fits = readable
       && checked.data.vault_id === bundle.vault_id
       && checked.data.passphrase_epoch === bundle.passphrase_epoch
       && checked.data.ask_passphrase_at > now
@@ -552,7 +563,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     if (! fits) {
       await deviceDB.eraseUnlock(scope)
       // Expired, or outdated by a new passphrase or a shorter setting, is routine; unreadable is worth a word.
-      if (! checked.success) { forgetUnreadableUnlock() }
+      if (! readable) { forgetUnreadableUnlock() }
       return
     }
     const remembered = checked.data
@@ -649,12 +660,14 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     getSnapshot: () => snapshot,
 
     subscribe: (listener) => {
+      if (typeof listener !== 'function') { throw new VaultError('bad_option', 'subscribe needs a listener function to call after each snapshot change.') }
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
 
     unlock: async (passphrase) => {
       ensureOpen()
+      parsePassphrase(passphrase, 'unlock')
       if (! passphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
       const shutsThen = shutsSoFar
       // Sync with the backend first: the passphrase proves itself against the bundle as it
@@ -703,6 +716,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
     changePassphrase: async (oldPassphrase, newPassphrase) => {
       ensureOpen()
+      parsePassphrase(oldPassphrase, 'changePassphrase')
+      parsePassphrase(newPassphrase, 'changePassphrase')
       if (! newPassphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
       const shutsThen = shutsSoFar
       // The old passphrase proves itself against the bundle as the backend holds it now: a
@@ -797,6 +812,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     read: async (boxlabel) => await openBox(boxlabel),
 
     use: async (boxlabel, callback) => {
+      if (typeof callback !== 'function') { throw new VaultError('bad_option', 'use needs a callback function to hand the whisper to.') }
       const whisper = await openBox(boxlabel)
       return await callback(whisper)
     },
@@ -966,20 +982,80 @@ const parseLabel = (candidate: string): string => {
   return checked.data
 }
 
-/**
- * The share of an adapter's limits a vault's whispers may claim: of its maxRecordBytes, one
- * whisper; of its maxVaultBytes, every lockbox at its largest. Stored, a whisper's ciphertext is
- * base64, a third larger than the whisper; the records' other fields, and each backend's own way
- * of counting bytes, need the rest.
- */
-const WhisperShareOfStorage = 0.5
+const parseUserId = (candidate: string): string => {
+  const checked = VaultScope.shape.user_id.safeParse(candidate)
+  if (! checked.success) {
+    throw new VaultError('bad_label', 'A vault needs the signed-in user: pass the userId from your auth layer, as non-empty text.')
+  }
+  return checked.data
+}
+
+/** True when `record` names `scope`: the same app, user and vault. */
+const isOfScope = (record: VaultScope, scope: VaultScope): boolean => (
+  record.applabel === scope.applabel && record.user_id === scope.user_id && record.vaultlabel === scope.vaultlabel
+)
+
+// The refusal never quotes its input: a passphrase stays out of error messages.
+const parsePassphrase = (candidate: string, said: 'unlock' | 'changePassphrase') => {
+  if (typeof candidate !== 'string') {
+    throw new VaultError('bad_option', `${said} takes each passphrase as a string: the text the user typed.`)
+  }
+}
+
+const isFunction = (candidate: unknown) => typeof candidate === 'function'
+const isBag = (candidate: unknown) => typeof candidate === 'object' && candidate !== null
+
+/** What a VaultDB must carry: its public verbs. Checked only: openVault keeps the adapter. */
+const vaultDBShape = Z.object({
+  readBundle:   Z.custom(isFunction),
+  createBundle: Z.custom(isFunction),
+  updateBundle: Z.custom(isFunction),
+  readBox:      Z.custom(isFunction),
+  listBoxes:    Z.custom(isFunction),
+  updateBox:    Z.custom(isFunction),
+  eraseBox:     Z.custom(isFunction),
+  eraseVault:   Z.custom(isFunction),
+  subscribe:    Z.custom(isFunction),
+})
+
+const parseVaultDB = (candidate: VaultDB): VaultDB => {
+  if (! vaultDBShape.safeParse(candidate).success) {
+    throw new VaultError('bad_option', "vaultDB is not a VaultDB: pass a storage adapter, such as localVaultDB(), idbVaultDB() from 'safebyok/idb', or your backend's own.")
+  }
+  return candidate
+}
+
+/** What a DeviceDB must carry. Checked only: openVault keeps the device store it was handed. */
+const deviceDBShape = Z.object({
+  readUnlock:  Z.custom(isFunction),
+  writeUnlock: Z.custom(isFunction),
+  eraseUnlock: Z.custom(isFunction),
+  eraseAll:    Z.custom(isFunction),
+})
+
+const parseDeviceDB = (candidate: DeviceDB): DeviceDB => {
+  if (! deviceDBShape.safeParse(candidate).success) {
+    throw new VaultError('bad_option', "deviceDB is not a DeviceDB: in a browser, spread browserOpts() from 'safebyok/browser' into openVault's options; elsewhere, pass memoryDeviceDB().")
+  }
+  return candidate
+}
 
 /**
- * Room for a lockbox's fields besides its whisper -- its boxlabel, note, wrapped lockboxKey,
- * revision and times, and the scope a backend files it under -- counted as whisper bytes
- * are, against {@link WhisperShareOfStorage}. A vault of many small whispers is mostly these.
+ * How many bytes of storage a vault reserves for each byte of whisper: two. Stored, a whisper's
+ * ciphertext is base64, a third larger than the whisper; the rest is room for each backend's own
+ * way of counting bytes. So one whisper may claim at most half of an adapter's `maxRecordBytes`.
  */
-const LockboxFieldsBytes = 1024
+export const StoredBytesPerWhisperByte = 2
+
+/**
+ * Room for a lockbox's stored fields besides its whisper, in bytes of their JSON: its format,
+ * boxlabel, revision, note, times, wrapped lockboxKey, the cipherIv and tag of its
+ * whisperCiphered, and the scope a backend files it under. At their largest -- a forty-character
+ * boxlabel, applabel and vaultlabel, a note of 256 UTF-16 code units at three UTF-8 bytes each, a
+ * user_id of 512 bytes -- they take under 1900; a vault of many small whispers is mostly these.
+ * A JSON-text backend's escapes, six bytes for a control character, are its own way of counting.
+ */
+export const LockboxFieldsBytes = 2048
 
 const maxWhisperBytes = Z._default(Z.int().check(Z.positive()), MaxWhisperBytes)
 const maxLockboxes = Z._default(Z.int().check(Z.positive()), MaxLockboxes)
@@ -1126,14 +1202,13 @@ const parseDeclaredBytes = (vaultDB: VaultDB, limitname: 'maxRecordBytes' | 'max
  */
 const ensureLimitsFit = (vaultDB: VaultDB, whisperByteLimit: number, lockboxLimit: number) => {
   const recordBytes = parseDeclaredBytes(vaultDB, 'maxRecordBytes')
-  if (whisperByteLimit > recordBytes * WhisperShareOfStorage) {
+  if (whisperByteLimit * StoredBytesPerWhisperByte > recordBytes) {
     throw new VaultError('bad_option', `maxWhisperBytes is over half of the ${String(recordBytes)} bytes this storage adapter holds in one record, so a whisper that large might not store: pass a smaller maxWhisperBytes.`)
   }
   const vaultBytes = parseDeclaredBytes(vaultDB, 'maxVaultBytes')
-  const vaultBudget = vaultBytes * WhisperShareOfStorage
-  const lockboxBytes = whisperByteLimit + LockboxFieldsBytes
-  if (lockboxLimit * lockboxBytes <= vaultBudget) { return }
-  const fitting = Math.floor(vaultBudget / lockboxBytes)
+  const lockboxBytes = (whisperByteLimit * StoredBytesPerWhisperByte) + LockboxFieldsBytes
+  if (lockboxLimit * lockboxBytes <= vaultBytes) { return }
+  const fitting = Math.floor(vaultBytes / lockboxBytes)
   const outcome = fitting === 0
     ? 'At that maxWhisperBytes, not even one lockbox fits: pass a smaller maxWhisperBytes.'
     : `At that maxWhisperBytes, at most ${String(fitting)} lockboxes fit: pass a smaller maxLockboxes or maxWhisperBytes.`
