@@ -40,7 +40,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "justify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "prepublishOnly": "pnpm justify"
+    "prepublishOnly": "node ../../scripts/require-pnpm.ts && pnpm justify"
   },
   "devDependencies": {
     "@arethetypeswrong/core": "^0.18.5",
