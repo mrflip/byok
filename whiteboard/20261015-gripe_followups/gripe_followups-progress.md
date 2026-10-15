@@ -7,7 +7,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 | # | Thread              | Base          | Status   |
 | - | ------------------- | ------------- | -------- |
-| 1 | vault_amendments    | `origin/main` | underway |
+| 1 | vault_amendments    | `origin/main` | in review ([#87](https://github.com/mrflip/safebyok/pull/87)) |
 | 2 | validation_overrides | `origin/main` | filed [#85](https://github.com/mrflip/safebyok/pull/85) (no review: documents only) |
 
 ## What the threads have taught
