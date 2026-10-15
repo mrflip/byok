@@ -7,7 +7,7 @@ export const VaultErrorKindVals = [
   'bad_label',           // a label that does not meet the Label rules
   'bad_whisper',         // a whisper JSON cannot carry (undefined, a function, a class), or a non-string
   'whisper_too_large',   // a whisper over the vault's maxWhisperBytes
-  'bad_option',          // an openVault or mask option out of range, or options that cannot go together
+  'bad_option',          // an openVault or mask option out of its range
   'vault_closed',        // the vault handle was closed and cannot be used again
   'corrupt_record',      // a stored record failed validation or decryption verification
   'unknown_key_deriver', // the vault names a key deriver this handle was not built with
