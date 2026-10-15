@@ -129,6 +129,15 @@ At wrap-up: the gripe_followups line (#87 → #85 → #83) → #(3) → #(4) →
 sprint's PR, squashed on top. Peers biggest first; thread 1 will conflict with threads 3 and 4
 in `vault-db.ts` and `vault.ts`, resolved by its worker at the restack.
 
+## Decisions taken in YOLO
+
+* **Thread 2's fallback dropped** (flagged review of #91): the fallback for engines without
+  `Intl.RelativeTimeFormat` used `Intl.NumberFormat`'s `style: 'unit'`, which every engine got
+  *after* RTF, so it would throw where it ran; any engine that runs our es2022 build has both,
+  and the dialog's DOM markup never runs on React Native. The plan's guard was the
+  orchestrator's addition, not the Coach's. Also: "Locks on this device in ..." when creating a
+  vault, "Locks again ..." on an ordinary unlock.
+
 ## For the Coach
 
 * Answered in chat: `Intl.RelativeTimeFormat` across the target platforms.
