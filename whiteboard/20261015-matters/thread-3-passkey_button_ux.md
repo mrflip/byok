@@ -2,7 +2,8 @@
 
 Branch `20261015-passkey_button_ux`, PR [#98](https://github.com/mrflip/safebyok/pull/98), cut
 from main at `c4c070f`. Justify: green -- root 123, core 956, React 83 (was 71), Convex 276,
-IndexedDB 104, Postgres 156, GraphQL 153, argon2-wasm 44, demo 124.
+IndexedDB 104, Postgres 156, GraphQL 153, argon2-wasm 44, demo 124 (React 92 after the
+review round).
 
 * **Built**:
   - `packages/safebyok-react/src/boundary.tsx`: `Boundary`, a small error boundary each component
@@ -14,6 +15,11 @@ IndexedDB 104, Postgres 156, GraphQL 153, argon2-wasm 44, demo 124.
     provider test of a stale-tab unlock (`unknown_key_deriver`) that closes to `dismissed`;
     `TH.renderReporting`, a render that keeps what React hands `onCaughtError`.
   - README *When an unlock fails*; `notes/security.md` entry; changeset (React minor).
+  - **Review round** (pulled in as best UX): `withUnlockedVault` settles every call
+    (`vault-provider.tsx`: an `Asking` per showing, ended with false when its vault goes); the
+    gripe is `role="alert"`; the passkey's word survives typing until the next submit, and focus
+    returns to the field when the button goes; the notice is an `alertdialog` that Escape closes.
+    Six provider tests, each failing on the old provider.
 * **Decisions taken**:
   - **The rule**: a failure that is the user's to mend (a condition) shows in its own words, as
     before. Anything else, arising inside the dialog or the button, is contained there: the user
@@ -33,10 +39,13 @@ IndexedDB 104, Postgres 156, GraphQL 153, argon2-wasm 44, demo 124.
   - **`reentryHours` of no hours is contained too**, though it is a prop: the dialog can never work
     with it, and containing it keeps the rest of the app usable. The developer meets it on the
     dialog's first open.
+  - **Overlapping calls share one dialog** rather than the newer one settling the older with
+    false, as the review suggested: one unlock should run every action that waited for it.
   - `VaultProvider`'s open is left as it was: its misuse throws at mount, on every load, before any
     user has typed anything, and there is no in-place UI of ours to fall back to.
-* **Deviations**: one `eslint-disable-next-line jsx-a11y/no-autofocus` on the notice's Close, as the
-  form's field already has (focus would otherwise fall to the page). No `ts-expect-error`.
+* **Deviations**: `eslint-disable-next-line jsx-a11y/no-autofocus` on the notice's Close, as the
+  field has; `jsx-a11y/no-noninteractive-element-interactions` on the `alertdialog`, for Escape.
+  No `ts-expect-error`.
 * **Discoveries**:
   - The gloss said misuse "shows calmly in the button"; on main both components already threw it to
     the host's boundary (big_feats thread 3 copied the dialog). The real gap was the blank page.
@@ -44,27 +53,15 @@ IndexedDB 104, Postgres 156, GraphQL 153, argon2-wasm 44, demo 124.
     deployment that changes the deriver is a production path for "misuse", not only a dev one.
   - Testing Library 16's `render(ui, { onCaughtError })` keeps the suite quiet and lets tests
     assert the report.
+  - Left: dialog semantics and Escape on the *form* (gripes PR #90 rewrites its markup; cheaper
+    there), and resetting `Boundary` when a hand-rendered dialog's `vault` changes (the provider
+    keys each showing, so its dialogs start fresh).
 
 ## Before and after
 
-**Unchanged**: a wrong passphrase, storage out of reach, a damaged record, a passkey that doesn't
-answer -- each shows in the dialog in the vault's calm words, to retry or cancel. A dismissed
-passkey prompt does nothing; a lock that wins closes the dialog.
-
-**A failure not the user's to mend, while unlocking** (a closed vault handle, a vault made with a
-key deriver this build lacks, an `rpId` that doesn't fit the page, a bug):
-
-| | Before | After |
-|-|--------|-------|
-| **End user, passphrase** | The dialog, and whatever the host's nearest boundary wraps (usually the app), is replaced by the host's fallback; with no boundary, React unmounts the root and the page goes blank. The action they started never finishes. | The dialog stays, its form replaced by "Something went wrong. This app ran into a problem of its own, not one you caused, and could not unlock your vault. Your secrets are safe. Close this, reload the page, and try again." and a focused Close. The rest of the app is untouched; Close is a cancel. |
-| **End user, passkey** | The same as above: the button's throw took the dialog with it. | The button disappears and the dialog says "Your passkey can't be used here just now. Unlock with your passphrase instead." The passphrase field stays. |
-| **Developer** | The error reaches their boundary (its fallback), or with none an uncaught error and the dev overlay; `withUnlockedVault`'s promise hangs. | The broken dialog on screen, and `console.error` from React with the very error and its component stack, in dev and prod; their tracker gets it if hooked on `createRoot(..., { onCaughtError })` (README shows how). Their boundary is never triggered; `withUnlockedVault` resolves null on Close. |
-
-**A hand-rendered dialog given `reentryHours` of zero, negative or NaN**: before, thrown to the
-host's boundary on first render; after, the same notice on first render, and the same report.
-
-**Opening the vault with a bad option** (`VaultProvider`): unchanged -- thrown to the host's
-boundary at mount, on every load.
+What the developer and the end user each meet, before and after, is in
+`thread-3-passkey_button_ux-before_after.md` beside this file: for the Coach, ruling on what
+remains, and for anyone changing how these components fail.
 
 ## For the Coach
 
@@ -73,5 +70,4 @@ boundary at mount, on every load.
   `react-error-boundary`, which would be a runtime dependency of every host. Rec: keep the class.
 * **A choice you may want to overrule**: on such a failure the dialog replaces its form with the
   notice rather than showing a gripe above the form. Rec: keep it -- retrying cannot mend misuse.
-* No `onError` prop for routing these failures apart from the host's other React errors. Rec: none
-  until a host asks.
+* No `onError` prop. Rec: none until a host asks.
