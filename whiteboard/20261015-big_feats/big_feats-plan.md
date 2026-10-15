@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach)
-* **Status**: threads 2, 5 filed (#71, #73); 1 filing; 3, 4 underway; 6 waits for a slot (base #73)
+* **Status**: threads 1, 2, 5 filed (#74, #71, #73); 3, 4, 6 underway
 
 ## Read first
 
@@ -91,7 +91,7 @@ every point checked (parameters, variant and version, lane rounding, UTF-8), and
 either wasm export carries no noble. Left, minor: the 1 GiB refusal still names `@noble/hashes`;
 `parseKeyDeriverSpec` takes a `KeyDeriverSpec`, not `unknown`; hash-wasm caches a failed compile,
 and older Safari may need `'unsafe-eval'`; `pnpm size` builds the core twice; a duplicated test
-helper. Not checked: real browsers' CSP behaviour.
+helper. Not checked: real browsers' CSP behaviour. Filed as [#74](https://github.com/mrflip/safebyok/pull/74), stacked on #68.
 
 ### 2. unlock_envelopes
 
