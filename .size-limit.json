@@ -5,5 +5,7 @@
   { "name": "argon2idWebV1Deriver", "path": "packages/safebyok/dist/index.js", "import": "{ argon2idWebV1Deriver }", "limit": "5.5 kB" },
   { "name": "idbDeviceDB", "path": "packages/safebyok/dist/idb.js", "import": "{ idbDeviceDB }", "limit": "9.5 kB" },
   { "name": "browserOpts", "path": "packages/safebyok/dist/browser.js", "import": "{ browserOpts }", "limit": "14.5 kB" },
-  { "name": "mask", "path": "packages/safebyok/dist/utils.js", "import": "{ mask }", "limit": "6.5 kB" }
+  { "name": "mask", "path": "packages/safebyok/dist/utils.js", "import": "{ mask }", "limit": "6.5 kB" },
+  { "name": "argon2idWasmWebV1Deriver", "path": "packages/safebyok-argon2-wasm/dist/index.js", "import": "{ argon2idWasmWebV1Deriver }", "limit": "10 kB" },
+  { "name": "argon2idWasmDeriver", "path": "packages/safebyok-argon2-wasm/dist/index.js", "import": "{ argon2idWasmDeriver }", "limit": "16 kB" }
 ]

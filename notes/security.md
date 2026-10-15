@@ -488,3 +488,19 @@ security expert who knows what questions to ask.
   from it. A subscription's user is fixed when it starts (over a websocket, when the connection
   opened), so a session revoked meanwhile keeps hearing the vault's scope -- never a record --
   until the subscription ends.
+* 2026-10-15: **a second implementation behind one label.** `safebyok-argon2-wasm` runs Argon2id
+  through `hash-wasm` (4.12.0, MIT, no dependencies; its Argon2 is C written for it after Go's
+  `x/crypto/argon2`, compiled to WebAssembly and embedded in its JavaScript; widely used, but
+  with no published audit, where `@noble/hashes` has one), under the same specs and
+  labels as the core's `@noble/hashes` deriver, `argon2id_web_v1` included. It checks a spec with
+  the core's own `parseKeyDeriverSpec`, so its bounds are the core's by construction; hash-wasm's
+  own limits (a salt of at least 8 bytes, memory of at least 8 KiB a lane, below 4 GiB) are no
+  narrower. That the two derive the same bytes is a test, not a claim: both are held to Argon2id's
+  reference test vector, and to each other byte for byte across the supplied spec and cheap specs
+  that press on lane counts, memory not divisible into segments, the shortest and longest salts,
+  and non-ASCII passphrases; a vault made under each opens under the other. A difference would
+  strand vaults across devices rather than weaken them. Its derivation runs in one synchronous
+  WebAssembly call (about 130 ms at `argon2id_web_v1` in Node, against the core's 580 ms), so it
+  holds the thread rather than yielding as the core's does. It needs `'wasm-unsafe-eval'` in a
+  page's Content-Security-Policy, and refuses (`bad_option`) where WebAssembly will not compile
+  or is missing (Hermes): it never falls back to another deriver on its own.
