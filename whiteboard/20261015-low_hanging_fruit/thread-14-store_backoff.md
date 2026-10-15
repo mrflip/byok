@@ -1,8 +1,8 @@
 # Thread 14: store_backoff (2026-10-15)
 
-Branch `20261015-store_backoff`, PR not yet filed, stacked on
-[#44](https://github.com/mrflip/safebyok/pull/44) (thread 7). Justify: green (safebyok 327,
-safebyok-convex 219, safebyok-react 8, demo 24, root 91). Had no separate review: a small
+Branch `20261015-store_backoff`, PR [#45](https://github.com/mrflip/safebyok/pull/45), on
+`main` (thread 7's [#44](https://github.com/mrflip/safebyok/pull/44) had merged by filing time).
+Justify: green (safebyok 327, safebyok-convex 219, safebyok-react 15, demo 28, root 91). Had no separate review: a small
 follow-up the Coach asked for directly, in YOLO mode.
 
 * **Built**: in `packages/safebyok/src/vault.ts`, `retryStale` now sleeps before each retry:
