@@ -1,7 +1,7 @@
 # Thread 2: the storage verbs and versionedUpdate, in the core (2026-10-15)
 
 Branch `20261014-storage_verbs`, PR [#18](https://github.com/mrflip/safebyok/pull/18), on main.
-Justify: root green (255 tests, build, attw, publint); `packages/safebyok-react` green (7 tests).
+Justify: root green (257 tests, build, attw, publint); `packages/safebyok-react` green (7 tests).
 Reviewed: b6cdd2c (the reviewer's) makes `subscribe` wrap an adapter's throw as
 `storage_unavailable` too; the IndexedDB erase window is now noted. Then the Coach's ruling of
 2026-10-15 gave both erases a `vault_id` expectation (below); threads 3 and 4 build to that.
@@ -104,7 +104,16 @@ Reviewed: b6cdd2c (the reviewer's) makes `subscribe` wrap an adapter's throw as
     the `do*` verbs and does each update's and erase's check atomically. No stored record
     changed shape.
   - **Ruled** (Coach, 2026-10-15, was an open question): both erases carry a `vault_id`-only
-    expectation. Built.
+    expectation. Built; the second review (37ec7ed, 8d69b44) made `destroy()` take its
+    `vault_id` before its first await, and pinned a destroy of a vault already gone.
+  - **Open** (from that review, in the PR): `destroy()` on a handle that never saw a bundle
+    resolves without erasing, even if a vault has since appeared elsewhere -- so "delete
+    account" can report success while a vault stands. Options: refresh first and erase what
+    stands (an erase aimed at a vault this handle never read), or refuse as `stale_write`.
+  - **Open** (same): after a refused `destroy()` the handle has caught up and holds the
+    successor's `vault_id`, so an app that retries `destroy()` automatically erases the reborn
+    vault. That is the documented "a second destroy() takes it"; whether a retry should need
+    something more deliberate is the Coach's call.
   - **Minor**: `storage_unavailable` also wraps a programming error inside an adapter (a
     TypeError), with that error as `cause`. Its message says "could not be reached, or failed".
   - **Minor**: the `do*` names are mechanical to rename if you'd rather another rule.
