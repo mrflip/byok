@@ -571,3 +571,9 @@ security expert who knows what questions to ask.
   first, or it may deadlock with `eraseVault`; the DDL's comments and the README say so, and give
   the recount statement for a count gone astray. The refusal's message names the limit, never a
   boxlabel or a record.
+* 2026-10-15: `PassphraseModal` and `PasskeyUnlockButton` (`safebyok-react`) catch, in an error
+  boundary of their own, every failure that is not a condition (misuse, or anything that is no
+  `VaultError`, whatever its value), and show the user fixed copy, never the error's message. React
+  hands the very thrown value to the host root's `onCaughtError` (the console by default), as it
+  would any error a boundary catches; before, it went to the host's boundary instead. The dialog's
+  form, and the passphrase typed into its state, unmount with the failure.
