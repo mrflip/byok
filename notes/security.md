@@ -7,6 +7,23 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-15: `mask` (`safebyok/utils`) takes a whisper and returns text meant for display: its
+  first and last few characters (two and four by default, at the caller's choice) and, up to
+  `maxLen` (15 by default), its length. Beyond `maxLen` the result is fixed-width
+  (`head***...***tail`), or `maxLen` stars when even that does not fit, so the length stops
+  showing; a `head` and `tail` large enough to cover a short whisper show it nearly whole, and
+  `minStars: 0` shows a short one entirely. It makes the whisper safe to butcher
+  (normalize and strip the whole input), butchers it, and then checks the result is safe by
+  passing it through the same stripping, so every result, even the stars, is free of combining
+  marks, control, format, surrogate, private-use and unassigned code points, spaces, ignorable
+  code points, bidirectional controls and direction marks, and the symbols drawn blank or as a
+  box (U+2800, U+1D159, U+FFFC); it is one plain line that cannot hide or overwrite anything.
+  Right-to-left letters and numbers are kept (the Coach's ruling: strip the direction markers,
+  not the scripts), so a mask may reorder neighbouring neutral characters, such as stars and
+  punctuation, in a display; with no controls in it, it cannot do worse. `mask` is meant for
+  plain text, and arbitrary blobs may give unusual behavior. `head`, `tail` and `minStars` are capped at 1000, so no option
+  makes it build an unbounded string. It throws `bad_option` or `bad_whisper` without quoting
+  its input.
 * 2026-10-14 (revised 2026-10-15 for the push-to-main workflow): the package is staged on npm by `.github/workflows/release.yml`, run on every push
   to main (when the Coach has merged the Version PR, and a version npm lacks is waiting),
   authenticating by npm's trusted publishing (OIDC, no stored token) from the `npm`
