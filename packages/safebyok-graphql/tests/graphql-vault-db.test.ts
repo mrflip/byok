@@ -1,0 +1,181 @@
+import { describe, expect, it } from 'vitest'
+import { Client, CombinedError, fetchExchange } from '@urql/core'
+import { executeExchange } from '@urql/exchange-execute'
+import { buildSchema } from 'graphql'
+import { VaultError, memoryDeviceDB, openVault } from 'safebyok'
+import { postgresVaultDB } from 'safebyok-postgres'
+import * as TH from './test-helpers'
+import { graphqlVaultDB } from '../src/index'
+import type { GraphqlVaultClient } from '../src/index'
+
+TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB over PGlite', async () => {
+  const schema = TH.schemaOver(await TH.emptyDatabase())
+  return TH.perUser((userId) => TH.browserFor(schema, userId))
+})
+
+const u1 = TH.scopeOf('u1')
+const thisVault = { vault_id: 'vault-id-u1' }
+
+/** A fetch with no network behind it. */
+const offline = () => Promise.reject(new TypeError('Failed to fetch'))
+
+describe("graphqlVaultDB, its client", () => {
+  const BadClients = [
+    [null,                                                      'no client at all'],
+    [{},                                                        'an object with none of a Client\'s methods'],
+    [{ query: () => null, mutation: () => null },               'a client that cannot subscribe'],
+    [(url: string) => fetch(url),                               'a fetch function, not a Client'],
+    ['https://app.example.test/api/graphql',                    'the url alone'],
+  ] as const
+
+  for (const [client, blurb] of BadClients) {
+    it(`refuses ${blurb}, with kind bad_option`, () => {
+      expect(() => graphqlVaultDB(client as unknown as GraphqlVaultClient)).to.throw(VaultError).with.property('kind', 'bad_option')
+    })
+  }
+
+  it("declares a mebibyte to a record, and no limit to a vault", () => {
+    const vaultDB = graphqlVaultDB(new Client({ url: 'https://app.example.test/api/graphql', exchanges: [fetchExchange] }))
+    expect(vaultDB.maxRecordBytes).to.eq(1024 * 1024)
+    expect(vaultDB.maxVaultBytes).to.eq(Infinity)
+  })
+})
+
+describe("graphqlVaultDB, as the README has it", () => {
+  it("carries a real vault, made and opened by the core in the browser", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const opened = () => openVault({
+      applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: TH.browserFor(schema, 'u1'), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver,
+    })
+    const first = await opened()
+    await first.unlock('correct horse battery staple')
+    await first.store('anthropic_api_key', 'sk-ant-test-not-a-real-key', { note: 'work account' })
+    await first.store('openai_api_key', { apiKey: 'sk-test-not-a-real-key', orgId: null })
+    first.close()
+
+    const second = await opened()
+    await second.unlock('correct horse battery staple')
+    expect(await second.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
+    expect(await second.read('openai_api_key')).to.deep.equal({ apiKey: 'sk-test-not-a-real-key', orgId: null })
+    expect(second.getSnapshot().boxes.map((box) => box.note)).to.deep.equal(['work account', null])
+    await second.erase('openai_api_key')
+    expect(second.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic_api_key'])
+    second.close()
+  })
+
+  it("never lets the Client's cache answer: a read after another device's write sees it", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const browser = TH.browserFor(schema, 'u1')
+    expect(await browser.readBundle(u1)).to.be.null
+    await TH.browserFor(schema, 'u1').createBundle(TH.bundleOf('u1'))
+    expect(await browser.readBundle(u1)).to.deep.equal(TH.bundleOf('u1'))
+  })
+})
+
+describe("graphqlVaultDB, its refusals", () => {
+  it("carries the server's refusal across as the same VaultError, kind and message", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const notMine = await TH.refusalOf(TH.browserFor(schema, 'u1').readBundle(TH.scopeOf('u2')))
+    expect(notMine).to.be.instanceOf(VaultError)
+    expect(notMine.kind).to.eq('not_permitted')
+    expect(notMine.message).to.eq('This vault belongs to another user: a signed-in user reaches only their own vaults.')
+    expect(notMine.cause).to.be.undefined
+  })
+
+  it("refuses a stale write with stale_write, and a signed-out browser with not_permitted", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const browser = TH.browserFor(schema, 'u1')
+    await browser.createBundle(TH.bundleOf('u1'))
+    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', passphrase_epoch: 7 }))
+    expect(stale.kind).to.eq('stale_write')
+    const signedOut = await TH.refusalOf(TH.browserFor(schema, null).readBundle(u1))
+    expect(signedOut.kind).to.eq('not_permitted')
+  })
+
+  it("refuses with storage_unavailable when the database is down, never saying what the driver said", async () => {
+    const dbDown = new Error('password authentication failed for user "vault_owner"')
+    const schema = TH.schemaOver(await TH.database(), ({ userId }) => postgresVaultDB({ client: TH.failingClient(dbDown), userId }))
+    const refusal = await TH.refusalOf(TH.browserFor(schema, 'u1').readBundle(u1))
+    expect(refusal.kind).to.eq('storage_unavailable')
+    expect(String(refusal.message)).to.not.include('vault_owner')
+    expect(JSON.stringify(refusal)).to.not.include('vault_owner')
+  })
+
+  it("refuses with storage_unavailable, urql's error its cause, when the server does not serve the vault's schema", async () => {
+    const schema = buildSchema('type Query { hello: String }')
+    const vaultDB = graphqlVaultDB(new Client({ url: 'https://app.example.test/api/graphql', exchanges: [executeExchange({ schema })] }))
+    const refusal = await TH.refusalOf(vaultDB.readBundle(u1))
+    expect(refusal.kind).to.eq('storage_unavailable')
+    expect(refusal.cause).to.be.instanceOf(CombinedError)
+  })
+
+  it("refuses with storage_unavailable when the network fails", async () => {
+    const vaultDB = graphqlVaultDB(new Client({ url: 'https://app.example.test/api/graphql', exchanges: [fetchExchange], fetch: offline }))
+    const refusal = await TH.refusalOf(vaultDB.updateBox(u1, TH.boxOf('openai', 'r1'), { vault_id: 'vault-id-u1', revision_id: null }))
+    expect(refusal.kind).to.eq('storage_unavailable')
+  })
+
+  it("refuses with storage_unavailable an answer holding neither data nor an error", async () => {
+    const answered = { toPromise: () => Promise.resolve({ data: undefined }) }
+    const mute = { query: () => answered, mutation: () => answered, subscription: () => answered }
+    const refusal = await TH.refusalOf(graphqlVaultDB(mute as unknown as GraphqlVaultClient).readBundle(u1))
+    expect(refusal.kind).to.eq('storage_unavailable')
+  })
+
+  it("passes over a GraphQL error whose kind is not a VaultError's", async () => {
+    const schema = buildSchema('type Query { safebyokReadBundle(scope: SafebyokVaultScopeInput!): Boolean } input SafebyokVaultScopeInput { applabel: String!, user_id: String!, vaultlabel: String! }')
+    const rootValue = { safebyokReadBundle: () => Promise.reject(Object.assign(new Error('no such kind'), { extensions: { kind: 'made_up' } })) }
+    const vaultDB = graphqlVaultDB(new Client({ url: 'https://app.example.test/api/graphql', exchanges: [executeExchange({ schema, rootValue })] }))
+    const refusal = await TH.refusalOf(vaultDB.readBundle(u1))
+    expect(refusal.kind).to.eq('storage_unavailable')
+  })
+})
+
+describe("graphqlVaultDB, hearing other writes", () => {
+  it("hears another device's write to its vault, and stops when unsubscribed", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const elsewhere = TH.browserFor(schema, 'u1')
+    await elsewhere.createBundle(TH.bundleOf('u1'))
+    const { heard, onChange } = TH.changeCounter()
+    const unsubscribe = TH.browserFor(schema, 'u1').subscribe(u1, onChange)
+    await TH.aWhile()
+
+    await elsewhere.updateBox(u1, TH.boxOf('openai', 'r1'), { ...thisVault, revision_id: null })
+    await TH.eventually(() => heard.count === 1)
+    unsubscribe()
+    await elsewhere.eraseBox(u1, 'openai', thisVault)
+    await TH.aWhile()
+    expect(heard.count).to.eq(1)
+  })
+
+  it("hears nothing of another vault's writes", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const { heard, onChange } = TH.changeCounter()
+    const unsubscribe = TH.browserFor(schema, 'u1').subscribe(u1, onChange)
+    await TH.aWhile()
+    await TH.browserFor(schema, 'u2').createBundle(TH.bundleOf('u2'))
+    await TH.browserFor(schema, 'u1').createBundle(TH.bundleOf('u1', { vaultlabel: 'spare' }))
+    await TH.aWhile()
+    expect(heard.count).to.eq(0)
+    unsubscribe()
+  })
+
+  it("hears nothing, and throws nothing, when the server refuses the subscription", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const { heard, onChange } = TH.changeCounter()
+    const unsubscribe = TH.browserFor(schema, 'u1').subscribe(TH.scopeOf('u2'), onChange)
+    await TH.browserFor(schema, 'u2').createBundle(TH.bundleOf('u2'))
+    await TH.aWhile()
+    expect(heard.count).to.eq(0)
+    unsubscribe()
+  })
+
+  it("hears nothing through a Client that has no way to send subscriptions", async () => {
+    const vaultDB = graphqlVaultDB(new Client({ url: 'https://app.example.test/api/graphql', exchanges: [fetchExchange], fetch: offline }))
+    const { heard, onChange } = TH.changeCounter()
+    const unsubscribe = vaultDB.subscribe(u1, onChange)
+    await TH.aWhile()
+    expect(heard.count).to.eq(0)
+    unsubscribe()
+  })
+})
