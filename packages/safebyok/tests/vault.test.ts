@@ -911,6 +911,109 @@ describe("close", () => {
   })
 })
 
+/**
+ * Counts the storage watches `vaultDB` opens and closes again: a failed open hands its caller no
+ * handle to close, so a watch it left running would be one nobody could end.
+ */
+const tallyWatches = (vaultDB: VaultDB) => {
+  const tally = { opened: 0, closed: 0 }
+  const subscribe = vaultDB.subscribe.bind(vaultDB)
+  vi.spyOn(vaultDB, 'subscribe').mockImplementation((scope, onChange) => {
+    tally.opened += 1
+    const unsubscribe = subscribe(scope, onChange)
+    return () => {
+      tally.closed += 1
+      unsubscribe()
+    }
+  })
+  return tally
+}
+
+/** Makes the vault, with a lockbox in it, and closes the handle: what a later open will find. */
+const seedVault = async (world: ReturnType<typeof makeWorld>) => {
+  const vault = await world.open()
+  await vault.unlock('pw')
+  await vault.store('anthropic', 'sk-fake')
+  vault.close()
+}
+
+// Each arranges for one storage call during the open to fail, and hands back the error it planted
+// (or a promise of it, for an arrangement that first seeds the vault).
+const FailedOpenCases: readonly (readonly [string, (world: ReturnType<typeof makeWorld>) => unknown])[] = [
+  ['storage refuses the first read, as for a user not yet signed in', (world) => {
+    const refusal = new VaultError('not_permitted', 'Sign in to reach this vault.')
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(refusal)
+    return refusal
+  }],
+  ['storage cannot be reached for the first read', (world) => {
+    const trouble = new VaultError('storage_unavailable', 'The vault storage could not be reached.')
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(trouble)
+    return trouble
+  }],
+  ['storage fails listing the lockboxes, after the bundle read', async (world) => {
+    await seedVault(world)
+    const trouble = new VaultError('storage_unavailable', 'The vault storage could not be reached.')
+    vi.spyOn(world.vaultDB, 'listBoxes').mockRejectedValueOnce(trouble)
+    return trouble
+  }],
+  ["the device's own store fails reading the remembered unlock", async (world) => {
+    await seedVault(world)
+    const trouble = new Error('device storage is unavailable')
+    vi.spyOn(world.deviceDB, 'readUnlock').mockRejectedValueOnce(trouble)
+    return trouble
+  }],
+]
+
+describe("a failed open", () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  for (const [blurb, arrange] of FailedOpenCases) {
+    it(`rejects with the very error, and ends its storage watch, when ${blurb}`, async () => {
+      const world = makeWorld()
+      const planted = await arrange(world)
+      const tally = tallyWatches(world.vaultDB)
+      let refusal: unknown = null
+      try {
+        await world.open()
+      } catch (err) {
+        refusal = err
+      }
+      expect(refusal).to.eq(planted)
+      expect(tally).to.deep.equal({ opened: 1, closed: 1 })
+    })
+  }
+
+  it("ends its storage watch when the stored bundle does not parse", async () => {
+    const world = makeWorld()
+    world.dbStore.write('vault:acme:u1:main', '{"format":"not-a-vault"}')
+    const tally = tallyWatches(world.vaultDB)
+    await expectRefusal(world.open(), 'corrupt_record')
+    expect(tally).to.deep.equal({ opened: 1, closed: 1 })
+  })
+
+  it("leaves nothing listening: a later write starts no read on its behalf", async () => {
+    const world = makeWorld()
+    const reads = vi.spyOn(world.vaultDB, 'readBundle')
+    reads.mockRejectedValueOnce(new VaultError('not_permitted', 'Sign in to reach this vault.'))
+    await expectRefusal(world.open(), 'not_permitted')
+    const readsBefore = reads.mock.calls.length
+    // Any write rings the store's change bell; only a handle still listening would read.
+    world.dbStore.write('elsewhere', '{}')
+    await TH.wakeupAtNextTick()
+    expect(reads.mock.calls.length).to.eq(readsBefore)
+  })
+
+  it("leaves the vault to open cleanly once storage relents, with one live watch", async () => {
+    const world = makeWorld()
+    const tally = tallyWatches(world.vaultDB)
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(new VaultError('not_permitted', 'Sign in to reach this vault.'))
+    await expectRefusal(world.open(), 'not_permitted')
+    const vault = await world.open()
+    expect(vault.getSnapshot().state).to.eq('absent')
+    expect(tally.opened - tally.closed).to.eq(1)
+  })
+})
+
 // The handle a vault keeps between operations must refuse subtle.exportKey; an extractable
 // handle may exist only inside an operation about to wrap the vaultKey, dropped on return.
 // The closure hides the handle itself, so the suite below watches what each flow asks WebCrypto
