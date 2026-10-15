@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { cipherBinding, deriveWrappingKey, fromB64, importWrappingKeyBytes, randomBytes, toB64, unwrapKeyUnder, wrapKeyUnder } from './crypto'
+import { cipherBinding, deriveWrappingKey, fromB64, importWrappingKeyBytes, randomBytes, toB64, unwrapKeyUnder, wrapKeyUnder, type Ciphered } from './crypto'
 import { VaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import { PassphraseKeyBytes } from './key-deriver-spec'
@@ -11,10 +11,12 @@ import { PasskeySaltBytes, type PasskeyEnvelope, type PasskeyProof, type Passphr
  * and `Envelope.sealPasskey` make one, `Envelope.open` finds the one a passphrase or a passkey
  * opens, `Envelope.summarize` gives its public face. Internal to the package; the vault calls it.
  *
- * Each envelope's wrap is bound to its vault and to its own public header -- every field but the
- * wrap itself, encoded with its keys sorted -- under a purpose its method names. The bundle's
- * `unlock_epoch` is not in it: a change to one envelope bumps the epoch, and the others, whose
- * passphrases this device does not hold, must still open.
+ * Each envelope's wrap is bound to its vault -- the scope, and the bundle fields that never
+ * change, `vault_id` and `registered_at` -- and to its own public header (every field but the wrap
+ * itself, encoded with its keys sorted), under a purpose its method names. A passkey envelope's
+ * key is made with that same context as its HKDF `info`. The bundle's `unlock_epoch` and the
+ * list of envelopes are not in it: a change to one envelope bumps the epoch and rewrites the
+ * list, and the others, whose passphrases this device does not hold, must still open.
  */
 
 /**
@@ -30,6 +32,12 @@ type HeaderOf<EnvelopeT> = EnvelopeT extends unknown ? Omit<EnvelopeT, 'vault_ke
 /** An envelope's public header, every field but its wrap: what the wrap is bound to. */
 export type EnvelopeHeader = HeaderOf<UnlockEnvelope>
 
+/**
+ * What an envelope's wrap binds of the bundle it belongs to: the fields a bundle never changes once
+ * made. A whole {@link VaultBundle} is one.
+ */
+export type BundleIdentity = Pick<VaultBundle, 'vault_id' | 'registered_at'>
+
 /** The binding purpose of each method's wrap, so no method's envelope opens as another's. */
 const PurposeForMethod = {
   passphrase: 'vault_key_passphrase_wrapped',
@@ -42,9 +50,12 @@ const SessionUsage = { extractable: false, usage: ['wrapKey', 'unwrapKey'] } as 
 // list, so it carries the narrowest one.
 const TransientUsage = { extractable: true, usage: ['wrapKey'] } as const
 
-/** The context an envelope's wrap is bound to: the vault it lets into, and its own public header. */
-const binding = (scope: VaultScope, vaultId: string, header: EnvelopeHeader): Uint8Array => (
-  cipherBinding('safebyok-vault-v1', scope.applabel, scope.user_id, scope.vaultlabel, vaultId, PurposeForMethod[header.method], header)
+/**
+ * The context an envelope's wrap is bound to (and, for a passkey, its key made with): the vault it
+ * lets into, and its own public header.
+ */
+const binding = (scope: VaultScope, bundle: BundleIdentity, header: EnvelopeHeader): Uint8Array => (
+  cipherBinding('safebyok-vault-v1', scope.applabel, scope.user_id, scope.vaultlabel, bundle.vault_id, bundle.registered_at, PurposeForMethod[header.method], header)
 )
 
 /** `envelope` without its wrap. */
@@ -84,7 +95,7 @@ const passphraseKeyOf = async (keyDeriver: KeyDeriver, passphrase: string, saltB
  * @param keyDeriver - What makes the passphraseKey; its label goes on the envelope.
  * @param passphrase - The passphrase this envelope admits.
  * @param scope - The vault's scope, bound into the wrap.
- * @param vaultId - The vault's id, bound into the wrap.
+ * @param bundle - The bundle's `vault_id` and `registered_at`, bound into the wrap.
  * @param naming - The envelope's `unlock_id` and `unlocklabel`.
  * @param vaultKey - The vaultKey to wrap: extractable, as only such a key can be.
  * @returns The envelope, and a non-extractable handle on the vaultKey unwrapped from it.
@@ -93,7 +104,7 @@ export const sealPassphrase = async (
   keyDeriver: KeyDeriver,
   passphrase: string,
   scope: VaultScope,
-  vaultId: string,
+  bundle: BundleIdentity,
   naming: { unlock_id: string, unlocklabel: string },
   vaultKey: CryptoKey,
 ): Promise<{ envelope: PassphraseEnvelope, sessionKey: CryptoKey }> => {
@@ -106,7 +117,7 @@ export const sealPassphrase = async (
     salt_b64:          toB64(saltBytes),
   } as const
   const passphraseKey = await passphraseKeyOf(keyDeriver, passphrase, saltBytes)
-  const envelopeBinding = binding(scope, vaultId, header)
+  const envelopeBinding = binding(scope, bundle, header)
   const wrapped = await wrapKeyUnder(passphraseKey, vaultKey, envelopeBinding)
   const sessionKey = await unwrapKeyUnder(passphraseKey, wrapped, envelopeBinding, SessionUsage)
   return { envelope: { ...header, vault_key_wrapped: wrapped }, sessionKey }
@@ -148,7 +159,7 @@ export const openWithPassphrase = async (
     throw new VaultError('corrupt_record', "One of this vault's passphrases is stored with a salt its key deriver could not have made: the bundle is damaged. It was left as it is.")
   }
   for (const envelope of derivable) {
-    const opened = await tryPassphrase(keyDeriver, passphrase, scope, bundle.vault_id, envelope)
+    const opened = await tryPassphrase(keyDeriver, passphrase, scope, bundle, envelope)
     if (opened !== null) { return { ...opened, unlockId: envelope.unlock_id } }
   }
   throw new VaultError('wrong_passphrase', "That passphrase didn't unlock the vault. Check for typos and try again.")
@@ -168,19 +179,18 @@ const tryPassphrase = async (
   keyDeriver: KeyDeriver,
   passphrase: string,
   scope: VaultScope,
-  vaultId: string,
+  bundle: BundleIdentity,
   envelope: PassphraseEnvelope,
 ): Promise<VaultKeyPair | null> => {
   const passphraseKey = await passphraseKeyOf(keyDeriver, passphrase, fromB64(envelope.salt_b64))
-  return await tryUnwrap(passphraseKey, scope, vaultId, envelope)
+  return await tryUnwrap(passphraseKey, binding(scope, bundle, headerOf(envelope)), envelope.vault_key_wrapped)
 }
 
-/** Both lives of the vaultKey out of `envelope` under `wrappingKey`, or null when it will not open. */
-const tryUnwrap = async (wrappingKey: CryptoKey, scope: VaultScope, vaultId: string, envelope: UnlockEnvelope): Promise<VaultKeyPair | null> => {
-  const envelopeBinding = binding(scope, vaultId, headerOf(envelope))
+/** Both lives of the vaultKey out of `wrapped` under `wrappingKey`, or null when it will not open. */
+const tryUnwrap = async (wrappingKey: CryptoKey, envelopeBinding: Uint8Array, wrapped: Ciphered): Promise<VaultKeyPair | null> => {
   try {
-    const transientKey = await unwrapKeyUnder(wrappingKey, envelope.vault_key_wrapped, envelopeBinding, TransientUsage)
-    const sessionKey = await unwrapKeyUnder(wrappingKey, envelope.vault_key_wrapped, envelopeBinding, SessionUsage)
+    const transientKey = await unwrapKeyUnder(wrappingKey, wrapped, envelopeBinding, TransientUsage)
+    const sessionKey = await unwrapKeyUnder(wrappingKey, wrapped, envelopeBinding, SessionUsage)
     return { transientKey, sessionKey }
   } catch {
     return null
@@ -218,11 +228,13 @@ export const open = async (
 )
 
 /**
- * The passkeyKey a passkey's PRF answer makes: HKDF-SHA256 over the answer, its `info` naming the
- * purpose and the credential, so the same answer put to any other use makes another key.
+ * The passkeyKey a passkey's PRF answer makes: HKDF-SHA256 over the answer, its `info` the
+ * envelope's whole binding -- the vault, the purpose, and every public field of the envelope,
+ * the credential among them -- so the same answer put to any other use, or in any other vault,
+ * makes another key.
  */
-const passkeyKeyOf = async (prfBytes: Uint8Array, credentialId: string): Promise<CryptoKey> => (
-  await deriveWrappingKey(prfBytes, cipherBinding('safebyok-vault-v1', PurposeForMethod.passkey, credentialId))
+const passkeyKeyOf = async (prfBytes: Uint8Array, envelopeBinding: Uint8Array): Promise<CryptoKey> => (
+  await deriveWrappingKey(prfBytes, envelopeBinding)
 )
 
 /**
@@ -231,8 +243,8 @@ const passkeyKeyOf = async (prfBytes: Uint8Array, credentialId: string): Promise
  * the salt it answered for, so the vault can ask it again; never the answer.
  *
  * @param passkey - What the new passkey answered, over a fresh salt of {@link PasskeySaltBytes}.
- * @param scope - The vault's scope, bound into the wrap.
- * @param vaultId - The vault's id, bound into the wrap.
+ * @param scope - The vault's scope, bound into the wrap and its key.
+ * @param bundle - The bundle's `vault_id` and `registered_at`, bound into the wrap and its key.
  * @param naming - The envelope's `unlock_id` and `unlocklabel`.
  * @param vaultKey - The vaultKey to wrap: extractable, as only such a key can be.
  * @returns The envelope, and a non-extractable handle on the vaultKey unwrapped from it.
@@ -240,7 +252,7 @@ const passkeyKeyOf = async (prfBytes: Uint8Array, credentialId: string): Promise
 export const sealPasskey = async (
   passkey: PasskeyProof,
   scope: VaultScope,
-  vaultId: string,
+  bundle: BundleIdentity,
   naming: { unlock_id: string, unlocklabel: string },
   vaultKey: CryptoKey,
 ): Promise<{ envelope: PasskeyEnvelope, sessionKey: CryptoKey }> => {
@@ -251,8 +263,8 @@ export const sealPasskey = async (
     credential_id: passkey.credentialId,
     prf_salt_b64:  passkey.prfSaltB64,
   } as const
-  const passkeyKey = await passkeyKeyOf(passkey.prfBytes, passkey.credentialId)
-  const envelopeBinding = binding(scope, vaultId, header)
+  const envelopeBinding = binding(scope, bundle, header)
+  const passkeyKey = await passkeyKeyOf(passkey.prfBytes, envelopeBinding)
   const wrapped = await wrapKeyUnder(passkeyKey, vaultKey, envelopeBinding)
   const sessionKey = await unwrapKeyUnder(passkeyKey, wrapped, envelopeBinding, SessionUsage)
   return { envelope: { ...header, vault_key_wrapped: wrapped }, sessionKey }
@@ -290,8 +302,9 @@ export const openWithPasskey = async (
   if (envelope.prf_salt_b64 !== passkey.prfSaltB64) {
     throw new VaultError('wrong_passkey', "The passkey answered for a different salt than this vault keeps for it: ask it again with the prf_salt_b64 the snapshot's unlocks list.")
   }
-  const passkeyKey = await passkeyKeyOf(passkey.prfBytes, envelope.credential_id)
-  const opened = await tryUnwrap(passkeyKey, scope, bundle.vault_id, envelope)
+  const envelopeBinding = binding(scope, bundle, headerOf(envelope))
+  const passkeyKey = await passkeyKeyOf(passkey.prfBytes, envelopeBinding)
+  const opened = await tryUnwrap(passkeyKey, envelopeBinding, envelope.vault_key_wrapped)
   if (opened === null) {
     throw new VaultError('wrong_passkey', "That passkey's answer didn't unlock the vault. Try the passkey again, or unlock with a passphrase.")
   }

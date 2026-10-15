@@ -486,13 +486,16 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     listeners.forEach((listener) => { listener() })
   }
 
-  // The context each encryption is bound to; see VOCABULARY.md on cipherAdditionalData.
-  // An unlock envelope's binding is Envelope's; this one is the remembered device unlock's.
-  const localBinding = (vaultId: string, epoch: number) => (
-    cipherBinding('safebyok-vault-v1', applabel, scope.user_id, vaultlabel, vaultId, epoch, 'vault_key_local_wrapped')
+  // The context each encryption is bound to; see VOCABULARY.md on cipherAdditionalData. An
+  // unlock envelope's binding is Envelope's. The remembered device unlock's binds every field of
+  // its record but the key and the wrap, the scope, vault and epoch as this vault expects them.
+  const localBinding = (vaultId: string, epoch: number, askAt: number) => (
+    cipherBinding('safebyok-unlock-v1', applabel, scope.user_id, vaultlabel, vaultId, epoch, askAt, 'vault_key_local_wrapped')
   )
-  const boxBinding = (vaultId: string, boxlabel: string, revisionId: string, purpose: 'lockbox_key_wrapped' | 'whisper_ciphered') => (
-    cipherBinding('safebyok-lockbox-v1', applabel, scope.user_id, vaultlabel, vaultId, boxlabel, revisionId, purpose)
+  // A lockbox's binds the vault it lies in, and its record's whole public header: every field but
+  // the two encrypted ones, so a note or a time altered in storage refuses to open.
+  const boxBinding = (vaultId: string, header: LockboxHeader, purpose: 'lockbox_key_wrapped' | 'whisper_ciphered') => (
+    cipherBinding('safebyok-lockbox-v1', applabel, scope.user_id, vaultlabel, vaultId, purpose, header)
   )
 
   const refresh = async () => {
@@ -551,17 +554,16 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   /** A brand-new bundle around a brand-new vaultKey, wrapped under `passphrase`: its one way in. */
   const draftBundle = async (passphrase: string): Promise<{ draft: VaultBundle } & VaultKeyPair> => {
-    const vaultId = randomId()
+    const identity = { vault_id: randomId(), registered_at: clockNow() }
     const freshKey = await makeVaultKey()
     const naming = { unlock_id: randomId(), unlocklabel: FirstUnlocklabel }
-    const { envelope, sessionKey } = await Envelope.sealPassphrase(keyDeriver, passphrase, scope, vaultId, naming, freshKey)
+    const { envelope, sessionKey } = await Envelope.sealPassphrase(keyDeriver, passphrase, scope, identity, naming, freshKey)
     const draft: VaultBundle = {
       format:              'safebyok-vault-v1',
       ...scope,
-      vault_id:            vaultId,
+      ...identity,
       unlock_epoch:        1,
       unlocks:             [envelope],
-      registered_at:       clockNow(),
     }
     return { draft, transientKey: freshKey, sessionKey }
   }
@@ -634,7 +636,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   /** A passphrase envelope in `standing` for `newPassphrase`, around the vaultKey `proven` holds. */
   const sealFor = async (standing: VaultBundle, newPassphrase: string, naming: { unlock_id: string, unlocklabel: string }, proven: VaultKeyPair) => {
-    const { envelope } = await Envelope.sealPassphrase(keyDeriver, newPassphrase, scope, standing.vault_id, naming, proven.transientKey)
+    const { envelope } = await Envelope.sealPassphrase(keyDeriver, newPassphrase, scope, standing, naming, proven.transientKey)
     return envelope
   }
 
@@ -732,7 +734,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   /** Mint a fresh localUnlockKey, wrap the vaultKey under it, and remember the unlock on this device. */
   const rememberDevice = async (unlockedKey: CryptoKey, standing: VaultBundle, until: number) => {
     const localUnlockKey = await makeLocalUnlockKey()
-    const wrapped = await wrapKeyUnder(localUnlockKey, unlockedKey, localBinding(standing.vault_id, standing.unlock_epoch))
+    const wrapped = await wrapKeyUnder(localUnlockKey, unlockedKey, localBinding(standing.vault_id, standing.unlock_epoch, until))
     await deviceDB.writeUnlock({
       format:                  'safebyok-unlock-v1',
       ...scope,
@@ -781,7 +783,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       vaultKey = await unwrapKeyUnder(
         remembered.local_unlock_key,
         remembered.vault_key_local_wrapped,
-        localBinding(bundle.vault_id, bundle.unlock_epoch),
+        localBinding(bundle.vault_id, bundle.unlock_epoch, remembered.ask_passphrase_at),
         { extractable: false, usage: ['wrapKey', 'unwrapKey'] },
       )
       askPassphraseAt = remembered.ask_passphrase_at
@@ -893,14 +895,15 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
    */
   const decipherLockbox = async (unlockedKey: CryptoKey, vaultId: string, lockbox: Lockbox): Promise<Whisper> => {
     let whisperBytes: Uint8Array
+    const { lockbox_key_wrapped: lockboxKeyWrapped, whisper_ciphered: whisperCiphered, ...header } = lockbox
     try {
       const lockboxKey = await unwrapKeyUnder(
         unlockedKey,
-        lockbox.lockbox_key_wrapped,
-        boxBinding(vaultId, lockbox.boxlabel, lockbox.revision_id, 'lockbox_key_wrapped'),
+        lockboxKeyWrapped,
+        boxBinding(vaultId, header, 'lockbox_key_wrapped'),
         { extractable: false, usage: ['decrypt'] },
       )
-      whisperBytes = await decipherBytes(lockboxKey, lockbox.whisper_ciphered, boxBinding(vaultId, lockbox.boxlabel, lockbox.revision_id, 'whisper_ciphered'))
+      whisperBytes = await decipherBytes(lockboxKey, whisperCiphered, boxBinding(vaultId, header, 'whisper_ciphered'))
     } catch {
       throw new VaultError('corrupt_record', 'The lockbox would not open: its stored record failed verification, as if damaged or moved from somewhere else. It was left as it is.')
     }
@@ -1032,7 +1035,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
           if (answered === null) { return null }
           const passkey = parseNewPasskey(answered)
           ensureNewCredential(standing, passkey)
-          const { envelope } = await Envelope.sealPasskey(passkey, scope, standing.vault_id, naming, proven.transientKey)
+          const { envelope } = await Envelope.sealPasskey(passkey, scope, standing, naming, proven.transientKey)
           return [...standing.unlocks, envelope]
         },
       })
@@ -1101,16 +1104,19 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
         // reborn elsewhere, or a box written meanwhile by another device, refuses it.
         const expected = { vault_id: vaultId, revision_id: prev?.revision_id ?? null }
-        const lockbox: Lockbox = {
+        const header: LockboxHeader = {
           format:              'safebyok-lockbox-v1',
           boxlabel:            label,
           revision_id:         revisionId,
-          lockbox_key_wrapped: await wrapKeyUnder(unlockedKey, lockboxKey, boxBinding(vaultId, label, revisionId, 'lockbox_key_wrapped')),
-          whisper_ciphered:    await cipherBytes(lockboxKey, whisperBytes, boxBinding(vaultId, label, revisionId, 'whisper_ciphered')),
           // A box with no note is stored with no note field: never a null or undefined one.
           ...(note !== null && { note }),
           registered_at:       prev?.registered_at ?? now,
           changed_at:          unchanged ? prev.changed_at : now,
+        }
+        const lockbox: Lockbox = {
+          ...header,
+          lockbox_key_wrapped: await wrapKeyUnder(unlockedKey, lockboxKey, boxBinding(vaultId, header, 'lockbox_key_wrapped')),
+          whisper_ciphered:    await cipherBytes(lockboxKey, whisperBytes, boxBinding(vaultId, header, 'whisper_ciphered')),
         }
         try {
           // A damaged box is cleared first, as erase() would, so the write meets no revision: its
@@ -1281,6 +1287,9 @@ const saltLengthOf = (saltB64: string): number | null => {
 
 /** The `unlocklabel` of the way in a vault is created with, by its first `unlock()`. */
 const FirstUnlocklabel = 'passphrase'
+
+/** A lockbox's public header: every field of its record but the two encrypted ones, all bound into both. */
+type LockboxHeader = Omit<Lockbox, 'lockbox_key_wrapped' | 'whisper_ciphered'>
 
 /** An unlock_id as a host hands one back: the id of one of the snapshot's `unlocks`. */
 const unlockIdShape = Z.string().check(Z.minLength(1))
