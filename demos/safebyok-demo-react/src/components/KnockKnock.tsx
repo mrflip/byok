@@ -27,6 +27,8 @@ export const KnockKnock = () => {
 
   if (vault === null) { return null }
   const keyBox = snapshot.boxes.find((box) => box.boxlabel === ApiKeyBoxlabel)
+  // The button and the Enter key alike: a sound key, someone at the door, and no joke underway.
+  const canKnock = ! telling && whosThere.trim() !== '' && keyBox !== undefined && ! keyBox.damaged
 
   const knock = async () => {
     setTelling(true)
@@ -56,9 +58,9 @@ export const KnockKnock = () => {
           placeholder="Banana"
           value={whosThere}
           onChange={(evt) => { setWhosThere(evt.target.value) }}
-          onKeyDown={(evt) => { if (evt.key === 'Enter' && whosThere.trim()) { void knock() } }}
+          onKeyDown={(evt) => { if (canKnock && evt.key === 'Enter') { void knock() } }}
         />
-        <button disabled={telling || ! whosThere.trim() || keyBox === undefined || keyBox.damaged} onClick={() => { void knock() }}>
+        <button disabled={! canKnock} onClick={() => { void knock() }}>
           (( {whosThere.trim() || '…'} Who? ))
         </button>
       </div>
