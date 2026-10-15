@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
-import { boxOf, bundleOf, scopeOf } from '../src/testing'
+import * as TH from './test-helpers'
 
 const WhisperCases = [
   // every JSON shape a whisper may take:
@@ -61,11 +61,11 @@ describe("Label", () => {
 
 const ScopeCases = [
   // regular usage:
-  [scopeOf('u1'),                                  true,   'an applabel, a user_id and a vaultlabel'],
-  [scopeOf('user|2fJ8:google'),                    true,   'a user_id in whatever form the host app issues'],
+  [TH.scopeOf('u1'),                                  true,   'an applabel, a user_id and a vaultlabel'],
+  [TH.scopeOf('user|2fJ8:google'),                    true,   'a user_id in whatever form the host app issues'],
   // refused:
-  [{ ...scopeOf('u1'), user_id: '' },              false,  'an empty user_id names no one'],
-  [{ ...scopeOf('u1'), applabel: 'Acme' },         false,  'an applabel outside the label grammar'],
+  [{ ...TH.scopeOf('u1'), user_id: '' },              false,  'an empty user_id names no one'],
+  [{ ...TH.scopeOf('u1'), applabel: 'Acme' },         false,  'an applabel outside the label grammar'],
   [{ applabel: 'acme', user_id: 'u1' },            false,  'a scope missing its vaultlabel'],
 ] as const
 
@@ -77,13 +77,13 @@ describe("VaultScope", () => {
 
 const BundleCases = [
   // regular usage:
-  [bundleOf('u1'),                                         true,   'a whole bundle'],
+  [TH.bundleOf('u1'),                                         true,   'a whole bundle'],
   // refused, as a damaged or foreign record:
-  [{ ...bundleOf('u1'), format: 'safebyok-vault-v2' },    false,  'a format this version does not know'],
-  [{ ...bundleOf('u1'), passphrase_epoch: 0 },            false,  'an epoch starts at one'],
-  [{ ...bundleOf('u1'), passphrase_epoch: 1.5 },          false,  'an epoch is a whole number'],
-  [{ ...bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
-  [{ ...bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, 'an envelope missing its ciphertext'],
+  [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },    false,  'a format this version does not know'],
+  [{ ...TH.bundleOf('u1'), passphrase_epoch: 0 },            false,  'an epoch starts at one'],
+  [{ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 },          false,  'an epoch is a whole number'],
+  [{ ...TH.bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
+  [{ ...TH.bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, 'an envelope missing its ciphertext'],
 ] as const
 
 describe("VaultBundle", () => {
@@ -92,10 +92,10 @@ describe("VaultBundle", () => {
   }
 })
 
-const { note: _note, ...notelessBox } = boxOf('anthropic_api_key', 'a1')
+const { note: _note, ...notelessBox } = TH.boxOf('anthropic_api_key', 'a1')
 const LockboxCases = [
   // regular usage:
-  [boxOf('anthropic_api_key', 'a1'),                       true,   'a whole lockbox, with its note'],
+  [TH.boxOf('anthropic_api_key', 'a1'),                       true,   'a whole lockbox, with its note'],
   [notelessBox,                                            true,   'a lockbox with no note field at all'],
   // a stored vault is a contract: earlier versions wrote a lockbox with no note as `note:
   // undefined`, which IndexedDB's structured clone keeps, so it still reads as no note
@@ -151,7 +151,7 @@ describe("LockboxSummary", () => {
   })
 
   it("strips the two ciphered fields and the format from a whole lockbox", () => {
-    const summary = LockboxSummary.parse(boxOf('anthropic_api_key', 'a1'))
+    const summary = LockboxSummary.parse(TH.boxOf('anthropic_api_key', 'a1'))
     expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'created_at', 'updated_at'])
   })
 })

@@ -6,7 +6,6 @@ import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts, type Vault } from '../src/vault'
 import type { KeyDeriver } from '../src/key-deriver'
-import { scopeOf, testDeriver } from '../src/testing'
 import * as TH from './test-helpers'
 
 /**
@@ -22,7 +21,7 @@ const makeWorld = () => {
   const clock = { now: () => nowMs }
   const advance = (byMs: number) => { nowMs += byMs }
   const open = (overrides?: Partial<OpenVaultOpts>) => (
-    openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB, clock, keyDeriver: testDeriver, ...overrides })
+    openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB, clock, keyDeriver: TH.testDeriver, ...overrides })
   )
   return { dbStore, vaultDB, deviceDB, clock, advance, open }
 }
@@ -844,7 +843,7 @@ describe("the key deriver seam", () => {
     const world = makeWorld()
     const vault = await world.open()
     await vault.unlock('pw')
-    const alienDeriver = { ...testDeriver, key_deriver_label: 'someone_elses_deriver_v9' }
+    const alienDeriver = { ...TH.testDeriver, key_deriver_label: 'someone_elses_deriver_v9' }
     const alien = await world.open({ deviceDB: memoryDeviceDB(), keyDeriver: alienDeriver })
     await expectRefusal(alien.unlock('pw'), 'unknown_key_deriver')
   })
@@ -855,7 +854,7 @@ describe("the key deriver seam", () => {
 
   it("refuses to open without a keyDeriver, pointing at the browser's defaults", async () => {
     const world = makeWorld()
-    const { keyDeriver: _dropped, ...withoutDeriver } = { applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: world.vaultDB, deviceDB: world.deviceDB, keyDeriver: testDeriver }
+    const { keyDeriver: _dropped, ...withoutDeriver } = { applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: world.vaultDB, deviceDB: world.deviceDB, keyDeriver: TH.testDeriver }
     const err = await expectRefusal(openVault(withoutDeriver as OpenVaultOpts), 'bad_option')
     expect(err.message).to.include('keyDeriver')
     expect(err.message).to.include('safebyok/browser')
@@ -867,8 +866,8 @@ describe("the key deriver seam", () => {
       null,
       'argon2id_web_v1',
       { key_deriver_label: 'test_digest_v0', salt_bytes: 16 },
-      { ...testDeriver, salt_bytes: 0 },
-      { ...testDeriver, key_deriver_label: '' },
+      { ...TH.testDeriver, salt_bytes: 0 },
+      { ...TH.testDeriver, key_deriver_label: '' },
     ]
     for (const notDeriver of NotDerivers) {
       await expectRefusal(world.open({ keyDeriver: notDeriver as unknown as KeyDeriver }), 'bad_option')
@@ -877,9 +876,9 @@ describe("the key deriver seam", () => {
 
   it("keeps the keyDeriver it was handed, so one whose method lives on its prototype still derives", async () => {
     class PrototypeDeriver implements KeyDeriver {
-      readonly key_deriver_label = testDeriver.key_deriver_label
-      readonly salt_bytes = testDeriver.salt_bytes
-      readonly #inner = testDeriver
+      readonly key_deriver_label = TH.testDeriver.key_deriver_label
+      readonly salt_bytes = TH.testDeriver.salt_bytes
+      readonly #inner = TH.testDeriver
       deriveKeyBytes(passphrase: string, saltBytes: Uint8Array) { return this.#inner.deriveKeyBytes(passphrase, saltBytes) }
     }
     const world = makeWorld()
@@ -1145,7 +1144,7 @@ describe("versioned updates: two devices writing at once", () => {
     const [raced, landed] = updateBox.mock.calls.map(([, lockbox]) => lockbox)
     expect(landed?.revision_id).to.not.eq(raced?.revision_id)
     expect(landed?.lockbox_key_wrapped).to.not.deep.eq(raced?.lockbox_key_wrapped)
-    const standing = await hereDB.readBox(scopeOf('u1'), 'anthropic')
+    const standing = await hereDB.readBox(TH.scopeOf('u1'), 'anthropic')
     expect(standing?.revision_id).to.eq(landed?.revision_id)
   })
 

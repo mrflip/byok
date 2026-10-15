@@ -85,7 +85,7 @@
       "require": "./dist/idb.cjs"
     },
     "./testing": {
-      "@safebyok/source": "./src/testing/index.ts",
+      "@safebyok/source": "./tests/test-helpers.ts",
       "import": "./dist/testing.js",
       "require": "./dist/testing.cjs"
     },
