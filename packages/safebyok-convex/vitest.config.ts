@@ -7,5 +7,11 @@ export default defineConfig({
     include:     ['tests/**/*.test.ts'],
     environment: 'edge-runtime',
     server:      { deps: { inline: ['convex-test'] } },
+    coverage: {
+      provider: 'v8',
+      include:  ['src/**/*.ts'],
+      exclude:  ['src/component/_generated/**'],
+      reporter: ['text', 'html', 'lcov'],
+    },
   },
 })
