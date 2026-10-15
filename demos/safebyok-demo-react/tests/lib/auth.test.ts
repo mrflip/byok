@@ -24,6 +24,14 @@ describe("createAuth", () => {
     expect(dbStore.read('account:acme:margo')).to.not.be.null
   })
 
+  it("the account row records its creation time as epoch milliseconds, an integer", async () => {
+    const { auth, dbStore } = makeWorld()
+    await auth.signIn('margo')
+    const account = JSON.parse(dbStore.read('account:acme:margo') ?? '{}') as { created_at: unknown }
+    expect(Number.isInteger(account.created_at)).to.eq(true)
+    expect(account.created_at).to.be.within(Date.now() - 60_000, Date.now())
+  })
+
   it("the same userlabel signs back into the same account", async () => {
     const { auth } = makeWorld()
     const first = await auth.signIn('margo')

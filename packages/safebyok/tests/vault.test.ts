@@ -16,7 +16,7 @@ const makeWorld = () => {
   const dbStore = memoryStore()
   const vaultDB = localVaultDB(dbStore)
   const deviceDB = memoryDeviceDB()
-  let nowMs = Date.parse('2026-10-14T12:00:00Z')
+  let nowMs = 1_791_979_200_000  // 2026-10-14T12:00:00Z
   const clock = { now: () => nowMs }
   const advance = (byMs: number) => { nowMs += byMs }
   const open = (overrides?: Partial<OpenVaultOpts>) => (

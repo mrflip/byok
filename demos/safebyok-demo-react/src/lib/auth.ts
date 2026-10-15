@@ -1,4 +1,4 @@
-import { Label, type StringStore } from 'safebyok'
+import { Label, wallClock, type StringStore } from 'safebyok'
 
 /**
  * SCAFFOLDING a real host application replaces with its own auth (Google sign-in, Clerk, Convex
@@ -15,7 +15,7 @@ export type Session = {
 type Account = {
   user_id:    string
   userlabel:  string
-  created_at: string
+  created_at: number
 }
 
 export type Auth = {
@@ -79,7 +79,7 @@ export const createAuth = (opts: { applabel: string, dbStore: StringStore, devic
       const existing = dbStore.read(ckey)
       const account: Account = existing !== null
         ? JSON.parse(existing) as Account
-        : { user_id: randomId(), userlabel: checked.data, created_at: new Date().toISOString() }
+        : { user_id: randomId(), userlabel: checked.data, created_at: wallClock.now() }
       if (existing === null) { dbStore.write(ckey, JSON.stringify(account)) }
       session = { userId: account.user_id, userlabel: account.userlabel }
       deviceStore.write(sessionCkey, JSON.stringify(session))
