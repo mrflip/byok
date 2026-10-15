@@ -17,6 +17,10 @@ describe("idbVaultDB", () => {
     expect(idbVaultDB().maxRecordBytes).to.eq(Infinity)
   })
 
+  it("declares no per-vault limit: it never reads a vault under a budget", () => {
+    expect(idbVaultDB().maxVaultBytes).to.eq(Infinity)
+  })
+
   it("keeps each record as itself, at the ckey it always had", async () => {
     const dbName = freshDbName()
     const vaultDB = idbVaultDB({ dbName })

@@ -76,6 +76,16 @@ export abstract class VaultDB {
    */
   abstract readonly maxRecordBytes: number
 
+  /**
+   * The most this backend holds of one vault in all, in bytes as stored -- every lockbox
+   * together -- or `Infinity` when it sets no such limit. Declare what the backend can still
+   * list and erase whole: a backend that reads a vault in one transaction under a read budget
+   * declares the share of that budget its heaviest verb leaves. A vault refuses to open when its
+   * `maxLockboxes` lockboxes at `maxWhisperBytes` each, with room for encoding and each
+   * lockbox's other fields, might not fit in half of it.
+   */
+  abstract readonly maxVaultBytes: number
+
   // ------------------------------------------------------------------- the verbs safebyok calls
 
   /** The vault's bundle, validated, or null when the vault has never been created. */
@@ -369,6 +379,8 @@ class StringStoreVaultDB extends VaultDB {
   // localStorage holds about five megabytes per origin, in all: a mebibyte is this stand-in's
   // most for any one record.
   readonly maxRecordBytes = 1024 * 1024
+  // Nothing here reads a whole vault under a budget; the store's own quota refuses a write past it.
+  readonly maxVaultBytes = Infinity
 
   private readonly store: StringStore
 
