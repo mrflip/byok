@@ -59,10 +59,14 @@ class MapVaultDB extends VaultDB {
   }
 }
 
-/** A MapVaultDB in trouble: reading the bundle fails as `failure` does; updating a box rejects. */
+/**
+ * A MapVaultDB in trouble: reading the bundle and subscribing fail as `failure` does; updating a
+ * box rejects.
+ */
 class TroubledVaultDB extends MapVaultDB {
   constructor(private readonly failure: () => never) { super() }
   protected override doReadBundle(): Promise<unknown> { this.failure() }
+  protected override doSubscribe(): () => void { this.failure() }
   protected override doUpdateBox(): Promise<boolean> { return Promise.reject(new Error('the backend dropped the connection')) }
 }
 
@@ -183,6 +187,16 @@ describe("the abstract VaultDB, around an adapter's half", () => {
     await vaultDB.createBundle(bundleOf('u1'))
     expect(heardCount).to.eq(0)
     unsubscribe()
+  })
+
+  it("turns an adapter's failure to subscribe into kind 'storage_unavailable' as well, keeping it as the cause", () => {
+    const outage = new Error('the backend is not connected')
+    const vaultDB = new TroubledVaultDB(() => { throw outage })
+    let refusal: unknown = null
+    try { vaultDB.subscribe(scopeOf('u1'), unheard) } catch (err) { refusal = err }
+    expect(refusal).to.be.instanceOf(VaultError)
+    expect((refusal as VaultError).kind).to.eq('storage_unavailable')
+    expect((refusal as VaultError).cause).to.eq(outage)
   })
 
   it("refuses to subscribe to a malformed scope", () => {

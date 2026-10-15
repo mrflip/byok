@@ -157,7 +157,12 @@ export abstract class VaultDB {
    * regardless, so all it loses is news of *other* devices' writes.
    */
   subscribe(scope: VaultScope, onChange: () => void): () => void {
-    return this.doSubscribe(checkScope(scope), onChange)
+    const asked = checkScope(scope)
+    try {
+      return this.doSubscribe(asked, onChange)
+    } catch (err) {
+      throw asStorageTrouble(err)
+    }
   }
 
   // --------------------------------------------------------------------------- the half you write
@@ -221,9 +226,14 @@ const fromStorage = async <ValT>(attempt: () => Promise<ValT>): Promise<ValT> =>
   try {
     return await attempt()
   } catch (err) {
-    if (err instanceof VaultError) { throw err }
-    throw new VaultError('storage_unavailable', "The vault's storage could not be reached, or failed partway: try again shortly. The storage adapter's own error is this error's cause.", { cause: err })
+    throw asStorageTrouble(err)
   }
+}
+
+/** What an adapter threw, as a VaultError: its own VaultError untouched, anything else wrapped. */
+const asStorageTrouble = (err: unknown): VaultError => {
+  if (err instanceof VaultError) { return err }
+  return new VaultError('storage_unavailable', "The vault's storage could not be reached, or failed partway: try again shortly. The storage adapter's own error is this error's cause.", { cause: err })
 }
 
 const checkScope = (scope: VaultScope): VaultScope => {
