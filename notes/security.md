@@ -379,4 +379,6 @@ security expert who knows what questions to ask.
   scope is forgotten before any unwrap; its `vault_key_local_wrapped` binding would refuse it
   anyway. The vault-size check counts each lockbox at twice `maxWhisperBytes` plus 2 KiB for its
   other fields against the adapter's whole `maxVaultBytes`: the same outcomes as half the limit
-  with 1 KiB, with the fields' allowance now covering them (a test builds the heaviest row).
+  with 1 KiB, with the fields' allowance now covering them (a test builds the heaviest row) while
+  `user_id`, which nothing bounds, is at most 512 bytes; a longer one, or a note a JSON-text
+  backend escapes, eats into the room the doubled whisper leaves.
