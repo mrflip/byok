@@ -1,0 +1,125 @@
+import { v } from 'convex/values'
+
+/**
+ * Convex validators for safebyok's stored records, field for field with the core's Zod records
+ * (`Lockbox`, `VaultBundle`, `Ciphered`, `VaultScope` in `safebyok`). They check what Convex can:
+ * which fields, their types, which are optional, and each record's `format`. The finer rules -- the
+ * label grammar, non-empty strings, a positive whole `passphrase_epoch`, a note's length -- are
+ * the client's, checked by the core's Zod records on every write and every read.
+ *
+ * A new record format widens its `format` union: an additive deploy, shipped with this package.
+ */
+
+/**
+ * An encrypted value as a record holds it: its cipherIv and its ciphertext, each base64url
+ * text. Every encrypted field of every record is this one shape, nested as the record holds it.
+ *
+ * @example { cipher_iv_b64: 'q83vEjRWeJA', ciphertext_b64: 'yL3cKX0...' }
+ */
+export const Ciphered = v.object({
+  cipher_iv_b64:  v.string(),
+  ciphertext_b64: v.string(),
+})
+
+/**
+ * What names one vault: the host application's label, the user, and the vault's own label.
+ *
+ * @example { applabel: 'acme', user_id: 'user_2fJ8...', vaultlabel: 'main' }
+ */
+export const VaultScope = v.object({
+  applabel:   v.string(),
+  user_id:    v.string(),
+  vaultlabel: v.string(),
+})
+
+/** The formats of a VaultBundle this package stores. */
+export const VaultBundleFormat = v.union(v.literal('safebyok-vault-v1'))
+
+/** The formats of a Lockbox this package stores. */
+export const LockboxFormat = v.union(v.literal('safebyok-lockbox-v1'))
+
+/**
+ * A vault's bundle: its scope, `vault_id`, `passphrase_epoch`, how its passphraseKey is derived,
+ * and its vaultKey wrapped under that passphraseKey. Nothing in it opens without the passphrase.
+ */
+export const VaultBundle = v.object({
+  format:                       VaultBundleFormat,
+  applabel:                     v.string(),
+  user_id:                      v.string(),
+  vaultlabel:                   v.string(),
+  vault_id:                     v.string(),
+  passphrase_epoch:             v.number(),
+  key_deriver_label:            v.string(),
+  passphrase_salt_b64:          v.string(),
+  vault_key_passphrase_wrapped: Ciphered,
+  created_at:                   v.string(),
+  updated_at:                   v.string(),
+})
+
+/**
+ * One lockbox: its whisper ciphered under its own lockboxKey, that lockboxKey wrapped under the
+ * vaultKey, and the public shell -- boxlabel, revision, note, timestamps. `note` is absent when
+ * there is none, never `undefined`.
+ */
+export const Lockbox = v.object({
+  format:              LockboxFormat,
+  boxlabel:            v.string(),
+  revision_id:         v.string(),
+  lockbox_key_wrapped: Ciphered,
+  whisper_ciphered:    Ciphered,
+  note:                v.optional(v.string()),
+  created_at:          v.string(),
+  updated_at:          v.string(),
+})
+
+/**
+ * A lockbox as a listing returns it: every field but the two ciphered ones, `format` kept, so the
+ * client validates it as it would a whole record.
+ */
+export const ListedLockbox = Lockbox.omit('lockbox_key_wrapped', 'whisper_ciphered')
+
+/**
+ * What a bundle update was proven against: it lands only while the standing bundle still has
+ * this `vault_id` and `passphrase_epoch`.
+ *
+ * @example { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }
+ */
+export const BundleExpectation = v.object({
+  vault_id:         v.string(),
+  passphrase_epoch: v.number(),
+})
+
+/**
+ * What a lockbox update was written for and read: it lands only while the scope's bundle has this
+ * `vault_id`, and the standing lockbox this `revision_id` -- or, for null, there is no lockbox.
+ *
+ * @example { vault_id: bundle.vault_id, revision_id: null }   // a box that was not there
+ */
+export const LockboxExpectation = v.object({
+  vault_id:    v.string(),
+  revision_id: v.nullable(v.string()),
+})
+
+/**
+ * What an erase was meant for: the vault it lands in. An erase lands only while the scope's
+ * bundle has this `vault_id`, whatever revision any lockbox stands at -- so a stale session
+ * never erases from a vault made anew elsewhere.
+ *
+ * @example { vault_id: bundle.vault_id }
+ */
+export const EraseExpectation = v.object({
+  vault_id: v.string(),
+})
+
+/**
+ * The vault's change signature: its bundle's `vault_id` and `passphrase_epoch` (null while it has
+ * no bundle) and each lockbox's `[boxlabel, revision_id]`, in boxlabel order. It changes exactly
+ * when a write lands in the vault, and holds nothing a listing does not already show.
+ *
+ * @example { vault_id: 'b3f1...', passphrase_epoch: 2, boxes: [['anthropic_api_key', '9c4e...']] }
+ */
+export const VaultSignature = v.object({
+  vault_id:         v.nullable(v.string()),
+  passphrase_epoch: v.nullable(v.number()),
+  boxes:            v.array(v.array(v.string())),
+})

@@ -1,0 +1,171 @@
+import { mutationGeneric, queryGeneric } from 'convex/server'
+import type { ApiFromModules, GenericDataModel, GenericQueryCtx } from 'convex/server'
+import { ConvexError, v } from 'convex/values'
+import type { ComponentApi } from './component-api'
+import {
+  BundleExpectation, EraseExpectation, ListedLockbox, Lockbox, LockboxExpectation, VaultBundle, VaultScope, VaultSignature,
+} from './component/validators'
+
+export type { ComponentApi } from './component-api'
+
+/**
+ * The host app's answer to "who is calling?": the signed-in user's id, as the vault scopes it, or
+ * null (or undefined, or empty) when no one is signed in. Runs first in every safebyok function.
+ *
+ * @example async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null
+ */
+export type GetUserId<DataModel extends GenericDataModel = GenericDataModel> =
+  (ctx: GenericQueryCtx<DataModel>) => Promise<string | null | undefined> | string | null | undefined
+
+/** What {@link SafebyokComponent.api} needs from the host app. */
+export type SafebyokApiOpts<DataModel extends GenericDataModel = GenericDataModel> = {
+  /** Who is calling: see {@link GetUserId}. */
+  getUserId: GetUserId<DataModel>
+}
+
+/**
+ * Every refusal safebyok's Convex functions throw, as the `kind` in a `ConvexError`'s `data`. Each
+ * is the `VaultError` kind of the same name: `not_permitted`, for a caller who is signed out or is
+ * not the vault's user. A failed expectation is not a refusal: the update or erase resolves `false`.
+ */
+export const SafebyokErrorKindVals = ['not_permitted'] as const
+export type SafebyokErrorKind = typeof SafebyokErrorKindVals[number]
+
+/**
+ * The `data` of a `ConvexError` safebyok's functions throw: a `kind` to branch on, and a calm
+ * message. Neither ever names a user or quotes a record.
+ */
+export type SafebyokErrorData = {
+  kind:    SafebyokErrorKind
+  message: string
+}
+
+/**
+ * safebyok's storage on Convex, as the host app serves it: wraps the installed component
+ * (`components.safebyok`) and hands back the functions the host re-exports from its own
+ * `convex/` directory, each authenticating its caller through the host's {@link GetUserId}.
+ *
+ * @example
+ *   // convex/safebyok.ts
+ *   import { SafebyokComponent } from 'safebyok-convex/server'
+ *   import { components } from './_generated/api'
+ *
+ *   export const {
+ *     getBundle, createBundle, updateBundle, getBox, listBoxSummaries,
+ *     updateBox, eraseBox, eraseVault, watchVault,
+ *   } = new SafebyokComponent(components.safebyok).api({
+ *     getUserId: async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null,
+ *   })
+ */
+export class SafebyokComponent {
+  /** @param component - The installed component, `components.safebyok` from the host's generated api. */
+  constructor(private readonly component: ComponentApi) {}
+
+  /**
+   * The nine public functions a client's `convexVaultDB` calls, one per storage verb. Each first
+   * resolves `getUserId(ctx)`, and refuses with a `ConvexError` of kind `not_permitted` when it
+   * is null, or when the vault's `user_id` is someone else's; then it calls the component.
+   *
+   * @param opts - `getUserId`: who is calling, from the host's own auth.
+   * @returns The functions, to export under these names from one module of the host's `convex/`.
+   */
+  api<DataModel extends GenericDataModel>({ getUserId }: SafebyokApiOpts<DataModel>) {
+    const vaults = this.component.vaults
+
+    /** Refuses unless the caller is signed in as `userId`, the vault's own user. */
+    const mustBe = async (ctx: GenericQueryCtx<DataModel>, userId: string): Promise<void> => {
+      const callerId = await getUserId(ctx)
+      if (! callerId) {
+        throw notPermitted('No one is signed in, so this vault cannot be reached: sign in, then try again.')
+      }
+      if (callerId !== userId) {
+        throw notPermitted('This vault belongs to another user: a signed-in user reaches only their own vaults.')
+      }
+    }
+
+    return {
+      getBundle: queryGeneric({
+        args:    { scope: VaultScope },
+        returns: v.nullable(VaultBundle),
+        handler: async (ctx, args) => {
+          await mustBe(ctx, args.scope.user_id)
+          return await ctx.runQuery(vaults.getBundle, args)
+        },
+      }),
+      createBundle: mutationGeneric({
+        args:    { bundle: VaultBundle },
+        returns: VaultBundle,
+        handler: async (ctx, args) => {
+          await mustBe(ctx, args.bundle.user_id)
+          return await ctx.runMutation(vaults.createBundle, args)
+        },
+      }),
+      updateBundle: mutationGeneric({
+        args:    { bundle: VaultBundle, expected: BundleExpectation },
+        returns: v.boolean(),
+        handler: async (ctx, args) => {
+          await mustBe(ctx, args.bundle.user_id)
+          return await ctx.runMutation(vaults.updateBundle, args)
+        },
+      }),
+      getBox: queryGeneric({
+        args:    { scope: VaultScope, boxlabel: v.string() },
+        returns: v.nullable(Lockbox),
+        handler: async (ctx, args) => {
+          await mustBe(ctx, args.scope.user_id)
+          return await ctx.runQuery(vaults.getBox, args)
+        },
+      }),
+      listBoxSummaries: queryGeneric({
+        args:    { scope: VaultScope },
+        returns: v.array(ListedLockbox),
+        handler: async (ctx, args) => {
+          await mustBe(ctx, args.scope.user_id)
+          return await ctx.runQuery(vaults.listBoxSummaries, args)
+        },
+      }),
+      updateBox: mutationGeneric({
+        args:    { scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation },
+        returns: v.boolean(),
+        handler: async (ctx, args) => {
+          await mustBe(ctx, args.scope.user_id)
+          return await ctx.runMutation(vaults.updateBox, args)
+        },
+      }),
+      eraseBox: mutationGeneric({
+        args:    { scope: VaultScope, boxlabel: v.string(), expected: EraseExpectation },
+        returns: v.boolean(),
+        handler: async (ctx, args) => {
+          await mustBe(ctx, args.scope.user_id)
+          return await ctx.runMutation(vaults.eraseBox, args)
+        },
+      }),
+      eraseVault: mutationGeneric({
+        args:    { scope: VaultScope, expected: EraseExpectation },
+        returns: v.boolean(),
+        handler: async (ctx, args) => {
+          await mustBe(ctx, args.scope.user_id)
+          return await ctx.runMutation(vaults.eraseVault, args)
+        },
+      }),
+      watchVault: queryGeneric({
+        args:    { scope: VaultScope },
+        returns: VaultSignature,
+        handler: async (ctx, args) => {
+          await mustBe(ctx, args.scope.user_id)
+          return await ctx.runQuery(vaults.watchVault, args)
+        },
+      }),
+    }
+  }
+}
+
+/**
+ * The host's safebyok functions as its clients reference them: the type of `api.safebyok` when
+ * the host re-exports {@link SafebyokComponent.api}'s functions from `convex/safebyok.ts`.
+ */
+export type SafebyokApi = ApiFromModules<{ safebyok: ReturnType<SafebyokComponent['api']> }>['safebyok']
+
+const notPermitted = (message: string) => (
+  new ConvexError<SafebyokErrorData>({ kind: 'not_permitted', message })
+)
