@@ -7,14 +7,30 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
 
 | # | Thread            | Base                                   | Status                         |
 | - | ----------------- | -------------------------------------- | ------------------------------ |
-| 1 | argon2_wasm       | #68 (kdf_configs) `80ac694`            | filed #74                      |
-| 2 | unlock_envelopes  | main (#63 merged; was `ea4b93d`)       | filed #71                      |
-| 3 | passkey_unlock    | #71 `983bd0c`                          | filed #76                      |
-| 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | filed #77                      |
-| 5 | postgres_vaultdb  | #71 `983bd0c` (rebased from `ea4b93d`) | filed #73                      |
-| 6 | graphql_vaultdb   | #73 `d55eb9c`                          | filed #78                      |
+| 1 | argon2_wasm       | #78 `4d2a0f8` (restacked; was #68)     | filed #74 `00daf1f`            |
+| 2 | unlock_envelopes  | #82 `7bf5a4b` (restacked; was main)    | filed #71 `1c83205`            |
+| 3 | passkey_unlock    | #71 `1c83205`                          | filed #76 `cfdd0be`            |
+| 4 | indexeddb_package | #74 `00daf1f` (restacked; was #70)     | filed #77 `12fc4d0`            |
+| 5 | postgres_vaultdb  | #76 `cfdd0be` (restacked; was #71)     | filed #73 `6d23727`            |
+| 6 | graphql_vaultdb   | #73 `6d23727`                          | filed #78 `4d2a0f8`            |
+| 7 | epoch_rename      | #77 `12fc4d0`                          | underway                       |
+| 8 | store_vault_cap   | thread 7's tip                         | pending (waits on 7)           |
+| 9 | unlock_fixes      | #77 `12fc4d0`                          | underway                       |
+| 10 | docs_housekeeping | #77 `12fc4d0`                         | underway                       |
 
 ## What the threads have taught
+
+* *Orchestrator:* **The restack** (2026-10-15, at the Coach's word). gripe_fixes restacked into one
+  line on main (#66's duplicates dropped), top #82 `7bf5a4b`. Thread 2's worker replayed all six
+  big_feats branches onto it, justified once at the top, and pushed. What it changed:
+  * gripe_fixes' 32-byte check on a deriver's output (`derivePassphraseKey`) now lives in
+    `envelope.ts`, where every derivation runs.
+  * The four new packages' `build:deps` honour `SAFEBYOK_SKIP_BUILD_DEPS`.
+  * A Postgres test now expects `bad_option` for a bundle naming another vault_id (#70 refuses it
+    in the core).
+  * Size budgets rose: `openVault` 19 kB, `everything` 27 kB, `idbDeviceDB` 9.5 kB, `browserOpts`
+    14.5 kB.
+  * Tests use gripe_fixes' `TH.expectRefusal` and `openUnlocked`.
 
 * *Orchestrator:* **Adapters store field by field** (the Coach, 2026-10-15). The plan first said
   "store records whole"; the Convex component in fact keeps a typed column per field, and the

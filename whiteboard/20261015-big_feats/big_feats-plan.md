@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach)
-* **Status**: done -- all six threads filed (#71, #73, #74, #76, #77, #78); closing note `human/20261015-sprint_big_feats_done.md`
+* **Status**: amendments underway -- the six threads filed and restacked into one line on gripe_fixes' #82 (#82 → #71 → #76 → #73 → #78 → #74 → #77); amendment threads 7, 9 and 10 underway, 8 waiting on 7. Rulings: `human/20261015-sprint_big_feats_rulings.md`
 
 ## Read first
 
@@ -281,6 +281,94 @@ misconfiguration crosses with its kind; helpers duplicated from the core. Not tr
 Apollo, Mercurius, graphql-ws, a real disconnect. Filed as
 [#78](https://github.com/mrflip/safebyok/pull/78), stacked on #73.
 
+## Amendments (after the Coach's rulings, 2026-10-15)
+
+The Coach read the done note, answered most of its questions
+(`human/20261015-sprint_big_feats_rulings.md`), and asked for two things: restack the six PRs into
+one mergeable line, and do the follow-up work in amendment PRs on top of it. The line is now
+#82 → #71 → #76 → #73 → #78 → #74 → #77, with #77 at `12fc4d0`. The amendments are built from
+#77, assembled into a line above it, and the sprint's documents PR (#79) goes on top of
+everything.
+
+*Ground rules for the amendments:*
+
+* **No backward compatibility.** The Coach: "there's no need for backwards compatibility; the
+  only available versions of the packages are deprecated." A changed stored shape gets no shim
+  and no migration. An old record fails safe, and the changeset says what a host sees.
+* **Restacks justify at the top.** The Coach: "if you can cleanly assemble a>b>c>d and d
+  justifies, push them all and let CI have a chance."
+* Not yet ruled, so not built: HKDF `info` binding, `listBoxRecords`, reporting swallowed
+  subscription failures to the logger, and the epoch revocation note in `security.md`.
+
+### 7. epoch_rename
+
+> yes -- renaming passphrase_epoch to unlock_epoch across all five adapters
+> yes -- Rename passphrase_epoch to unlock_epoch across the core
+
+*Gloss*: one mechanical sweep. It renames the stored bundle field, `DeviceUnlock`'s field, the
+`BundleExpectation`, and every adapter that stores or matches it: the core's memory VaultDB,
+`safebyok-indexeddb`, `safebyok-convex` (its schema and component), `safebyok-postgres` (its
+column) and `safebyok-graphql` (its schema field). It also covers docs (VOCABULARY, READMEs,
+`notes/security.md`), comments, tests, the demo, and a changeset naming the stored-shape change.
+Also sweep prose that calls it a "passphrase epoch" when it is the unlock epoch. The old field
+name gets no alias. *Model*: sonnet. *Base*: #77 `12fc4d0`. *Look-ahead*: thread 8 stacks on it
+and touches the same adapters.
+
+### 8. store_vault_cap
+
+> stores without limits can specify a large number, 1_200_300_400_500_600 will do if Infinity
+> won't. Don't offer that constant from core, because each store should set their own. [...] --
+> A vault size cap on the Postgres server: a lockbox-count check inside the insert, refusing
+> vault_full, as the Convex component has.
+
+*Gloss*, as the rulings note reads it:
+* Every `VaultDB` declares a `maxLockboxes`, an abstract readonly beside `maxRecordBytes`, with
+  no default and no constant in the core.
+* A store with no limit of its own declares a large one: Infinity where the number stays in
+  memory, `1_200_300_400_500_600` where it must cross a wire or be stored.
+* `openVault` refuses with `bad_option` a `maxLockboxes` above its store's, and defaults to the
+  smaller of `MaxLockboxes` and the store's.
+* `safebyok-postgres` takes its limit as an option, has a default of its own, and enforces it
+  inside the insert statement itself, so a hostile client cannot skip it. A new lockbox past the
+  limit is refused as `vault_full`; a replacement never is.
+* Convex declares the component's limit. GraphQL declares what its server half enforces (an
+  option, defaulting to Postgres's).
+*Base*: thread 7's tip, once filed.
+
+### 9. unlock_fixes
+
+From the rulings' *Smaller ones*, recommended as amendments:
+* `addPasskey` checks its proof before it asks the authenticator for a new passkey, so a wrong
+  passphrase leaves no passkey behind that opens nothing.
+* `safebyok-indexeddb`'s BroadcastChannel no longer keeps a Node or Bun process alive (`unref`
+  where the platform has it), and a listener that throws no longer escapes as an uncaught error.
+* A test that sends a passkey envelope through `safebyok-graphql`, backing #78's claim that a new
+  way in crosses with no change there (thread 6's restack report).
+*Base*: #77 `12fc4d0`; restacked onto thread 8 at assembly.
+
+### 10. docs_housekeeping
+
+> yes, you are approved to name the packages safebyok-{graphql,postgres,etc} and modify the
+> guidance docs including CLAUDE.md to reflect that.
+> noted, add to security.md: "Dependencies: hash-wasm has no published audit"
+> as long as nothing needs a package or anything, it's ok if there are test helpers in the common
+> library that the core doesn't need -- TH.perUser into safebyok/testing
+
+*Gloss*:
+* CLAUDE.md's *Layout* lists every package (`safebyok`, `safebyok-react`, `safebyok-convex`,
+  `safebyok-indexeddb`, `safebyok-postgres`, `safebyok-graphql`, `safebyok-argon2-wasm`) and the
+  `safebyok-<store>` naming rule for storage adapters. Do the same for PROCESS.md and any other
+  guidance doc that names the packages.
+* `notes/security.md` gets the hash-wasm entry: no published audit, and its working memory is
+  never zeroed.
+* `TH.perUser` moves from the Postgres and GraphQL tests into `safebyok/testing`, with a doc block
+  and a test, and both suites use it.
+* YOLO: pin `graphql-yoga` and `@graphql-tools/schema` (dev only, #78) to the newest release at
+  least two weeks old.
+*Base*: #77 `12fc4d0`; restacked onto thread 9 at assembly.
+
+**Assembly**: #77 → 7 → 8 → 9 → 10 → #79, justified at the top only, then pushed together.
+
 ## Order
 
 * **Now**: threads 2 and 5, from #63.
@@ -309,6 +397,9 @@ Apollo, Mercurius, graphql-ws, a real disconnect. Filed as
    start. Its columns follow the bundle's shape (the Coach's field-by-field rule), so it cannot
    file on #63 alone; building in parallel and rebasing an unpushed branch costs one column
    change.
+
+5. **Amendment thread 10 pins the two young GraphQL dev dependencies** to releases at least two
+   weeks old, a two-way door the Coach did not rule on.
 
 ## For the Coach
 
