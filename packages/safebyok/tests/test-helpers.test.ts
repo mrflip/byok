@@ -443,6 +443,20 @@ describe("perUser", () => {
     expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
   })
 
+  it("sends updateBundle, subscribe, eraseBox and eraseVault to the user named, too", async () => {
+    const { vaultDB, store } = counted()
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.createBundle(TH.bundleOf('u2'))
+    await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
+    await vaultDB.updateBundle({ ...TH.bundleOf('u2'), passphrase_epoch: 2 }, { vault_id: 'vault-id-u2', passphrase_epoch: 1 })
+    vaultDB.subscribe(TH.scopeOf('u2'), () => undefined)()
+    await vaultDB.eraseBox(TH.scopeOf('u2'), 'anthropic', { vault_id: 'vault-id-u2' })
+    expect(await servingOnly('u2', store).listBoxes(TH.scopeOf('u2'))).to.have.lengthOf(0)
+    await vaultDB.eraseVault(TH.scopeOf('u2'), { vault_id: 'vault-id-u2' })
+    expect(await servingOnly('u2', store).readBundle(TH.scopeOf('u2'))).to.be.null
+    expect(await servingOnly('u1', store).readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
+  })
+
   it("makes each user's VaultDB once, and keeps it", async () => {
     const { vaultDB, askedFor } = counted()
     await vaultDB.readBundle(TH.scopeOf('u1'))
