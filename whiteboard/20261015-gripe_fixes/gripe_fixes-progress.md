@@ -8,12 +8,12 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | # | Thread             | Base                  | Status  |
 | - | ------------------ | --------------------- | ------- |
 | 1 | kdf_configs        | #66 tip `5fefc90`     | filed [#68](https://github.com/mrflip/safebyok/pull/68) |
-| 2 | vaultdb_validation | #66 tip `dfdbbec`     | filing |
+| 2 | vaultdb_validation | #66 tip `5fefc90`     | filed [#70](https://github.com/mrflip/safebyok/pull/70) |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
 | 4 | ci_tooling         | #66 tip `5fefc90`     | underway |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
-| 6 | thin_tests         | thread 2's tip, once filed | waiting on thread 2 |
-| 7 | test_helpers       | thread 6's tip        | pending |
+| 6 | thin_tests         | #70 tip `d874db3`     | underway |
+| 7 | test_helpers       | thread 6's tip        | pending (after 6 files) |
 | 8 | comment_width      | #66 tip, after 1-7    | pending |
 
 ## What the threads have taught
@@ -79,3 +79,15 @@ questions: `user_id` unbounded; a control-character note escapes past 2 KiB on a
 duplications. **Re-plan:** thread 6 now stacks on thread 2 (it strengthens the Convex "never
 quotes a record" test thread 2 rewrote; both would rewrite the same lines), so thread 6 is cut
 from thread 2's tip once it files, and thread 7 from thread 6's.
+
+*Orchestrator:* thread 2 filed as [#70](https://github.com/mrflip/safebyok/pull/70) (tip `d874db3`);
+its review is posted on the PR. Its open questions add to the Coach's list: the `openVault`
+size budget will not hold both #68 and #70; is the reframed allowance enough; `user_id` has no
+length bound; should `erase()` tolerate a `corrupt_record` box; should `SafebyokComponent.api`
+check `getUserId` at load.
+
+*Orchestrator:* **paused 10:18-11:19 at the Coach's word** (session limit). Thread 4 checkpointed
+at `830e2ed` during the pause (justify green at `1070c86` below it) and has resumed. Thread 4's
+findings so far: Dependabot's `directory: /` already covers `packages/*` and `demos/*` (no config
+change); justify ~35 s -> ~20 s warm, with a `SAFEBYOK_SKIP_BUILD_DEPS` env var that the root's
+build and test set so each package builds once. Thread 6 was cut from #70's tip after the pause.
