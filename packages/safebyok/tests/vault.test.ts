@@ -1126,6 +1126,89 @@ describe("a lock that lands while an unlock is under way", () => {
   })
 })
 
+describe("a vault that moves elsewhere while an unlock is under way", () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it("destroyed and made anew: the unlock takes up nothing, throws 'vault_locked', and can't seal into the new vault", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lock()
+    const there = await world.open({ deviceDB: memoryDeviceDB() })
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await there.destroy()
+    await there.unlock('pw two')
+    await there.store('anthropic', 'sk-ant-fake-new')
+    // Let this handle's background refresh, rung by the writes above, bring in the new vault.
+    await TH.wakeupAtNextTick()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+    await expectRefusal(vault.store('anthropic', 'sk-ant-fake-stale'), 'vault_locked')
+    expect(await there.read('anthropic')).to.eq('sk-ant-fake-new')
+    await vault.unlock('pw two')
+    expect(await vault.read('anthropic')).to.eq('sk-ant-fake-new')
+  })
+
+  it("destroyed and not remade: the unlock takes up nothing, and the vault reads as absent", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lock()
+    const there = await world.open({ deviceDB: memoryDeviceDB() })
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await there.destroy()
+    await TH.wakeupAtNextTick()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('absent')
+    expect(await world.rememberedUnlock()).to.be.null
+  })
+
+  it("its passphrase changed: the old passphrase, proven a moment too late, unlocks nothing", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lock()
+    const there = await world.open({ deviceDB: memoryDeviceDB() })
+    await there.unlock('pw one')
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await there.changePassphrase('pw one', 'pw two')
+    await TH.wakeupAtNextTick()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+    await vault.unlock('pw two')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("a refresh that brings back the same bundle, unchanged, does not defeat the unlock", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lock()
+    const there = await world.open({ deviceDB: memoryDeviceDB() })
+    await there.unlock('pw one')
+    const gate = world.holdNextDerive()
+    const unlocking = vault.unlock('pw one')
+    await gate.reached
+    await there.store('anthropic', 'sk-ant-fake')
+    await TH.wakeupAtNextTick()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(await vault.read('anthropic')).to.eq('sk-ant-fake')
+  })
+})
+
 describe("the key deriver seam", () => {
   it("a vault made under one deriver refuses to unlock under another, by label", async () => {
     const world = makeWorld()
