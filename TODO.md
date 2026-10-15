@@ -318,7 +318,22 @@ kinds that are misuse in one caller and a condition in another (a boxlabel the u
 
 A host chooses its own label grammar. Waits on the low-hanging-fruit report of what depends on
 the current strictness (storage ckeys, the cipher binding, the Convex tables, the React package);
-the seam is likely an `openVault` option with the current `parseLabel` as the default.
+the seam is likely an `openVault` option with the current `parseLabel` as the default. The report
+([#35](https://github.com/mrflip/safebyok/pull/35)) found the colon is the one character the
+storage ckeys cannot take: they join applabel, user id, vaultlabel and boxlabel with `:` as plain
+concatenations, so a label holding a colon collides with another scope or hides a box. **The
+Coach's ruling: a pluggable label validator must also provide a label-tuple stringifier that
+handles the `:` issue** -- the validator and the stringifier come as one pair, so a host that
+widens the grammar also says how the tuple becomes a ckey. The current `:`-join stays the default
+pair's stringifier, so every stored ckey keeps its shape.
+
+### Validating the user id
+
+`VaultScope.user_id` comes from the host's auth and is free-form today: any non-empty string, no
+grammar, deliberately not a Label. **The Coach's ruling: it gets some manner of validation, and
+the validation is replaceable** -- a default check (a length cap, no control characters, and
+whatever the ckey stringifier above needs) that a host can swap for its own auth provider's id
+shape. Same seam family as the label validator; decide them together.
 
 ### A conflict-handler hook
 
