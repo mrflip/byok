@@ -289,9 +289,10 @@ describe("convexVaultDB.subscribe", () => {
       const there = convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok)
       const watch = await settledWatch(here)
       watch.unsubscribe()
+      const heardBefore = watch.onChange.mock.calls.length
       await there.createBundle(TH.bundleOf('u1'))
       await caughtUp(here)
-      expect(watch.onChange.mock.calls.length).to.eq(watch.heardBefore)
+      expect(watch.onChange.mock.calls.length).to.eq(heardBefore)
     })
 
     it(`hears nothing over a ${clientTitle} of another vault's writes`, async () => {
