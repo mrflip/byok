@@ -469,7 +469,8 @@ security expert who knows what questions to ask.
   scope, or any while signed out, before querying; that check is the whole of the authorization.
   Row-level security is on with no policy (the owner role bypasses it; every other role,
   Supabase's Data API roles among them, reaches no row). The NOTIFY payload is the scope, which
-  any role able to connect may LISTEN for. The server holds a vault to no size of its own. Past
+  any role able to connect may LISTEN for. The server holds a vault to a lockbox count of its own
+  (see the `maxLockboxes` entry below), and to no size in bytes. Past
   scope and boxlabel, a route's bundles, lockboxes and expectations are validated only as the
   core's VaultDB validates them. A driver's error rides as `cause` and may quote key columns, or
   (a malformed record refused by a NOT NULL) the whole failing row, its ciphertext included; the
@@ -520,3 +521,25 @@ security expert who knows what questions to ask.
   anything else lets the browser commit the transaction early, and the next request throws);
   `src/shelf.ts`'s `inOneTransaction` says so. Its rows, ckeys and database name are unchanged,
   and its change bell, a BroadcastChannel per database, still carries no scope and no record.
+* 2026-10-15: every `VaultDB` declares a `maxLockboxes`, the most lockboxes its backend holds in
+  one vault (`Infinity` for none), and `openVault` refuses (`bad_option`) a `maxLockboxes` above
+  it, defaulting to the smaller of it and `MaxLockboxes`. The core offers no "unlimited" constant:
+  each store sets its own. `localVaultDB` and `idbVaultDB` declare `Infinity` and enforce nothing;
+  `convexVaultDB` declares the component's 8,000; `graphqlVaultDB` declares what its host says the
+  server enforces (default 1000), which only moves `openVault`'s check: the server's own refusal
+  is the limit. `postgresVaultDB` enforces its `maxLockboxes` (default 1000; a host wanting none
+  passes a large safe integer) inside the one statement that inserts a new lockbox, against a
+  `lockbox_count` column on the bundle row that an `AFTER INSERT OR DELETE` row trigger on
+  `safebyok_lockboxes` keeps, so writes by any statement, the host's own SQL included, keep it
+  true (a `TRUNCATE` of the lockboxes alone does not). The insert locks the bundle row
+  (`FOR UPDATE`) and compares the count it locked: under READ COMMITTED, a statement that waited
+  for the lock is handed the row as its forerunner left it (Postgres re-reads a row it waited to
+  lock), so two inserts racing for the last place cannot both land; under REPEATABLE READ or
+  SERIALIZABLE, the waiter fails with a serialization error, refused as `storage_unavailable`. A
+  bare `count(*)` in the insert would not hold under READ COMMITTED, each statement counting from
+  its own snapshot. This is reasoned from Postgres's documented semantics; the tests run on PGlite,
+  one connection, and cannot race. `eraseBox` locks the bundle row before deleting, so an erase's
+  count update and a waiting insert cannot deadlock. Holding the lock also keeps the bundle, so the
+  insert no longer meets a foreign-key failure from a vault erased meanwhile. A replacement is never
+  refused for the count, nor is a first write whose boxlabel is already taken (it refuses as
+  `stale_write`). The refusal's message names the limit, never a boxlabel or a record.

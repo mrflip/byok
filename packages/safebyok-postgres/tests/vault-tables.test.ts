@@ -34,9 +34,12 @@ describe("VaultTablesSql", () => {
     expect(await TH.requestFor(db, 'u1').readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
   })
 
-  it("makes a bundle's columns exactly as the adapter writes them, in order", async () => {
+  it("makes a bundle's columns exactly as the adapter writes them, in order, then the vault's lockbox count", async () => {
     const db = await TH.database()
-    expect(await describedColumns(db, 'safebyok_bundles')).to.deep.equal(BundleColumns.map(([field, kind]) => [field, TypeForKind[kind]]))
+    expect(await describedColumns(db, 'safebyok_bundles')).to.deep.equal([
+      ...BundleColumns.map(([field, kind]) => [field, TypeForKind[kind]]),
+      ['lockbox_count', 'bigint'],
+    ])
   })
 
   it("makes a lockbox's columns exactly as the adapter writes them, after its vault's scope and vault_id", async () => {

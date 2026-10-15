@@ -6,7 +6,7 @@ import { VaultError, memoryDeviceDB, openVault } from 'safebyok'
 import { postgresVaultDB } from 'safebyok-postgres'
 import * as TH from './test-helpers'
 import { graphqlVaultDB } from '../src/index'
-import type { GraphqlVaultClient } from '../src/index'
+import type { GraphqlVaultClient, GraphqlVaultDBOpts } from '../src/index'
 
 TH.bootDatabaseFirst()
 
@@ -36,10 +36,65 @@ describe("graphqlVaultDB, its client", () => {
     })
   }
 
-  it("declares a mebibyte to a record, and no limit to a vault", () => {
+  it("declares a mebibyte to a record, no limit to a vault's bytes, and 1000 lockboxes to a vault", () => {
     const vaultDB = graphqlVaultDB(new Client({ url: 'https://app.example.test/api/graphql', exchanges: [fetchExchange] }))
     expect(vaultDB.maxRecordBytes).to.eq(1024 * 1024)
     expect(vaultDB.maxVaultBytes).to.eq(Infinity)
+    expect(vaultDB.maxLockboxes).to.eq(1000)
+  })
+
+  it("declares by default the lockbox limit the Postgres VaultDB holds by default", () => {
+    const client = new Client({ url: 'https://app.example.test/api/graphql', exchanges: [fetchExchange] })
+    const server = postgresVaultDB({ client: { query: offline }, userId: 'u1' })
+    expect(graphqlVaultDB(client).maxLockboxes).to.eq(server.maxLockboxes)
+  })
+
+  it("declares the maxLockboxes it is given, Infinity among them, as the README's example gives it", () => {
+    const client = new Client({ url: 'https://app.example.test/api/graphql', exchanges: [fetchExchange] })
+    expect(graphqlVaultDB(client, { maxLockboxes: 250 }).maxLockboxes).to.eq(250)
+    expect(graphqlVaultDB(client, { maxLockboxes: Infinity }).maxLockboxes).to.eq(Infinity)
+    expect(graphqlVaultDB(client, {}).maxLockboxes).to.eq(1000)
+  })
+
+  const BadLockboxLimits = [
+    [0,          'a maxLockboxes of none'],
+    [2.5,        'a maxLockboxes that is no whole number'],
+    ['1000',     'a maxLockboxes that is text'],
+    [NaN,        'a maxLockboxes of NaN'],
+    [-Infinity,  'a maxLockboxes of -Infinity'],
+  ] as const
+
+  for (const [maxLockboxes, blurb] of BadLockboxLimits) {
+    it(`refuses ${blurb}, with kind bad_option`, () => {
+      const client = new Client({ url: 'https://app.example.test/api/graphql', exchanges: [fetchExchange] })
+      expect(() => graphqlVaultDB(client, { maxLockboxes } as unknown as GraphqlVaultDBOpts)).to.throw(VaultError).with.property('kind', 'bad_option')
+    })
+  }
+})
+
+describe("graphqlVaultDB, a server's lockbox limit", () => {
+  it("carries the server's vault_full refusal back as itself, kind and message, naming no boxlabel", async () => {
+    const db = await TH.emptyDatabase()
+    const schema = TH.schemaOver(db, ({ userId }) => postgresVaultDB({ client: db, userId, maxLockboxes: 1 }))
+    // A browser declaring more than its server holds: the server holds the line.
+    const vaultDB = graphqlVaultDB(TH.urqlClientFor(schema, 'u1'), { maxLockboxes: Infinity })
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.updateBox(u1, TH.boxOf('openai', 'sk-fake-one'), { vault_id: 'vault-id-u1', revision_id: null })
+    const refusal = await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('secret_project_x', 'sk-fake-two'), { vault_id: 'vault-id-u1', revision_id: null }), 'vault_full')
+    expect(refusal).to.be.instanceOf(VaultError)
+    expect(refusal.message).to.include('1 lockboxes')
+    expect(refusal.message).to.not.include('secret_project_x')
+    const listed = await vaultDB.listBoxes(u1)
+    expect(listed.map((box) => box.boxlabel)).to.deep.equal(['openai'])
+  })
+
+  it("has a vault opened over it refuse a maxLockboxes above what it declares", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const vaultDB = graphqlVaultDB(TH.urqlClientFor(schema, 'u1'), { maxLockboxes: 3 })
+    const refusal = await TH.expectRefusal(openVault({
+      applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver, maxLockboxes: 4,
+    }), 'bad_option')
+    expect(refusal.message).to.include('3 lockboxes')
   })
 })
 

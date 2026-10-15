@@ -140,6 +140,11 @@ without `format` -- which the browser's VaultDB may not hand back from its own l
   kind `storage_unavailable`, urql's own error as its `cause`.
 * **It holds a record to 1 MiB**, as the Postgres VaultDB behind it does, and a vault to no size
   of its own.
+* **It declares the lockbox limit your server holds a vault to**: 1000, the Postgres VaultDB's
+  own unless told otherwise, or the `maxLockboxes` you pass (`graphqlVaultDB(client, {
+  maxLockboxes: 250 })`; `Infinity` for a server that sets none). Pass the number your server's
+  VaultDB enforces, so `openVault` refuses a vault asking for more up front; the server refuses a
+  new lockbox past its own with kind `vault_full` either way, and the refusal crosses.
 * **A subscription that fails** (the server refusing it, the socket dropping) is not retried, and
   nothing is told: the vault goes on refreshing after its own writes.
 

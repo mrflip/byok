@@ -9,6 +9,20 @@ import { BundleFields, ListedLockboxFields, LockboxFields, ScopeFields, recordOf
  */
 export type GraphqlVaultClient = Pick<Client, 'query' | 'mutation' | 'subscription'>
 
+/** What {@link graphqlVaultDB} takes beside its client. */
+export type GraphqlVaultDBOpts = {
+  /**
+   * The most lockboxes one vault holds, as the VaultDB behind your server enforces it: a whole
+   * number above zero, or `Infinity` for a server that sets none. Default: 1000, what the
+   * Postgres VaultDB holds unless told otherwise. Declare your server's own, so that `openVault`
+   * refuses a vault asking for more up front, rather than the server at the first lockbox past it.
+   */
+  maxLockboxes?: number | undefined
+}
+
+/** What the Postgres VaultDB holds in one vault unless told otherwise, and so what this declares. */
+const DefaultMaxLockboxes = 1000
+
 /**
  * safebyok's storage over GraphQL, in the browser: a VaultDB whose every verb is one operation,
  * sent through your app's urql Client to a server serving `VaultSchemaSdl` with `vaultResolvers`
@@ -26,19 +40,30 @@ export type GraphqlVaultClient = Pick<Client, 'query' | 'mutation' | 'subscripti
  *   writes as before. A subscription that fails is not retried, and nothing is told.
  *
  * @param client - Your app's urql Client, its `url` your GraphQL server's.
+ * @param opts - Optionally, the `maxLockboxes` your server holds a vault to.
  * @returns The VaultDB, holding at most 1 MiB in one record, as the Postgres VaultDB behind it
- *   does, and setting no limit on one vault.
+ *   does, and `maxLockboxes` lockboxes in one vault, setting no limit on a vault's bytes.
  *
  * @example
  *   const vaultDB = graphqlVaultDB(new Client({ url: '/api/graphql', exchanges: [fetchExchange] }))
  *   const vault = await openVault({ ...browserOpts(), applabel: 'acme', userId, vaultlabel: 'main', vaultDB })
+ * @example
+ *   const vaultDB = graphqlVaultDB(client, { maxLockboxes: 250 })  // the server's postgresVaultDB holds 250
  */
-export const graphqlVaultDB = (client: GraphqlVaultClient): VaultDB => {
+export const graphqlVaultDB = (client: GraphqlVaultClient, opts?: GraphqlVaultDBOpts): VaultDB => {
   if (! isUrqlClient(client)) {
     throw new VaultError('bad_option', "graphqlVaultDB needs an urql Client: your app's own, made with `new Client({ url, exchanges })` from @urql/core or urql.")
   }
-  return new UrqlVaultDB(client)
+  const { maxLockboxes = DefaultMaxLockboxes } = (opts as Partial<GraphqlVaultDBOpts> | null | undefined) ?? {}
+  if (! isLockboxCount(maxLockboxes)) {
+    throw new VaultError('bad_option', "graphqlVaultDB's `maxLockboxes`, when given, is a whole number above zero, or Infinity for a server that sets no limit.")
+  }
+  return new UrqlVaultDB(client, maxLockboxes)
 }
+
+const isLockboxCount = (count: unknown): count is number => (
+  count === Infinity || (Number.isSafeInteger(count) && (count as number) > 0)
+)
 
 const isUrqlClient = (client: unknown): client is GraphqlVaultClient => {
   if (typeof client !== 'object' || client === null) { return false }
@@ -104,12 +129,14 @@ class UrqlVaultDB extends VaultDB {
   readonly maxRecordBytes = 1024 * 1024
   // Nothing here reads a vault under a budget: the server's storage sets what it sets.
   readonly maxVaultBytes = Infinity
+  readonly maxLockboxes: number
 
   private readonly client: GraphqlVaultClient
 
-  constructor(client: GraphqlVaultClient) {
+  constructor(client: GraphqlVaultClient, maxLockboxes: number) {
     super()
     this.client = client
+    this.maxLockboxes = maxLockboxes
   }
 
   protected async doReadBundle(scope: VaultScope): Promise<unknown> {

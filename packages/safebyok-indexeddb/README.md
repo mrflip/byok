@@ -44,9 +44,11 @@ const vault = await openVault({
   at once settle on one; erasing a vault takes its every lockbox with it, or none of them.
 * **Other tabs' writes** ring `subscribe`, over a BroadcastChannel, so a vault open in two tabs
   stays current in both. The bell says only that something changed; the vault reads again.
-* **No limits of its own.** IndexedDB sets none per record or per vault, so `maxRecordBytes` and
-  `maxVaultBytes` are `Infinity`: the origin's storage quota bounds the whole database, and a
-  write past it refuses with kind `storage_unavailable`, IndexedDB's own error as its `cause`.
+* **No limits of its own.** IndexedDB sets none per record or per vault, so `maxRecordBytes`,
+  `maxVaultBytes` and `maxLockboxes` are `Infinity`: a vault holds what `openVault`'s
+  `maxLockboxes` allows (100 by default), the origin's storage quota bounds the whole database,
+  and a write past it refuses with kind `storage_unavailable`, IndexedDB's own error as its
+  `cause`.
 * **Best-effort storage.** The browser may evict IndexedDB under pressure, and "clear site data"
   removes it: the vault goes with it, and there is no other copy. Call
   `navigator.storage.persist()`, and tell your users plainly that the vault lives only in this

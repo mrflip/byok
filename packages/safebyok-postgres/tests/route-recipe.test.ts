@@ -72,6 +72,7 @@ const VaultRouteUrl = '/api/safebyok'
 class RouteVaultDB extends VaultDB {
   readonly maxRecordBytes = 1024 * 1024
   readonly maxVaultBytes = Infinity
+  readonly maxLockboxes = 1000 // the server's postgresVaultDB maxLockboxes
 
   private readonly fetcher: Fetch
 

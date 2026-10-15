@@ -2,23 +2,28 @@
  * The SQL that makes safebyok's tables in your Postgres (14 or later, in a UTF8 database): one
  * bundle per vault in `safebyok_bundles`, one row per lockbox in `safebyok_lockboxes`, each record
  * a column to a field and its ciphered values opaque jsonb; row-level security on, with no policy,
- * so only the tables' owner reaches them; and the trigger that notifies {@link VaultChangeChannel}
- * after every write. Run it once, as a migration or at your server's start: it is safe to run
- * again. The package also ships it as `vault-tables.sql`, for a migration tool to copy.
+ * so only the tables' owner reaches them; the trigger that notifies {@link VaultChangeChannel}
+ * after every write; and the trigger that keeps each bundle's count of its vault's lockboxes,
+ * which a new lockbox is checked against. Run it once, as a migration or at your server's start:
+ * it is safe to run again. The package also ships it as `vault-tables.sql`, for a migration tool
+ * to copy.
  *
  * @example await pool.query(VaultTablesSql)  // pg runs several statements in one query without parameters
  * @example await pglite.exec(VaultTablesSql)
  */
-export const VaultTablesSql = `-- safebyok-postgres: the tables a safebyok vault is stored in, and the trigger that tells
--- listeners when a vault changes. For Postgres 14 or later, in a UTF8 database. Safe to run
--- again: it creates only the tables that are missing, and replaces its function and triggers.
+export const VaultTablesSql = `-- safebyok-postgres: the tables a safebyok vault is stored in, the trigger that tells
+-- listeners when a vault changes, and the one that counts each vault's lockboxes. For Postgres 14
+-- or later, in a UTF8 database. Safe to run again: it creates only the tables that are missing,
+-- and replaces its functions and triggers.
 --
 -- Each record is stored field by field, a column to a field, exactly as safebyok wrote it:
 -- text as text, a time or a count as a bigint, and each structured value -- an encrypted value
 -- (a cipherIv and its ciphertext), or a bundle's list of unlock envelopes -- as one opaque jsonb.
 -- A record's secret fields are ciphertext, every one.
 
--- One bundle per vault.
+-- One bundle per vault, and beside it how many lockboxes the vault holds: not a field of the
+-- bundle, but the adapter's own count, kept by the trigger below, which a new lockbox is checked
+-- against.
 CREATE TABLE IF NOT EXISTS safebyok_bundles (
   applabel         text   NOT NULL,
   user_id          text   NOT NULL,
@@ -28,6 +33,7 @@ CREATE TABLE IF NOT EXISTS safebyok_bundles (
   unlock_epoch     bigint NOT NULL,
   unlocks          jsonb  NOT NULL,
   registered_at    bigint NOT NULL,
+  lockbox_count    bigint NOT NULL DEFAULT 0,
   PRIMARY KEY (applabel, user_id, vaultlabel),
   -- What a lockbox's foreign key names: its vault, down to the vault_id.
   UNIQUE (applabel, user_id, vaultlabel, vault_id)
@@ -91,6 +97,26 @@ CREATE OR REPLACE TRIGGER safebyok_bundles_changed
 CREATE OR REPLACE TRIGGER safebyok_lockboxes_changed
   AFTER INSERT OR UPDATE OR DELETE ON safebyok_lockboxes
   FOR EACH ROW EXECUTE FUNCTION safebyok_vault_changed();
+
+-- Keeps each bundle's lockbox_count equal to its vault's lockboxes, whatever statement adds or
+-- removes one, in that statement's transaction. A lockbox never moves to another vault, so an
+-- update leaves the count as it is. TRUNCATE fires no row trigger: empty both tables together.
+CREATE OR REPLACE FUNCTION safebyok_lockboxes_counted() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    UPDATE safebyok_bundles SET lockbox_count = lockbox_count + 1
+      WHERE applabel = NEW.applabel AND user_id = NEW.user_id AND vaultlabel = NEW.vaultlabel AND vault_id = NEW.vault_id;
+  ELSE
+    UPDATE safebyok_bundles SET lockbox_count = lockbox_count - 1
+      WHERE applabel = OLD.applabel AND user_id = OLD.user_id AND vaultlabel = OLD.vaultlabel AND vault_id = OLD.vault_id;
+  END IF;
+  RETURN NULL;
+END
+$$;
+
+CREATE OR REPLACE TRIGGER safebyok_lockboxes_counted
+  AFTER INSERT OR DELETE ON safebyok_lockboxes
+  FOR EACH ROW EXECUTE FUNCTION safebyok_lockboxes_counted();
 `
 
 /**

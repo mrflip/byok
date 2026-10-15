@@ -37,9 +37,10 @@ describe("idbVaultDB's options", () => {
 })
 
 describe("idbVaultDB", () => {
-  it("declares no per-record or per-vault limit: IndexedDB has neither", () => {
+  it("declares no per-record or per-vault limit, in bytes or in lockboxes: IndexedDB has neither", () => {
     expect(idbVaultDB().maxRecordBytes).to.eq(Infinity)
     expect(idbVaultDB().maxVaultBytes).to.eq(Infinity)
+    expect(idbVaultDB().maxLockboxes).to.eq(Infinity)
   })
 
   it("keeps each record as itself, field by field, at the ckey it always had", async () => {

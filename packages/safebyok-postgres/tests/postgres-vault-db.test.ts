@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import type { PGlite } from '@electric-sql/pglite'
 import type { Client, Pool, PoolClient } from 'pg'
 import { VaultError, memoryDeviceDB, openVault } from 'safebyok'
+import type { VaultDB } from 'safebyok'
 import * as TH from './test-helpers'
 import { VaultChangeChannel, postgresVaultDB } from '../src/index'
 import type { PostgresClient, PostgresListen, PostgresVaultDBOpts } from '../src/index'
@@ -25,6 +26,11 @@ describe("postgresVaultDB, its options", () => {
     [{ client: { query: 'SELECT 1' }, userId: 'u1' },        'a client whose query is not a function'],
     [{ client: { query: () => Promise.resolve({ rows: [] }) }, userId: 42 },  'a userId that is not text'],
     [{ client: { query: () => Promise.resolve({ rows: [] }) }, userId: 'u1', listen: 'LISTEN' }, 'a listen that is not a function'],
+    [{ client: { query: () => Promise.resolve({ rows: [] }) }, userId: 'u1', maxLockboxes: 0 },        'a maxLockboxes of none'],
+    [{ client: { query: () => Promise.resolve({ rows: [] }) }, userId: 'u1', maxLockboxes: 2.5 },      'a maxLockboxes that is no whole number'],
+    [{ client: { query: () => Promise.resolve({ rows: [] }) }, userId: 'u1', maxLockboxes: '1000' },   'a maxLockboxes that is text'],
+    [{ client: { query: () => Promise.resolve({ rows: [] }) }, userId: 'u1', maxLockboxes: Infinity }, 'a maxLockboxes of Infinity, which Postgres cannot take as a bigint'],
+    [{ client: { query: () => Promise.resolve({ rows: [] }) }, userId: 'u1', maxLockboxes: 2 ** 53 },  'a maxLockboxes past the safe integers'],
   ] as const
 
   for (const [opts, blurb] of BadOpts) {
@@ -39,10 +45,17 @@ describe("postgresVaultDB, its options", () => {
     expect(await vaultDB.readBundle(u1)).to.be.null
   })
 
-  it("declares a mebibyte to a record, and no limit to a vault", () => {
+  it("declares a mebibyte to a record, no limit to a vault's bytes, and 1000 lockboxes to a vault", () => {
     const vaultDB = postgresVaultDB({ client: TH.failingClient(new Error('unused')), userId: 'u1' })
     expect(vaultDB.maxRecordBytes).to.eq(1024 * 1024)
     expect(vaultDB.maxVaultBytes).to.eq(Infinity)
+    expect(vaultDB.maxLockboxes).to.eq(1000)
+  })
+
+  it("declares the maxLockboxes it is given, as the README's examples give it", () => {
+    const client = TH.failingClient(new Error('unused'))
+    expect(postgresVaultDB({ client, userId: 'u1', maxLockboxes: 250 }).maxLockboxes).to.eq(250)
+    expect(postgresVaultDB({ client, userId: 'u1', maxLockboxes: 1_200_300_400_500_600 }).maxLockboxes).to.eq(1_200_300_400_500_600)
   })
 })
 
@@ -143,9 +156,10 @@ describe("postgresVaultDB, what it stores", () => {
       vaultlabel:       'main',
       format:           'safebyok-vault-v1',
       vault_id:         'vault-id-u1',
-      unlock_epoch: 1,
+      unlock_epoch:     1,
       unlocks:          TH.bundleOf('u1').unlocks,
       registered_at:    Date.UTC(2026, 9, 14),
+      lockbox_count:    0,
     }])
   })
 
@@ -244,6 +258,154 @@ describe("postgresVaultDB, what it stores", () => {
   })
 })
 
+/** The lockbox_count of u1's vault, as the tables' trigger keeps it; null with no bundle. */
+const countedForU1 = async (db: PGlite): Promise<number | null> => {
+  const { rows } = await db.query<{ lockbox_count: number }>("SELECT lockbox_count FROM safebyok_bundles WHERE user_id = 'u1'")
+  return rows[0]?.lockbox_count ?? null
+}
+
+/** The boxlabels in u1's vault, as `vaultDB` lists them. */
+const boxlabelsIn = async (vaultDB: VaultDB): Promise<string[]> => {
+  const listed = await vaultDB.listBoxes(u1)
+  return listed.map((box) => box.boxlabel)
+}
+
+/** A request for u1 over `db` holding vaults to `maxLockboxes`, its vault made and given those boxlabels. */
+const filledTo = async (db: PGlite, maxLockboxes: number, boxlabels: readonly string[]) => {
+  const vaultDB = postgresVaultDB({ client: db, userId: 'u1', maxLockboxes })
+  await vaultDB.createBundle(TH.bundleOf('u1'))
+  for (const boxlabel of boxlabels) { await vaultDB.updateBox(u1, TH.boxOf(boxlabel, `sk-fake-${boxlabel}`), noBoxYet) }
+  return vaultDB
+}
+
+describe("postgresVaultDB, its lockbox limit", () => {
+  it("refuses a new lockbox past maxLockboxes as vault_full, writing nothing and naming no boxlabel", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 2, ['openai', 'anthropic'])
+    const refusal = await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('secret_project_x', 'sk-fake'), noBoxYet), 'vault_full')
+    expect(refusal.message).to.include('2 lockboxes')
+    expect(refusal.message).to.not.include('secret_project_x')
+    expect(await boxlabelsIn(vaultDB)).to.have.members(['openai', 'anthropic'])
+    expect(await countedForU1(db)).to.eq(2)
+  })
+
+  it("never refuses a replacement for the count", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 1, ['openai'])
+    const standing = await vaultDB.readBox(u1, 'openai')
+    await vaultDB.updateBox(u1, { ...TH.boxOf('openai', 'sk-fake-new'), revision_id: 'rev-new' }, { vault_id: 'vault-id-u1', revision_id: standing?.revision_id ?? null })
+    const replaced = await vaultDB.readBox(u1, 'openai')
+    expect(replaced?.revision_id).to.eq('rev-new')
+    expect(await countedForU1(db)).to.eq(1)
+  })
+
+  it("refuses a first write under a boxlabel already taken in a full vault as stale_write, not vault_full: the writer missed a lockbox it would replace", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 1, ['openai'])
+    const standing = await vaultDB.readBox(u1, 'openai')
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('openai', 'sk-fake-other'), noBoxYet), 'stale_write')
+    expect(await vaultDB.readBox(u1, 'openai')).to.deep.equal(standing)
+  })
+
+  it("refuses a first write in a full vault of another vault_id as stale_write: the count is the standing vault's", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 1, ['openai'])
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-gone', revision_id: null }), 'stale_write')
+    expect(await boxlabelsIn(vaultDB)).to.deep.equal(['openai'])
+  })
+
+  it("makes room with an erase", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 1, ['openai'])
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'vault_full')
+    await vaultDB.eraseBox(u1, 'openai', thisVault)
+    await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet)
+    expect(await boxlabelsIn(vaultDB)).to.deep.equal(['anthropic'])
+  })
+
+  it("lets exactly one of two first writes sent at once take the last place", async () => {
+    // PGlite runs one statement at a time, so this holds the outcome, not the race: the race is
+    // the row lock's, as InsertBoxSql's comment says.
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 2, ['openai'])
+    const outcomes = await Promise.allSettled([
+      vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake-one'), noBoxYet),
+      postgresVaultDB({ client: db, userId: 'u1', maxLockboxes: 2 }).updateBox(u1, TH.boxOf('mistral', 'sk-fake-two'), noBoxYet),
+    ])
+    expect(outcomes.map((outcome) => outcome.status)).to.have.members(['fulfilled', 'rejected'])
+    expect(await countedForU1(db)).to.eq(2)
+  })
+
+  it("holds a vault filled under a higher limit to a lowered one, stranding none of its lockboxes", async () => {
+    const db = await TH.emptyDatabase()
+    await filledTo(db, 1000, ['openai', 'anthropic', 'mistral'])
+    const lowered = postgresVaultDB({ client: db, userId: 'u1', maxLockboxes: 2 })
+    await TH.expectRefusal(lowered.updateBox(u1, TH.boxOf('gemini', 'sk-fake'), noBoxYet), 'vault_full')
+    expect(await boxlabelsIn(lowered)).to.have.members(['openai', 'anthropic', 'mistral'])
+  })
+
+  it("keeps each vault's count in step with its lockboxes, through every verb and the host's own SQL", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 10, ['openai', 'anthropic'])
+    await filledTo(db, 10, [])  // a second createBundle of the same vault changes nothing
+    expect(await countedForU1(db)).to.eq(2)
+    await vaultDB.eraseBox(u1, 'openai', thisVault)
+    await vaultDB.eraseBox(u1, 'never_stored', thisVault)
+    expect(await countedForU1(db)).to.eq(1)
+    await db.query("DELETE FROM safebyok_lockboxes WHERE boxlabel = 'anthropic'")
+    expect(await countedForU1(db)).to.eq(0)
+    await vaultDB.updateBundle({ ...TH.bundleOf('u1'), unlock_epoch: 2 }, { vault_id: 'vault-id-u1', unlock_epoch: 1 })
+    expect(await countedForU1(db)).to.eq(0)
+    await vaultDB.eraseVault(u1, thisVault)
+    expect(await countedForU1(db)).to.be.null
+  })
+
+  it("counts each vault apart, even one user's two", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 1, ['openai'])
+    const other = { ...u1, vaultlabel: 'other' }
+    await vaultDB.createBundle({ ...TH.bundleOf('u1'), vaultlabel: 'other' })
+    await vaultDB.updateBox(other, TH.boxOf('openai', 'sk-fake'), noBoxYet)
+    const { rows } = await db.query('SELECT vaultlabel, lockbox_count FROM safebyok_bundles ORDER BY vaultlabel')
+    expect(rows).to.deep.equal([{ vaultlabel: 'main', lockbox_count: 1 }, { vaultlabel: 'other', lockbox_count: 1 }])
+  })
+
+  it("refuses as vault_full a store() its vault's own count let through, when another device filled the vault unheard", async () => {
+    const db = await TH.emptyDatabase()
+    const opened = () => openVault({
+      applabel: 'acme', userId: 'u1', vaultlabel: 'main', deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver,
+      // No listen: neither vault hears the other's writes.
+      vaultDB: postgresVaultDB({ client: db, userId: 'u1', maxLockboxes: 2 }),
+    })
+    const here = await opened()
+    await here.unlock('correct horse battery staple')
+    await here.store('openai', 'sk-fake-one')
+    const there = await opened()
+    await there.unlock('correct horse battery staple')
+    await there.store('anthropic', 'sk-fake-two')
+    expect(here.getSnapshot().boxes).to.have.lengthOf(1)
+    const refusal = await TH.expectRefusal(here.store('mistral', 'sk-fake-three'), 'vault_full')
+    expect(refusal.message).to.include('its storage keeps')
+    here.close()
+    there.close()
+  })
+
+  it("opens a vault with the smaller of MaxLockboxes and its own, and refuses one asking for more", async () => {
+    const db = await TH.emptyDatabase()
+    const optsFor = (maxLockboxes?: number) => ({
+      applabel: 'acme', userId: 'u1', vaultlabel: 'main', deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver,
+      vaultDB: postgresVaultDB({ client: db, userId: 'u1', maxLockboxes: 3 }), maxLockboxes,
+    })
+    await TH.expectRefusal(openVault(optsFor(4)), 'bad_option')
+    const vault = await openVault(optsFor())
+    await vault.unlock('correct horse battery staple')
+    for (const boxlabel of ['one', 'two', 'three']) { await vault.store(boxlabel, `sk-fake-${boxlabel}`) }
+    const refusal = await TH.expectRefusal(vault.store('four', 'sk-fake-four'), 'vault_full')
+    expect(refusal.message).to.include('limit of 3 lockboxes')
+    vault.close()
+  })
+})
+
 describe("postgresVaultDB, listBoxRecords", () => {
   it("lists each lockbox as stored, ciphered fields left out, format kept, a missing note missing", async () => {
     const db = await TH.emptyDatabase()
@@ -302,20 +464,10 @@ describe("postgresVaultDB, in trouble", () => {
     expect(refusal.kind).to.eq('storage_unavailable')
   })
 
-  it("refuses a first lockbox write whose bundle went between the statement's read and its insert, as stale_write", async () => {
+  it("refuses a failure of a first lockbox write as storage_unavailable, a serialization failure among them", async () => {
     const db = await TH.emptyDatabase()
-    const foreignKeyRefused = Object.assign(new Error('violates foreign key constraint'), { code: '23503' })
-    const spy = TH.spyClient(db, (text) => (text.startsWith('INSERT INTO safebyok_lockboxes') ? Promise.reject(foreignKeyRefused) : undefined))
-    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1' })
-    await vaultDB.createBundle(TH.bundleOf('u1'))
-    const refusal = await TH.refusalOf(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'one'), noBoxYet))
-    expect(refusal.kind).to.eq('stale_write')
-  })
-
-  it("refuses any other failure of a first lockbox write as storage_unavailable", async () => {
-    const db = await TH.emptyDatabase()
-    const tooBusy = Object.assign(new Error('too many connections'), { code: '53300' })
-    const spy = TH.spyClient(db, (text) => (text.startsWith('INSERT INTO safebyok_lockboxes') ? Promise.reject(tooBusy) : undefined))
+    const tooBusy = Object.assign(new Error('could not serialize access due to concurrent update'), { code: '40001' })
+    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.reject(tooBusy) : undefined))
     const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1' })
     await vaultDB.createBundle(TH.bundleOf('u1'))
     const refusal = await TH.refusalOf(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'one'), noBoxYet))
