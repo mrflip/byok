@@ -66,6 +66,6 @@ export const ensureSuppliedSpecKept = (candidate: Partial<KeyDeriverSpec> & { re
   const carried: Readonly<Record<string, unknown>> = candidate
   const kept = Object.entries(supplied).every(([field, val]) => carried[field] === val)
   if (! kept) {
-    throw new VaultError('bad_option', `A key deriver labelled ${supplied.key_deriver_label} must carry that spec's parameters exactly, or vaults made under it will not open elsewhere: spread the exported spec into yours, or choose a label of your own.`)
+    throw new VaultError('bad_option', `A key deriver labelled ${supplied.key_deriver_label} must carry that spec's parameters exactly, or vaults made under it will not open elsewhere: spread the exported spec into yours and test that it derives the same bytes as argon2idWebV1Deriver, or choose a label of your own.`)
   }
 }
