@@ -83,5 +83,6 @@ describe("OutageVaultDB, while down", () => {
     const vaultDB = new OutageVaultDB(inner, makeOutage())
     expect(vaultDB.maxRecordBytes).to.eq(inner.maxRecordBytes)
     expect(vaultDB.maxVaultBytes).to.eq(inner.maxVaultBytes)
+    expect(vaultDB.maxLockboxes).to.eq(inner.maxLockboxes)
   })
 })

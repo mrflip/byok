@@ -90,10 +90,11 @@ export type OpenVaultOpts = {
    */
   maxWhisperBytes?: number | undefined
   /**
-   * The most lockboxes the vault holds. Default: {@link MaxLockboxes}, 100. `store()` refuses a
-   * new lockbox past it with kind 'vault_full'; replacing one already there is always allowed,
-   * and lowering it strands nothing already stored. Raise this or `maxWhisperBytes` freely while
-   * the two fit the vaultDB's `maxVaultBytes`: openVault refuses a pair that might not, with kind
+   * The most lockboxes the vault holds. Default: {@link MaxLockboxes}, 100, or the vaultDB's own
+   * `maxLockboxes` when that is smaller. `store()` refuses a new lockbox past it with kind
+   * 'vault_full'; replacing one already there is always allowed, and lowering it strands nothing
+   * already stored. Raise this or `maxWhisperBytes` freely while this stays within the vaultDB's
+   * `maxLockboxes` and the two fit its `maxVaultBytes`: openVault refuses otherwise, with kind
    * 'bad_option'.
    */
   maxLockboxes?: number | undefined
@@ -393,7 +394,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
   const keyDeriver = parseKeyDeriver(opts.keyDeriver)
   const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
-  const lockboxLimit = parseMaxLockboxes(opts.maxLockboxes)
+  const lockboxLimit = parseMaxLockboxes(opts.maxLockboxes, parseDeclared(vaultDB, 'maxLockboxes'))
   ensureLimitsFit(vaultDB, whisperByteLimit, lockboxLimit)
 
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
@@ -1323,7 +1324,7 @@ export const StoredBytesPerWhisperByte = 2
 export const LockboxFieldsBytes = 2048
 
 const maxWhisperBytes = Z._default(Z.int().check(Z.positive()), MaxWhisperBytes)
-const maxLockboxes = Z._default(Z.int().check(Z.positive()), MaxLockboxes)
+const maxLockboxes = Z.optional(Z.int().check(Z.positive()))
 /**
  * The largest limit in bytes the vault keeps. An adapter's `Infinity`, its way of saying it sets
  * no limit, becomes this as openVault reads it: past that read, no limit is infinite.
@@ -1335,6 +1336,23 @@ const someBytes = Z.union([Z.number().check(Z.positive()), Z.literal(Infinity)])
 const bytesKept = Z.transform((bytes: number) => Math.min(bytes, UnlimitedBytes))
 const byteLimit = Z.number().check(Z.positive(), Z.lte(UnlimitedBytes))
 const declaredBytes = Z.pipe(Z.pipe(someBytes, bytesKept), byteLimit)
+
+/**
+ * The most lockboxes the vault keeps as a limit. An adapter's `Infinity`, its way of saying it
+ * counts none, becomes this as openVault reads it: past that read, no limit is infinite.
+ */
+const UnlimitedLockboxes = Number.MAX_SAFE_INTEGER
+
+/** A count of lockboxes as an adapter declares one, a whole number or `Infinity` for none, to the finite form the vault keeps. */
+const someLockboxes = Z.union([Z.int().check(Z.positive()), Z.literal(Infinity)])
+const declaredLockboxes = Z.pipe(someLockboxes, Z.transform((count: number) => Math.min(count, UnlimitedLockboxes)))
+
+/** How openVault reads each limit an adapter declares. */
+const DeclaredLimitFor = {
+  maxRecordBytes: declaredBytes,
+  maxVaultBytes:  declaredBytes,
+  maxLockboxes:   declaredLockboxes,
+} as const
 
 const MsPerHour = 60 * 60 * 1000
 
@@ -1426,10 +1444,19 @@ const parseMaxWhisperBytes = (candidate: number | undefined): number => {
   return checked.data
 }
 
-const parseMaxLockboxes = (candidate: number | undefined): number => {
+/**
+ * The vault's `maxLockboxes`: as given, or by default the smaller of {@link MaxLockboxes} and
+ * `storeLockboxes`, the most the vaultDB holds in one vault -- which a given one may not exceed.
+ */
+const parseMaxLockboxes = (candidate: number | undefined, storeLockboxes: number): number => {
   const checked = maxLockboxes.safeParse(candidate)
   if (! checked.success) {
     throw new VaultError('bad_option', 'maxLockboxes is a whole number of lockboxes, greater than zero.')
+  }
+  if (checked.data === undefined) { return Math.min(MaxLockboxes, storeLockboxes) }
+  //
+  if (checked.data > storeLockboxes) {
+    throw new VaultError('bad_option', `maxLockboxes is over the ${String(storeLockboxes)} lockboxes this storage adapter holds in one vault (its own maxLockboxes): pass ${String(storeLockboxes)} or fewer.`)
   }
   return checked.data
 }
@@ -1452,9 +1479,12 @@ const parseKeyDeriver = (candidate: KeyDeriver | undefined): KeyDeriver => {
   return candidate
 }
 
-/** One of the adapter's declared limits, in the finite form the vault keeps: `Infinity` becomes {@link UnlimitedBytes}. */
-const parseDeclaredBytes = (vaultDB: VaultDB, limitname: 'maxRecordBytes' | 'maxVaultBytes'): number => {
-  const checked = declaredBytes.safeParse(vaultDB[limitname])
+/**
+ * One of the adapter's declared limits, in the finite form the vault keeps: `Infinity` becomes
+ * {@link UnlimitedBytes} or {@link UnlimitedLockboxes}.
+ */
+const parseDeclared = (vaultDB: VaultDB, limitname: keyof typeof DeclaredLimitFor): number => {
+  const checked = DeclaredLimitFor[limitname].safeParse(vaultDB[limitname])
   // An adapter that declares no limit, or one written before a limit existed, is refused: never guessed.
   if (! checked.success) {
     throw new VaultError('bad_option', `This storage adapter does not declare ${limitname}, a limit every adapter states: update the adapter, or ask its author to.`)
@@ -1467,11 +1497,11 @@ const parseDeclaredBytes = (vaultDB: VaultDB, limitname: 'maxRecordBytes' | 'max
  * or a vault too large for it to hold, list and erase whole.
  */
 const ensureLimitsFit = (vaultDB: VaultDB, whisperByteLimit: number, lockboxLimit: number) => {
-  const recordBytes = parseDeclaredBytes(vaultDB, 'maxRecordBytes')
+  const recordBytes = parseDeclared(vaultDB, 'maxRecordBytes')
   if (whisperByteLimit * StoredBytesPerWhisperByte > recordBytes) {
     throw new VaultError('bad_option', `maxWhisperBytes is over half of the ${String(recordBytes)} bytes this storage adapter holds in one record, so a whisper that large might not store: pass a smaller maxWhisperBytes.`)
   }
-  const vaultBytes = parseDeclaredBytes(vaultDB, 'maxVaultBytes')
+  const vaultBytes = parseDeclared(vaultDB, 'maxVaultBytes')
   const lockboxBytes = (whisperByteLimit * StoredBytesPerWhisperByte) + LockboxFieldsBytes
   if (lockboxLimit * lockboxBytes <= vaultBytes) { return }
   const fitting = Math.floor(vaultBytes / lockboxBytes)

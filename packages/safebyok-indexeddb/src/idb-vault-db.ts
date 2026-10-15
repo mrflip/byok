@@ -17,8 +17,9 @@ import { inOneTransaction, shelfOf } from './shelf'
  *   stands, even with another tab writing at the same moment, and refuses with kind
  *   `stale_write` otherwise.
  * * **Other tabs' writes** ring `subscribe`, over a BroadcastChannel.
- * * **No limits of its own**: IndexedDB sets none per record or per vault, so `maxRecordBytes`
- *   and `maxVaultBytes` are `Infinity`; the origin's storage quota bounds the whole database.
+ * * **No limits of its own**: IndexedDB sets none per record or per vault, so `maxRecordBytes`,
+ *   `maxVaultBytes` and `maxLockboxes` are `Infinity`; the origin's storage quota bounds the
+ *   whole database.
  *
  * Browser storage is best-effort: the browser may evict it under pressure, and "clear site data"
  * removes it. An app keeping its vaults here should call `navigator.storage.persist()`, and say
@@ -36,6 +37,7 @@ export const idbVaultDB = (opts?: IdbVaultDBOpts): VaultDB => new IdbVaultDB(par
 class IdbVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
   readonly maxVaultBytes = Infinity
+  readonly maxLockboxes = Infinity
 
   private readonly dbName: string
 

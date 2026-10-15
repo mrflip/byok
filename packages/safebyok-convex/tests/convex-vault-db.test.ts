@@ -5,6 +5,7 @@ import { VaultError, openVault } from 'safebyok'
 import * as TH from './test-helpers'
 import { convexVaultDB } from '../src/index'
 import { toConvexLockbox } from '../src/convex-vault-db'
+import { MaxVaultLockboxes } from '../src/component/tallies'
 import type { ConvexVaultClient, SafebyokApi } from '../src/index'
 import { fakeDeployment } from './fake-deployment'
 
@@ -91,6 +92,12 @@ describe("convexVaultDB, as it is made", () => {
   it("holds at most half of what one Convex function may read in one vault, since erasing reads it twice", () => {
     const deployment = deploy()
     expect(convexVaultDB(deployment.client('u1'), deployment.api.safebyok).maxVaultBytes).to.eq(8 * 1024 * 1024)
+  })
+
+  it("declares the component's own limit on lockboxes, which the component enforces", () => {
+    const deployment = deploy()
+    expect(convexVaultDB(deployment.client('u1'), deployment.api.safebyok).maxLockboxes).to.eq(MaxVaultLockboxes)
+    expect(MaxVaultLockboxes).to.eq(8000)
   })
 
   const NotClientCases = [

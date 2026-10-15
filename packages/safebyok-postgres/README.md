@@ -53,6 +53,8 @@ const vaultDB = postgresVaultDB({ client: pool, userId: session.userId })
 * **Every verb is one statement**, atomic as Postgres makes every statement, so it asks no
   transaction of your driver: a write lands only while what it expects still stands, and refuses
   with kind `stale_write` otherwise.
+* **`maxLockboxes`**, 1000 unless you say otherwise, is the most lockboxes one vault holds: see
+  *A limit of the server's own*, below.
 * **Trouble** refuses with kind `storage_unavailable`, your driver's own error as its `cause`.
   Every refusal is a `VaultError`, and its `kind` and message are safe to send to the browser;
   its `cause` is not, being your driver's, and may name your database.
@@ -134,6 +136,7 @@ const VaultRouteUrl = '/api/safebyok'
 export class RouteVaultDB extends VaultDB {
   readonly maxRecordBytes = 1024 * 1024
   readonly maxVaultBytes = Infinity
+  readonly maxLockboxes = 1000 // the server's postgresVaultDB maxLockboxes
 
   protected doReadBundle(scope: VaultScope) { return this.call('readBundle', scope) }
   protected doCreateBundle(bundle: VaultBundle) { return this.call('createBundle', bundle) }
@@ -181,9 +184,14 @@ const isKind = (kind: unknown): kind is VaultErrorKind => (VaultErrorKindVals as
 * **No push over a plain route**: the browser's vault refreshes after its own writes, and learns
   of other devices' writes when it next reads. For live updates, carry `subscribe` over a
   socket, server-sent events, or a GraphQL subscription (`safebyok-graphql`), fed by `listen`.
-* **No limit of the server's own.** Unlike the Convex component, this VaultDB holds a vault to no
-  size: your framework's request-size limit bounds each record, and nothing bounds how many
-  lockboxes a signed-in user writes into their own vault.
+* **A limit of the server's own.** As the Convex component does, this VaultDB holds every vault
+  to a number of lockboxes, `maxLockboxes` (1000 unless you pass another), whatever the browser
+  asks: a new lockbox past it refuses with kind `vault_full`, checked in the statement that
+  inserts it, and a lockbox replacing one already there never does. Declare the same number as
+  the browser VaultDB's `maxLockboxes`, so that `openVault` refuses a larger one up front. For no
+  practical limit, pass both a large number, such as `1_200_300_400_500_600`: the server's goes
+  to Postgres as a bigint, where `Infinity` cannot. Nothing bounds a vault's bytes beyond that:
+  your framework's request-size limit bounds each record.
 
 ## Hearing other writes
 
@@ -237,10 +245,10 @@ value (a cipherIv and its ciphertext, `{ cipher_iv_b64, ciphertext_b64 }`), or t
 `unlocks`, its list of unlock envelopes. Nothing is normalized: a note or a
 user id reads back byte for byte.
 
-| Table                | One row per | Primary key                                    | Columns                                                                                           |
-| -------------------- | ----------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `safebyok_bundles`   | vault       | `applabel`, `user_id`, `vaultlabel`            | every field of the `VaultBundle`                                                                  |
-| `safebyok_lockboxes` | lockbox     | `applabel`, `user_id`, `vaultlabel`, `boxlabel` | the vault's scope and `vault_id`, then every field of the `Lockbox`; a lockbox with no note, null |
+| Table                | One row per | Primary key                                     | Columns                                                                                                |
+| -------------------- | ----------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `safebyok_bundles`   | vault       | `applabel`, `user_id`, `vaultlabel`             | every field of the `VaultBundle`, then `lockbox_count`, the vault's lockboxes as a trigger counts them |
+| `safebyok_lockboxes` | lockbox     | `applabel`, `user_id`, `vaultlabel`, `boxlabel` | the vault's scope and `vault_id`, then every field of the `Lockbox`; a lockbox with no note, null      |
 
 * **Encrypted**: each whisper (`whisper_ciphered`), each lockbox's lockboxKey
   (`lockbox_key_wrapped`), and the vaultKey, once under each way into the vault (each unlock
@@ -296,6 +304,12 @@ shape of table, copy it, and keep to what makes it right:
   compiler holding the list to the record's fields both ways, and builds every statement from it.
 * **Authorize in the adapter**: made per request for one user, it refuses every other user's
   scope with `not_permitted`.
+* **Enforce the lockbox limit in the write itself.** A count read in one statement and checked
+  in the next lets two writes race past it, and so does a `count(*)` inside the insert: under
+  READ COMMITTED, each statement counts from its own snapshot. Here a trigger keeps the count on
+  the bundle's row, and the insert locks that row (`FOR UPDATE`) before reading it, so racing
+  writes take turns, and a write that waited reads the count its forerunner left. Lock the
+  bundle first in an erase too, so the trigger and a waiting insert never deadlock.
 * **Prove it with the shared suite**: `describeVaultDB` from `safebyok/testing` runs every verb,
   expectation and refusal against a fresh adapter. Its two users' vaults go through one adapter,
   so a per-request adapter answers it with one VaultDB per user (`perUser` in

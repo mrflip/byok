@@ -95,6 +95,17 @@ export abstract class VaultDB {
    */
   abstract readonly maxVaultBytes: number
 
+  /**
+   * The most lockboxes this backend holds in one vault, a whole number, or `Infinity` when it sets
+   * no such limit: each backend sets its own, and one whose limit crosses a wire or is stored,
+   * where `Infinity` cannot go, sets a large whole number instead. A vault refuses to open with a
+   * `maxLockboxes` above it, with kind `bad_option`, and given none opens with the smaller of this
+   * and `MaxLockboxes`. A backend that enforces its limit refuses a new lockbox past it with
+   * a VaultError of kind `vault_full`, checked in the same atomic step as the write, and never
+   * refuses for the count a lockbox that replaces one already there.
+   */
+  abstract readonly maxLockboxes: number
+
   // ------------------------------------------------------------------- the verbs safebyok calls
 
   /** The vault's bundle, validated, or null when the vault has never been created. */
@@ -429,6 +440,8 @@ class StringStoreVaultDB extends VaultDB {
   readonly maxRecordBytes = 1024 * 1024
   // Nothing here reads a whole vault under a budget; the store's own quota refuses a write past it.
   readonly maxVaultBytes = Infinity
+  // Nor does it count lockboxes: the vault's own maxLockboxes is the only limit.
+  readonly maxLockboxes = Infinity
 
   private readonly store: StringStore
 

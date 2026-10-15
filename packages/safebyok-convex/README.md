@@ -142,7 +142,8 @@ erasing reads it twice, so `convexVaultDB` declares a `maxVaultBytes` of 8 MiB. 
 many would. At the default `maxWhisperBytes` (40444) that is at most 101; at a `maxWhisperBytes`
 of 2048, ample for API keys, it is 1365. A store past the limit is refused with kind
 `vault_full`, until a lockbox is erased. Each record must also fit Convex's 1 MiB document limit,
-which the core's `maxWhisperBytes` keeps well inside.
+which the core's `maxWhisperBytes` keeps well inside. `convexVaultDB` declares the component's own
+8,000 as its `maxLockboxes`, so `openVault` also refuses a `maxLockboxes` above that.
 
 The component holds every vault to limits of its own, whatever its client asks, so that even a
 modified client cannot grow a vault past what erasing can reach: **8,000 lockboxes**, and

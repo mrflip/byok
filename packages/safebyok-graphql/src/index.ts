@@ -4,4 +4,4 @@
  * the schema and its resolvers, over a VaultDB made per request -- is `safebyok-graphql/server`.
  */
 export { graphqlVaultDB } from './graphql-vault-db'
-export type { GraphqlVaultClient } from './graphql-vault-db'
+export type { GraphqlVaultClient, GraphqlVaultDBOpts } from './graphql-vault-db'

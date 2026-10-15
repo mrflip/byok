@@ -13,6 +13,7 @@ import * as TH from './test-helpers'
 class MapVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
   readonly maxVaultBytes = Infinity
+  readonly maxLockboxes = Infinity
   readonly rows = new Map<string, unknown>()
   private bundleCkey(scope: VaultScope) { return `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}` }
   private boxCkey(scope: VaultScope, boxlabel: string) { return `${this.bundleCkey(scope)}/${boxlabel}` }
@@ -84,10 +85,11 @@ TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
 TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB())
 
 describe("localVaultDB", () => {
-  it("holds a mebibyte in one record, and sets no limit on a vault", () => {
+  it("holds a mebibyte in one record, and sets no limit on a vault, in bytes or in lockboxes", () => {
     const vaultDB = localVaultDB(memoryStore())
     expect(vaultDB.maxRecordBytes).to.eq(1_048_576)
     expect(vaultDB.maxVaultBytes).to.eq(Infinity)
+    expect(vaultDB.maxLockboxes).to.eq(Infinity)
   })
 
   it("reads a vault stored before the storage verbs: the same rows, at the same ckeys", async () => {

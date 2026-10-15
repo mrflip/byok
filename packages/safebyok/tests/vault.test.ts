@@ -921,6 +921,14 @@ const declaringVaultBytes = (vaultDB: VaultDB, maxVaultBytes: unknown): VaultDB 
 )
 
 /**
+ * `vaultDB` declaring `maxLockboxes` as given, and otherwise itself: the in-tree local adapters
+ * count no lockboxes, and the limit's checks want one that does.
+ */
+const declaringLockboxes = (vaultDB: VaultDB, maxLockboxes: unknown): VaultDB => (
+  Object.create(vaultDB, { maxLockboxes: { value: maxLockboxes } }) as VaultDB
+)
+
+/**
  * A lockbox row as a backend files it, with every field but the whisper at its largest: the
  * longest labels, a note of 256 UTF-16 code units at three UTF-8 bytes each, a user_id of 512
  * bytes, the latest times, and real ciphertext of `whisperBytes` random bytes.
@@ -1066,7 +1074,7 @@ describe("the lockbox limit", () => {
     }
   })
 
-  it("refuses an adapter that declares no maxVaultBytes, or no maxRecordBytes", async () => {
+  it("refuses an adapter that declares no maxVaultBytes, no maxRecordBytes, or no maxLockboxes", async () => {
     const world = makeWorld()
     for (const undeclared of [undefined, NaN, 0, -1]) {
       const noVaultLimit = await TH.expectRefusal(world.open({ vaultDB: declaringVaultBytes(world.vaultDB, undeclared) }), 'bad_option')
@@ -1074,7 +1082,52 @@ describe("the lockbox limit", () => {
       const noRecordLimit = Object.create(world.vaultDB, { maxRecordBytes: { value: undeclared } }) as VaultDB
       const err = await TH.expectRefusal(world.open({ vaultDB: noRecordLimit }), 'bad_option')
       expect(err.message).to.include('maxRecordBytes')
+      const noLockboxLimit = await TH.expectRefusal(world.open({ vaultDB: declaringLockboxes(world.vaultDB, undeclared) }), 'bad_option')
+      expect(noLockboxLimit.message).to.include('does not declare maxLockboxes')
     }
+  })
+
+  it("refuses an adapter whose maxLockboxes is no whole number, or past the largest it keeps", async () => {
+    const world = makeWorld()
+    for (const misdeclared of [1.5, '100', -Infinity, Number.MAX_SAFE_INTEGER + 2]) {
+      await TH.expectRefusal(world.open({ vaultDB: declaringLockboxes(world.vaultDB, misdeclared) }), 'bad_option')
+    }
+  })
+
+  it("refuses a maxLockboxes over the adapter's own, naming the adapter's", async () => {
+    const world = makeWorld()
+    const vaultDB = declaringLockboxes(world.vaultDB, 50)
+    expect(await world.stateOnOpen({ vaultDB, maxLockboxes: 50 })).to.eq('absent')
+    const err = await TH.expectRefusal(world.open({ vaultDB, maxLockboxes: 51 }), 'bad_option')
+    expect(err.message).to.include('maxLockboxes')
+    expect(err.message).to.include('50 lockboxes')
+  })
+
+  it("holds the adapter's own maxLockboxes, unless told otherwise, when it is under MaxLockboxes", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw', { vaultDB: declaringLockboxes(world.vaultDB, 2) })
+    await vault.store('openai', 'sk-fake-one')
+    await vault.store('anthropic', 'sk-ant-fake-two')
+    const err = await TH.expectRefusal(vault.store('mistral', 'sk-fake-three'), 'vault_full')
+    expect(err.message).to.include('2 lockboxes')
+  })
+
+  it("holds MaxLockboxes, unless told otherwise, on an adapter holding more", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw', { vaultDB: declaringLockboxes(world.vaultDB, 8000) })
+    for (let ii = 0; ii < MaxLockboxes; ii++) { await vault.store(`box_${String(ii)}`, `sk-fake-${String(ii)}`) }
+    const err = await TH.expectRefusal(vault.store('one_more', 'sk-fake'), 'vault_full')
+    expect(err.message).to.include(`${String(MaxLockboxes)} lockboxes`)
+  })
+
+  it("takes an adapter's Infinity, or a large whole number, for no limit on its lockboxes", async () => {
+    const world = makeWorld()
+    expect(world.vaultDB.maxLockboxes).to.eq(Infinity)
+    expect(await world.stateOnOpen({ maxLockboxes: 1_000_000_000 })).to.eq('absent')
+    const unlimitedish = declaringLockboxes(world.vaultDB, 1_200_300_400_500_600)
+    expect(await world.stateOnOpen({ vaultDB: unlimitedish, maxLockboxes: 1_000_000_000 })).to.eq('absent')
+    const err = await TH.expectRefusal(world.open({ vaultDB: unlimitedish, maxLockboxes: 1_200_300_400_500_601 }), 'bad_option')
+    expect(err.message).to.include('1200300400500600 lockboxes')
   })
 
   it("takes an adapter's Infinity, for no limit, as the largest finite limit, so nothing past openVault holds Infinity", async () => {

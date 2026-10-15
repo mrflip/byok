@@ -51,6 +51,7 @@ export const makeOutage = (): Outage => {
 export class OutageVaultDB extends VaultDB {
   readonly maxRecordBytes: number
   readonly maxVaultBytes: number
+  readonly maxLockboxes: number
   private readonly inner: VaultDB
   private readonly outage: Outage
 
@@ -64,6 +65,7 @@ export class OutageVaultDB extends VaultDB {
     this.outage = outage
     this.maxRecordBytes = inner.maxRecordBytes
     this.maxVaultBytes = inner.maxVaultBytes
+    this.maxLockboxes = inner.maxLockboxes
   }
 
   protected async doReadBundle(scope: VaultScope): Promise<unknown> {

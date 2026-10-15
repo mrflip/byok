@@ -14,8 +14,8 @@
  *
  * `vault_full` means a new lockbox in a vault already holding its `maxLockboxes` (a limit the
  * client keeps), and also that storage has no room for the write (a limit of the backend's own,
- * such as the Convex component's). Either way the user erases a lockbox, or the host raises
- * `maxLockboxes` where the backend allows. `whisper_too_large` is the user's value over
+ * such as the Convex component's or the Postgres server's). Either way the user erases a lockbox,
+ * or the host raises `maxLockboxes` where the backend allows. `whisper_too_large` is the user's value over
  * `maxWhisperBytes`, so a condition; `bad_label` is the app's own label, a misuse -- a label the
  * user types is checked first with the exported `Label`.
  *
