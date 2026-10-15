@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
@@ -215,6 +215,47 @@ describe("VaultProvider", () => {
       )
       await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('boundary') })
       expect(caught[0]).to.eq(trouble)
+    })
+
+    it("throws a rejection of null too: the failure is held, not the value", async () => {
+      hushConsole()
+      const world = makeWorld()
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(null)
+      const caught: unknown[] = []
+      render(
+        <CatchingBoundary caught={caught}>
+          <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+            <Probe />
+          </VaultProvider>
+        </CatchingBoundary>,
+      )
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('boundary') })
+      expect(caught).to.have.length(1)
+      expect(caught[0]).to.be.null
+    })
+
+    it("ignores a rejection that arrives after the user signed out", async () => {
+      hushConsole()
+      const world = makeWorld()
+      let rejectRead: (err: unknown) => void = () => { /* replaced below */ }
+      vi.spyOn(world.vaultDB, 'readBundle').mockReturnValueOnce(new Promise((_resolve, reject) => { rejectRead = reject }))
+      const caught: unknown[] = []
+      const tree = (userId: string | null) => (
+        <CatchingBoundary caught={caught}>
+          <VaultProvider applabel="acme" vaultlabel="main" userId={userId} vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+            <Probe />
+          </VaultProvider>
+        </CatchingBoundary>
+      )
+      const { rerender } = render(tree('u1'))
+      await waitFor(() => { expect(world.vaultDB.readBundle).toHaveBeenCalledOnce() })
+      rerender(tree(null))
+      await act(async () => {
+        rejectRead(new VaultError('storage_unavailable', 'The vault storage could not be reached.'))
+        await new Promise((resolve) => { setTimeout(resolve, 0) })
+      })
+      expect(screen.getByTestId('state').textContent).to.eq('no vault')
+      expect(caught).to.have.length(0)
     })
 
     it("opens nothing, and so throws nothing, while nobody is signed in", async () => {
