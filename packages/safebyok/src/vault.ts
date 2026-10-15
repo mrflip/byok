@@ -613,18 +613,23 @@ const parseMaxLockboxes = (candidate: number | undefined): number => {
  * or a vault too large for it to hold, list and erase whole.
  */
 const ensureLimitsFit = (vaultDB: VaultDB, whisperByteLimit: number, lockboxLimit: number) => {
+  // An adapter that declares no limit, or one written before a limit existed, is refused: never guessed.
+  for (const limitname of ['maxRecordBytes', 'maxVaultBytes'] as const) {
+    if (! declaredBytes.safeParse(vaultDB[limitname]).success) {
+      throw new VaultError('bad_option', `This storage adapter does not declare ${limitname}, a limit every adapter states: update the adapter, or ask its author to.`)
+    }
+  }
   if (whisperByteLimit > vaultDB.maxRecordBytes * WhisperShareOfStorage) {
     throw new VaultError('bad_option', `maxWhisperBytes is over half of the ${String(vaultDB.maxRecordBytes)} bytes this storage adapter holds in one record, so a whisper that large might not store: pass a smaller maxWhisperBytes.`)
-  }
-  // An adapter written before maxVaultBytes existed declares none: refuse it, never guess.
-  if (! declaredBytes.safeParse(vaultDB.maxVaultBytes).success) {
-    throw new VaultError('bad_option', 'This storage adapter does not declare maxVaultBytes, the most it holds of one vault: update the adapter, or ask its author to.')
   }
   const vaultBudget = vaultDB.maxVaultBytes * WhisperShareOfStorage
   const lockboxBytes = whisperByteLimit + LockboxFieldsBytes
   if (lockboxLimit * lockboxBytes <= vaultBudget) { return }
   const fitting = Math.floor(vaultBudget / lockboxBytes)
-  throw new VaultError('bad_option', `${String(lockboxLimit)} lockboxes (maxLockboxes) of up to ${String(whisperByteLimit)} bytes of whisper each (maxWhisperBytes) might not fit in the ${String(vaultDB.maxVaultBytes)} bytes this storage adapter holds of one vault (its maxVaultBytes), with room for each lockbox's other fields. At that maxWhisperBytes, at most ${String(fitting)} lockboxes fit: pass a smaller maxLockboxes or maxWhisperBytes.`)
+  const outcome = fitting === 0
+    ? 'At that maxWhisperBytes, not even one lockbox fits: pass a smaller maxWhisperBytes.'
+    : `At that maxWhisperBytes, at most ${String(fitting)} lockboxes fit: pass a smaller maxLockboxes or maxWhisperBytes.`
+  throw new VaultError('bad_option', `${String(lockboxLimit)} lockboxes (maxLockboxes) of up to ${String(whisperByteLimit)} bytes of whisper each (maxWhisperBytes) might not fit in the ${String(vaultDB.maxVaultBytes)} bytes this storage adapter holds of one vault (its maxVaultBytes), with room for each lockbox's other fields. ${outcome}`)
 }
 
 /** JSON text parsed, or null on text that is not JSON -- which Whisper's validator then refuses. */
