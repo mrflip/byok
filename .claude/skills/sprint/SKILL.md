@@ -69,9 +69,18 @@ Commit both (`plan:`) and push the sprint branch, so the Coach can read them on 
 Claude Docs tools are in the session, load the live guide before your first docs call
 (`guide( items = ["topic.index", "topic.tabs"] )`: that surface moves quickly; work from what it
 says today), then birth one doc named for the sprint with a *Plan* tab and a *Progress* tab, and
-hand the Coach its link once in chat. The repo files stay the source of truth: write the file
-first, mirror it after. No Docs tools in the session: skip the mirror, say so in one line, and
-carry on.
+hand the Coach its link once in chat. The worktree's files live on a branch the Coach's checkout
+is not on, so the doc is where they usually read: **every file in the sprint's whiteboard
+directory is mirrored in full** -- a *Plan* tab, a *Progress* tab, one tab for any preplan or
+other input you copied in, and **one tab per thread** (not per worker: a resumed or replaced
+worker still writes the same thread file) holding that thread's `thread-<N>-<label>.md`, read
+from the thread's branch, with the thread's own `human/` entry, if it wrote one, below it under
+its own heading. A sprint-level `human/` entry gets a tab of its own. You are the doc's only
+writer; workers never touch it, so parallel threads never race for it and a background worker
+needs no Docs tools. Re-mirror a tab whole whenever its file changes, and mirror a thread's tab
+when the thread is `ready`, again when it files, and at any pause. Mirror the whole text, not a
+summary. The repo files stay the source of truth: write the file first, mirror it after. No
+Docs tools in the session: skip the mirror, say so in one line, and carry on.
 
 Post a short plan summary in chat -- threads, which run together and which wait, look-ahead
 calls -- and proceed. Do not wait for approval unless planning surfaced a *significant*
