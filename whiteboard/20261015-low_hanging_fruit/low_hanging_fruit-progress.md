@@ -25,8 +25,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 
 ## For the Coach
 
-* **[#46](https://github.com/mrflip/safebyok/pull/46)'s branch carries thread 13's six commits: do not merge it as it
-  stands.** Thread 13's branch was cut from `origin/20261015-convex_server_cap`, so git set that branch as its upstream,
+* ~~**[#46](https://github.com/mrflip/safebyok/pull/46)'s branch carried thread 13's six commits**~~ -- *reset to `c519073` on the Coach's yes (force-push with lease); #46 is thread 12 alone again.* Thread 13's branch was cut from `origin/20261015-convex_server_cap`, so git set that branch as its upstream,
   and its worker's push fast-forwarded #46 from `c519073` (thread 12, as reviewed) to `ebba509`. The orchestrator's
   mistake: its own note says to unset the upstream after cutting a worktree. Undoing it takes a force-push, yours or
   on your word: `git push --force-with-lease=20261015-convex_server_cap:ebba509 origin
