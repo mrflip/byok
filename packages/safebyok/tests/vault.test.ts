@@ -6,7 +6,7 @@ import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts, type Vault } from '../src/vault'
 import type { KeyDeriver } from '../src/key-deriver'
-import { scopeOf, testDeriver } from './helpers'
+import { scopeOf, testDeriver } from '../src/testing'
 
 /**
  * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, and an

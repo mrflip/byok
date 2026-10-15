@@ -335,7 +335,7 @@ export default defineConfig([
   // == [Tests] ==
   {
     name: 'safebyok-convex/tests',
-    files: ['tests/**/*.ts'],
+    files: ['tests/**/*.ts', 'src/testing/**/*.ts'],
     extends: [vitest.configs.recommended],
     rules: {
       'vitest/no-disabled-tests': 'warn',
@@ -368,7 +368,7 @@ export default defineConfig([
   // expression that does nothing.
   {
     name: 'safebyok-convex/tests-chai',
-    files: ['tests/**/*.ts'],
+    files: ['tests/**/*.ts', 'src/testing/**/*.ts'],
     plugins: { 'chai-expect': chaiExpect, 'chai-friendly': chaiFriendly },
     rules: {
       'vitest/valid-expect':                       'off',

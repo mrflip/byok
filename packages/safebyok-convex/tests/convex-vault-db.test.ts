@@ -3,15 +3,13 @@ import { anyApi } from 'convex/server'
 import { ConvexError } from 'convex/values'
 import { VaultError, memoryDeviceDB, openVault } from 'safebyok'
 import type { VaultBundle } from 'safebyok'
+import { boxOf, bundleOf, describeVaultDB, scopeOf, testDeriver } from 'safebyok/testing'
+import type { VaultDBVerbs } from 'safebyok/testing'
 import { convexVaultDB } from '../src/index'
 import { toConvexLockbox } from '../src/convex-vault-db'
 import type { ConvexVaultClient, SafebyokApi } from '../src/index'
 import { fakeDeployment } from './fake-deployment'
-import { RealPassphrase, boxOf, bundleOf, scopeOf } from './helpers'
-// The core's behaviour suite and its cheap test deriver, by relative path: both test-only, not public.
-import { describeVaultDB } from '../../safebyok/tests/vault-db-suite'
-import type { VaultDBVerbs } from '../../safebyok/tests/vault-db-suite'
-import { testDeriver } from '../../safebyok/tests/helpers'
+import { RealPassphrase } from './helpers'
 
 // Every deployment a test makes is closed after it, so no client keeps its socket's timers alive.
 const deployments: ReturnType<typeof fakeDeployment>[] = []

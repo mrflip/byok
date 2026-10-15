@@ -4,8 +4,7 @@ import { memoryStore } from '../src/string-store'
 import { VaultDB, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation } from '../src/vault-db'
 import { VaultError } from '../src/errors'
 import type { Lockbox, VaultBundle, VaultScope } from '../src/types'
-import { boxOf, bundleOf, scopeOf } from './helpers'
-import { describeVaultDB } from './vault-db-suite'
+import { boxOf, bundleOf, describeVaultDB, scopeOf } from '../src/testing'
 
 /**
  * The smallest honest adapter: a Map of records, each check-and-write in one synchronous step.
