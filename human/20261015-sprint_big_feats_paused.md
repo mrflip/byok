@@ -15,3 +15,5 @@ context, and finds its worktree as it left it.
 
 Open for the Coach, already in chat and the sprint doc: thread 2's proof-for-every-envelope-change
 rule, the epoch out of the envelope binding, and the ~4.8 s worst-case unaimed unlock.
+
+**Resumed at 11:19 UTC**: the three stopped agents were resumed in place.
