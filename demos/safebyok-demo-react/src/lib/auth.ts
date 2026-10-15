@@ -1,4 +1,4 @@
-import { Label, type StringStore } from 'safebyok'
+import { Label, wallClock, type Clock, type StringStore } from 'safebyok'
 
 /**
  * SCAFFOLDING a real host application replaces with its own auth (Google sign-in, Clerk, Convex
@@ -36,12 +36,15 @@ export type Auth = {
  * pattern for production -- there is no password and no verification, by design: the vault
  * passphrase is deliberately a separate thing from signing in.
  *
+ * @param opts - `applabel`, namespacing the rows; `dbStore` and `deviceStore`, where they live;
+ *   and `clock`, which stamps a new account's `registered_at` (default: the wall clock).
+ *
  * @example
  *   const auth = createAuth({ applabel: 'acme', dbStore, deviceStore })
  *   const session = await auth.signIn('margo')  // { userId: 'user_3f...', userlabel: 'margo' }
  */
-export const createAuth = (opts: { applabel: string, dbStore: StringStore, deviceStore: StringStore }): Auth => {
-  const { applabel, dbStore, deviceStore } = opts
+export const createAuth = (opts: { applabel: string, dbStore: StringStore, deviceStore: StringStore, clock?: Clock | undefined }): Auth => {
+  const { applabel, dbStore, deviceStore, clock = wallClock } = opts
   const accountCkey = (userlabel: string) => `account:${applabel}:${userlabel}`
   const sessionCkey = `session:${applabel}`
 
@@ -78,7 +81,7 @@ export const createAuth = (opts: { applabel: string, dbStore: StringStore, devic
       const ckey = accountCkey(checked.data)
       const existing = dbStore.read(ckey)
       const account: Account = existing === null
-        ? { user_id: randomId(), userlabel: checked.data, registered_at: Date.now() }
+        ? { user_id: randomId(), userlabel: checked.data, registered_at: clock.now() }
         : JSON.parse(existing) as Account
       if (existing === null) { dbStore.write(ckey, JSON.stringify(account)) }
       session = { userId: account.user_id, userlabel: account.userlabel }
