@@ -94,6 +94,12 @@ Start: 1, 3, 4. Then the lowest-numbered thread whose base exists, as slots free
    defaults fit.
 8. **The cap of three counts building workers, not reviews**, so the queue does not idle while
    reviews run.
+9. **`mask`'s `maxLen` floor** (thread 5's review): a `maxLen` below `head + tail + 9` is
+   refused as `bad_option`, rather than collapsing into a longer result or letting the length
+   show past `maxLen`. The reviewer leaned to "collapse only when shorter"; refusing keeps
+   `maxLen` honest and the security note true.
+10. **`mask` strips bidi controls and zero-width invisibles** (U+200B, U+2060, U+FEFF) as well
+    as control characters, keeping ZWJ, ZWNJ, variation selectors and tags.
 
 ## The threads
 

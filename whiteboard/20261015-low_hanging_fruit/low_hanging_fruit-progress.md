@@ -12,7 +12,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 2  | `explicit_options` | thread 1 | pending |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | in review |
+| 5  | `mask_utils` | `origin/main` | underway (review flagged; resumed) |
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
@@ -64,6 +64,11 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   `maskAll` struck (`mask(w, { head: 0, tail: 0 })` is the stars-only form); `maxLen` wins over
   `minStars`; an empty whisper gives `''`. Commit prefixes: `utils:` and `react:` are not in
   PROCESS.md's table -- an entry point is `api:`, the React package `client:`.
+  *Review:* flagged, two significant, decided by the orchestrator in YOLO and sent back: (1)
+  `maxLen` below `head + tail + 9` collapsed into a *longer* result -- now refused as
+  `bad_option`, so the result is never longer than `maxLen`; (2) bidi controls survived the
+  strip -- now `\p{Bidi_Control}`, U+200B, U+2060 and U+FEFF are stripped too (ZWJ, ZWNJ,
+  variation selectors and tags kept). A second review covers the new commits only.
 * *Orchestrator:* **Thread 9** found the core README had no locking section: it appended
   *Locking* (`visibilitychange` -> `vault.lock()`, "when `lockSoon()` lands") and *No recovery*
   at the README's end, so threads 1 and 2's README edits rebase mechanically. The expiry thread
