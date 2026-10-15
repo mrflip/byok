@@ -37,7 +37,7 @@ const rejectionOf = async (attempt: Promise<unknown>): Promise<unknown> => {
 }
 
 /** Bytes as lowercase hex, as test vectors are written. */
-const hexOf = (bytes: Uint8Array) => [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('')
+const hexOf = (bytes: Uint8Array) => Buffer.from(bytes).toString('hex')
 
 /** A whisper, stored on one device and read on another; an obvious fake. */
 const FakeApiKey = 'sk-fake-0000-not-a-real-key'
