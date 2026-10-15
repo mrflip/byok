@@ -1,5 +1,6 @@
 import { useState, type SubmitEvent } from 'react'
 import { isVaultError, type Vault } from 'safebyok'
+import { PasskeyUnlockButton } from './passkey-unlock-button'
 
 /**
  * The dialog withUnlockedVault summons when the vault turns out to be locked. Unstyled markup
@@ -49,6 +50,7 @@ export const PassphraseModal = ({ vault, onDone }: { vault: Vault, onDone: (unlo
         <p className="quiet">Stays unlocked on this device for seven days.</p>
         <div className="row">
           <button type="submit">{creating ? 'Create vault' : 'Unlock'}</button>
+          {! creating && <PasskeyUnlockButton vault={vault} onDone={onDone} onGripe={setGripe} />}
           <button type="button" onClick={() => { onDone(false) }}>Cancel</button>
         </div>
       </form>
