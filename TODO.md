@@ -327,6 +327,13 @@ Straightforward, likely to be done, not needed yet. Each is a thread cut from `m
 * **IndexedDB `versionedUpdate` truly atomic**, inside one IndexedDB transaction (idb-keyval's
   `update()`, throw-to-abort mapped to `stale_write`), closing the window `notes/security.md`
   records. After storage_verbs.
+* **Dependabot runtime-dependency PRs get their changeset without the Coach.** Today
+  ([#72](https://github.com/mrflip/safebyok/pull/72)'s gate) a Dependabot PR that changes a
+  published package's runtime dependencies fails CI until someone pushes a changeset to it. A
+  workflow on Dependabot PRs could write `.changeset/dependabot-<n>.md` (a patch bump naming the
+  dependency and versions) and push it, so the PR goes green on its own and the release notes say
+  what moved. Decide: does the bot's push need a token that re-triggers CI, and is patch always
+  the right level for a runtime dependency bump before 1.0?
 * **A GraphQL vault store** (urql): listed because the Coach asked; it is not actually easy.
   Subscribe and `versionedUpdate` depend on a schema we do not own, so it needs resolvers on
   the host's GraphQL server as well as a client, and no host's existing schema has our tables.
@@ -386,6 +393,15 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
 * **Provide built-as-a-whole recommended KDFs, and functions to roll your own.** Follows from
   [#68](https://github.com/mrflip/safebyok/pull/68)'s `argon2idDeriver(spec)`; replaces its open
   question of adding RFC 9106's second recommended option as a supplied spec.
+* **CI questions left by [#72](https://github.com/mrflip/safebyok/pull/72)**, each its own
+  conversation:
+  - the Dependabot changeset gate recognizes a Dependabot PR by its author;
+  - the release workflow skips by the `changeset-release/` branch name (predates #72);
+  - the runtime-dependency comparison skips removed or made-private packages,
+    `peerDependenciesMeta` and `bundledDependencies`;
+  - `justify:root` is defined and never used;
+  - in `justify`, a build failure skips every package's tests, not only its own;
+  - `safebyok-convex`'s `./test` entry imports a devDependency.
 * Style guide audit
   - A few comment lines exceed 100 columns.
 

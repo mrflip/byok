@@ -54,8 +54,12 @@ independent, and a stray overlap surfaces as a conflict when the Coach merges. A
 * from `origin/main`, when it depends on nothing unmerged;
 * from the tip of the one thread it depends on, once that thread is **filed**, and its PR says
   "Stacked on #N";
-* not at all, while it would stand on two unmerged threads: it waits until the Coach merges all
-  but one. Never merge thread branches together, and never rebase a filed branch to restack it.
+* while it would stand on two unmerged threads, from the top of the two once you have restacked
+  them into a line (§5, *Restack*). Never merge thread branches together.
+
+The Coach merges a sprint as **one linear line**: each PR rebased onto the one below it, every
+PR's base still `main`, so merging the top merges them all. Restacking filed branches to make
+that line is your job, not the Coach's (§5).
 
 **`<sprint_name>-progress.md`** -- yours alone: a one-line-per-thread *Status* table (`pending`
 each; then `underway`, `in review`, `filing`, `filed #N`, `blocked`, `waiting on a merge`), and a
@@ -63,7 +67,13 @@ curated summary of what the threads have taught, newer than the plan wherever th
 Each worker writes its own section to `thread-<N>-<label>.md` in the same directory of its own
 branch, so no two writers ever share a file.
 
-Commit both (`plan:`) and push the sprint branch, so the Coach can read them on GitHub.
+Commit both (`plan:`), push the sprint branch, and file it at once as a **draft** PR against
+`main` (documents only, a `plan:` title): the *sprint PR*. It is yours, and you commit to it
+freely as the sprint runs. Each thread commits its own `thread-<N>-<label>.md` and `human/` entry
+on its own branch as it goes; the sprint PR holds only the files no thread writes -- the plan,
+the progress document, the sprint's `human/` entry, any input you copied in. So it never
+conflicts with a thread, and since nothing is cut from it, its commits never force a restack. It
+joins the line last, on top (§5).
 
 **The sprint doc** -- a live remote mirror, so the Coach can watch from any device. When the
 Claude Docs tools are in the session, load the live guide before your first docs call
@@ -77,9 +87,11 @@ worker still writes the same thread file) holding that thread's `thread-<N>-<lab
 from the thread's branch, with the thread's own `human/` entry, if it wrote one, below it under
 its own heading. A sprint-level `human/` entry gets a tab of its own. You are the doc's only
 writer; workers never touch it, so parallel threads never race for it and a background worker
-needs no Docs tools. Re-mirror a tab whole whenever its file changes, and mirror a thread's tab
-when the thread is `ready`, again when it files, and at any pause. Mirror the whole text, not a
-summary. The repo files stay the source of truth: write the file first, mirror it after. No
+needs no Docs tools. Mirror at milestones and when idle, not after every edit: the *Plan* and
+*Progress* tabs when you first write them; a thread's tab when the thread is `ready` and again
+when it files, with *Progress* beside it; everything at a pause and at wrap-up; and, while you
+wait on workers with nothing else to do, any tab whose file has changed since its last mirror.
+Mirror a tab whole -- the whole text, not a summary. The repo files stay the source of truth: write the file first, mirror it after. No
 Docs tools in the session: skip the mirror, say so in one line, and carry on.
 
 Post a short plan summary in chat -- threads, which run together and which wait, look-ahead
@@ -165,7 +177,7 @@ follows the resume that finishes it.
    look, and spin an outgrown block into a file of its own in the sprint directory, with a line
    on who should read it. Keep the progress document under about 5,000 words: every later
    worker reads it whole. Mark what you add with `*Orchestrator:*`; never edit a worker's
-   thread file. Commit (`plan:`), and mirror to the sprint doc.
+   thread file. Commit (`plan:`) and push to the sprint PR; mirror at the milestones §1 names.
 4. **Decide** (§4), refill the frontier, and wait for the next report. If the Coach has
    interjected in chat meanwhile, fold their guidance in first.
 
@@ -213,11 +225,26 @@ means merging a PR.
 
 ## 5. Wrap up
 
-When the last thread files (or the sprint pauses for good): set both documents' status lines and
-mirror them; add `human/YYYYMMDD-sprint_<name>_done.md` in the sprint worktree -- the sprint in a
-paragraph, its PRs in the order they filed with their "Stacked on" notes, YOLO decisions if any,
-and the open questions gathered in one place; commit, push, and file the sprint branch's own PR
-(documents only, `plan:`), then `git worktree remove` it. Give the Coach the closing summary in
-chat, leading with what shipped, what the reviews fixed and left, and what needs their word,
-with the PRs in the order to merge them: a stacked PR after the one it stands on. Never merge
-anything.
+When the last thread files (or the sprint pauses for good):
+
+1. **Restack** the filed threads into one line on `origin/main`. A stack the threads already
+   form keeps its order; peers go biggest and messiest first, so the large changes merge first
+   and the small ones adapt. In a worktree of your own (a name no other session uses), rebase
+   each branch onto the one below with `--no-update-refs`. A conflict goes back to that
+   thread's worker (resumed, with the new base), which resolves it, proves it, and pushes. When
+   every rebase is clean, run `pnpm justify` (and `pnpm size`) once, at the top, and let CI
+   check the middle. Push each branch with a lease on the SHA it replaces
+   (`--force-with-lease=<branch>:<old sha>`), and rewrite each PR's first line to "Stacked on
+   #N, in the line main → #A → #B → …". Check the bottom stands on today's `origin/main`, not on
+   an unmerged PR whose commits `main` already holds under other SHAs.
+2. **Close the sprint PR.** Set both documents' status lines; add
+   `human/YYYYMMDD-sprint_<name>_done.md` -- the sprint in a paragraph, the PRs in merge order
+   with their "Stacked on" notes, YOLO decisions if any, and the open questions gathered in one
+   place; commit. Tag the tip and push the tag (`sprint/YYYYMMDD-<name>`), so its history stays
+   on GitHub. Then squash the sprint branch into one commit on top of the line, push it with a
+   lease, and take the PR out of draft (`gh pr ready`). It is the line's top: merging it merges
+   everything.
+3. **Mirror** every tab a last time, `git worktree remove` your worktrees, and give the Coach
+   the closing summary in chat, leading with what shipped, what the reviews fixed and left, and
+   what needs their word, with the PRs in merge order and the top named. Never merge
+   anything.
