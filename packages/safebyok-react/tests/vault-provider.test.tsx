@@ -1,8 +1,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, expectTypeOf, it } from 'vitest'
 import { isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
 import { useEffect, useState } from 'react'
-import { VaultProvider, useVault, useVaultSnapshot } from '../src/vault-provider'
+import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
 
 /** A cheap deriver (one SHA-256) so the suite is not a benchmark of Argon2id. */
 const testDeriver: KeyDeriver = {
@@ -138,6 +138,10 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('dismissed') })
     expect(screen.getByTestId('state').textContent).to.eq('absent')
     expect(screen.getByTestId('boxcount').textContent).to.eq('0')
+  })
+
+  it("asks for a keyDeriver outright, as openVault does", () => {
+    expectTypeOf<Pick<VaultProviderProps, 'keyDeriver'>>().toEqualTypeOf<{ keyDeriver: KeyDeriver }>()
   })
 
   it("passes every openVault option through, as given", async () => {

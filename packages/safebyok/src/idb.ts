@@ -78,7 +78,7 @@ const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
  *
  * @example
  *   const vaultDB = idbVaultDB({ dbName: 'my_app' })
- *   const vault = await openVault({ applabel: 'my_app', userId, vaultlabel: 'main', vaultDB, deviceDB: idbDeviceDB({ dbName: 'my_app' }) })
+ *   const vault = await openVault({ applabel: 'my_app', userId, vaultlabel: 'main', vaultDB, ...browserOpts({ dbName: 'my_app' }) })
  */
 export const idbVaultDB = (opts: IdbOpts = {}): VaultDB => new IdbVaultDB(opts.dbName ?? 'safebyok')
 

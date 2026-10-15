@@ -1,10 +1,11 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { MaxLockboxes, MaxWhisperBytes, SevenDaysMs, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts, type Vault } from '../src/vault'
+import type { KeyDeriver } from '../src/key-deriver'
 import { testDeriver } from './helpers'
 
 /**
@@ -684,6 +685,45 @@ describe("the key deriver seam", () => {
     const alienDeriver = { ...testDeriver, key_deriver_label: 'someone_elses_deriver_v9' }
     const alien = await world.open({ deviceDB: memoryDeviceDB(), keyDeriver: alienDeriver })
     await expectRefusal(alien.unlock('pw'), 'unknown_key_deriver')
+  })
+
+  it("asks for a keyDeriver outright: there is no default to fall back on", () => {
+    expectTypeOf<Pick<OpenVaultOpts, 'keyDeriver'>>().toEqualTypeOf<{ keyDeriver: KeyDeriver }>()
+  })
+
+  it("refuses to open without a keyDeriver, pointing at the browser's defaults", async () => {
+    const world = makeWorld()
+    const { keyDeriver: _dropped, ...withoutDeriver } = { applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: world.vaultDB, deviceDB: world.deviceDB, keyDeriver: testDeriver }
+    const err = await expectRefusal(openVault(withoutDeriver as OpenVaultOpts), 'bad_option')
+    expect(err.message).to.include('keyDeriver')
+    expect(err.message).to.include('safebyok/browser')
+  })
+
+  it("refuses a keyDeriver that is not one", async () => {
+    const world = makeWorld()
+    const NotDerivers = [
+      null,
+      'argon2id_web_v1',
+      { key_deriver_label: 'test_digest_v0', salt_bytes: 16 },
+      { ...testDeriver, salt_bytes: 0 },
+      { ...testDeriver, key_deriver_label: '' },
+    ]
+    for (const notDeriver of NotDerivers) {
+      await expectRefusal(world.open({ keyDeriver: notDeriver as unknown as KeyDeriver }), 'bad_option')
+    }
+  })
+
+  it("keeps the keyDeriver it was handed, so one whose method lives on its prototype still derives", async () => {
+    class PrototypeDeriver implements KeyDeriver {
+      readonly key_deriver_label = testDeriver.key_deriver_label
+      readonly salt_bytes = testDeriver.salt_bytes
+      readonly #inner = testDeriver
+      deriveKeyBytes(passphrase: string, saltBytes: Uint8Array) { return this.#inner.deriveKeyBytes(passphrase, saltBytes) }
+    }
+    const world = makeWorld()
+    const vault = await world.open({ keyDeriver: new PrototypeDeriver() })
+    await vault.unlock('pw')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
   })
 })
 
