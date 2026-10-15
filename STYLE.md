@@ -62,7 +62,9 @@ else's database, and stay one spelling from the wire to the code. Everything els
 **A time is UTC epoch milliseconds, an integer** (`registered_at: 1760000000000`,
 `askPassphraseAt`), in a stored record, a snapshot, a test fixture and the demo alike: never an
 ISO string, never a `Date`. The clock seam (`Clock.now()`) already yields it, every index sorts
-it, and one convention means no parsing at any boundary. A field named `*_at` holds one.
+it, and one convention means no parsing at any boundary. A field named `*_at` holds one. The
+package writes whole milliseconds; reading, `EpochMillis` checks the bounds (1981 to 2255) and
+lets a fraction through, as a host's clock may return one.
 
 Specificity is a virtue (`saltBytes` says it is bytes), but don't tag the obvious: `title`, not
 `titleStr`. When genericity is exactly the point, use the tag bare: `encode(bytes)`.
@@ -135,6 +137,10 @@ between columns lets the editor align them (see *Tests*).
   After it, no ambiguity and no undefined-checking paranoia.
 * A Zod schema is the first choice for defaults, coercion, limits and collapsing unions: one
   schema, one message per limit, never a hand-written `if (n > 99) throw` beside it.
+* **Clear intent at the door, clean data inside.** An entrypoint may take a host's plain way of
+  saying something -- `forcePassphraseReentryHours: Infinity` for "never" -- and turns it into
+  the bounded form the code keeps, at the parse: `Infinity` hours becomes the longest finite
+  window. Past the entrypoint, and in every stored field, nothing is infinite.
 * **`src/` uses `zod/mini`**, never classic `zod` (the linter refuses it): mini's builders
   tree-shake, so a host pays only for the validators its imports reach. Its schemas are plain
   functions, its limits checks: `Z.optional(Z.string().check(Z.maxLength(256)))` where classic

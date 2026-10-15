@@ -120,11 +120,12 @@ first release; the Convex sprint's component thread puts the same columns in its
   binding; the Convex design already strips them on read, and surfacing them to a host is a
   later additive field on the listing. What no tag gives is verification while locked: a signed
   listing would need a vault signing keypair, and it is additive later, so it is not reserved.
-* **Every time is UTC epoch milliseconds, an integer** (ruled; now in STYLE.md): stored
+* **Every time is UTC epoch milliseconds, an integer** (ruled; now in STYLE.md; **built**,
+  second_harvest thread 6, with the two bullets below it): stored
   records, the snapshot, the device record, the Convex columns, the demo's own records. The
   low-hanging-fruit `epoch_millis` thread does the code outside the stored records; the records
   switch here, with the rename below, since the old fields go anyway.
-* **Timestamps named for the event, as epoch-millisecond integers, and only three.** Lockbox
+* **Timestamps named for the event, as epoch-millisecond integers, and only three** (built). Lockbox
   `registered_at` (first stored through the library; carried forward) and `changed_at` (ruled
   the stronger contract: it moves only when the serialized whisper differs; `store()` decrypts
   the previous whisper, which it already fetches, compares the serialized forms, and carries
@@ -147,7 +148,7 @@ first release; the Convex sprint's component thread puts the same columns in its
   then applies to the whisper alone, inside the encryption. Reserved now because a bound field
   cannot be added later without re-encrypting every lockbox. The demo moves its note into the
   bag; the Convex table omits an empty bag as it did an absent note.
-* **The device record's deadline is named for its consequence**: `expires_at` becomes
+* **The device record's deadline is named for its consequence** (built): `expires_at` becomes
   `ask_passphrase_at` (see 4). Local-only, so this one is cheap at any time.
 * **A vault has a size cap, mirrored on the adapter** (low-hanging-fruit thread 1 builds it;
   listed here because it is a surface to settle before the release). Today nothing caps how
