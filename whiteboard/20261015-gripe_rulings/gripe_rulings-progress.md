@@ -7,7 +7,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 | # | Thread                 | Base       | Status   |
 | - | ---------------------- | ---------- | -------- |
-| 1 | damaged_boxes          | #83 tip    | in review ([#93](https://github.com/mrflip/safebyok/pull/93)) |
+| 1 | damaged_boxes          | #83 tip    | filed [#93](https://github.com/mrflip/safebyok/pull/93) |
 | 2 | dialog_wording         | #83 tip    | filed [#91](https://github.com/mrflip/safebyok/pull/91) |
 | 3 | tuple_ckeys            | #83 tip    | in review ([#92](https://github.com/mrflip/safebyok/pull/92)) |
 | 4 | replaceable_validators | thread 3   | pending  |
@@ -23,3 +23,17 @@ which no such engine has; dropped as a YOLO decision (see the plan). Second revi
 doc block and README gave only the "again" wording). Left: an engine without RTF throws to the
 error boundary, as before; the unit matrix tests only the creating wording. **Commit prefix for
 `safebyok-react` is `client:`** (PROCESS.md), not `react:`.
+
+*Orchestrator:* thread 1, damaged_boxes, filed as [#93](https://github.com/mrflip/safebyok/pull/93):
+a lockbox whose record fails its check lists as `{ boxlabel, damaged: true }`, named by the ckey
+it sits under (so a row that isn't JSON can still be removed); `openVault` and `refresh()` no
+longer refuse over one; `erase()` removes it from any handle; `store()` erases then writes it
+afresh; `read()`/`use()` still refuse. **Breaking for adapter authors**: `doListBoxes` returns
+`{ boxlabel, lockbox }` pairs. *Review:* `fixed` -- the demo's Enter key knocked past the
+button's gate; the security note names the two store-over-damaged races; the worker then
+corrected the docs' "fails verification" wording (ed42ce5). Left, minor: those races (closing
+them needs a revision-guarded erase in the adapter contract); a JS adapter on the old contract
+lists every box as damaged. **For the restack**: `boxlabelOfCkey` and both string/IndexedDB
+listings conflict with thread 3 (the boxlabel becomes the tuple's last element);
+`NameableLockbox` and `listedOrDamaged` should take thread 4's validators. Size: `everything`
+24.45 of 24.5 kB.
