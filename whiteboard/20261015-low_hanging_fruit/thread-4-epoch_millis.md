@@ -1,6 +1,6 @@
 # Thread 4: epoch_millis (2026-10-15)
 
-Branch `20261015-epoch_millis`, PR not yet filed. Justify: green (core 242 tests, convex 210, react 7, demo 25, root 67).
+Branch `20261015-epoch_millis`, PR [#31](https://github.com/mrflip/safebyok/pull/31). Justify: green (core 242 tests, convex 210, react 7, demo 25, root 67).
 
 * **Built**: the demo's account row (`demos/safebyok-demo-react/src/lib/auth.ts`) now records
   `created_at` as epoch milliseconds from `wallClock.now()` (was `new Date().toISOString()`), typed
