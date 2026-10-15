@@ -1,6 +1,4 @@
 import { PGlite } from '@electric-sql/pglite'
-import type { VaultDB } from 'safebyok'
-import type { VaultDBVerbs } from 'safebyok/testing'
 import { postgresVaultDB } from '../src/index'
 import type { PostgresClient, PostgresListen } from '../src/index'
 import { VaultTablesSql } from '../src/vault-tables'
@@ -34,35 +32,6 @@ export const emptyDatabase = async (): Promise<PGlite> => {
 
 /** A PGlite's own `listen`, as the README wires it. */
 export const listenOn = (db: PGlite): PostgresListen => (channel, onNotify) => db.listen(channel, onNotify)
-
-/**
- * One VaultDB per user, each made for that user as a server makes one per request: the core's
- * suite reaches two users' vaults through one adapter, where a server's request is one user's.
- */
-export const perUser = (vaultDBFor: (userId: string) => VaultDB): VaultDBVerbs => {
-  const vaultDBs = new Map<string, VaultDB>()
-  const as = ({ user_id }: { user_id: string }): VaultDB => {
-    const known = vaultDBs.get(user_id)
-    if (known) { return known }
-    const vaultDB = vaultDBFor(user_id)
-    vaultDBs.set(user_id, vaultDB)
-    return vaultDB
-  }
-  const anyone = vaultDBFor('anyone')
-  return {
-    maxRecordBytes: anyone.maxRecordBytes,
-    maxVaultBytes:  anyone.maxVaultBytes,
-    readBundle:     (scope) => as(scope).readBundle(scope),
-    createBundle:   (bundle) => as(bundle).createBundle(bundle),
-    updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
-    readBox:        (scope, boxlabel) => as(scope).readBox(scope, boxlabel),
-    listBoxes:      (scope) => as(scope).listBoxes(scope),
-    updateBox:      (scope, lockbox, expected) => as(scope).updateBox(scope, lockbox, expected),
-    eraseBox:       (scope, boxlabel, expected) => as(scope).eraseBox(scope, boxlabel, expected),
-    eraseVault:     (scope, expected) => as(scope).eraseVault(scope, expected),
-    subscribe:      (scope, onChange) => as(scope).subscribe(scope, onChange),
-  }
-}
 
 /** One statement a {@link spyClient} was handed. */
 export type SentStatement = { text: string, params: unknown[] }

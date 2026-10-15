@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { localVaultDB, memoryStore, openVault } from '../src/index'
+import { localVaultDB, memoryStore, openVault, type StringStore } from '../src/index'
 import { Ciphered, fromB64, toB64 } from '../src/crypto'
 import { VaultError } from '../src/errors'
 import { Lockbox, PasskeySaltBytes, VaultBundle, VaultScope, type DeviceUnlock } from '../src/types'
@@ -393,4 +393,76 @@ TH.describeDeviceDB('describeDeviceDB, over the smallest honest DeviceDB', () =>
     eraseUnlock: (scope) => { rows.delete(ckeyOf(scope)); return Promise.resolve() },
     eraseAll:    () => { rows.clear(); return Promise.resolve() },
   }
+})
+
+/**
+ * A server's VaultDB for one signed-in user, over a store every user's vaults share: it refuses
+ * any scope naming someone else, as a server's must, so the VaultDB suite reaches it only through
+ * `perUser`.
+ */
+const servingOnly = (userId: string, store: StringStore): TH.VaultDBVerbs => {
+  const shared = localVaultDB(store)
+  const permitted = ({ user_id }: { user_id: string }): void => {
+    if (user_id !== userId) { throw new VaultError('not_permitted', "That vault belongs to someone else.") }
+  }
+  return {
+    maxRecordBytes: shared.maxRecordBytes,
+    maxVaultBytes:  shared.maxVaultBytes,
+    readBundle:     async (scope) => { permitted(scope); return await shared.readBundle(scope) },
+    createBundle:   async (bundle) => { permitted(bundle); return await shared.createBundle(bundle) },
+    updateBundle:   async (bundle, expected) => { permitted(bundle); await shared.updateBundle(bundle, expected) },
+    readBox:        async (scope, boxlabel) => { permitted(scope); return await shared.readBox(scope, boxlabel) },
+    listBoxes:      async (scope) => { permitted(scope); return await shared.listBoxes(scope) },
+    updateBox:      async (scope, lockbox, expected) => { permitted(scope); await shared.updateBox(scope, lockbox, expected) },
+    eraseBox:       async (scope, boxlabel, expected) => { permitted(scope); await shared.eraseBox(scope, boxlabel, expected) },
+    eraseVault:     async (scope, expected) => { permitted(scope); await shared.eraseVault(scope, expected) },
+    subscribe:      (scope, onChange) => { permitted(scope); return shared.subscribe(scope, onChange) },
+  }
+}
+
+TH.describeVaultDB('perUser, over a VaultDB serving one user', () => {
+  const store = memoryStore()
+  return TH.perUser((userId) => servingOnly(userId, store))
+})
+
+/** perUser over servingOnly, with the user ids it asked a VaultDB for, in order. */
+const counted = () => {
+  const store = memoryStore()
+  const askedFor: string[] = []
+  const vaultDB = TH.perUser((userId) => { askedFor.push(userId); return servingOnly(userId, store) })
+  return { vaultDB, askedFor, store }
+}
+
+describe("perUser", () => {
+  it("sends each verb to the VaultDB of the user its scope or bundle names", async () => {
+    const { vaultDB, store } = counted()
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.createBundle(TH.bundleOf('u2'))
+    await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
+    expect(await servingOnly('u2', store).readBox(TH.scopeOf('u2'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'two'))
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
+  })
+
+  it("makes each user's VaultDB once, and keeps it", async () => {
+    const { vaultDB, askedFor } = counted()
+    await vaultDB.readBundle(TH.scopeOf('u1'))
+    await vaultDB.readBundle(TH.scopeOf('u1', 'spare'))
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    vaultDB.subscribe(TH.scopeOf('u2'), () => undefined)()
+    expect(askedFor).to.deep.equal(['anyone', 'u1', 'u2'])
+  })
+
+  it("has the limits of the VaultDB it made for anyone", () => {
+    const store = memoryStore()
+    expect(TH.perUser((userId) => servingOnly(userId, store))).to.include({
+      maxRecordBytes: localVaultDB(store).maxRecordBytes,
+      maxVaultBytes:  localVaultDB(store).maxVaultBytes,
+    })
+  })
+
+  it("passes on a refusal from the user's VaultDB", async () => {
+    const store = memoryStore()
+    const onlyU1 = TH.perUser(() => servingOnly('u1', store))
+    await TH.expectRefusal(onlyU1.readBundle(TH.scopeOf('u2')), 'not_permitted')
+  })
 })

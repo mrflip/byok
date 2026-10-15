@@ -27,38 +27,10 @@ const ClientCases: [string, (deployment: Deployment, subject: string | null) => 
   ['ConvexReactClient', (deployment, subject) => deployment.reactClient(subject)],
 ]
 
-/**
- * One VaultDB per user, each over its own client signed in as that user: the core's suite
- * reaches two users' vaults through one adapter, where a real app has one user per client.
- */
-const perUser = (connect: (subject: string | null) => ConvexVaultClient, api: SafebyokApi): TH.VaultDBVerbs => {
-  const vaultDBs = new Map<string, TH.VaultDBVerbs>()
-  const as = ({ user_id }: { user_id: string }): TH.VaultDBVerbs => {
-    const known = vaultDBs.get(user_id)
-    if (known) { return known }
-    const vaultDB = convexVaultDB(connect(user_id || null), api)
-    vaultDBs.set(user_id, vaultDB)
-    return vaultDB
-  }
-  return {
-    maxRecordBytes: convexVaultDB(connect(null), api).maxRecordBytes,
-    maxVaultBytes:  convexVaultDB(connect(null), api).maxVaultBytes,
-    readBundle:     (scope) => as(scope).readBundle(scope),
-    createBundle:   (bundle) => as(bundle).createBundle(bundle),
-    updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
-    readBox:        (scope, boxlabel) => as(scope).readBox(scope, boxlabel),
-    listBoxes:      (scope) => as(scope).listBoxes(scope),
-    updateBox:      (scope, lockbox, expected) => as(scope).updateBox(scope, lockbox, expected),
-    eraseBox:       (scope, boxlabel, expected) => as(scope).eraseBox(scope, boxlabel, expected),
-    eraseVault:     (scope, expected) => as(scope).eraseVault(scope, expected),
-    subscribe:      (scope, onChange) => as(scope).subscribe(scope, onChange),
-  }
-}
-
 for (const [clientTitle, connect] of ClientCases) {
   TH.describeVaultDB(`convexVaultDB over a ${clientTitle}`, () => {
     const deployment = deploy()
-    return perUser((subject) => connect(deployment, subject), deployment.api.safebyok)
+    return TH.perUser((userId) => convexVaultDB(connect(deployment, userId || null), deployment.api.safebyok))
   })
 }
 
