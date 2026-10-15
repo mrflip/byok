@@ -116,8 +116,8 @@ security expert who knows what questions to ask.
   `vault_id`). Nothing else does: no timer, and no idle detection. Two consequences: an open
   handle sees that new epoch only when it next reads the bundle (an unlock, a write, or a change
   the vaultDB pushes), so a handle that only reads whispers, on storage that pushes nothing, keeps
-  its vaultKey in memory until then; and lowering the option later does not shorten an unlock a
-  device already remembers, since the remembered path reads the stored `expires_at` as written.
+  its vaultKey in memory until then; and lowering the option later ends an unlock a device
+  already remembers only at its next open (see the entry below).
 * 2026-10-15: the device record's `expires_at` is an `EpochMillis`: a whole number of epoch ms
   from `FarPast` (1981-01-01T00:00:00Z) to `FarFuture`, the microsecond epochalypse
   (`Math.floor(Number.MAX_SAFE_INTEGER / 1000)`, 2255-06-05T23:47:34.740Z). It is the only epoch-ms
@@ -130,6 +130,20 @@ security expert who knows what questions to ask.
   against the bounds. One counting in seconds writes device records that, under any usual window,
   never read back, but keeps an unlock in memory a thousand times its window; one counting in
   microseconds has every unlock expire the moment it is made.
+* 2026-10-15: lowering `forcePassphraseReentryHours` reaches devices already remembered. At each
+  open, a remembered unlock whose deadline lies past now plus that open's setting was remembered
+  under a longer one, and is treated as a record that does not fit: erased, and the vault opens
+  locked. Raising the option lengthens no remembered unlock; an unchanged setting never trips it
+  (the deadline set at unlock is always within now plus the setting), so it fires only when the
+  host lowered the setting, or the clock went backward. There is deliberately no write-back of a
+  shortened deadline: a blind write of the record read at the start of the open would bring back
+  a remembered unlock that another tab's `lock()` erased in between, and later opens would come
+  up unlocked against the user's last act. Doing it safely would need an atomic "shorten if still
+  present" on `DeviceDB`, an interface hosts implement. An erase cannot resurrect anything and
+  cannot slide; racing another tab's fresh unlock, it only makes that device ask again. A stored
+  deadline past `FarFuture` never reaches this check: it fails the record's `EpochMillis` bounds
+  and is erased first (the entry above). A handle already open keeps the deadline it opened
+  with: the option is read at `openVault`.
 * 2026-10-14: the package was renamed `byok` → `safebyok` before any release, and its stored
   format tags with it (`safebyok-vault-v1`, `safebyok-lockbox-v1`, `safebyok-unlock-v1`). The
   tags are also the first element of every encryption's additional data, so a record written

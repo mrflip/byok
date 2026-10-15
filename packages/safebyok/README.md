@@ -61,7 +61,7 @@ marked `sideEffects: false`: what you never import never ships.
 An unlocked vault stays unlocked until its remembered unlock expires
 (`forcePassphraseReentryHours`, seven days by default) or `vault.lock()` is called. `Infinity` hours
 means never on this device, until `lock()`: `askPassphraseAt` then equals the exported `FarFuture`, the latest instant
-the package accepts (in 2255), so a host can show "until locked" by comparing against it. `lock()` forgets the unlock in memory and on this device
+the package accepts (in 2255), so a host can show "until locked" by comparing against it. Lowering the option later takes hold on each device at its next open: an unlock remembered under the longer setting, whose deadline lies past the new number of hours from then, is forgotten, and the user types their passphrase again. Raising it lengthens no unlock already remembered. `lock()` forgets the unlock in memory and on this device
 alike, so the user types their passphrase again afterwards. The core cannot watch for a locked
 screen or a hidden tab (it runs where there is no `document`), so locking on those signals is a
 few lines in the host app:

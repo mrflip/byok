@@ -58,6 +58,9 @@ export type OpenVaultOpts = {
    * Any number above zero, fractions too: 0.25 is fifteen minutes. `Infinity` means never on
    * this device: the vault stays unlocked until `lock()` (or the vault changes under it), and
    * `askPassphraseAt` reads as {@link FarFuture}, however large the number.
+   * Lowering it takes hold on each device at its next open: an unlock remembered under the
+   * longer setting, whose deadline lies past this many hours from then, is forgotten, and the
+   * vault opens locked. Raising it lengthens no unlock already remembered.
    */
   forcePassphraseReentryHours?: number | undefined
   /** Time source for expiry; tests inject one. Default: the wall clock. */
@@ -359,16 +362,24 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
    * Pick up a remembered unlock, if this device holds one that still fits and still opens. The
    * deviceDB may be the host's own, so what it hands back is checked here, whoever wrote it: a
    * record that does not pass reads as "no remembered unlock", the safe failure.
+   *
+   * A record whose deadline lies past what this open's forcePassphraseReentryHours allows from
+   * now was remembered under a longer setting, and does not fit either: lowering the option has
+   * each device ask again at its next open, and raising it lengthens no unlock already
+   * remembered. Nothing on this path writes a record, so it can never bring back one that
+   * another tab's lock() erased meanwhile.
    */
   const rememberedUnlock = async () => {
     if (bundle === UnreadBundle || bundle === null) { return }
     const kept = await deviceDB.readUnlock(scope)
     if (kept === null) { return }
     const checked = DeviceUnlock.safeParse(kept)
+    const now = clock.now()
     const fits = checked.success
       && checked.data.vault_id === bundle.vault_id
       && checked.data.passphrase_epoch === bundle.passphrase_epoch
-      && checked.data.expires_at > clock.now()
+      && checked.data.expires_at > now
+      && checked.data.expires_at <= deadlineAfter(now, reentryMs)
     if (! fits) {
       await deviceDB.eraseUnlock(scope)
       return
