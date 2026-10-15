@@ -231,6 +231,22 @@ export function workspaceRanges(manifest: Record<string, unknown>): string[] {
 }
 
 /**
+ * The entry points in a packed package.json that still carry the workspace's `@safebyok/source`
+ * condition: none, when pnpm packed it, since pnpm ships `publishConfig.exports` in their place.
+ * npm would publish them as written, pointing a consumer's tooling at a src/ the tarball lacks.
+ *
+ * @param manifest - A package.json, as read from the tarball.
+ * @returns `exports["<entry>"]: @safebyok/source` for each one left.
+ *
+ * @example sourceConditions({ exports: { '.': { '@safebyok/source': './src/index.ts' } } })  // => ['exports["."]: @safebyok/source']
+ */
+export function sourceConditions(manifest: Record<string, unknown>): string[] {
+  return Object.entries((manifest['exports'] ?? {}) as Record<string, unknown>)
+    .filter(([_entry, target]) => typeof target === 'object' && target !== null && Object.hasOwn(target, '@safebyok/source'))
+    .map(([entry]) => `exports["${entry}"]: @safebyok/source`)
+}
+
+/**
  * The package.json inside a packed tarball.
  *
  * @param run     - Runs `tar`.
@@ -305,7 +321,8 @@ async function stageOne(release: Release, head: string, opts: StageOpts): Promis
 }
 
 async function stageTarball(release: Release, opts: StageOpts): Promise<StageOutcome> {
-  const leftover = workspaceRanges(await packedManifest(opts.run, release.tarball))
+  const manifest = await packedManifest(opts.run, release.tarball)
+  const leftover = [...workspaceRanges(manifest), ...sourceConditions(manifest)]
   if (leftover.length > 0) {
     return { release, kind: 'failed', detail: `its packed package.json still holds ${leftover.join(', ')}: pack it with pnpm` }
   }
