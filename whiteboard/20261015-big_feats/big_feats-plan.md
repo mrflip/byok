@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach)
-* **Status**: threads 1, 2, 5 underway (2 and 5 in review); 4 has its base (#70) and waits for a slot. (Paused 10:18 to 11:19 UTC at the Coach's word.)
+* **Status**: thread 2 filed (#71); threads 1, 5 in review; 3 underway; 4 has its base (#70) and waits for a slot
 
 ## Read first
 
@@ -120,6 +120,15 @@ Convex component's schema and validators, the React binding if it names bundle f
 #63. *Look-ahead*: thread 3 stacks on this and adds the second method; leave the method a
 discriminated union with one member, and the listing ready to carry method-specific public
 fields.
+
+*Review:* `fixed`. One fix: an unlock aimed at one envelope (`unlockId`) on a vault destroyed
+elsewhere silently made a new vault, and now refuses `absent_unlock`. Left, minor: a taken
+`unlocklabel` is `bad_label` (misuse), not a condition; another deriver's envelopes are passed over
+silently; small cleanups. Two minor findings were fixed by the worker at the orchestrator's word
+before filing: a malformed or wrong-length `salt_b64` refuses as `corrupt_record` (checked at
+unlock in `envelope.ts`, not in the schema, to keep the size budget), and a blank proof
+passphrase is refused up front. Filed as [#71](https://github.com/mrflip/safebyok/pull/71),
+rebased onto main after the second_harvest stack merged.
 
 ### 3. passkey_unlock
 
