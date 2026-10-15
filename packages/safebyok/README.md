@@ -56,8 +56,8 @@ marked `sideEffects: false`: what you never import never ships.
 
 ## Locking
 
-An unlocked vault stays unlocked until its remembered unlock expires (`rememberForMs`, seven days
-by default) or `vault.lock()` is called. `lock()` forgets the unlock in memory and on this device
+An unlocked vault stays unlocked until its remembered unlock expires
+(`forcePassphraseReentryHours`, seven days by default) or `vault.lock()` is called. `lock()` forgets the unlock in memory and on this device
 alike, so the user types their passphrase again afterwards. The core cannot watch for a locked
 screen or a hidden tab (it runs where there is no `document`), so locking on those signals is a
 few lines in the host app:
