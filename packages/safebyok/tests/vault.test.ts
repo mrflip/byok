@@ -1416,6 +1416,19 @@ describe("several passphrases", () => {
     await expectRefusal(vault.unlock('pw', { unlockId: 42 as unknown as string }), 'bad_option')
   })
 
+  it("an unlock aimed at a vault destroyed elsewhere is refused as absent_unlock, and creates nothing", async () => {
+    const world = makeWorld()
+    const here = await world.open()
+    await here.unlock('pw')
+    await here.lock()
+    const unlockId = here.getSnapshot().unlocks[0]?.unlock_id
+    const there = await world.open({ deviceDB: memoryDeviceDB() })
+    await there.destroy()
+    await expectRefusal(here.unlock('pw', { unlockId }), 'absent_unlock')
+    expect(here.getSnapshot().state).to.eq('absent')
+    expect(await world.vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
+  })
+
   it("addPassphrase wants a passphrase the vault opens with as proof, even while unlocked", async () => {
     const world = makeWorld()
     const vault = await world.open()
