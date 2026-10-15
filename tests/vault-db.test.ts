@@ -1,7 +1,7 @@
 import { omit } from 'es-toolkit'
 import { describe, expect, it } from 'vitest'
 import { memoryStore } from '../src/string-store'
-import { VaultDB, localVaultDB, type BundleExpectation, type LockboxExpectation } from '../src/vault-db'
+import { VaultDB, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation } from '../src/vault-db'
 import { VaultError } from '../src/errors'
 import type { Lockbox, VaultBundle, VaultScope } from '../src/types'
 import { boxOf, bundleOf, scopeOf } from './helpers'
@@ -47,15 +47,17 @@ class MapVaultDB extends VaultDB {
     return Promise.resolve(true)
   }
 
-  protected doEraseBox(scope: VaultScope, boxlabel: string) {
+  protected doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation) {
+    if (this.standingBundle(scope)?.vault_id !== expected.vault_id) { return Promise.resolve(false) }
     this.rows.delete(this.boxCkey(scope, boxlabel))
-    return Promise.resolve()
+    return Promise.resolve(true)
   }
 
-  protected doEraseVault(scope: VaultScope) {
+  protected doEraseVault(scope: VaultScope, expected: EraseExpectation) {
+    if (this.standingBundle(scope)?.vault_id !== expected.vault_id) { return Promise.resolve(false) }
     const doomed = [...this.rows].map(([ckey]) => ckey).filter((ckey) => ckey === this.bundleCkey(scope) || ckey.startsWith(`${this.bundleCkey(scope)}/`))
     for (const ckey of doomed) { this.rows.delete(ckey) }
-    return Promise.resolve()
+    return Promise.resolve(true)
   }
 }
 
@@ -132,7 +134,7 @@ describe("localVaultDB", () => {
     await vaultDB.updateBox(colonScope, boxOf('anthropic', 'colon'), { vault_id: 'vault-id-colon', revision_id: null })
     await vaultDB.createBundle(bundleOf('u1'))
     expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
-    await vaultDB.eraseVault(scopeOf('u1'))
+    await vaultDB.eraseVault(scopeOf('u1'), { vault_id: 'vault-id-u1' })
     const theirs = await vaultDB.readBox(colonScope, 'anthropic')
     expect(theirs?.revision_id).to.eq('rev-colon')
   })

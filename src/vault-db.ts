@@ -30,6 +30,18 @@ export type LockboxExpectation = {
 }
 
 /**
+ * What an erase was aimed at: the vault whose lockbox, or whole self, the eraser means to remove.
+ * The erase lands only while the scope's standing bundle has that `vault_id`, so a device that
+ * missed a vault being destroyed and made anew never erases the successor. It names no revision:
+ * an erase wins over any write. Plain JSON, so it crosses any wire as-is.
+ *
+ * @example { vault_id: bundle.vault_id }
+ */
+export type EraseExpectation = {
+  vault_id: string
+}
+
+/**
  * Remote storage for vault records, as the host application plugs it in: extend this class and
  * implement its `do*` methods against your backend, one for each verb safebyok calls. That is the
  * whole job -- you are a shelf, not a safe:
@@ -38,11 +50,11 @@ export type LockboxExpectation = {
  *    fields are base64url text), so any backend that can hold JSON can hold a vault, as-is.
  *  * **Never look inside.** Every secret field arrives encrypted; nothing you hold can open a
  *    vault, and nothing safebyok does ever needs you to understand a record -- only to compare a
- *    few public fields (`vault_id`, `passphrase_epoch`, `revision_id`) before an update.
- *  * **Update only as expected.** `doUpdateBundle` and `doUpdateBox` carry an expectation of
- *    what stands in storage, and write only if it still does: check and write in one atomic step
- *    (a transaction, a conditional write), and resolve `false` when the expectation fails. Erases
- *    carry no expectation: an erase always wins.
+ *    few public fields (`vault_id`, `passphrase_epoch`, `revision_id`) before a write.
+ *  * **Write only as expected.** Every update and erase carries an expectation of what stands in
+ *    storage, and writes only if it still does: check and write in one atomic step (a
+ *    transaction, a conditional write), and resolve `false` when the expectation fails. An
+ *    erase's names only the vault, never a revision: within the right vault, an erase wins.
  *  * **Enforce who may reach which rows.** Your backend should let a signed-in user reach only
  *    their own records: safebyok's encryption protects the contents, your authorization decides
  *    who may fetch or overwrite them at all. Refuse with a VaultError of kind `not_permitted`.
@@ -138,17 +150,28 @@ export abstract class VaultDB {
     }
   }
 
-  /** Remove the lockbox under `boxlabel`, whatever revision stands; quiet when there is none. */
-  async eraseBox(scope: VaultScope, boxlabel: string): Promise<void> {
+  /**
+   * Remove the lockbox under `boxlabel`, whatever revision stands, only while the scope's standing
+   * bundle has the `vault_id` in `expected`; quiet when there is no such lockbox. Refuses with
+   * kind `stale_write` otherwise -- including when the scope holds no bundle -- and erases
+   * nothing.
+   */
+  async eraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<void> {
     const asked = checkScope(scope)
     const label = checkBoxlabel(boxlabel)
-    await fromStorage(() => this.doEraseBox(asked, label))
+    const landed = await fromStorage(() => this.doEraseBox(asked, label, expected))
+    if (! landed) { throw staleErase() }
   }
 
-  /** Remove the bundle and every lockbox: the backend's part of deleting a vault. */
-  async eraseVault(scope: VaultScope): Promise<void> {
+  /**
+   * Remove the bundle and every lockbox -- the backend's part of deleting a vault -- only while
+   * the standing bundle has the `vault_id` in `expected`. Refuses with kind `stale_write`
+   * otherwise -- including when the scope holds no bundle -- and erases nothing.
+   */
+  async eraseVault(scope: VaultScope, expected: EraseExpectation): Promise<void> {
     const asked = checkScope(scope)
-    await fromStorage(() => this.doEraseVault(asked))
+    const landed = await fromStorage(() => this.doEraseVault(asked, expected))
+    if (! landed) { throw staleErase() }
   }
 
   /**
@@ -195,10 +218,18 @@ export abstract class VaultDB {
    * null, no lockbox stands there. True when it was written; false, writing nothing, otherwise.
    */
   protected abstract doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean>
-  /** Remove the lockbox under `boxlabel`; succeed quietly when there is none. */
-  protected abstract doEraseBox(scope: VaultScope, boxlabel: string): Promise<void>
-  /** Remove the bundle and every lockbox of `scope` -- in one transaction, where the backend has them. */
-  protected abstract doEraseVault(scope: VaultScope): Promise<void>
+  /**
+   * Remove the lockbox under `boxlabel` if, and only if, the scope's standing bundle has
+   * `expected.vault_id`. True when that bundle stands, whether or not there was a lockbox to
+   * remove; false, erasing nothing, otherwise.
+   */
+  protected abstract doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean>
+  /**
+   * Remove the bundle and every lockbox of `scope` if, and only if, the standing bundle has
+   * `expected.vault_id` -- in one transaction, where the backend has them. True when erased;
+   * false, erasing nothing, otherwise.
+   */
+  protected abstract doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean>
   /**
    * Call `onChange` after any write touching `scope`, and return the unsubscribe. The default
    * never calls; a backend with live queries or push (Convex, a websocket) overrides it.
@@ -209,6 +240,8 @@ export abstract class VaultDB {
 }
 
 const noUnsubscribing = (): void => undefined
+
+const staleErase = () => new VaultError('stale_write', 'The vault changed in storage since this device read it -- it was deleted, or deleted and made anew, elsewhere -- so this erase was refused and nothing was erased. Read the vault again before retrying.')
 
 /**
  * A lockbox as the list verb's adapter half may hand it back: every field but the two ciphered
@@ -288,10 +321,15 @@ export const bundleMeetsExpectation = (standingBundle: unknown, expected: Bundle
     && standing.data.passphrase_epoch === expected.passphrase_epoch
 }
 
+/** True when the bundle row standing in storage belongs to the vault `expected` names. */
+export const vaultMeetsExpectation = (standingBundle: unknown, expected: EraseExpectation): boolean => {
+  const standing = StandingBundle.safeParse(standingBundle)
+  return standing.success && standing.data.vault_id === expected.vault_id
+}
+
 /** True when the bundle and lockbox rows standing in storage are the ones `expected` names. */
 export const lockboxMeetsExpectation = (standingBundle: unknown, standingBox: unknown, expected: LockboxExpectation): boolean => {
-  const bundle = StandingBundle.safeParse(standingBundle)
-  if (! bundle.success || bundle.data.vault_id !== expected.vault_id) { return false }
+  if (! vaultMeetsExpectation(standingBundle, expected)) { return false }
   if (standingBox === null || standingBox === undefined) { return expected.revision_id === null }
   const box = StandingBox.safeParse(standingBox)
   return box.success && box.data.revision_id === expected.revision_id
@@ -381,14 +419,20 @@ class StringStoreVaultDB extends VaultDB {
     })
   }
 
-  protected doEraseBox(scope: VaultScope, boxlabel: string): Promise<void> {
-    return soon(() => { this.store.erase(boxCkey(scope, boxlabel)) })
+  protected doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
+    return soon(() => {
+      if (! vaultMeetsExpectation(readJson(this.store, bundleCkey(scope)), expected)) { return false }
+      this.store.erase(boxCkey(scope, boxlabel))
+      return true
+    })
   }
 
-  protected doEraseVault(scope: VaultScope): Promise<void> {
+  protected doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
     return soon(() => {
+      if (! vaultMeetsExpectation(readJson(this.store, bundleCkey(scope)), expected)) { return false }
       const doomed = this.store.ckeys().filter((ckey) => isBoxCkeyOf(scope, ckey))
       for (const ckey of [...doomed, bundleCkey(scope)]) { this.store.erase(ckey) }
+      return true
     })
   }
 

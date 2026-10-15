@@ -1,8 +1,8 @@
 import { createStore, del, delMany, entries, get, getMany, keys, set, clear, type UseStore } from 'idb-keyval'
 import { DeviceUnlock, type Lockbox, type VaultBundle, type VaultScope } from './types'
 import {
-  VaultDB, boxCkey, bundleCkey, bundleMeetsExpectation, isBoxCkeyOf, lockboxMeetsExpectation, scopePath,
-  type BundleExpectation, type LockboxExpectation,
+  VaultDB, boxCkey, bundleCkey, bundleMeetsExpectation, isBoxCkeyOf, lockboxMeetsExpectation, scopePath, vaultMeetsExpectation,
+  type BundleExpectation, type EraseExpectation, type LockboxExpectation,
 } from './vault-db'
 import type { DeviceDB } from './device-db'
 
@@ -131,19 +131,24 @@ class IdbVaultDB extends VaultDB {
     return true
   }
 
-  protected async doEraseBox(scope: VaultScope, boxlabel: string): Promise<void> {
+  protected async doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
+    if (! vaultMeetsExpectation(await get(bundleCkey(scope), this.shelf()), expected)) { return false }
     await del(boxCkey(scope, boxlabel), this.shelf())
     this.ring()
+    return true
   }
 
-  // The listing and the deletion are two IndexedDB transactions: a box another tab writes in
-  // between survives, orphaned (notes/security.md). The delMany itself is one transaction, so
-  // the rows listed go together, or none of them do.
-  protected async doEraseVault(scope: VaultScope): Promise<void> {
+  // The look at the bundle, the listing and the deletion are separate IndexedDB transactions: a
+  // box another tab writes in between survives, orphaned, and a vault another tab destroys and
+  // makes anew in between can be erased (notes/security.md). The delMany itself is one
+  // transaction, so the rows listed go together, or none of them do.
+  protected async doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
+    if (! vaultMeetsExpectation(await get(bundleCkey(scope), this.shelf()), expected)) { return false }
     const ckeys = await keys(this.shelf())
     const doomed = ckeys.filter((ckey) => isBoxCkeyOf(scope, ckey))
     await delMany([...doomed, bundleCkey(scope)], this.shelf())
     this.ring()
+    return true
   }
 
   // Rings on every write to the shelf, not only ones in scope: a spurious refresh is harmless,

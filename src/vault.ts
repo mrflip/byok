@@ -118,9 +118,9 @@ export type Vault = {
   use<ResultT>(boxlabel: string, callback: (whisper: Whisper) => ResultT | Promise<ResultT>): Promise<ResultT>
   /**
    * Remove the lockbox `boxlabel` entirely, whatever revision of it stands. Requires unlocked;
-   * kind 'absent_box' when absent. Looks at storage first: if the vault was destroyed, recreated
-   * or re-passphrased elsewhere, this device relocks and throws kind 'vault_locked' rather than
-   * erasing from a vault reborn elsewhere.
+   * kind 'absent_box' when absent. The erase lands only in the vault this device last read: if
+   * it was destroyed, or destroyed and made anew, elsewhere, nothing is erased and the call
+   * throws kind 'stale_write', after catching up with storage -- which relocks this device.
    */
   erase(boxlabel: string): Promise<void>
 
@@ -128,6 +128,11 @@ export type Vault = {
    * Delete the vault's every stored record, remote and device-local: the vault half of deleting
    * an account. Deliberately does NOT require unlock -- an authenticated owner can always delete
    * their own rows server-side, and pretending otherwise would be false comfort.
+   *
+   * Deletes the vault this handle last read, and only that one: if it was destroyed, or
+   * destroyed and made anew, elsewhere since, storage keeps what stands there now and the call
+   * throws kind 'stale_write', after catching up -- a second destroy() then deletes the vault
+   * that stands. On a vault this handle has never seen created, only the device-local record goes.
    */
   destroy(): Promise<void>
   /** Release subscriptions and refuse further calls. Forgets nothing stored. */
@@ -473,12 +478,12 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
     erase: async (boxlabel) => {
       ensureUnlocked()
-      // An erase carries no expectation -- it wins over any write -- so it looks at storage
-      // first instead: a vault reborn elsewhere relocks this device rather than losing a box.
-      await refresh()
+      const label = parseLabel(boxlabel)
+      await readBoxOrThrow(label)
       ensureUnlocked()
-      await readBoxOrThrow(boxlabel)
-      await vaultDB.eraseBox(scope, parseLabel(boxlabel))
+      // Lands only in the vault this device holds keys for, whatever revision of the box stands:
+      // a vault destroyed and made anew elsewhere refuses it.
+      await refreshOnStale(vaultDB.eraseBox(scope, label, { vault_id: currentBundle().vault_id }))
       await refresh()
     },
 
@@ -487,7 +492,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       vaultKey = null
       expiresAt = null
       await deviceDB.eraseUnlock(scope)
-      await vaultDB.eraseVault(scope)
+      // Only the vault this handle last read: one destroyed and made anew since refuses.
+      if (bundle !== null && bundle !== UnreadBundle) {
+        await refreshOnStale(vaultDB.eraseVault(scope, { vault_id: bundle.vault_id }))
+      }
       await refresh()
     },
 

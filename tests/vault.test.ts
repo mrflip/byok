@@ -331,6 +331,16 @@ describe("erase and destroy", () => {
     await vault.destroy()
     expect(vault.getSnapshot().state).to.eq('absent')
   })
+
+  it("destroy on a vault already gone is quiet: a second destroy finds nothing to refuse", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.destroy()
+    await vault.unlock('pw')
+    await vault.destroy()
+    await vault.destroy()
+    expect(vault.getSnapshot().state).to.eq('absent')
+  })
 })
 
 describe("scoping", () => {
@@ -637,10 +647,22 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
     expect(vaultTwo.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
   })
 
-  it("erase() looks first and relocks: the reborn vault keeps its box", async () => {
+  it("erase() is refused by storage as stale, and relocks: the reborn vault keeps its box", async () => {
     const { vaultOne, vaultTwo } = await rebornWorld()
-    await expectRefusal(vaultOne.erase('anthropic'), 'vault_locked')
+    expect(vaultOne.getSnapshot().state).to.eq('unlocked')
+    await expectRefusal(vaultOne.erase('anthropic'), 'stale_write')
+    expect(vaultOne.getSnapshot().state).to.eq('locked')
     expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
+  })
+
+  it("destroy() is refused by storage as stale: the reborn vault survives, and a second destroy() takes it", async () => {
+    const { world, vaultOne, vaultTwo } = await rebornWorld()
+    await expectRefusal(vaultOne.destroy(), 'stale_write')
+    expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
+    expect(vaultOne.getSnapshot().state).to.eq('locked')
+    await vaultOne.destroy()
+    expect(vaultOne.getSnapshot().state).to.eq('absent')
+    expect(world.dbStore.ckeys()).to.have.lengthOf(0)
   })
 
   it("changePassphrase() proves against the standing bundle, never burying the reborn one", async () => {
