@@ -80,7 +80,8 @@ and the security reviewer reading the code.
   not after.
 * **Secret material never leaves through a side door.** Not into an error message, a thrown
   value's properties, a log line, a `toString`, or a validation error quoting its input. `src/`
-  writes nothing to the console (the linter enforces it). An error says what went wrong and what
+  writes nothing to the console but through the fallback logger, `src/console-logger.ts`, used
+  when a host passes no logger (the linter enforces it everywhere else). An error says what went wrong and what
   to do, calmly, and carries a `kind` a caller can branch on.
 * Every new piece of code gets a proportional doc block and test suite: at least one test per use
   case, and one per `@example` (STYLE.md, *Tests*).
