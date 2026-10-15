@@ -1301,7 +1301,6 @@ describe("erase and destroy", () => {
     expect(world.dbStore.read('box:acme:u1:main:anthropic')).to.eq(spoiled)
   })
 
-
   it("erase removes the box; a second erase finds it absent", async () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
