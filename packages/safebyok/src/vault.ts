@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxUnlocks, MaxUserIdChars, MaxWhisperBytes, PasskeySaltBytes, UserId, VaultBundle, VaultScope, Whisper, wallClock, type Clock, type PasskeyProof, type UnlockEnvelope, type UnlockSummary } from './types'
+import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, MaxLockboxes, MaxUnlocks, MaxUserIdChars, MaxWhisperBytes, PasskeySaltBytes, UserId, VaultBundle, VaultScope, Whisper, wallClock, type Clock, type PasskeyProof, type UnlockEnvelope, type UnlockSummary } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import { MaxSaltBytes, ensureSuppliedSpecKept } from './key-deriver-spec'
@@ -121,6 +121,16 @@ export type OpenVaultOpts = {
  * their passphrase, calls unlock(), and retries. Nothing prompts on open.
  */
 export type Vault = {
+  /**
+   * How long an entered passphrase lasts on this device, in whole milliseconds: the
+   * `forcePassphraseReentryHours` the vault was opened with, its default (168 hours) when none
+   * was given, never more than {@link ForeverMs}. A vault that stays unlocked until `lock()`
+   * (`Infinity` hours, or any as long) reads exactly {@link ForeverMs}. Fixed for the handle's
+   * life, so a UI can say how long an unlock lasts without being told the option again.
+   *
+   * @example vault.reentryWindowMs === ForeverMs ? 'until you lock it' : `for ${String(Math.round(vault.reentryWindowMs / 60_000))} minutes`
+   */
+  readonly reentryWindowMs: number
   /** Current snapshot; same object until something changes (useSyncExternalStore-ready). */
   getSnapshot: () => VaultSnapshot
   /**
@@ -834,6 +844,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
 
   const vault: Vault = {
+    reentryWindowMs: reentryMs,
+
     getSnapshot: () => snapshot,
 
     subscribe: (listener) => {
@@ -1417,14 +1429,6 @@ const parseGraceSeconds = (candidate: number | undefined): number => {
   }
   return checked.data
 }
-
-/**
- * The longest reentry window, in milliseconds: from {@link FarPast} to {@link FarFuture}, so a
- * deadline it sets from any instant the clock may read is {@link FarFuture}. `Infinity` hours, or
- * any number of hours as long or longer, becomes this window as the option is parsed: past that
- * parse, no time is ever infinite.
- */
-const ForeverMs = FarFuture - FarPast
 
 /** Hours, as the host thinks of them, to whole milliseconds, as every time inside is kept. */
 const someHours = Z.union([Z.number().check(Z.positive()), Z.literal(Infinity)])

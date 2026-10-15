@@ -114,6 +114,18 @@ export const FarFuture = 9_007_199_254_740 // Math.floor(Number.MAX_SAFE_INTEGER
 export const FarPast = 347_155_200_000 // Date.UTC(1981, 0, 1)
 
 /**
+ * The longest unlock window a vault keeps, in milliseconds: from {@link FarPast} to
+ * {@link FarFuture}, so a deadline it sets from any instant the clock may read is
+ * {@link FarFuture}. `forcePassphraseReentryHours: Infinity`, or any number of hours as long or
+ * longer, becomes this window as `openVault` parses it, and a vault's `reentryWindowMs` reads as
+ * exactly this when it stays unlocked until `lock()`.
+ *
+ * @example vault.reentryWindowMs === ForeverMs   // true when opened with forcePassphraseReentryHours: Infinity
+ * @example FarPast + ForeverMs === FarFuture        // true: a window from the earliest instant ends at the last
+ */
+export const ForeverMs = FarFuture - FarPast
+
+/**
  * Validator for an instant as whole UTC epoch milliseconds, from {@link FarPast} (1981) to
  * {@link FarFuture} (2255), both included. Every time the package keeps is one -- a lockbox's
  * `registered_at` and `changed_at`, a vault bundle's `registered_at`, a remembered unlock's
