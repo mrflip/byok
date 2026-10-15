@@ -3,6 +3,9 @@
 version: 2
 updates:
   - package-ecosystem: npm
+    # The root covers the whole pnpm workspace: Dependabot reads pnpm-workspace.yaml there and
+    # checks every package its globs match (packages/*, demos/*) against the one lockfile. Listing
+    # those directories too would run overlapping updates of one lockfile.
     directory: /
     schedule:
       interval: weekly

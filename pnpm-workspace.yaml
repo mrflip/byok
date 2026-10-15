@@ -6,7 +6,12 @@ packages:
 
 # `pnpm -r` runs one package at a time, in dependency order. A package that depends on another
 # builds it first (its `build:deps`), and tsdown starts by emptying `dist/`: two such packages run
-# side by side would each wipe the core's `dist/` while the other reads it.
+# side by side would each wipe the core's `dist/` while the other reads it. The root's own scripts
+# know better (package.json): `build` goes in dependency order with every `build:deps` stood down
+# (SAFEBYOK_SKIP_BUILD_DEPS), so each package builds once; lint and typecheck read sources, never
+# a `dist/`, and run side by side; `test` builds once first, then runs the packages' tests up to
+# four at a time, as dependency order allows: the core, then convex and react together, then the
+# demo.
 workspaceConcurrency: 1
 
 allowBuilds:

@@ -61,19 +61,12 @@ Small irritants, each a few lines, picked up by whoever is nearby.
 
 * The root scripts chain with `&&`, so a root-level failure hides package failures until it is
   fixed.
-* The react and demo pre-scripts rebuild the core several times, and `workspaceConcurrency: 1`
-  serialises `pnpm -r` for lint and typecheck as well. The whole justify takes ~29 s locally and
-  longer in the cloud.
 * Convex's `--no-error-on-unmatched-pattern` should go when it gets its own configs.
 * The demo's coverage has no `include`.
 * **The second flaky tamper test.** [#25](https://github.com/mrflip/safebyok/pull/25) fixed
   `packages/safebyok/tests/crypto.test.ts` with `tweakB64`; the same overwrite-with-`A` remains in
   `packages/safebyok/tests/vault.test.ts` ("a lockbox with altered ciphertext refuses to open")
   and fails one run in sixty-four. Use the helper. (Low-hanging-fruit thread 10 sweeps it in.)
-* **Dependabot after the move.** `.github/dependabot.yml` still says `directory: /`, which should
-  cover a pnpm workspace from its root lockfile, but nobody has seen it update a dependency under
-  `packages/` or `demos/` since the core moved there. Check its next weekly run; if it skips them,
-  replace `directory: /` with `directories: ['/', '/packages/*', '/demos/*']`.
 * **Click through the demo's passphrase dialog.** No agent has a browser, so the dialog in
   `demos/safebyok-demo-react` has never been exercised by hand since `safebyok-react` became a
   built package. `pnpm --filter safebyok-demo-react dev`, then set, enter, mistype and dismiss a
@@ -390,6 +383,9 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
 
 ### Others
 
+* **Provide built-as-a-whole recommended KDFs, and functions to roll your own.** Follows from
+  [#68](https://github.com/mrflip/safebyok/pull/68)'s `argon2idDeriver(spec)`; replaces its open
+  question of adding RFC 9106's second recommended option as a supplied spec.
 * Style guide audit
   - A few comment lines exceed 100 columns.
 

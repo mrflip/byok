@@ -5,8 +5,6 @@ import * as TH from '../test-helpers'
 import { MaxVaultLockboxBytes, MaxVaultLockboxes } from '../../src/component/tallies'
 
 const u1 = TH.scopeOf('u1')
-const thisVault = { vault_id: 'vault-id-u1' }
-const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null }
 
 /** A fresh backend whose `u1` scope holds a bundle, as every lockbox write needs. */
 const withBundle = async () => {
@@ -95,14 +93,14 @@ describe("getBox and updateBox", () => {
   it("has no box until one is written, then reads it back exactly, without its scope columns", async () => {
     const t = await withBundle()
     expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.be.null
-    expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })).to.be.true
+    expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })).to.be.true
     expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a1'))
   })
 
   it("stores a lockbox without a note with no note field at all, and reads it back so", async () => {
     const t = await withBundle()
     const { note: _note, ...noteless } = TH.boxOf('anthropic_api_key', 'a1')
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: noteless, expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: noteless, expected: TH.noBoxYet })
     const { lockboxes } = await allRows(t)
     const [row] = lockboxes
     expect(row).not.to.have.property('note')
@@ -111,7 +109,7 @@ describe("getBox and updateBox", () => {
 
   it("replaces a box whose standing revision is the one expected", async () => {
     const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
     const landed = await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })
     expect(landed).to.be.true
     expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a2'))
@@ -128,7 +126,7 @@ describe("getBox and updateBox", () => {
   for (const [expected, blurb] of StaleCases) {
     it(blurb, async () => {
       const t = await withBundle()
-      await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
+      await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
       expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected })).to.be.false
       expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a1'))
     })
@@ -136,8 +134,8 @@ describe("getBox and updateBox", () => {
 
   it("refuses to rewrite a box erased since it was read", async () => {
     const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
-    await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
+    await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })
     const landed = await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })
     expect(landed).to.be.false
     expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.be.null
@@ -145,7 +143,7 @@ describe("getBox and updateBox", () => {
 
   it("refuses any box in a scope that holds no bundle, writing nothing", async () => {
     const t = TH.componentTest()
-    expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })).to.be.false
+    expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })).to.be.false
     const { lockboxes } = await allRows(t)
     expect(lockboxes).to.have.lengthOf(0)
   })
@@ -153,7 +151,7 @@ describe("getBox and updateBox", () => {
   it("keeps the same boxlabel in two users' vaults apart", async () => {
     const t = await withBundle()
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u2') })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'mine'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'mine'), expected: TH.noBoxYet })
     await t.mutation(TH.vaults.updateBox, { scope: TH.scopeOf('u2'), lockbox: TH.boxOf('anthropic_api_key', 'theirs'), expected: { vault_id: 'vault-id-u2', revision_id: null } })
     expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'mine'))
   })
@@ -163,7 +161,7 @@ describe("listBoxSummaries", () => {
   it("lists the vault's boxes in boxlabel order, without ciphered fields, keeping format", async () => {
     const t = await withBundle()
     for (const boxlabel of ['openai_api_key', 'anthropic_api_key']) {
-      await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf(boxlabel, boxlabel), expected: noBoxYet })
+      await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf(boxlabel, boxlabel), expected: TH.noBoxYet })
     }
     const listed = await t.query(TH.vaults.listBoxSummaries, { scope: u1 })
     expect(listed.map((summary) => summary.boxlabel)).to.deep.equal(['anthropic_api_key', 'openai_api_key'])
@@ -175,7 +173,7 @@ describe("listBoxSummaries", () => {
     const t = await withBundle()
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u2') })
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1', { vaultlabel: 'spare', vault_id: 'vault-id-spare' }) })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'mine'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'mine'), expected: TH.noBoxYet })
     await t.mutation(TH.vaults.updateBox, { scope: TH.scopeOf('u2'), lockbox: TH.boxOf('openai_api_key', 'theirs'), expected: { vault_id: 'vault-id-u2', revision_id: null } })
     await t.mutation(TH.vaults.updateBox, { scope: TH.scopeOf('u1', 'spare'), lockbox: TH.boxOf('github_token', 'spare'), expected: { vault_id: 'vault-id-spare', revision_id: null } })
     const listed = await t.query(TH.vaults.listBoxSummaries, { scope: u1 })
@@ -195,27 +193,27 @@ describe("listBoxSummaries", () => {
 describe("eraseBox", () => {
   it("removes the box whatever revision stands: erase wins over a newer write", async () => {
     const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
     await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })
-    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault })).to.be.true
+    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })).to.be.true
     expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.be.null
   })
 
   it("is quiet, and lands, when there is no box to remove", async () => {
     const t = await withBundle()
-    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault })).to.be.true
+    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })).to.be.true
   })
 
   it("refuses to erase from a vault made anew since it was read, removing nothing", async () => {
     const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
     expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: { vault_id: 'vault-id-gone' } })).to.be.false
     expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a1'))
   })
 
   it("refuses when the scope holds no bundle", async () => {
     const t = TH.componentTest()
-    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault })).to.be.false
+    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })).to.be.false
   })
 })
 
@@ -223,10 +221,10 @@ describe("eraseVault", () => {
   it("removes the bundle and every box of the vault, and nothing of any other", async () => {
     const t = await withBundle()
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u2') })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('openai_api_key', 'o1'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('openai_api_key', 'o1'), expected: TH.noBoxYet })
     await t.mutation(TH.vaults.updateBox, { scope: TH.scopeOf('u2'), lockbox: TH.boxOf('anthropic_api_key', 'theirs'), expected: { vault_id: 'vault-id-u2', revision_id: null } })
-    expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: thisVault })).to.be.true
+    expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: TH.thisVault })).to.be.true
     const rows = await allRows(t)
     expect(rows.bundles.map((row) => row.user_id)).to.deep.equal(['u2'])
     expect(rows.lockboxes.map((row) => row.user_id)).to.deep.equal(['u2'])
@@ -234,7 +232,7 @@ describe("eraseVault", () => {
 
   it("refuses to erase a vault made anew since it was read, removing nothing", async () => {
     const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
     expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: { vault_id: 'vault-id-gone' } })).to.be.false
     const rows = await allRows(t)
     expect(rows.bundles).to.have.lengthOf(1)
@@ -243,7 +241,7 @@ describe("eraseVault", () => {
 
   it("refuses when the scope holds no bundle", async () => {
     const t = TH.componentTest()
-    expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: thisVault })).to.be.false
+    expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: TH.thisVault })).to.be.false
   })
 })
 
@@ -255,8 +253,8 @@ describe("watchVault", () => {
 
   it("signs the vault with its bundle's ids and each box's revision, in boxlabel order", async () => {
     const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('openai_api_key', 'o1'), expected: noBoxYet })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('openai_api_key', 'o1'), expected: TH.noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
     expect(await t.query(TH.vaults.watchVault, { scope: u1 })).to.deep.equal({
       vault_id:         'vault-id-u1',
       passphrase_epoch: 1,
@@ -274,15 +272,15 @@ describe("watchVault", () => {
     await sign()
     expect(signatures[1]).to.deep.equal(signatures[0])
 
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
     await sign()
     await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })
     await sign()
     await t.mutation(TH.vaults.updateBundle, { bundle: TH.bundleOf('u1', { passphrase_epoch: 2 }), expected: { vault_id: 'vault-id-u1', passphrase_epoch: 1 } })
     await sign()
-    await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault })
+    await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })
     await sign()
-    await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: thisVault })
+    await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: TH.thisVault })
     await sign()
     const distinct = new Set(signatures.slice(1).map((signature) => JSON.stringify(signature)))
     expect(distinct.size).to.eq(6)
@@ -361,20 +359,9 @@ const writeUntallied = (t: ReturnType<typeof TH.componentTest>, lockboxes: Retur
   await Promise.all(lockboxes.map((lockbox) => ctx.db.insert('safebyok_lockboxes', { ...u1, ...lockbox })))
 })
 
-/** The refusal's data, when a call is refused with a ConvexError; fails the test if it was not. */
-const refusalOf = async (call: Promise<unknown>): Promise<unknown> => {
-  try {
-    await call
-  } catch (err) {
-    if (err instanceof ConvexError) { return err.data }
-    throw err
-  }
-  throw new Error('the call was not refused')
-}
-
 /** The refusal's data, when `u1`'s vault refuses `lockbox` with a ConvexError. */
 const refusedWrite = (t: ReturnType<typeof TH.componentTest>, lockbox: ReturnType<typeof TH.boxOf>, expected: { vault_id: string, revision_id: string | null }) => (
-  refusalOf(t.mutation(TH.vaults.updateBox, { scope: u1, lockbox, expected }))
+  TH.convexRefusalOf(t.mutation(TH.vaults.updateBox, { scope: u1, lockbox, expected }))
 )
 
 const VaultFull = { kind: 'vault_full', message: 'This vault is full: erase a lockbox to make room, then try again.' }
@@ -386,12 +373,12 @@ describe("a vault's tally", () => {
   it("stays true across new lockboxes, replacements and erases", async () => {
     const t = await withBundle()
     const steps = [
-      () => t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet }),
+      () => t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet }),
       () => t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.heavyBox('anthropic_api_key', 5000, 'a2'), expected: over('a1') }),
-      () => t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('openai_api_key', 'o1'), expected: noBoxYet }),
+      () => t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('openai_api_key', 'o1'), expected: TH.noBoxYet }),
       () => t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a3'), expected: over('a2') }),
-      () => t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault }),
-      () => t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'never_stored', expected: thisVault }),
+      () => t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault }),
+      () => t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'never_stored', expected: TH.thisVault }),
     ]
     const counts = []
     for (const step of steps) {
@@ -406,16 +393,16 @@ describe("a vault's tally", () => {
   it("stays true across writes and erases running at once", async () => {
     const t = await withBundle()
     const boxlabels = Array.from({ length: 12 }, (_, ii) => `box_${String(ii)}`)
-    await Promise.all(boxlabels.map((boxlabel) => t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf(boxlabel, boxlabel), expected: noBoxYet })))
-    await Promise.all(boxlabels.slice(0, 5).map((boxlabel) => t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel, expected: thisVault })))
+    await Promise.all(boxlabels.map((boxlabel) => t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf(boxlabel, boxlabel), expected: TH.noBoxYet })))
+    await Promise.all(boxlabels.slice(0, 5).map((boxlabel) => t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel, expected: TH.thisVault })))
     expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
     expect(await keptTally(t)).to.have.property('lockbox_count', 7)
   })
 
   it("goes with its vault when the vault is erased, and a vault made anew keeps one of its own", async () => {
     const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })
-    await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: thisVault })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
+    await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: TH.thisVault })
     expect(await t.run((ctx) => ctx.db.query('safebyok_vault_tallies').collect())).to.deep.equal([])
     //
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1', { vault_id: 'vault-id-anew' }) })
@@ -427,8 +414,8 @@ describe("a vault's tally", () => {
   it("is kept apart for each vault", async () => {
     const t = await withBundle()
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u2') })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'mine'), expected: noBoxYet })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('openai_api_key', 'mine'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'mine'), expected: TH.noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('openai_api_key', 'mine'), expected: TH.noBoxYet })
     await t.mutation(TH.vaults.updateBox, { scope: TH.scopeOf('u2'), lockbox: TH.boxOf('anthropic_api_key', 'theirs'), expected: { vault_id: 'vault-id-u2', revision_id: null } })
     expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
     expect(await keptTally(t, TH.scopeOf('u2'))).to.deep.equal(await weighedTally(t, TH.scopeOf('u2')))
@@ -451,9 +438,9 @@ describe("a vault's tally", () => {
   it("is not counted by an erase, which never reads the whole vault", async () => {
     const t = await withBundle()
     await writeUntallied(t, [TH.boxOf('anthropic_api_key', 'a1'), TH.boxOf('openai_api_key', 'o1')])
-    await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault })
+    await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })
     expect(await keptTally(t)).to.be.null
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('github_token', 'g1'), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('github_token', 'g1'), expected: TH.noBoxYet })
     expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
     expect(await keptTally(t)).to.have.property('lockbox_count', 2)
   })
@@ -463,7 +450,7 @@ describe("a vault's tally", () => {
 const nearlyFull = async () => {
   const t = await withBundle()
   for (let ii = 0; ii < 8; ii++) {
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.heavyBox(`heavy_${String(ii)}`, 900_000), expected: noBoxYet })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.heavyBox(`heavy_${String(ii)}`, 900_000), expected: TH.noBoxYet })
   }
   const { lockbox_bytes: lockboxBytes } = await weighedTally(t)
   return { t, room: MaxVaultLockboxBytes - lockboxBytes }
@@ -473,7 +460,7 @@ describe("a vault's weight limit", () => {
   it("refuses a new lockbox that would take the vault past it, writing nothing, and says so calmly", async () => {
     const { t, room } = await nearlyFull()
     const ante = { rows: await allRows(t), tally: await keptTally(t) }
-    const refusal = await refusedWrite(t, TH.heavyBox('one_too_many', room), noBoxYet)
+    const refusal = await refusedWrite(t, TH.heavyBox('one_too_many', room), TH.noBoxYet)
     expect(refusal).to.deep.equal(VaultFull)
     expect(JSON.stringify(refusal)).to.not.include('one_too_many')
     expect({ rows: await allRows(t), tally: await keptTally(t) }).to.deep.equal(ante)
@@ -481,7 +468,7 @@ describe("a vault's weight limit", () => {
 
   it("lets in a new lockbox that fits", async () => {
     const { t } = await nearlyFull()
-    expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })).to.be.true
+    expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })).to.be.true
     expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
   })
 
@@ -502,14 +489,14 @@ describe("a vault's weight limit", () => {
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1') })
     // Nine of 900,000 bytes, written before tallies were kept: past the limit, still readable whole.
     await writeUntallied(t, Array.from({ length: 9 }, (_, ii) => TH.heavyBox(`heavy_${String(ii)}`, 900_000)))
-    expect(await refusedWrite(t, TH.boxOf('anthropic_api_key', 'a1'), noBoxYet)).to.deep.equal(VaultFull)
+    expect(await refusedWrite(t, TH.boxOf('anthropic_api_key', 'a1'), TH.noBoxYet)).to.deep.equal(VaultFull)
     const overgrown = TH.heavyBox('heavy_0', 900_001, 'grown_0')
     expect(await refusedWrite(t, overgrown, over('heavy_0'))).to.deep.equal(VaultFull)
     expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.heavyBox('heavy_0', 800_000, 'shrunk0'), expected: over('heavy_0') })).to.be.true
     expect(await keptTally(t)).to.be.null
     //
-    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'heavy_1', expected: thisVault })).to.be.true
-    expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })).to.be.true
+    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'heavy_1', expected: TH.thisVault })).to.be.true
+    expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })).to.be.true
     expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
   })
 
@@ -521,11 +508,11 @@ describe("a vault's weight limit", () => {
       await writeUntallied(t, Array.from({ length: 5 }, (_, ii) => TH.heavyBox(`heavy_${String((batch * 5) + ii)}`, 900_000)))
     }
     await expect(t.query(TH.vaults.listBoxSummaries, { scope: u1 })).rejects.toThrow(/Read too much data/)
-    expect(await refusedWrite(t, TH.boxOf('anthropic_api_key', 'a1'), noBoxYet)).to.deep.equal(VaultFull)
+    expect(await refusedWrite(t, TH.boxOf('anthropic_api_key', 'a1'), TH.noBoxYet)).to.deep.equal(VaultFull)
     for (let ii = 0; ii < 20; ii++) {
-      expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: `heavy_${String(ii)}`, expected: thisVault })).to.be.true
+      expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: `heavy_${String(ii)}`, expected: TH.thisVault })).to.be.true
     }
-    expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: thisVault })).to.be.true
+    expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: TH.thisVault })).to.be.true
     const { bundles, lockboxes } = await allRows(t)
     expect({ bundles, lockboxes }).to.deep.equal({ bundles: [], lockboxes: [] })
   })
@@ -536,7 +523,7 @@ describe("a vault's weight limit", () => {
 // again). So the component holds every vault to MaxVaultLockboxes lockboxes and
 // MaxVaultLockboxBytes bytes of them, whatever its client asks, and convexVaultDB declares half the
 // read budget, 8 MiB, as its maxVaultBytes. openVault admits a maxLockboxes only while that many
-// lockboxes at maxWhisperBytes each, plus 1 KiB apiece for their other fields, fit in half of the
+// lockboxes, each counted at twice maxWhisperBytes plus 2 KiB for its other fields, fit in the
 // 8 MiB: at most 101 of the largest default whisper (40444 bytes of JSON, about 54 KB stored),
 // and at most 1365 of 2 KiB whispers. The tests below fill a vault to each of those, and to each
 // of the component's own limits, with the longest labels and notes, and erase it.
@@ -570,7 +557,7 @@ const fillVault = async (count: number, whisperBytes: number, bundle = TH.bundle
 /** True when `lockbox` lands in `u1`'s vault as a new box, false when the vault refuses it as full. */
 const landsOrIsFull = async (t: ReturnType<typeof TH.componentTest>, lockbox: ReturnType<typeof TH.boxOf>) => {
   try {
-    return await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox, expected: noBoxYet })
+    return await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox, expected: TH.noBoxYet })
   } catch (err) {
     if (err instanceof ConvexError && (err.data as { kind?: unknown }).kind === 'vault_full') { return false }
     throw err
@@ -581,7 +568,7 @@ const landsOrIsFull = async (t: ReturnType<typeof TH.componentTest>, lockbox: Re
 const listWatchErase = async (t: ReturnType<typeof TH.componentTest>) => {
   const listed = await t.query(TH.vaults.listBoxSummaries, { scope: u1 })
   const { boxes } = await t.query(TH.vaults.watchVault, { scope: u1 })
-  const erased = await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: thisVault })
+  const erased = await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: TH.thisVault })
   const { lockboxes } = await allRows(t)
   return { listedCount: listed.length, watchedCount: boxes.length, erased, leftCount: lockboxes.length }
 }
@@ -612,7 +599,7 @@ describe("a large vault, within Convex's per-transaction limits", () => {
     const t = TH.componentTest(true)
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1') })
     await writeUntallied(t, Array.from({ length: MaxVaultLockboxes }, (_, ii) => TH.boxOf(`b${String(ii).padStart(4, '0')}`, String(ii))))
-    expect(await refusedWrite(t, TH.boxOf('one_too_many', 'x'), noBoxYet)).to.deep.equal(VaultFull)
+    expect(await refusedWrite(t, TH.boxOf('one_too_many', 'x'), TH.noBoxYet)).to.deep.equal(VaultFull)
     expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('b0000', 'replaced'), expected: over('0') })).to.be.true
     expect(await keptTally(t)).to.deep.equal(await weighedTally(t))
     expect(await keptTally(t)).to.have.property('lockbox_count', MaxVaultLockboxes)

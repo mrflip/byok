@@ -10,26 +10,25 @@ security expert who knows what questions to ask.
 * 2026-10-15: `mask` (`safebyok/utils`) takes a whisper and returns text meant for display: its
   first and last few characters (two and four by default, at the caller's choice) and, up to
   `maxLen` (15 by default), its length. Beyond `maxLen` the result is fixed-width
-  (`head***...***tail`), or `maxLen` stars when even that does not fit, so the length stops
-  showing; a `head` and `tail` large enough to cover a short whisper show it nearly whole, and
-  `minStars: 0` shows a short one entirely. It makes the whisper safe to butcher
-  (normalize and strip the whole input), butchers it, and then checks the result is safe by
-  passing it through the same stripping, so every result, even the stars, is free of combining
-  marks, control, format, surrogate, private-use and unassigned code points, spaces, ignorable
-  code points, bidirectional controls and direction marks, and the symbols drawn blank or as a
-  box (U+2800, U+1D159, U+FFFC); it is one plain line that cannot hide or overwrite anything.
-  Right-to-left letters and numbers are kept (the Coach's ruling: strip the direction markers,
-  not the scripts), so a mask may reorder neighbouring neutral characters, such as stars and
-  punctuation, in a display; with no controls in it, it cannot do worse. `mask` is meant for
-  plain text, and arbitrary blobs may give unusual behavior. `head`, `tail` and `minStars` are capped at 1000, so no option
-  makes it build an unbounded string. It throws `bad_option` or `bad_whisper` without quoting
-  its input.
-* 2026-10-14 (revised 2026-10-15 for the push-to-main workflow): the package is staged on npm by `.github/workflows/release.yml`, run on every push
-  to main (when the Coach has merged the Version PR, and a version npm lacks is waiting),
-  authenticating by npm's trusted publishing (OIDC, no stored token) from the `npm`
-  environment, with provenance. The `pack` job runs `pnpm justify` (lint, typecheck, tests and
-  the build) before `publish`, which runs no package's scripts. A maintainer's 2FA approval makes
-  the staged version public; CI cannot give it.
+  (`head***...***tail`), or `maxLen` stars when even that does not fit, so the length stops showing;
+  a `head` and `tail` large enough to cover a short whisper show it nearly whole, and `minStars: 0`
+  shows a short one entirely. It makes the whisper safe to butcher (normalize and strip the whole
+  input), butchers it, and then checks the result is safe by passing it through the same stripping,
+  so every result, even the stars, is free of combining marks, control, format, surrogate,
+  private-use and unassigned code points, spaces, ignorable code points, bidirectional controls and
+  direction marks, and the symbols drawn blank or as a box (U+2800, U+1D159, U+FFFC); it is one
+  plain line that cannot hide or overwrite anything. Right-to-left letters and numbers are kept (the
+  Coach's ruling: strip the direction markers, not the scripts), so a mask may reorder neighbouring
+  neutral characters, such as stars and punctuation, in a display; with no controls in it, it cannot
+  do worse. `mask` is meant for plain text, and arbitrary blobs may give unusual behavior. `head`,
+  `tail` and `minStars` are capped at 1000, so no option makes it build an unbounded string. It
+  throws `bad_option` or `bad_whisper` without quoting its input.
+* 2026-10-14 (revised 2026-10-15 for the push-to-main workflow): the package is staged on npm by
+  `.github/workflows/release.yml`, run on every push to main (when the Coach has merged the Version
+  PR, and a version npm lacks is waiting), authenticating by npm's trusted publishing (OIDC, no
+  stored token) from the `npm` environment, with provenance. The `pack` job runs `pnpm justify`
+  (lint, typecheck, tests and the build) before `publish`, which runs no package's scripts. A
+  maintainer's 2FA approval makes the staged version public; CI cannot give it.
 * 2026-10-14: the npm trusted publisher allows `npm stage publish` and `npm dist-tag`, and not
   `npm publish`. A run of the release workflow can therefore repoint a dist-tag (`latest`,
   `next`) at any version already public, with no 2FA approval; the workflow does not run
@@ -47,8 +46,8 @@ security expert who knows what questions to ask.
   JS, audited, no WASM -- at about half a second per derivation in V8. AES-256-GCM encryption,
   key wrapping and randomness come from WebCrypto (`crypto.subtle`, `crypto.getRandomValues`).
 * 2026-10-14: the key deriver is a seam (`OpenVaultOpts.keyDeriver`): the pinned Argon2id deriver
-  was the default until 2026-10-15 (below), tests substitute a cheap SHA-256 deriver, and a stored vault records its
-  deriver's label and refuses to unlock under any other.
+  was the default until 2026-10-15 (below), tests substitute a cheap SHA-256 deriver, and a
+  stored vault records its deriver's label and refuses to unlock under any other.
 * 2026-10-15: `openVault` has no default key deriver: `keyDeriver` is required, and
   `browserOpts()` (the `safebyok/browser` entry) supplies the pinned Argon2id one. An app that
   passes none is refused with `bad_option`, never quietly given one. `openVault` imports no
@@ -75,7 +74,8 @@ security expert who knows what questions to ask.
   (`dangerouslyAllowBrowser: true` on the SDK client), by design: the key is decrypted on-device
   inside `vault.use(...)` and sent only to `api.anthropic.com`.
 * 2026-10-14: `safe-stable-stringify` is a runtime dependency: `stableJsonify`
-  (`src/stable-jsonify.ts`) is a thin alias of it, backing snapshot change detection.
+  (`src/stable-jsonify.ts`) is a thin alias of it, backing snapshot change detection and the
+  comparison that decides whether a lockbox's `changed_at` moves (below).
 * 2026-10-14: `zod` moved from a regular dependency to a peer dependency (`^4.0.0`): the host app
   supplies it, so safebyok validates with whatever zod instance that app ships.
 * 2026-10-15: storage writes are versioned updates (`VaultDB.updateBundle`, `updateBox`). A
@@ -90,7 +90,8 @@ security expert who knows what questions to ask.
   bundle has that `vault_id`, refuse where no bundle stands, and expect no revision, so within
   its vault an erase wins over a concurrent update; erasing an absent lockbox is quiet. The
   atomicity of check-and-write is each adapter's: `localVaultDB` checks and saves in one
-  synchronous step; the Convex adapter is planned to check inside its mutation's transaction.
+  synchronous step; the Convex component checks inside the transaction of the mutation that
+  writes (below).
 * 2026-10-15: `idbVaultDB` performs its versioned updates, its erases and `createBundle` as a
   read, then a separate write, in separate IndexedDB transactions: another tab writing in
   between can still be buried, two tabs can each create a bundle, and a vault another tab
@@ -119,31 +120,31 @@ security expert who knows what questions to ask.
   passphrase against it. A passphrase changed elsewhere does not stop a stale session's
   `store()` or `erase()` (their expectations carry no epoch); the session relocks on its next
   look at the bundle.
-* 2026-10-14: the unlock window (`forcePassphraseReentryHours`, `rememberForMs` until 2026-10-15)
-  is chosen by the app at each `openVault`, so two devices on one vault may hold different
-  windows. It is client-side politeness, not a vault-wide synced policy: nothing stored enforces
-  it across devices, and a modified client could choose any window it likes. The real bounds
-  stay the passphrase and the device-bound localUnlockKey.
+* 2026-10-14 (the option was named `rememberForMs` until its rename on 2026-10-15): the unlock
+  window (`forcePassphraseReentryHours`) is chosen by the app at each `openVault`, so two devices on
+  one vault may hold different windows. It is client-side politeness, not a vault-wide synced
+  policy: nothing stored enforces it across devices, and a modified client could choose any window
+  it likes. The real bounds stay the passphrase and the device-bound localUnlockKey.
 * 2026-10-15 (revised the same day by clean_times): a host may let a device stay unlocked
-  indefinitely, by passing `forcePassphraseReentryHours: Infinity` (or any huge number); that is
-  the host's choice, with no upper cap. `openVault` turns it, as it parses the option, into a
-  finite window of `FarFuture - FarPast` ms, so the deadline it sets from any in-bounds clock
-  reading is `FarFuture` (see the next entry), and the stored `ask_passphrase_at` is a finite
-  number; no schema past that parse, and no stored field, accepts `Infinity`. What still ends such an
-  unlock: `lock()` (memory and device record), a passphrase change on another device (the next
-  look at the bundle sees a new epoch), and the vault being destroyed or made anew (a new
-  `vault_id`). Nothing else does: no timer, and no idle detection. Two consequences: an open
-  handle sees that new epoch only when it next reads the bundle (an unlock, a write, or a change
-  the vaultDB pushes), so a handle that only reads whispers, on storage that pushes nothing, keeps
-  its vaultKey in memory until then; and lowering the option later ends an unlock a device
-  already remembers only at its next open (see the entry below).
+  indefinitely, by passing `forcePassphraseReentryHours: Infinity` (or any huge number); that is the
+  host's choice, with no upper cap. `openVault` turns it, as it parses the option, into a finite
+  window of `FarFuture - FarPast` ms, so the deadline it sets from any in-bounds clock reading is
+  `FarFuture` (see the next entry), and the stored `ask_passphrase_at` is a finite number; no schema
+  past that parse, and no stored field, accepts `Infinity`. What still ends such an unlock: `lock()`
+  (memory and device record), a passphrase change on another device (the next look at the bundle
+  sees a new epoch), and the vault being destroyed or made anew (a new `vault_id`). Nothing else
+  does: no timer, and no idle detection. Two consequences: an open handle sees that new epoch only
+  when it next reads the bundle (an unlock, a write, or a change the vaultDB pushes), so a handle
+  that only reads whispers, on storage that pushes nothing, keeps its vaultKey in memory until then;
+  and lowering the option later ends an unlock a device already remembers only at its next open (see
+  the entry below).
 * 2026-10-15 (revised the same day by clean_times): every time the package stores is an
   `EpochMillis`: epoch ms from `FarPast` (1981-01-01T00:00:00Z) to `FarFuture`, the microsecond
   epochalypse (`Math.floor(Number.MAX_SAFE_INTEGER / 1000)`, 2255-06-05T23:47:34.740Z) -- the
   device record's `ask_passphrase_at` (named `expires_at` until then), and the lockbox's and
   bundle's `registered_at` and the lockbox's `changed_at`: whole ms, so a stored record with a
-  fraction of a millisecond fails its schema as one out of bounds does. A device record that fails the
-  schema, reads as "no remembered unlock", and is erased; it is not clamped on read. That
+  fraction of a millisecond fails its schema as one out of bounds does. A device record that
+  fails the schema reads as "no remembered unlock", and is erased; it is not clamped on read. That
   includes records written by 0.1.0 and 0.2.0 under a window above about two million hours (some
   229 years), which capped the window only at `MAX_SAFE_INTEGER` ms and stored `now + window`
   unclamped. **The host's `Clock` is checked**: `openVault` reads it once and refuses a reading
@@ -154,9 +155,9 @@ security expert who knows what questions to ask.
   `bad_option`, so a clock gone wrong never mints a deadline or a stored time, and leaves the vault
   locked in memory (the device record stays). A lock never waits on the clock: `lock()` reads
   none, and `lockSoon()`, unable to time its grace, locks at once and returns normally, with a
-  warning to the vault's logger (below). A clock that goes wrong in the middle of a `store()`, `erase()` or
-  `changePassphrase()` lets the write land, then throws `bad_option` from the refresh after it. A
-  clock in bounds but wrong (set a year ahead, say) is not detected.
+  warning to the vault's logger (below). A clock that goes wrong in the middle of a `store()`,
+  `erase()` or `changePassphrase()` lets the write land, then throws `bad_option` from the refresh
+  after it. A clock in bounds but wrong (set a year ahead, say) is not detected.
 * 2026-10-15: `openVault` takes a host's `logger` (`log`, `warn`, `error`, each
   `(message?, story?, err?)`), checked at the door (`bad_option`) and wrapped so that whatever it
   throws or rejects with is dropped. The vault calls it in four places: `lockSoon()` locking
@@ -183,7 +184,7 @@ security expert who knows what questions to ask.
   stands still across a new `revision_id` says the host stored the same whisper again. The bundle
   keeps `registered_at`; `created_at` and `updated_at` are gone from both records. None of the
   times is in the cipherAdditionalData (the binding is still the positional list), so a backend
-  can alter them undetected; binding the whole header is roadmap 3's, not yet built.
+  can alter them undetected; binding the whole header is TODO.md's roadmap 3, not yet built.
 * 2026-10-15: until 1.0.0 a stored-shape change carries no migration (the Coach's ruling). A
   lockbox or bundle written with `created_at`/`updated_at`, or a device record with
   `expires_at`, fails its schema: the vault refuses it as `corrupt_record` and leaves it as it
@@ -235,8 +236,8 @@ security expert who knows what questions to ask.
   find-or-insert in one mutation; the indexes are not unique, and a second bundle row for one
   scope would make every later call on that vault fail (`.unique()` throws) rather than pick one.
 * 2026-10-15: the Convex component's refusals carry `ConvexError` data of a fixed `kind`
-  (`not_permitted`, `vault_full`) and a fixed message; neither names the user or quotes a record. Its functions
-  log nothing.
+  (`not_permitted`, `vault_full`) and a fixed message; neither names the user or quotes a record.
+  Its functions log nothing.
 * 2026-10-15: Convex's own argument and return validation errors quote the value they refused.
   A malformed call to one of the Convex component's functions therefore writes its arguments --
   `user_id`, scope, notes, ciphertext, never plaintext or keys -- into the host's Convex logs,
@@ -280,8 +281,8 @@ security expert who knows what questions to ask.
   `corrupt_record`). Whatever a `DeviceDB` hands back -- the host may supply its own -- is checked
   against `DeviceUnlock` by the vault, and one that does not pass is erased and reads as no
   remembered unlock. `VaultDB`'s write verbs check labels and scope only, not the records the
-  vault builds. A remembered unlock's `ask_passphrase_at` is not bound into its encryption, so whoever
-  can write this device's IndexedDB can extend it (to any finite number of milliseconds).
+  vault builds. A remembered unlock's `ask_passphrase_at` is not bound into its encryption, so
+  whoever can write this device's IndexedDB can extend it (to any finite number of milliseconds).
 * 2026-10-14: releases run from `.github/workflows/release.yml` on every push to main, in jobs
   that each hold only what they need. Only `publish` (in the `npm` environment) may mint an npm
   OIDC token, and it runs no package's scripts (`pnpm install --ignore-scripts`): it stages the
@@ -307,6 +308,10 @@ security expert who knows what questions to ask.
   can use that token when it next runs. The token can create branches and tags and open, edit and
   close pull requests; whether it can also push to or merge into `main` depends on the branch
   protection's allowances for the App, which this repository's files do not record.
+* 2026-10-15: the `publish` job, the only one that can mint an npm token, installs npm 12.2.0
+  from a tarball checked against the sha512 `dist.integrity` recorded in `release.yml`, offline
+  (npm bundles its dependencies), so a changed tarball on the registry stops the job instead of
+  running beside the token. Moving npm means recording the new version's integrity by hand.
 * 2026-10-15: `store()` retries a write storage refused as stale, up to three attempts in all.
   Every attempt reads the box afresh and seals the whisper anew, under its own lockboxKey and
   `revision_id`: a refused attempt's ciphertext is never reused, so no two ciphertexts share a
@@ -315,11 +320,12 @@ security expert who knows what questions to ask.
   `vault_locked` before any whisper is sealed for the new vault. A retry overwrites what the
   other device wrote (last writer wins), as a host's own retry did, except that a box erased
   elsewhere is not brought back (an erase wins: `stale_write` at once); `erase()` is never retried.
-* 2026-10-15: the published package has a `safebyok/testing` entry point exporting
-  `testDeriver`, a KeyDeriver that is one SHA-256 of passphrase and salt, labelled
-  `test_digest_v0`. `openVault` accepts any KeyDeriver, so nothing stops a host passing it to a
-  real vault; a bundle records the label of the deriver that sealed it. The entry imports vitest,
-  an optional peer, and is not imported by `safebyok` or `safebyok/idb`.
+* 2026-10-15: the published package has a `safebyok/testing` entry point of test helpers
+  (the `TH` namespace of its tests), among them `testDeriver`, a KeyDeriver that is one SHA-256
+  of passphrase and salt, labelled `test_digest_v0`. `openVault` accepts any KeyDeriver, so
+  nothing stops a host passing it to a real vault; a bundle records the label of the deriver that
+  sealed it. The entry imports vitest, an optional peer, and is not imported by `safebyok`,
+  `safebyok/browser`, `safebyok/idb` or `safebyok/utils`.
 * 2026-10-15: the public packages' `exports` carry a `@safebyok/source` condition pointing at
   `src/`, for the workspace's own tooling; `pnpm pack` ships `publishConfig.exports` (dist only)
   instead. `scripts/release.ts` refuses a tarball that still carries the condition, and each
@@ -368,3 +374,38 @@ security expert who knows what questions to ask.
   gets zod's issues, which name paths and limits but carry no input (zod's `reportInput` is
   off). The build keeps each module its own file in `dist/` (`unbundle`), so a host's bundle
   carries only the modules its imports reach.
+* 2026-10-15: every `VaultDB` write verb validates its record and its expectation against the
+  schemas its reads use, before the adapter's half sees them, so the core never writes a record
+  its own read would refuse (an over-long note once did, and the vault could not be opened again);
+  Zod strips a field it does not know, so none reaches storage. `updateBundle` refuses a bundle
+  whose `vault_id` differs from the expected one. Listing still validates only what a listing
+  shows: a lockbox whose ciphered fields are damaged lists, and is refused at `read()`, so one
+  damaged box never makes the vault fail to open; such a box cannot be stored over or erased
+  either (both read it first), only destroyed with its vault. A remembered unlock naming another
+  scope is forgotten before any unwrap; its `vault_key_local_wrapped` binding would refuse it
+  anyway. The vault-size check counts each lockbox at twice `maxWhisperBytes` plus 2 KiB for its
+  other fields against the adapter's whole `maxVaultBytes`: the same outcomes as half the limit
+  with 1 KiB, with the fields' allowance now covering them (a test builds the heaviest row) while
+  `user_id`, which nothing bounds, is at most 512 bytes; a longer one, or a note a JSON-text
+  backend escapes, eats into the room the doubled whisper leaves.
+* 2026-10-15: a host may choose its key derivation. `argon2idDeriver(spec)` takes a whole
+  Argon2id parameter set and a label of the host's own, and runs it through `@noble/hashes` as
+  the supplied deriver does: parameters, not a new construction. `Argon2idWebV1` stays the one
+  supplied spec and what `browserOpts()` uses; no other was added (RFC 9106's first recommended
+  option needs 2 GiB, past what `@noble/hashes` allocates; its second differs from ours only in
+  four lanes, which a single-threaded JavaScript deriver runs one after another; OWASP's figures
+  are server minimums, below ours). **Refused** (`bad_option`), as what cannot run: a salt under
+  8 bytes (`@noble/hashes` and Argon2's reference code refuse it, so a 1-byte salt is refused
+  here) or over 65536 (`getRandomValues`' most), memory under 8 KiB a lane or over 1 GiB, no
+  passes or lanes, a key other than 32 bytes. **Allowed**, as foolish but workable: anything
+  weaker within those bounds -- 8 KiB of memory, one pass. Any `keyDeriver` openVault takes needs
+  a `salt_bytes` from 1 to 65536 (a non-Argon2 deriver, such as `testDeriver`, may take a 1-byte
+  salt), and the vault refuses a `deriveKeyBytes` that hands back anything but 32 bytes, before
+  wrapping anything: WebCrypto would otherwise accept 16 or 24 as a weaker AES key. **Enforced**:
+  a deriver now carries its spec's fields beside its function, and openVault and
+  `argon2idDeriver` refuse one wearing a supplied spec's label (`argon2id_web_v1`) without
+  carrying exactly that spec's parameters, so a WebAssembly or native stand-in cannot quietly
+  derive under others and strand vaults across devices. This checks what a deriver declares, not
+  the bytes it derives: a stand-in is the host's to test against `argon2idWebV1Deriver`. A host's
+  own label is not checked against anything, since a vault stores only the label; the host must
+  never change a label's parameters. The stored format is unchanged.

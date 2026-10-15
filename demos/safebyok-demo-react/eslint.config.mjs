@@ -298,13 +298,14 @@ export default defineConfig([
 
   {
     name: 'safebyok-demo/react-filenames',
-    files: ['src/App.tsx', 'src/components/**/*.tsx'],
+    // A component's test is named for it too: tests/ mirrors src/ path for path.
+    files: ['src/App.tsx', 'src/components/**/*.tsx', 'tests/App.test.tsx', 'tests/components/**/*.test.tsx'],
     // VaultDB and DeviceDB are the vocabulary's names (VOCABULARY.md), not `VaultDb`.
     rules: { 'unicorn/filename-case': ['error', { cases: { pascalCase: true }, checkDirectories: false, ignore: [/DB/u] }] },
   },
   {
     name: 'safebyok-demo/hook-filenames',
-    files: ['src/hooks/**/*.ts'],
+    files: ['src/hooks/**/*.ts', 'tests/hooks/**/*.test.tsx'],
     rules: { 'unicorn/filename-case': ['error', { cases: { camelCase: true }, checkDirectories: false }] },
   },
 
@@ -369,10 +370,12 @@ export default defineConfig([
       'vitest/no-focused-tests': 'warn',
       // A type-level test asserts with `expectTypeOf` and has no runtime to check. Without
       // this the only way to satisfy the rule is to pad it with a token runtime assertion,
-      // which tells the reader nothing about what the test is for. `expectRefusal` is the
-      // tests' own helper (tests/vault.test.ts): it asserts on the rejection it is handed.
+      // which tells the reader nothing about what the test is for. A helper of the tests' own
+      // whose name begins `expect` asserts too, and counts as the test's assertion: as
+      // `expectRefusal` (safebyok/testing, called as `TH.expectRefusal` outside its own
+      // module) asserts on the rejection it is handed.
       'vitest/expect-expect': ['error', {
-        assertFunctionNames: ['expect', 'expectTypeOf', 'expectRefusal'],
+        assertFunctionNames: ['expect*', 'TH.expect*'],
       }],
       // A bulk example list indexes a namespace by a name from its table, which this rule cannot
       // follow. tsc checks the same thing properly, and does.

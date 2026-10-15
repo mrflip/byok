@@ -1,10 +1,8 @@
 import { runInNewContext } from 'node:vm'
-import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { VaultError } from '../src/errors'
 import { parseLogger, type VaultLogger } from '../src/logger'
 import * as TH from './test-helpers'
-
-afterEach(() => { vi.restoreAllMocks() })
 
 /** What a host might hand openVault as its logger that is not one. */
 const NotLoggers = [

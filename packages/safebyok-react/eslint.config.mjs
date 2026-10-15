@@ -345,10 +345,12 @@ export default defineConfig([
       'vitest/no-focused-tests': 'warn',
       // A type-level test asserts with `expectTypeOf` and has no runtime to check. Without
       // this the only way to satisfy the rule is to pad it with a token runtime assertion,
-      // which tells the reader nothing about what the test is for. `expectRefusal` is the
-      // tests' own helper (tests/vault.test.ts): it asserts on the rejection it is handed.
+      // which tells the reader nothing about what the test is for. A helper of the tests' own
+      // whose name begins `expect` asserts too, and counts as the test's assertion: as
+      // `expectRefusal` (safebyok/testing, called as `TH.expectRefusal` outside its own
+      // module) asserts on the rejection it is handed.
       'vitest/expect-expect': ['error', {
-        assertFunctionNames: ['expect', 'expectTypeOf', 'expectRefusal'],
+        assertFunctionNames: ['expect*', 'TH.expect*'],
       }],
       // A bulk example list indexes a namespace by a name from its table, which this rule cannot
       // follow. tsc checks the same thing properly, and does.

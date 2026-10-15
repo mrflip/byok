@@ -1,12 +1,13 @@
 import { anyApi, defineSchema } from 'convex/server'
+import { ConvexError } from 'convex/values'
 import { convexTest, defineTestApp } from 'convex-test'
-import { Lockbox, VaultBundle, localVaultDB, memoryDeviceDB, memoryStore, openVault } from 'safebyok'
+import { Lockbox, VaultBundle, localVaultDB, memoryStore, openVault } from 'safebyok'
 import type { StringStore, Whisper } from 'safebyok'
-import { boxOf, testDeriver } from 'safebyok/testing'
+import { boxOf, memoryVaultOpts } from 'safebyok/testing'
 import type { ComponentApi } from '../src/component-api'
 import { toConvexLockbox } from '../src/convex-vault-db'
 import { SafebyokComponent } from '../src/server'
-import type { GetUserId } from '../src/server'
+import type { GetUserId, SafebyokErrorData } from '../src/server'
 import { modules, register, schema } from '../src/test'
 
 // Everything the core's tests use too, so a test here star-imports this one module as TH.
@@ -28,6 +29,28 @@ export const componentTest = (transactionLimits = false) => convexTest({ schema,
 export const hostWith = (getUserId: GetUserId) => {
   const app = defineTestApp({ schema: defineSchema({}), components: { safebyok: { register } } })
   return app.defineModules({ safebyok: new SafebyokComponent(app.components.safebyok).api({ getUserId }) })
+}
+
+/**
+ * The data of the ConvexError `operation` refused with: the component's and the host wrapper's
+ * way of refusing, which reaches a client as data rather than as a VaultError. The test fails if
+ * `operation` resolves, and any other error is thrown on.
+ *
+ * @param operation - The call that should refuse.
+ * @returns The refusal's data, its `kind` and `message`.
+ *
+ * @example
+ *   const refusal = await TH.convexRefusalOf(t.query(api.safebyok.getBundle, { scope }))
+ *   expect(refusal.kind).to.eq('not_permitted')
+ */
+export const convexRefusalOf = async (operation: Promise<unknown>): Promise<SafebyokErrorData> => {
+  try {
+    await operation
+  } catch (err) {
+    if (err instanceof ConvexError) { return err.data as SafebyokErrorData }
+    throw err
+  }
+  throw new Error('the call was not refused')
 }
 
 /** The README's getUserId: the signed-in identity's subject, or null when no one is. */
@@ -53,9 +76,7 @@ export const RealWhispers: Record<string, { whisper: Whisper, note?: string }> =
 export const RealPassphrase = 'correct horse battery staple'
 
 /** Opens a vault for `userId` over `store` the way an app does, deriving through the cheap test deriver. */
-export const openOver = (store: StringStore, userId = 'u1') => openVault({
-  applabel: 'acme', userId, vaultlabel: 'main', vaultDB: localVaultDB(store), deviceDB: memoryDeviceDB(), keyDeriver: testDeriver,
-})
+export const openOver = (store: StringStore, userId = 'u1') => openVault(memoryVaultOpts({ userId, vaultDB: localVaultDB(store) }))
 
 /**
  * A real vault, made by the core's own code: a bundle and a lockbox per {@link RealWhispers}

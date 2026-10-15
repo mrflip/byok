@@ -1,0 +1,178 @@
+// @vitest-environment jsdom
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { VaultError, localVaultDB, memoryStore } from 'safebyok'
+import { VaultDashboard } from '../../src/components/VaultDashboard'
+import { OutageVaultDB, makeOutage } from '../../src/lib/outage'
+import * as TH from '../test-helpers'
+
+/** The lockbox form's fields, by their labels. */
+const fillForm = (fields: { boxlabel?: string, whisper?: string, note?: string }) => {
+  if (fields.boxlabel !== undefined) { fireEvent.change(screen.getByLabelText(/^label/), { target: { value: fields.boxlabel } }) }
+  if (fields.whisper !== undefined) { fireEvent.change(screen.getByLabelText(/^whisper/), { target: { value: fields.whisper } }) }
+  if (fields.note !== undefined) { fireEvent.change(screen.getByLabelText(/^note/), { target: { value: fields.note } }) }
+}
+
+/** The table row of `boxlabel`'s lockbox. */
+const rowOf = (boxlabel: string): HTMLElement => {
+  const row = screen.getByText(boxlabel).closest('tr')
+  if (row === null) { throw new Error(`no row holds ${boxlabel}`) }
+  return row
+}
+
+describe("VaultDashboard, opening", () => {
+  it("says it is opening until the vault is there, then that it holds no lockboxes", async () => {
+    TH.makeWorld().renderInVault(<VaultDashboard />)
+    expect(screen.getByText('Opening vault…')).to.not.be.null
+    await screen.findByText(/No lockboxes yet/)
+    expect(screen.getByText('no vault yet')).to.not.be.null
+  })
+
+  it("shows storage it cannot reach in place, and opens once Retry finds it back", async () => {
+    const outage = makeOutage()
+    outage.setDown(true)
+    const vaultDB = new OutageVaultDB(localVaultDB(memoryStore()), outage)
+    TH.makeWorld({ vaultDB }).renderInVault(<VaultDashboard />)
+    await screen.findByText(/Can't reach your vault/)
+    outage.setDown(false)
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText(/No lockboxes yet/)).to.not.be.null
+  })
+
+  it("says a damaged vault record can't be opened, and offers no Retry", async () => {
+    const world = TH.makeWorld()
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValue(new VaultError('corrupt_record', 'The stored vault failed its checks.'))
+    world.renderInVault(<VaultDashboard />)
+    await screen.findByText(/stored record is damaged/)
+    expect(screen.queryByRole('button', { name: 'Retry' })).to.be.null
+  })
+})
+
+describe("VaultDashboard, its lockboxes", () => {
+  it("adds a lockbox, asking for a new vault's passphrase on the way", async () => {
+    const world = TH.makeWorld()
+    world.renderInVault(<VaultDashboard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a lockbox' }))
+    fillForm({ boxlabel: ' anthropic_api_key ', whisper: 'sk-ant-test-not-a-real-key', note: ' work account ' })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await TH.answerPassphraseDialog()
+    await screen.findByText('anthropic_api_key')
+    expect(within(rowOf('anthropic_api_key')).getByText('work account')).to.not.be.null
+    expect(within(rowOf('anthropic_api_key')).queryByText('sk-ant-test-not-a-real-key')).to.be.null
+    const vault = await world.openUnlocked()
+    expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
+  })
+
+  it("keeps a whisper typed as JSON its type", async () => {
+    const world = TH.makeWorld()
+    world.renderInVault(<VaultDashboard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a lockbox' }))
+    fillForm({ boxlabel: 'openai_api_key', whisper: '{"apiKey":"sk-test-not-a-real-key","orgId":null}' })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await TH.answerPassphraseDialog()
+    await screen.findByText('openai_api_key')
+    const vault = await world.openUnlocked()
+    expect(await vault.read('openai_api_key')).to.deep.equal({ apiKey: 'sk-test-not-a-real-key', orgId: null })
+  })
+
+  it("shows a refused store in the form, and keeps the form open", async () => {
+    TH.makeWorld().renderInVault(<VaultDashboard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a lockbox' }))
+    fillForm({ boxlabel: 'not a label', whisper: 'sk-ant-test-not-a-real-key' })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await TH.answerPassphraseDialog()
+    expect(await screen.findByText(/label/i, { selector: '.gripe' })).to.not.be.null
+    expect(screen.getByRole('button', { name: 'Save' })).to.not.be.null
+  })
+
+  it("puts the form away on Cancel", async () => {
+    TH.makeWorld().renderInVault(<VaultDashboard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a lockbox' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('button', { name: 'Save' })).to.be.null
+  })
+
+  it("views a whisper once unlocked, and hides it again", async () => {
+    const world = TH.makeWorld()
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+    world.renderInVault(<VaultDashboard />)
+    await screen.findByText('🔒 locked')
+    fireEvent.click(within(rowOf('anthropic_api_key')).getByRole('button', { name: 'view' }))
+    await TH.answerPassphraseDialog()
+    await screen.findByText('sk-ant-test-not-a-real-key')
+    fireEvent.click(within(rowOf('anthropic_api_key')).getByRole('button', { name: 'hide' }))
+    expect(screen.queryByText('sk-ant-test-not-a-real-key')).to.be.null
+  })
+
+  it("views nothing when the passphrase dialog is dismissed", async () => {
+    const world = TH.makeWorld()
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+    world.renderInVault(<VaultDashboard />)
+    await screen.findByText('🔒 locked')
+    fireEvent.click(within(rowOf('anthropic_api_key')).getByRole('button', { name: 'view' }))
+    await screen.findByPlaceholderText('vault passphrase')
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => { expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null })
+    expect(screen.queryByText('sk-ant-test-not-a-real-key')).to.be.null
+    expect(within(rowOf('anthropic_api_key')).getByRole('button', { name: 'view' })).to.not.be.null
+  })
+
+  it("edits a lockbox in place, its boxlabel fixed and its whisper and note filled in", async () => {
+    const world = TH.makeWorld()
+    await world.seed({ anthropic_api_key: { apiKey: 'sk-ant-test-not-a-real-key' } })
+    world.renderInVault(<VaultDashboard />)
+    await screen.findByText('🔒 locked')
+    fireEvent.click(within(rowOf('anthropic_api_key')).getByRole('button', { name: 'edit' }))
+    await TH.answerPassphraseDialog()
+    await screen.findByText('Edit anthropic_api_key')
+    expect(screen.getByLabelText<HTMLInputElement>(/^label/).disabled).to.be.true
+    expect(screen.getByLabelText<HTMLTextAreaElement>(/^whisper/).value).to.eq('{\n  "apiKey": "sk-ant-test-not-a-real-key"\n}')
+    fillForm({ whisper: 'sk-ant-test-replaced', note: 'rotated' })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(within(rowOf('anthropic_api_key')).queryByText('rotated')).to.not.be.null })
+    const vault = await world.openUnlocked()
+    expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-replaced')
+  })
+
+  it("deletes a lockbox once the user confirms, and keeps it when they don't", async () => {
+    const world = TH.makeWorld()
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key', openai_api_key: 'sk-test-not-a-real-key' })
+    world.renderInVault(<VaultDashboard />)
+    await screen.findByText('🔒 locked')
+    const confirming = vi.spyOn(globalThis, 'confirm').mockReturnValue(false)
+    fireEvent.click(within(rowOf('openai_api_key')).getByRole('button', { name: 'delete' }))
+    expect(confirming).toHaveBeenCalledWith("Delete the lockbox 'openai_api_key'?")
+    confirming.mockReturnValue(true)
+    fireEvent.click(within(rowOf('openai_api_key')).getByRole('button', { name: 'delete' }))
+    await TH.answerPassphraseDialog()
+    await waitFor(() => { expect(screen.queryByText('openai_api_key')).to.be.null })
+    expect(screen.getByText('anthropic_api_key')).to.not.be.null
+  })
+
+  it("uses a whisper by whispering it back in the Psst dialog", async () => {
+    const world = TH.makeWorld()
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+    world.renderInVault(<VaultDashboard />)
+    await screen.findByText('🔒 locked')
+    fireEvent.click(within(rowOf('anthropic_api_key')).getByRole('button', { name: 'use' }))
+    await TH.answerPassphraseDialog()
+    await screen.findByText('sk-ant-test-not-a-real-key')
+    fireEvent.click(screen.getByRole('button', { name: 'My lips are sealed' }))
+    expect(screen.queryByText('sk-ant-test-not-a-real-key')).to.be.null
+  })
+})
+
+describe("VaultDashboard, its lock", () => {
+  it("says how long it stays unlocked, and locks on demand", async () => {
+    const world = TH.makeWorld()
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+    world.renderInVault(<VaultDashboard />)
+    await screen.findByText('🔒 locked')
+    fireEvent.click(within(rowOf('anthropic_api_key')).getByRole('button', { name: 'view' }))
+    await TH.answerPassphraseDialog()
+    const chip = await screen.findByText(/unlocked until/)
+    expect(chip.textContent).to.match(/^🔓 unlocked until /)
+    fireEvent.click(screen.getByRole('button', { name: 'lock now' }))
+    await screen.findByText('🔒 locked')
+  })
+})

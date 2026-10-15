@@ -1,17 +1,22 @@
 /**
  * safebyok's test helpers, everything in one module: star-import it as `TH` in this package's
  * tests (`import * as TH from './test-helpers'`), and from `safebyok/testing` in another package's.
- * A cheap key deriver, shape-valid records whose ciphertext is fake, a live device unlock, small
- * timing and tampering aids, a logger that keeps what it hears, and the suite every VaultDB
- * adapter owes. For tests only, and under
- * vitest: the deriver is worthless against a brute-forcer.
+ * A cheap key deriver, a vault's options over stores in memory, shape-valid records whose
+ * ciphertext is fake, a live device unlock, small timing, interception and tampering aids, a
+ * logger that keeps what it hears, checks that a call refuses and that what it threw quotes
+ * nothing it shouldn't, and the suites every VaultDB and DeviceDB adapter owes. For tests only,
+ * and under vitest: the deriver is worthless against a brute-forcer.
  */
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { Ciphered } from '../src/crypto'
+import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
+import type { VaultError, VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
+import { memoryStore } from '../src/string-store'
 import type { DeviceUnlock, Lockbox, VaultBundle, VaultScope } from '../src/types'
-import type { VaultDB } from '../src/vault-db'
+import type { OpenVaultOpts } from '../src/vault'
+import { localVaultDB, type VaultDB } from '../src/vault-db'
 
 /** A Lockbox as the core writes one: a note, or no note field at all, never an undefined one. */
 type WrittenLockbox = Omit<Lockbox, 'note'> & { note?: string }
@@ -35,6 +40,35 @@ export const testDeriver: KeyDeriver = {
     return new Uint8Array(await crypto.subtle.digest('SHA-256', joined))
   },
 }
+
+/**
+ * Everything openVault needs, over stores in memory made fresh for each call: `u1`'s `main` vault
+ * in the `acme` app (as {@link scopeOf} has it), deriving through {@link testDeriver}. `overrides`
+ * replace any of it -- a store of the test's own, a clock, a logger, another user.
+ *
+ * @param overrides - Options to use in place of the defaults.
+ * @returns A complete bag of options for openVault, or (`userId` aside) for a VaultProvider.
+ *
+ * @example const vault = await openVault(TH.memoryVaultOpts())
+ * @example const vault = await openVault(TH.memoryVaultOpts({ userId: 'u2', vaultDB: myVaultDB }))
+ */
+export const memoryVaultOpts = (overrides: Partial<OpenVaultOpts> = {}): OpenVaultOpts => ({
+  applabel:   'acme',
+  userId:     'u1',
+  vaultlabel: 'main',
+  vaultDB:    localVaultDB(memoryStore()),
+  deviceDB:   memoryDeviceDB(),
+  keyDeriver: testDeriver,
+  ...overrides,
+})
+
+/**
+ * A database name no other call has handed out, so each test of an IndexedDB adapter starts
+ * from an empty database of its own.
+ *
+ * @example idbVaultDB({ dbName: TH.freshDbName() })
+ */
+export const freshDbName = (): string => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
 
 /**
  * A shape-valid Ciphered that opens nothing: for storage-layer tests, which never decrypt.
@@ -91,6 +125,22 @@ export const boxOf = (boxlabel: string, tag: string, overrides: Partial<WrittenL
   ...overrides,
 })
 
+/**
+ * What a write into {@link bundleOf}('u1')'s vault expects when its lockbox is not there yet:
+ * that vault, and no revision. Frozen, since every test shares it.
+ *
+ * @example vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet)
+ */
+export const noBoxYet = Object.freeze({ vault_id: 'vault-id-u1', revision_id: null } as const)
+
+/**
+ * What an erase of {@link bundleOf}('u1')'s vault, or of a lockbox in it, expects: that vault.
+ * Frozen, since every test shares it.
+ *
+ * @example vaultDB.eraseVault(TH.scopeOf('u1'), TH.thisVault)
+ */
+export const thisVault = Object.freeze({ vault_id: 'vault-id-u1' } as const)
+
 /** A real DeviceUnlock for device-storage tests: a live non-extractable localUnlockKey around fake wrapped material. */
 export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
   format:                  'safebyok-unlock-v1',
@@ -104,17 +154,19 @@ export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
 
 /**
  * Base64url text, bent a little: its first character swapped for another valid one, so it is
- * always different, keeps its length, and a tamper test reaches the check it means to exercise.
- * Blank text has no character to swap, so it comes back as `'a'`.
+ * always different, keeps its length, decodes whenever `b64` does, and a tamper test reaches the
+ * check it means to exercise. Blank text has no character to bend, and nothing put in its place
+ * decodes, so it throws: a tamper test aimed at an empty field is aimed at the wrong field.
  *
- * @param b64 - Base64url text.
+ * @param b64 - Base64url text, not blank.
  * @returns Text that differs from `b64` in its first character only.
  *
  * @example tweakB64('Zm9v') // 'am9v'
  * @example tweakB64('am9v') // 'bm9v'
- * @example tweakB64('') // 'a'
+ * @example tweakB64('')     // throws a TypeError
  */
 export const tweakB64 = (b64: string): string => {
+  if (b64 === '') { throw new TypeError('tweakB64 needs base64url text to bend, and was handed blank text.') }
   const replacer = b64.startsWith('a') ? 'b' : 'a'
   return replacer + b64.slice(1)
 }
@@ -126,7 +178,7 @@ export const tweakB64 = (b64: string): string => {
  *
  * @returns A promise for the next tick.
  *
- * @example await wakeupAtNextTick() // background refreshes have landed
+ * @example await wakeupAtNextTick() // a refresh already settled has run its continuation
  */
 export const wakeupAtNextTick = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 
@@ -153,6 +205,83 @@ export const makeGate = () => {
     await opened.promise
   }
   return { pass, reached: arrived.promise, release: opened.resolve }
+}
+
+/** The names of `Target`'s methods that return a promise. */
+export type AsyncVerbOf<Target> = {
+  [Verb in keyof Target]-?: Target[Verb] extends (...args: never[]) => Promise<unknown> ? Verb : never
+}[keyof Target]
+
+/**
+ * Has `meanwhile` run inside the next call to `target[verb]`, before the call itself goes on: for
+ * slipping another device's doings, or a pause, between a vault's look at storage and its write.
+ * Only the next call is touched; later ones go straight through.
+ *
+ * @param target - The object whose method to intercept: an adapter, a deriver.
+ * @param verb - The method, one returning a promise.
+ * @param meanwhile - What to run first, and wait for.
+ *
+ * @example
+ *   TH.beforeNextCall(vaultDB, 'updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
+ */
+export const beforeNextCall = <Target extends object>(target: Target, verb: AsyncVerbOf<Target> & string, meanwhile: () => Promise<unknown>): void => {
+  // Typed loosely from here: the caller's types were checked at the signature.
+  type AsyncFn = (...args: unknown[]) => Promise<unknown>
+  const original = (target as unknown as Record<string, AsyncFn | undefined>)[verb]?.bind(target)
+  if (original === undefined) { throw new TypeError(`beforeNextCall found no method ${verb} to intercept.`) }
+  vi.spyOn(target as unknown as Record<string, AsyncFn>, verb).mockImplementationOnce(async (...args: unknown[]) => {
+    await meanwhile()
+    return await original(...args)
+  })
+}
+
+/**
+ * Holds the next call to `target[verb]` at a gate (see {@link makeGate}) until the test releases
+ * it, so the test can land another call while that one is in flight. Later calls go straight
+ * through.
+ *
+ * @param target - The object whose method to hold: an adapter, a deriver.
+ * @param verb - The method, one returning a promise.
+ * @returns The gate: await `reached`, then `release()`.
+ *
+ * @example
+ *   const gate = TH.holdNextCall(vaultDB, 'readBundle')
+ *   const unlocking = vault.unlock('pw')   // now waiting at the gate
+ *   await gate.reached
+ *   await vault.lock()                     // lands mid-unlock
+ *   gate.release()
+ */
+export const holdNextCall = <Target extends object>(target: Target, verb: AsyncVerbOf<Target> & string) => {
+  const gate = makeGate()
+  beforeNextCall(target, verb, gate.pass)
+  return gate
+}
+
+/**
+ * A count of the storage watches `vaultDB` opens and closes from here on, kept by spying on its
+ * `subscribe`: for a test that a failed open, a close or a lock leaves no watch running that
+ * nobody could end. Each watch still reaches the adapter's own `subscribe`.
+ *
+ * @param vaultDB - The adapter whose watches to count.
+ * @returns The tally, live: `opened` and `closed`, each a count so far.
+ *
+ * @example
+ *   const tally = TH.tallyWatches(vaultDB)
+ *   await TH.expectRefusal(openVault(opts), 'not_permitted')
+ *   expect(tally.opened - tally.closed).to.eq(0)
+ */
+export const tallyWatches = (vaultDB: Pick<VaultDB, 'subscribe'>) => {
+  const tally = { opened: 0, closed: 0 }
+  const subscribe = vaultDB.subscribe.bind(vaultDB)
+  vi.spyOn(vaultDB, 'subscribe').mockImplementation((scope, onChange) => {
+    tally.opened += 1
+    const unsubscribe = subscribe(scope, onChange)
+    return () => {
+      tally.closed += 1
+      unsubscribe()
+    }
+  })
+  return tally
 }
 
 /** Stands in for a resolver until the promise hands over its own. */
@@ -206,8 +335,40 @@ export const spyLogger = () => {
  * @example expect(TH.loggedText(spy.calls)).to.not.include(passphrase)
  */
 export const loggedText = (calls: readonly LoggedCall[]): string => (
-  calls.map((call) => [call.level, call.message ?? '', jsonOrPlaceholder(call.story ?? {}), errorText(call.err, new Set())].join(' ')).join('\n')
+  calls.map((call) => [call.level, call.message ?? '', jsonOrPlaceholder(call.story ?? {}), thrownText(call.err)].join(' ')).join('\n')
 )
+
+/**
+ * Everything a thrown value carries, as one text to search for what must never be there: an
+ * error's message, stack and own properties, and the same of each cause beneath it; anything else
+ * thrown, as JSON. Like {@link loggedText}, it never throws: a cause seen before is written
+ * `[cause seen above]`, and own properties JSON cannot write are written `[not JSON]`.
+ *
+ * @param thrown - What an operation threw or rejected with.
+ * @returns The text, blank for `undefined` or `null`.
+ *
+ * @example expect(TH.thrownText(err)).to.not.include(passphrase)
+ */
+export const thrownText = (thrown: unknown): string => errorText(thrown, new Set())
+
+/**
+ * Every string and number in `val`, at any depth, as text: the values of a record, to search an
+ * error or a log for. Field names are not among them. Give the record values distinctive
+ * enough that finding one means it was quoted: an epoch of `2` turns up in any stack's line numbers.
+ *
+ * @param val - A record, or any JSON value.
+ * @returns Its leaves, in JSON's order.
+ *
+ * @example TH.leafTexts({ vault_id: 'vault-id-u1', wrapped: { ciphertext_b64: 'ct-a1' }, epoch: 7 })  // => ['vault-id-u1', 'ct-a1', '7']
+ */
+export const leafTexts = (val: unknown): string[] => {
+  const leaves: string[] = []
+  JSON.stringify(val, (_ckey, nested: unknown) => {
+    if (typeof nested === 'string' || typeof nested === 'number') { leaves.push(String(nested)) }
+    return nested
+  })
+  return leaves
+}
 
 /**
  * An error and every cause under it as text: message, stack and own properties each. Anything
@@ -260,8 +421,6 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
     await vaultDB.createBundle(bundleOf('u1'))
     return vaultDB
   }
-  const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null }
-  const thisVault = { vault_id: 'vault-id-u1' }
 
   describe(`${adapterTitle}, as a VaultDB: the bundle`, () => {
     it("has none until one is created, then reads it back whole", async () => {
@@ -482,22 +641,112 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('Not_a_label', 'one'), noBoxYet), 'bad_label')
       await expectRefusal(vaultDB.eraseBox({ ...scopeOf('u1'), user_id: '' }, 'anthropic', thisVault), 'bad_label')
     })
+
+    it("refuses a malformed record or expectation, or a bundle under another vault_id, before storage sees it", async () => {
+      const vaultDB = await withBundle()
+      const overlong = boxOf('anthropic', 'one', { note: 'n'.repeat(257) })
+      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), overlong, noBoxYet), 'bad_option')
+      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: '' }), 'bad_option')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { passphrase_epoch: 0 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'bad_option')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { vault_id: 'vault-id-new', passphrase_epoch: 2 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'bad_option')
+      await expectRefusal(vaultDB.eraseVault(scopeOf('u1'), { vault_id: '' }), 'bad_option')
+      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
+      expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
+    })
+  })
+}
+
+/**
+ * The behaviour every DeviceDB owes, written once: no remembered unlock until one is written,
+ * then that one back, its localUnlockKey still a non-extractable CryptoKey; each scope kept to
+ * itself; and an erase of one, or of all. Run it against an adapter with a factory making a fresh,
+ * empty one per test. For a DeviceDB's own tests, from `safebyok/testing`; it runs under vitest.
+ *
+ * @param adapterTitle - The adapter under test, as the suite's titles name it.
+ * @param makeDeviceDB - A fresh, empty adapter: no record in it, and none shared with another call.
+ *
+ * @example
+ *   describeDeviceDB('memoryDeviceDB', () => memoryDeviceDB())
+ */
+export const describeDeviceDB = (adapterTitle: string, makeDeviceDB: () => DeviceDB | Promise<DeviceDB>) => {
+  describe(`${adapterTitle}, as a DeviceDB`, () => {
+    it("has no remembered unlock until one is written, then keeps it whole, localUnlockKey handle and all", async () => {
+      const deviceDB = await makeDeviceDB()
+      expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+      const unlock = await unlockOf('u1')
+      await deviceDB.writeUnlock(unlock)
+      const kept = await deviceDB.readUnlock(scopeOf('u1'))
+      expect(kept).to.deep.equal(unlock)
+      expect(kept?.local_unlock_key).to.be.instanceOf(CryptoKey)
+      expect(kept?.local_unlock_key.extractable).to.be.false
+    })
+
+    it("keeps unlocks per user: erasing one leaves the other", async () => {
+      const deviceDB = await makeDeviceDB()
+      await deviceDB.writeUnlock(await unlockOf('u1'))
+      await deviceDB.writeUnlock(await unlockOf('u2'))
+      await deviceDB.eraseUnlock(scopeOf('u1'))
+      expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+      expect(await deviceDB.readUnlock(scopeOf('u2'))).to.not.be.null
+    })
+
+    it("eraseAll forgets every remembered unlock", async () => {
+      const deviceDB = await makeDeviceDB()
+      await deviceDB.writeUnlock(await unlockOf('u1'))
+      await deviceDB.writeUnlock(await unlockOf('u2'))
+      await deviceDB.eraseAll()
+      expect(await deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+      expect(await deviceDB.readUnlock(scopeOf('u2'))).to.be.null
+    })
   })
 }
 
 const unheard = (): void => undefined
 
+/** What {@link expectRefusal} sees in place of an error when the operation resolved. */
+const NotRefused = Symbol('not refused')
+
 /**
- * Expect `operation` to reject with an error of `kind`. By `kind`, not class: an adapter built on
- * the published package throws that package's VaultError, a different class from `src/`'s.
+ * The VaultError `operation` rejected with, once the test has checked it is one, of `kind`; the
+ * test fails if `operation` resolves. Checked by name and `kind`, not by class: an adapter built
+ * on the published package throws that package's VaultError, a different class from `src/`'s. A
+ * test that means to prove the class adds its own `instanceOf`.
+ *
+ * @param operation - The call that should refuse.
+ * @param kind - The refusal's expected `kind`.
+ * @returns The refusal, for a closer look at its message or cause.
+ *
+ * @example await TH.expectRefusal(vault.read('anthropic_api_key'), 'vault_locked')
+ * @example
+ *   const err = await TH.expectRefusal(openVault(TH.omitting(opts, 'keyDeriver')), 'bad_option')
+ *   expect(err.message).to.include('safebyok/browser')
  */
-const expectRefusal = async (operation: Promise<unknown>, kind: string) => {
-  let refusal: unknown = null
+export const expectRefusal = async (operation: Promise<unknown>, kind: VaultErrorKind): Promise<VaultError> => {
+  let refusal: unknown = NotRefused
   try {
     await operation
   } catch (err) {
     refusal = err
   }
+  expect(refusal, `expected a refusal of kind '${kind}', but the operation resolved`).to.not.eq(NotRefused)
   expect(refusal).to.be.instanceOf(Error)
-  expect((refusal as { kind?: unknown }).kind).to.eq(kind)
+  expect(refusal).to.have.property('name', 'VaultError')
+  expect(refusal).to.have.property('kind', kind)
+  return refusal as VaultError
+}
+
+/**
+ * `bag` with its `ckey` field left out, still typed as the whole bag: for a test that an
+ * entrypoint refuses a caller who forgot a required option, which `exactOptionalPropertyTypes`
+ * otherwise lets a test write only with a cast.
+ *
+ * @param bag - A complete bag of options.
+ * @param ckey - The field to leave out.
+ * @returns A copy of `bag` without that field.
+ *
+ * @example openVault(TH.omitting(opts, 'keyDeriver'))  // refuses: no keyDeriver
+ */
+export const omitting = <Bag extends object>(bag: Bag, ckey: keyof Bag): Bag => {
+  const { [ckey]: _omitted, ...rest } = bag
+  return rest as Bag
 }

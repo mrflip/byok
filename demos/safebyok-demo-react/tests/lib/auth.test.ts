@@ -1,13 +1,20 @@
-import { describe, expect, it } from 'vitest'
-import { memoryStore } from 'safebyok'
+import { describe, expect, it, vi } from 'vitest'
+import { memoryStore, type StringStore } from 'safebyok'
 import { createAuth } from '../../src/lib/auth'
 
+/** Two fresh stores, a clock the test moves by hand, and the auth over them. */
 const makeWorld = () => {
   const dbStore = memoryStore()
   const deviceStore = memoryStore()
-  const auth = createAuth({ applabel: 'acme', dbStore, deviceStore })
-  return { dbStore, deviceStore, auth }
+  let nowMs = Date.UTC(2026, 9, 15, 9, 30)
+  const clock = { now: () => nowMs }
+  const advance = (byMs: number) => { nowMs += byMs }
+  const auth = createAuth({ applabel: 'acme', dbStore, deviceStore, clock })
+  return { dbStore, deviceStore, advance, auth }
 }
+
+/** The account row the fake auth keeps for margo, as it is stored: null if there is none. */
+const margosAccount = (dbStore: StringStore): unknown => JSON.parse(dbStore.read('account:acme:margo') ?? 'null')
 
 describe("createAuth", () => {
   it("starts signed out", () => {
@@ -24,12 +31,32 @@ describe("createAuth", () => {
     expect(dbStore.read('account:acme:margo')).to.not.be.null
   })
 
-  it("the same userlabel signs back into the same account", async () => {
-    const { auth } = makeWorld()
+  it("stamps a new account with the clock's time, in epoch milliseconds", async () => {
+    const { auth, dbStore } = makeWorld()
+    const session = await auth.signIn('margo')
+    expect(margosAccount(dbStore)).to.deep.equal({ user_id: session.userId, userlabel: 'margo', registered_at: Date.UTC(2026, 9, 15, 9, 30) })
+  })
+
+  it("the same userlabel signs back into the same account, registered when it was made", async () => {
+    const { auth, dbStore, advance } = makeWorld()
     const first = await auth.signIn('margo')
     auth.signOut()
+    advance(24 * 60 * 60 * 1000)
     const again = await auth.signIn('margo')
     expect(again.userId).to.eq(first.userId)
+    expect(margosAccount(dbStore)).to.have.property('registered_at', Date.UTC(2026, 9, 15, 9, 30))
+  })
+
+  it("reads the wall clock when handed none", async () => {
+    const dbStore = memoryStore()
+    const auth = createAuth({ applabel: 'acme', dbStore, deviceStore: memoryStore() })
+    vi.useFakeTimers({ now: Date.UTC(2026, 9, 15, 9, 30), toFake: ['Date'] })
+    try {
+      await auth.signIn('margo')
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(margosAccount(dbStore)).to.have.property('registered_at', Date.UTC(2026, 9, 15, 9, 30))
   })
 
   it("different userlabels are different accounts", async () => {

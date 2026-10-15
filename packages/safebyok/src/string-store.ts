@@ -1,3 +1,5 @@
+import { VaultError } from './errors'
+
 /**
  * The smallest storage the local adapters need: strings by string ckey, with change notification
  * so the vault and an inspector can watch it. A host backs one with localStorage; the tests
@@ -14,12 +16,16 @@ export type StringStore = {
   subscribe(listener: () => void): () => void
 }
 
-/** Listener bookkeeping shared by both stores. */
+/**
+ * Listener bookkeeping shared by both stores. A listener that is not a function is refused as it
+ * subscribes, with kind 'bad_option', rather than breaking some later write that rings it.
+ */
 const makeBell = () => {
   const listeners = new Set<() => void>()
   return {
     ring: () => { listeners.forEach((listener) => { listener() }) },
     subscribe: (listener: () => void) => {
+      if (typeof listener !== 'function') { throw new VaultError('bad_option', 'subscribe needs a listener function to call after each write or erase.') }
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },

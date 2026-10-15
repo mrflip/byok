@@ -34,7 +34,7 @@
     "build": "tsdown",
     "prebuild": "pnpm build:deps",
     "build:watch": "tsdown --watch",
-    "build:deps": "pnpm --filter 'safebyok-convex^...' build",
+    "build:deps": "[ \"$SAFEBYOK_SKIP_BUILD_DEPS\" = 1 ] || SAFEBYOK_SKIP_BUILD_DEPS=1 pnpm --filter 'safebyok-convex^...' build",
     "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
@@ -42,7 +42,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "pretest:coverage": "pnpm build:deps",
-    "justify": "pnpm install && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "justify": "pnpm install && pnpm lint && pnpm typecheck && pnpm test && SAFEBYOK_SKIP_BUILD_DEPS=1 pnpm build",
     "prepublishOnly": "node ../../scripts/require-pnpm.ts && pnpm justify"
   },
   "devDependencies": {
