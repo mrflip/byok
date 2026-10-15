@@ -525,7 +525,8 @@ security expert who knows what questions to ask.
 * 2026-10-15: **Dependencies: hash-wasm has no published audit.** `safebyok-argon2-wasm`'s one
   runtime dependency, `hash-wasm`, derives the passphraseKey for every vault made or opened
   through it, and no audit of it, or of the C its WebAssembly is compiled from, has been
-  published; `@noble/hashes`, the core's Argon2id, has one. Its working memory is never zeroed
+  published. Nor has one of the core's Argon2id: `@noble/hashes`'s one audit (Cure53, January
+  2022, at 1.0.0) left its `argon2` out of scope. hash-wasm's working memory is never zeroed
   (the entry above).
 * 2026-10-15: the IndexedDB vault store moved to a package of its own, `safebyok-indexeddb`, and
   each of its write verbs (`createBundle`, `updateBundle`, `updateBox`, `eraseBox`, `eraseVault`)
