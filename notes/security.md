@@ -464,6 +464,18 @@ security expert who knows what questions to ask.
   with one. `createPasskey` registers each passkey under a random user handle, so it cannot replace
   a sign-in passkey on the same RP; removing a passkey from the vault does not delete it from the
   authenticator, and (as for passphrases) is not revocation.
+* 2026-10-15: `addPasskey` proves first and asks the authenticator after, so a refused proof
+  leaves no orphaned passkey; the cost is that the proven vaultKey's extractable transient handle
+  (`wrapKey` usage only) is held from the proof until the new envelope is sealed, across the
+  WebAuthn prompt: human time, not one derivation. Acceptable because the handle lives only in a
+  closure inside `reviseUnlocks`, never in the snapshot, a field or an error, so no host script
+  can reach it, and a script able to hook SubtleCrypto already sees every unwrap; while unlocked
+  the session's non-extractable handle opens every lockbox anyway, and extractability adds only
+  the export of the raw bytes. It is bounded by the prompt: the WebAuthn `timeout`
+  (`createPasskey`'s option, or the browser's default, minutes) ends it, a dismissal or a refusal
+  drops the reference, and the change then writes nothing. A `lock()` during the prompt does not
+  cut it short: the passkey still lands and the vault stays locked, as for any change to the ways
+  in.
 * 2026-10-15: `safebyok-postgres` authorizes on the server, per request: `postgresVaultDB` is
   made with the `userId` the host's auth verified, and refuses (`not_permitted`) any other user's
   scope, or any while signed out, before querying; that check is the whole of the authorization.
