@@ -239,3 +239,9 @@ security expert who knows what questions to ask.
   `src/`, for the workspace's own tooling; `pnpm pack` ships `publishConfig.exports` (dist only)
   instead. `scripts/release.ts` refuses a tarball that still carries the condition, and each
   public package's `prepublishOnly` refuses a publish not run by pnpm.
+* 2026-10-15: `VaultProvider` hands a stored record that fails verification at open
+  (`corrupt_record`) to the app in place, as `openError`, rather than throwing it to the error
+  boundary: it is a condition, as are `storage_unavailable` and `not_permitted`. A tampered or
+  damaged bundle therefore reaches the app's own UI, beside a `retryOpen` that cannot mend it; the
+  React README tells hosts to branch on `openError.kind`, and the error's message carries no
+  secret material. Misuse still goes to the boundary.
