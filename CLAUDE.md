@@ -111,7 +111,7 @@ pnpm build           # tsdown: ESM + CJS + declarations into dist/, checked by p
   `fixtures/` holds sample data, when there is some.
 * `packages/` -- companion workspace packages (`safebyok-react`, the React binding). Each lints,
   typechecks and tests itself (`pnpm justify` inside it); the root `pnpm test` runs their tests but the
-  root justify does not lint or build them, and CI runs the React package's justify.
+  root justify does not lint or build them, and CI runs each package's justify.
 * `demos/` -- private playground apps exercising the packages; never published.
 * `dist/` is built, never committed.
 * `whiteboard/` -- work threads in progress, under a `YYYYMMDD-threadname` directory.
