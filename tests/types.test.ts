@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { Label, Whisper } from '../src/types'
+import { Label, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { bundleOf, scopeOf } from './helpers'
 
 const WhisperCases = [
   // every JSON shape a whisper may take:
@@ -55,5 +56,38 @@ const LabelCases = [
 describe("Label", () => {
   for (const [candidate, expected, blurb] of LabelCases) {
     it(blurb, () => { expect(Label.safeParse(candidate).success).to.eq(expected) })
+  }
+})
+
+const ScopeCases = [
+  // regular usage:
+  [scopeOf('u1'),                                  true,   'an applabel, a user_id and a vaultlabel'],
+  [scopeOf('user|2fJ8:google'),                    true,   'a user_id in whatever form the host app issues'],
+  // refused:
+  [{ ...scopeOf('u1'), user_id: '' },              false,  'an empty user_id names no one'],
+  [{ ...scopeOf('u1'), applabel: 'Acme' },         false,  'an applabel outside the label grammar'],
+  [{ applabel: 'acme', user_id: 'u1' },            false,  'a scope missing its vaultlabel'],
+] as const
+
+describe("VaultScope", () => {
+  for (const [candidate, expected, blurb] of ScopeCases) {
+    it(blurb, () => { expect(VaultScope.safeParse(candidate).success).to.eq(expected) })
+  }
+})
+
+const BundleCases = [
+  // regular usage:
+  [bundleOf('u1'),                                         true,   'a whole bundle'],
+  // refused, as a damaged or foreign record:
+  [{ ...bundleOf('u1'), format: 'safebyok-vault-v2' },    false,  'a format this version does not know'],
+  [{ ...bundleOf('u1'), passphrase_epoch: 0 },            false,  'an epoch starts at one'],
+  [{ ...bundleOf('u1'), passphrase_epoch: 1.5 },          false,  'an epoch is a whole number'],
+  [{ ...bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
+  [{ ...bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, 'an envelope missing its ciphertext'],
+] as const
+
+describe("VaultBundle", () => {
+  for (const [candidate, expected, blurb] of BundleCases) {
+    it(blurb, () => { expect(VaultBundle.safeParse(candidate).success).to.eq(expected) })
   }
 })
