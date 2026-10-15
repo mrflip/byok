@@ -115,6 +115,20 @@ describe("Ckeys, over every split of one awkward string", () => {
   })
 })
 
+describe("Ckeys.isUnlock", () => {
+  it("knows an unlock's ckey, for any scope", () => {
+    expect(Ckeys.isUnlock(Ckeys.unlock(u1))).to.be.true
+    expect(Ckeys.isUnlock(Ckeys.unlock({ applabel: 'a:"b"', user_id: String.raw`\,[]`, vaultlabel: '' }))).to.be.true
+  })
+
+  it("refuses an earlier version's ckey, another kind's, and anything that is not text", () => {
+    expect(Ckeys.isUnlock('unlock:acme:u1:main')).to.be.false
+    expect(Ckeys.isUnlock(Ckeys.bundle(u1))).to.be.false
+    expect(Ckeys.isUnlock('["unlocked","acme","u1","main"]')).to.be.false
+    expect(Ckeys.isUnlock(['unlock', 'acme', 'u1', 'main'])).to.be.false
+  })
+})
+
 describe("Ckeys, between kinds", () => {
   it("never takes a bundle or an unlock for a lockbox, nor one kind's ckey for another's", () => {
     const isBox = Ckeys.isBoxIn(u1)
