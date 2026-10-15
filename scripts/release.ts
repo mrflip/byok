@@ -271,9 +271,19 @@ export async function stage(releases: readonly Release[], opts: StageOpts): Prom
   const head = headOut.trim()
   const outcomes: StageOutcome[] = []
   for (const release of releases) {
-    outcomes.push(await stageOne(release, head, opts))
+    try {
+      outcomes.push(await stageOne(release, head, opts))
+    } catch (err) {
+      outcomes.push(unexpectedFailure(release, err))
+    }
   }
   return outcomes
+}
+
+/** A release that stopped on a failure of ours (git, tar) rather than on npm's answer: reported failed, and the next is still tried */
+function unexpectedFailure(release: Release, err: unknown): StageOutcome {
+  const reason = err instanceof Error ? firstLine(err.message) : 'something unexpected'
+  return { release, kind: 'failed', detail: `could not tell whether to stage it: ${reason}` }
 }
 
 async function stageOne(release: Release, head: string, opts: StageOpts): Promise<StageOutcome> {
