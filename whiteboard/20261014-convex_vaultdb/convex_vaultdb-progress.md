@@ -1,6 +1,6 @@
 # Sprint convex_vaultdb: progress
 
-**Status**: thread 1 filed (#17); thread 2 in review
+**Status**: threads 1, 2 filed (#17, #18); thread 3 underway
 
 The orchestrator's document: newer than the plan wherever they disagree. Each worker's own
 account is in `thread-<N>-<label>.md` on its branch.
@@ -10,8 +10,8 @@ account is in `thread-<N>-<label>.md` on its branch.
 | Thread | Label            | Branch                       | Base               | Status   |
 | ------ | ---------------- | ---------------------------- | ------------------ | -------- |
 | 1      | convex_skills    | `20261014-convex_skills`     | origin/main        | filed [#17](https://github.com/mrflip/safebyok/pull/17) (no review: docs only) |
-| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | in review |
-| 3      | convex_component | `20261014-convex_component`  | thread 2, on filing | pending  |
+| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18) |
+| 3      | convex_component | `20261014-convex_component`  | #18 at d3c0961     | underway |
 | 4      | convex_client    | `20261014-convex_client`     | thread 3, on filing | pending  |
 
 ## What the threads have taught
@@ -44,6 +44,13 @@ with the Coach's uncommitted rewrite, and whether to install Convex's own Claude
 and the wrong key alike" overwrites the first base64url character with `A`. When that character already is
 `A` (1 run in 64), the test fails. The defect is in the test, not the crypto. The fix is to flip a byte
 instead. No thread of this sprint owns it; thread 2 may fix it if it touches that file anyway, declared.
+
+*Review (thread 2, [#18](https://github.com/mrflip/safebyok/pull/18)):* `fixed`. Kept b6cdd2c: `subscribe` now wraps an
+adapter's synchronous throw as `storage_unavailable` (shared `asStorageTrouble` helper), so thread 4's `doSubscribe` may
+throw freely. Left, minor: `idbVaultDB.doEraseVault` lists, then deletes in two transactions (an orphan box can survive;
+now named in security.md, the rework stays with the ruled IndexedDB TODO); `expected` and `createBundle`'s input go
+unvalidated, and `updateBundle` does not check `bundle.vault_id === expected.vault_id` (a recorded decision: vault.ts builds
+them, TypeScript types them); `listBoxes` validates the projected shape, so a damaged ciphered field shows at `read()`.
 
 ## The storage contract threads 3 and 4 build to
 
