@@ -4,16 +4,16 @@ import { VaultError } from './errors'
 import type { StringStore } from './string-store'
 
 /**
- * What a bundle update was proven against: the vault and the passphrase epoch of the bundle the
+ * What a bundle update was proven against: the vault and the unlock epoch of the bundle the
  * writer read. The update lands only while the standing bundle still has both. Plain JSON, so it
  * crosses any wire as-is.
  *
- * @example { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }
+ * @example { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch }
  */
 export type BundleExpectation = Z.infer<typeof BundleExpectation>
 const BundleExpectation = Z.object({
   vault_id:         VaultBundle.shape.vault_id,
-  passphrase_epoch: VaultBundle.shape.passphrase_epoch,
+  unlock_epoch:     VaultBundle.shape.unlock_epoch,
 })
 
 /**
@@ -53,7 +53,7 @@ const EraseExpectation = Z.object({
  *    fields are base64url text), so any backend that can hold JSON can hold a vault, as-is.
  *  * **Never look inside.** Every secret field arrives encrypted; nothing you hold can open a
  *    vault, and nothing safebyok does ever needs you to understand a record -- only to compare a
- *    few public fields (`vault_id`, `passphrase_epoch`, `revision_id`) before a write.
+ *    few public fields (`vault_id`, `unlock_epoch`, `revision_id`) before a write.
  *  * **Write only as expected.** Every update and erase carries an expectation of what stands in
  *    storage, and writes only if it still does: check and write in one atomic step (a
  *    transaction, a conditional write), and resolve `false` when the expectation fails. An
@@ -95,6 +95,17 @@ export abstract class VaultDB {
    */
   abstract readonly maxVaultBytes: number
 
+  /**
+   * The most lockboxes this backend holds in one vault, a whole number, or `Infinity` when it sets
+   * no such limit: each backend sets its own, and one whose limit crosses a wire or is stored,
+   * where `Infinity` cannot go, sets a large whole number instead. A vault refuses to open with a
+   * `maxLockboxes` above it, with kind `bad_option`, and given none opens with the smaller of this
+   * and `MaxLockboxes`. A backend that enforces its limit refuses a new lockbox past it with
+   * a VaultError of kind `vault_full`, checked in the same atomic step as the write, and never
+   * refuses for the count a lockbox that replaces one already there.
+   */
+  abstract readonly maxLockboxes: number
+
   // ------------------------------------------------------------------- the verbs safebyok calls
 
   /** The vault's bundle, validated, or null when the vault has never been created. */
@@ -118,7 +129,7 @@ export abstract class VaultDB {
 
   /**
    * Replace the bundle with `bundle`, only while the standing one still has the `vault_id` and
-   * `passphrase_epoch` in `expected`. Refuses with kind `stale_write` otherwise -- including when
+   * `unlock_epoch` in `expected`. Refuses with kind `stale_write` otherwise -- including when
    * no bundle stands at all -- and writes nothing. A vault's `vault_id` never changes, so `bundle`
    * must carry the one in `expected`: kind 'bad_option' otherwise.
    */
@@ -131,7 +142,7 @@ export abstract class VaultDB {
     }
     const landed = await fromStorage(() => this.doUpdateBundle(outgoing, expectation))
     if (! landed) {
-      throw new VaultError('stale_write', 'The vault changed in storage since this device read it -- its passphrase was changed, or it was deleted or made anew, elsewhere -- so this change was refused and nothing was written. Read the vault again before retrying.')
+      throw new VaultError('stale_write', 'The vault changed in storage since this device read it -- its ways in were changed, or it was deleted or made anew, elsewhere -- so this change was refused and nothing was written. Read the vault again before retrying.')
     }
   }
 
@@ -232,7 +243,7 @@ export abstract class VaultDB {
   protected abstract doCreateBundle(bundle: VaultBundle): Promise<unknown>
   /**
    * Replace the standing bundle with `bundle` if, and only if, it has `expected.vault_id` and
-   * `expected.passphrase_epoch`. True when it was written; false, writing nothing, when the
+   * `expected.unlock_epoch`. True when it was written; false, writing nothing, when the
    * expectation failed or no bundle stands.
    */
   protected abstract doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean>
@@ -364,45 +375,46 @@ const checkRecord = <RecordT>(recordSchema: Z.ZodMiniType<RecordT>, raw: unknown
   return checked.data
 }
 
-// ------------------------------------------ shared by the in-tree adapters, not public surface
+// ---------------------------------------------- localVaultDB's own, not public surface
 
 // Just the fields an expectation compares; a standing row too damaged to show them fails it.
-const StandingBundle = Z.object({ vault_id: Z.string(), passphrase_epoch: Z.number() })
+const StandingBundle = Z.object({ vault_id: Z.string(), unlock_epoch: Z.number() })
 const StandingBox = Z.object({ revision_id: Z.string() })
 
 /** True when the bundle row standing in storage is the one `expected` names. */
-export const bundleMeetsExpectation = (standingBundle: unknown, expected: BundleExpectation): boolean => {
+const bundleMeetsExpectation = (standingBundle: unknown, expected: BundleExpectation): boolean => {
   const standing = StandingBundle.safeParse(standingBundle)
   return standing.success
     && standing.data.vault_id === expected.vault_id
-    && standing.data.passphrase_epoch === expected.passphrase_epoch
+    && standing.data.unlock_epoch === expected.unlock_epoch
 }
 
 /** True when the bundle row standing in storage belongs to the vault `expected` names. */
-export const vaultMeetsExpectation = (standingBundle: unknown, expected: { vault_id: string }): boolean => {
+const vaultMeetsExpectation = (standingBundle: unknown, expected: { vault_id: string }): boolean => {
   const standing = StandingBundle.safeParse(standingBundle)
   return standing.success && standing.data.vault_id === expected.vault_id
 }
 
 /** True when the bundle and lockbox rows standing in storage are the ones `expected` names. */
-export const lockboxMeetsExpectation = (standingBundle: unknown, standingBox: unknown, expected: LockboxExpectation): boolean => {
+const lockboxMeetsExpectation = (standingBundle: unknown, standingBox: unknown, expected: LockboxExpectation): boolean => {
   if (! vaultMeetsExpectation(standingBundle, expected)) { return false }
   if (standingBox === null || standingBox === undefined) { return expected.revision_id === null }
   const box = StandingBox.safeParse(standingBox)
   return box.success && box.data.revision_id === expected.revision_id
 }
 
-// The ckeys both in-tree adapters store rows under: a stored contract, so never reshaped.
+// The ckeys localVaultDB stores rows under, and the device store its unlocks: a stored contract,
+// so never reshaped. safebyok-indexeddb keeps a copy of its own.
 export const scopePath = (scope: VaultScope) => `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}`
-export const bundleCkey = (scope: VaultScope) => `vault:${scopePath(scope)}`
-export const boxCkey = (scope: VaultScope, boxlabel: string) => `box:${scopePath(scope)}:${boxlabel}`
+const bundleCkey = (scope: VaultScope) => `vault:${scopePath(scope)}`
+const boxCkey = (scope: VaultScope, boxlabel: string) => `box:${scopePath(scope)}:${boxlabel}`
 
 /**
  * True for the ckey of a lockbox in `scope`. A prefix alone is not enough: a user_id may hold a
  * colon, so another user's rows can share this scope's prefix -- but never with a bare boxlabel
  * (which holds no colon) after it.
  */
-export const isBoxCkeyOf = (scope: VaultScope, ckey: unknown): ckey is string => {
+const isBoxCkeyOf = (scope: VaultScope, ckey: unknown): ckey is string => {
   const prefix = `box:${scopePath(scope)}:`
   return typeof ckey === 'string' && ckey.startsWith(prefix) && ! ckey.slice(prefix.length).includes(':')
 }
@@ -428,6 +440,8 @@ class StringStoreVaultDB extends VaultDB {
   readonly maxRecordBytes = 1024 * 1024
   // Nothing here reads a whole vault under a budget; the store's own quota refuses a write past it.
   readonly maxVaultBytes = Infinity
+  // Nor does it count lockboxes: the vault's own maxLockboxes is the only limit.
+  readonly maxLockboxes = Infinity
 
   private readonly store: StringStore
 

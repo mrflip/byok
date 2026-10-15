@@ -15,15 +15,18 @@ import * as TH from '../test-helpers'
 
 /**
  * A record's shape, as both validator libraries can be read: which fields, which optional, and
- * each field's base type. The literal a `format` field allows is part of its shape.
+ * each field's base type. The literal a `format` field allows is part of its shape; so is each
+ * member of a union of records, such as the unlock envelopes a bundle lists.
  */
 type Shape =
   | { kind: 'string' | 'number' }
   | { kind: 'literal', values: string[] }
   | { kind: 'object', fields: Record<string, { optional: boolean, shape: Shape }> }
+  | { kind: 'array', element: Shape }
+  | { kind: 'union', members: Shape[] }
 
 /** Zod's half: read from its public `def`, refinements (min, regex, int) set aside. */
-type ZodLike = { def: { type: string, values?: unknown[], innerType?: ZodLike, shape?: Record<string, ZodLike> } }
+type ZodLike = { def: { type: string, values?: unknown[], innerType?: ZodLike, shape?: Record<string, ZodLike>, element?: ZodLike, options?: ZodLike[] } }
 
 const zodShape = (schema: ZodLike): Shape => {
   const { def } = schema
@@ -36,6 +39,8 @@ const zodShape = (schema: ZodLike): Shape => {
     })
     return { kind: 'object', fields: Object.fromEntries(fields) }
   }
+  if (def.type === 'array' && def.element) { return { kind: 'array', element: zodShape(def.element) } }
+  if (def.type === 'union' && def.options) { return { kind: 'union', members: def.options.map((option) => zodShape(option)) } }
   throw new Error(`no shape for a Zod ${def.type}`)
 }
 
@@ -48,9 +53,11 @@ const convexShape = (validator: GenericValidator): Shape => {
   case 'union': {
     const shapes = validator.members.map((member) => convexShape(member))
     const literals = shapes.filter((shape) => shape.kind === 'literal')
-    if (literals.length < shapes.length) { throw new Error('no shape for a union of non-literals') }
+    if (literals.length === 0) { return { kind: 'union', members: shapes } }
+    if (literals.length < shapes.length) { throw new Error('no shape for a union of literals and others') }
     return { kind: 'literal', values: literals.flatMap((shape) => shape.values).toSorted((one, two) => one.localeCompare(two)) }
   }
+  case 'array': { return { kind: 'array', element: convexShape(validator.element) } }
   case 'object': {
     const fields = Object.entries(validator.fields).map(([ckey, field]) => (
       [ckey, { optional: field.isOptional === 'optional', shape: convexShape(field) }] as const
@@ -66,7 +73,7 @@ const listedZod = Z.omit(Records.Lockbox, { lockbox_key_wrapped: true, whisper_c
 const ShapeCases = [
   [Records.Ciphered,     Ciphered,      'Ciphered: the shared encrypted-value shape'],
   [Records.VaultScope,   VaultScope,    'VaultScope: what names one vault'],
-  [Records.VaultBundle,  VaultBundle,   'VaultBundle: every field, ciphered envelope nested'],
+  [Records.VaultBundle,  VaultBundle,   'VaultBundle: every field, each unlock envelope and its ciphered wrap nested'],
   [Records.Lockbox,      Lockbox,       'Lockbox: every field, note optional, both ciphered fields nested'],
   [listedZod,            ListedLockbox, 'a listed lockbox: the record without its ciphered fields, format kept'],
 ] as const
@@ -115,6 +122,14 @@ const convexAccepts = async (call: Promise<unknown>): Promise<boolean> => {
 const { vault_id: _vaultId, ...bundleWithoutVaultId } = TH.bundleOf('u1')
 const { note: _note, ...boxWithoutNote } = TH.boxOf('anthropic_api_key', 'a1')
 const { registered_at: _bundleTime, ...bundleWithoutTime } = TH.bundleOf('u1')
+const { unlocks: _unlocks, ...bundleWithoutUnlocks } = TH.bundleOf('u1')
+/** The three fields a bundle held its one passphrase in, before `unlocks`. */
+const OldEnvelopeFields = {
+  key_deriver_label:            'test_digest_v0',
+  // base64 of the literal text 'salt': a fake salt, public material anyway
+  passphrase_salt_b64:          'c2FsdA',
+  vault_key_passphrase_wrapped: TH.fakeCiphered('old'),
+}
 const { registered_at: _boxRegistered, changed_at: _boxChanged, ...boxWithoutTimes } = TH.boxOf('anthropic_api_key', 'a1')
 /** An ISO time, as records stored them before every time became epoch milliseconds. */
 const OldIso = '2026-10-14T00:00:00.000Z'
@@ -122,12 +137,16 @@ const OldIso = '2026-10-14T00:00:00.000Z'
 const BundleCases = [
   // both accept:
   [TH.bundleOf('u1'),                                                        true,   true,   'a whole bundle'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase'), TH.passkeyEnvelopeOf('laptop')] }, true, true, 'a bundle with a passphrase and a passkey'],
   // both refuse -- what Convex can see:
   [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },                    false,  false,  'a format this package does not know'],
   [{ ...TH.bundleOf('u1'), format: 'safebyok-lockbox-v1' },                  false,  false,  "another record's format"],
   [bundleWithoutVaultId,                                                     false,  false,  'a bundle missing its vault_id'],
-  [{ ...TH.bundleOf('u1'), passphrase_epoch: '1' },                          false,  false,  'an epoch written as text'],
-  [{ ...TH.bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, false, 'a ciphered envelope missing its ciphertext'],
+  [{ ...TH.bundleOf('u1'), unlock_epoch: '1' },                              false,  false,  'an epoch written as text'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { vault_key_wrapped: { cipher_iv_b64: 'iv' } as never })] }, false, false, 'a ciphered envelope missing its ciphertext'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { method: 'fingerprint' as never })] }, false, false, 'an unlock method this package does not know'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { method: 'passkey' as never })] }, false, false, "a passphrase's fields under the passkey method"],
+  [{ ...bundleWithoutUnlocks, ...OldEnvelopeFields },                     false,  false,  'a bundle from before its unlocks were a list of envelopes'],
   [{ ...TH.bundleOf('u1'), registered_at: null },                            false,  false,  'a null registered_at'],
   [{ ...TH.bundleOf('u1'), registered_at: '2026-10-14T00:00:00.000Z' },      false,  false,  'a registered_at as an ISO string'],
   [{ ...bundleWithoutTime, created_at: OldIso, updated_at: OldIso },         false,  false,  'a bundle from before its time was named registered_at'],
@@ -136,9 +155,12 @@ const BundleCases = [
   // Zod refuses, Convex accepts -- the finer rules are the client's:
   [{ ...TH.bundleOf('u1'), applabel: 'ACME' },                               false,  true,   'an applabel outside the label grammar'],
   [{ ...TH.bundleOf('u1'), vault_id: '' },                                   false,  true,   'an empty vault_id'],
-  [{ ...TH.bundleOf('u1'), passphrase_epoch: 0 },                            false,  true,   'an epoch of zero'],
-  [{ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 },                          false,  true,   'a fractional epoch'],
+  [{ ...TH.bundleOf('u1'), unlock_epoch: 0 },                                false,  true,   'an epoch of zero'],
+  [{ ...TH.bundleOf('u1'), unlock_epoch: 1.5 },                              false,  true,   'a fractional epoch'],
   [{ ...TH.bundleOf('u1'), registered_at: 1_792_022_400 },                   false,  true,   'a registered_at in epoch seconds, before 1981'],
+  [{ ...TH.bundleOf('u1'), unlocks: [] },                                    false,  true,   'a vault with no way in'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('one'), TH.envelopeOf('one', { unlock_id: 'unlock-two' })] }, false, true, 'two ways in sharing an unlocklabel'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.passkeyEnvelopeOf('one'), TH.passkeyEnvelopeOf('two', { credential_id: 'cred-one' })] }, false, true, 'two passkeys for the same credential'],
 ] as const
 
 const LockboxCases = [

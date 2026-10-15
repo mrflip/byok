@@ -4,17 +4,18 @@
  * A cheap key deriver, a vault's options over stores in memory, shape-valid records whose
  * ciphertext is fake, a live device unlock, small timing, interception and tampering aids, a
  * logger that keeps what it hears, checks that a call refuses and that what it threw quotes
- * nothing it shouldn't, and the suites every VaultDB and DeviceDB adapter owes. For tests only,
- * and under vitest: the deriver is worthless against a brute-forcer.
+ * nothing it shouldn't, and the suites every VaultDB and DeviceDB adapter owes (the VaultDB suite
+ * runnable over an adapter made per signed-in user). For tests only, and under vitest: the
+ * deriver is worthless against a brute-forcer.
  */
 import { describe, expect, it, vi } from 'vitest'
-import type { Ciphered } from '../src/crypto'
+import { toB64, type Ciphered } from '../src/crypto'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import type { VaultError, VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import { memoryStore } from '../src/string-store'
-import type { DeviceUnlock, Lockbox, VaultBundle, VaultScope } from '../src/types'
+import type { DeviceUnlock, Lockbox, PasskeyEnvelope, PasskeyProof, PassphraseEnvelope, VaultBundle, VaultScope } from '../src/types'
 import type { OpenVaultOpts } from '../src/vault'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
 
@@ -89,20 +90,78 @@ export const fakeCiphered = (tag: string): Ciphered => ({
 export const scopeOf = (userId: string, vaultlabel = 'main'): VaultScope => ({ applabel: 'acme', user_id: userId, vaultlabel })
 
 /**
- * A shape-valid VaultBundle for `userId`'s `main` vault, its envelope fake: for storage-layer
- * tests, which never decrypt. Its vault_id is `vault-id-<userId>`, its epoch 1.
+ * A shape-valid passphrase envelope labelled `unlocklabel`, its wrap fake: for storage-layer
+ * tests, which never decrypt. Its unlock_id is `unlock-<unlocklabel>`.
  *
- * @example bundleOf('u1', { passphrase_epoch: 2 })
+ * @example envelopeOf('passphrase')                                         // the one bundleOf holds
+ * @example envelopeOf('home_phrase', { vault_key_wrapped: fakeCiphered('home') })
+ */
+export const envelopeOf = (unlocklabel: string, overrides: Partial<PassphraseEnvelope> = {}): PassphraseEnvelope => ({
+  method:            'passphrase',
+  unlock_id:         `unlock-${unlocklabel}`,
+  unlocklabel,
+  key_deriver_label: 'test_digest_v0',
+  // base64 of the literal text 'saltsaltsaltsalt': a fake salt, public material anyway
+  salt_b64:          'c2FsdHNhbHRzYWx0c2FsdA',
+  vault_key_wrapped: fakeCiphered(`envelope-${unlocklabel}`),
+  ...overrides,
+})
+
+/**
+ * A shape-valid passkey envelope labelled `unlocklabel`, its wrap fake: for storage-layer tests,
+ * which never decrypt. Its unlock_id is `unlock-<unlocklabel>`, its credential_id
+ * `cred-<unlocklabel>`.
+ *
+ * @example passkeyEnvelopeOf('laptop')
+ * @example bundleOf('u1', { unlocks: [envelopeOf('passphrase'), passkeyEnvelopeOf('laptop')] })
+ */
+export const passkeyEnvelopeOf = (unlocklabel: string, overrides: Partial<PasskeyEnvelope> = {}): PasskeyEnvelope => ({
+  method:            'passkey',
+  unlock_id:         `unlock-${unlocklabel}`,
+  unlocklabel,
+  credential_id:     `cred-${unlocklabel}`,
+  // base64 of the literal text 'prfsaltprfsaltprfsaltprfsaltprfs': a fake 32-byte salt, public material anyway
+  prf_salt_b64:      'cHJmc2FsdHByZnNhbHRwcmZzYWx0cHJmc2FsdHByZnM',
+  vault_key_wrapped: fakeCiphered(`envelope-${unlocklabel}`),
+  ...overrides,
+})
+
+/** SHA-256 of `text`'s UTF-8 bytes. */
+const digestOf = async (text: string): Promise<Uint8Array> => (
+  new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
+)
+
+/**
+ * A passkey's answer, as a fake authenticator would give it: for tests, in place of a WebAuthn
+ * call. The credential is `tag`'s own (its id base64url of `cred-<tag>`), the salt a 32-byte one
+ * made from `tag` unless given, and the answer SHA-256 of the credential and salt -- so the same
+ * passkey asked with the same salt answers the same, and with another salt answers otherwise, as
+ * a real PRF does. Worthless as a secret: never hand it to a vault that holds a real one.
+ *
+ * @example await vault.addPasskey('pw', () => passkeyOf('laptop'), { unlocklabel: 'laptop' })
+ * @example await vault.unlock(await passkeyOf('laptop'))
+ * @example await passkeyOf('laptop', otherSaltB64)  // the same credential, answering another salt
+ */
+export const passkeyOf = async (tag: string, prfSaltB64?: string): Promise<PasskeyProof> => {
+  const credentialId = toB64(new TextEncoder().encode(`cred-${tag}`))
+  const saltB64 = prfSaltB64 ?? toB64(await digestOf(`salt-${tag}`))
+  return { credentialId, prfSaltB64: saltB64, prfBytes: await digestOf(`${credentialId}:${saltB64}`) }
+}
+
+/**
+ * A shape-valid VaultBundle for `userId`'s `main` vault, its one envelope fake: for storage-layer
+ * tests, which never decrypt. Its vault_id is `vault-id-<userId>`, its epoch 1, and its one way in
+ * an {@link envelopeOf} labelled `passphrase` whose wrap is `bundle-<userId>`.
+ *
+ * @example bundleOf('u1', { unlock_epoch: 2 })
+ * @example bundleOf('u1', { unlocks: [envelopeOf('passphrase'), envelopeOf('home_phrase')] })
  */
 export const bundleOf = (userId: string, overrides: Partial<VaultBundle> = {}): VaultBundle => ({
   format:              'safebyok-vault-v1',
   ...scopeOf(userId),
   vault_id:            `vault-id-${userId}`,
-  passphrase_epoch:    1,
-  key_deriver_label:   'test_digest_v0',
-  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- base64 of the literal text 'saltsaltsaltsalt': a fake salt (which is public material anyway), not a credential
-  passphrase_salt_b64: 'c2FsdHNhbHRzYWx0c2FsdA',
-  vault_key_passphrase_wrapped: fakeCiphered(`bundle-${userId}`),
+  unlock_epoch:    1,
+  unlocks:             [envelopeOf('passphrase', { vault_key_wrapped: fakeCiphered(`bundle-${userId}`) })],
   registered_at:       Date.UTC(2026, 9, 14),
   ...overrides,
 })
@@ -146,7 +205,7 @@ export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
   format:                  'safebyok-unlock-v1',
   ...scopeOf(userId),
   vault_id:                `vault-id-${userId}`,
-  passphrase_epoch:        1,
+  unlock_epoch:        1,
   local_unlock_key:        await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey']),
   vault_key_local_wrapped: fakeCiphered(`local-${userId}`),
   ask_passphrase_at:       1_900_000_000_000,
@@ -396,7 +455,7 @@ const jsonOrPlaceholder = (val: unknown): string => {
  * VaultDB from the built package (`safebyok`) qualifies as readily as one extending `src/`.
  */
 export type VaultDBVerbs = Pick<VaultDB,
-  'maxRecordBytes' | 'maxVaultBytes' | 'readBundle' | 'createBundle' | 'updateBundle' | 'readBox' | 'listBoxes' | 'updateBox' | 'eraseBox' | 'eraseVault' | 'subscribe'
+  'maxRecordBytes' | 'maxVaultBytes' | 'maxLockboxes' | 'readBundle' | 'createBundle' | 'updateBundle' | 'readBox' | 'listBoxes' | 'updateBox' | 'eraseBox' | 'eraseVault' | 'subscribe'
 >
 
 /**
@@ -439,30 +498,30 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
 
     it("updateBundle lands while the standing bundle is the one proven against", async () => {
       const vaultDB = await withBundle()
-      const next = { ...bundleOf('u1'), passphrase_epoch: 2 }
-      await vaultDB.updateBundle(next, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
+      const next = { ...bundleOf('u1'), unlock_epoch: 2 }
+      await vaultDB.updateBundle(next, { vault_id: 'vault-id-u1', unlock_epoch: 1 })
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(next)
     })
 
-    it("updateBundle refuses over a passphrase_epoch since moved on, writing nothing", async () => {
+    it("updateBundle refuses over a unlock_epoch since moved on, writing nothing", async () => {
       const vaultDB = await withBundle()
-      const theirs = { ...bundleOf('u1'), passphrase_epoch: 2, vault_key_passphrase_wrapped: fakeCiphered('theirs') }
-      await vaultDB.updateBundle(theirs, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
-      const mine = { ...bundleOf('u1'), passphrase_epoch: 2, vault_key_passphrase_wrapped: fakeCiphered('mine') }
-      await expectRefusal(vaultDB.updateBundle(mine, { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'stale_write')
+      const theirs = { ...bundleOf('u1'), unlock_epoch: 2, unlocks: [envelopeOf('passphrase', { vault_key_wrapped: fakeCiphered('theirs') })] }
+      await vaultDB.updateBundle(theirs, { vault_id: 'vault-id-u1', unlock_epoch: 1 })
+      const mine = { ...bundleOf('u1'), unlock_epoch: 2, unlocks: [envelopeOf('passphrase', { vault_key_wrapped: fakeCiphered('mine') })] }
+      await expectRefusal(vaultDB.updateBundle(mine, { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(theirs)
     })
 
     it("updateBundle refuses over a vault made anew under another vault_id", async () => {
       const vaultDB = await withBundle()
-      const next = { ...bundleOf('u1'), vault_id: 'vault-id-gone', passphrase_epoch: 2 }
-      await expectRefusal(vaultDB.updateBundle(next, { vault_id: 'vault-id-gone', passphrase_epoch: 1 }), 'stale_write')
+      const next = { ...bundleOf('u1'), vault_id: 'vault-id-gone', unlock_epoch: 2 }
+      await expectRefusal(vaultDB.updateBundle(next, { vault_id: 'vault-id-gone', unlock_epoch: 1 }), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
     })
 
     it("updateBundle refuses where no bundle stands: an update never creates", async () => {
       const vaultDB = await makeVaultDB()
-      await expectRefusal(vaultDB.updateBundle(bundleOf('u1'), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'stale_write')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
     })
   })
@@ -647,13 +706,52 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       const overlong = boxOf('anthropic', 'one', { note: 'n'.repeat(257) })
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), overlong, noBoxYet), 'bad_option')
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: '' }), 'bad_option')
-      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { passphrase_epoch: 0 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'bad_option')
-      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { vault_id: 'vault-id-new', passphrase_epoch: 2 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'bad_option')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { unlock_epoch: 0 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'bad_option')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { vault_id: 'vault-id-new', unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'bad_option')
       await expectRefusal(vaultDB.eraseVault(scopeOf('u1'), { vault_id: '' }), 'bad_option')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
       expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
     })
   })
+}
+
+/**
+ * One adapter reaching every user's vaults, made of a VaultDB per user: for
+ * {@link describeVaultDB} over an adapter that serves only the user signed in, as a server's
+ * does when it makes one per request. The suite reaches two users' vaults through one adapter;
+ * this sends each verb to the VaultDB `vaultDBFor` made for the user its scope or bundle names,
+ * making each user's once and keeping it. Its limits are those of the one made for `anyone`.
+ *
+ * @param vaultDBFor - The VaultDB a request signed in as `userId` gets.
+ * @returns The verbs of one adapter, each sent on to its user's VaultDB.
+ *
+ * @example
+ *   describeVaultDB('postgresVaultDB', () => perUser((userId) => postgresVaultDB({ client, userId })))
+ */
+export const perUser = (vaultDBFor: (userId: string) => VaultDBVerbs): VaultDBVerbs => {
+  const vaultDBs = new Map<string, VaultDBVerbs>()
+  const as = ({ user_id }: { user_id: string }): VaultDBVerbs => {
+    const known = vaultDBs.get(user_id)
+    if (known) { return known }
+    const vaultDB = vaultDBFor(user_id)
+    vaultDBs.set(user_id, vaultDB)
+    return vaultDB
+  }
+  const anyone = as({ user_id: 'anyone' })
+  return {
+    maxRecordBytes: anyone.maxRecordBytes,
+    maxVaultBytes:  anyone.maxVaultBytes,
+    maxLockboxes:   anyone.maxLockboxes,
+    readBundle:     (scope) => as(scope).readBundle(scope),
+    createBundle:   (bundle) => as(bundle).createBundle(bundle),
+    updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
+    readBox:        (scope, boxlabel) => as(scope).readBox(scope, boxlabel),
+    listBoxes:      (scope) => as(scope).listBoxes(scope),
+    updateBox:      (scope, lockbox, expected) => as(scope).updateBox(scope, lockbox, expected),
+    eraseBox:       (scope, boxlabel, expected) => as(scope).eraseBox(scope, boxlabel, expected),
+    eraseVault:     (scope, expected) => as(scope).eraseVault(scope, expected),
+    subscribe:      (scope, onChange) => as(scope).subscribe(scope, onChange),
+  }
 }
 
 /**

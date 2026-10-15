@@ -43,8 +43,10 @@ security expert who knows what questions to ask.
   (`byok-stub-vault-v0`, `byok-stub-unlock-v0`) are not read by the new code: they existed only
   in the demo and were never published.
 * 2026-10-14: Argon2id (the pinned `argon2id_web_v1` spec) runs through `@noble/hashes` -- pure
-  JS, audited, no WASM -- at about half a second per derivation in V8. AES-256-GCM encryption,
-  key wrapping and randomness come from WebCrypto (`crypto.subtle`, `crypto.getRandomValues`).
+  JS, no WASM; the library's one audit (Cure53, January 2022, at 1.0.0) left its `argon2` out of
+  scope, as its README says, so the Argon2id itself is unaudited -- at about half a second per
+  derivation in V8. AES-256-GCM encryption, key wrapping and randomness come from WebCrypto
+  (`crypto.subtle`, `crypto.getRandomValues`).
 * 2026-10-14: the key deriver is a seam (`OpenVaultOpts.keyDeriver`): the pinned Argon2id deriver
   was the default until 2026-10-15 (below), tests substitute a cheap SHA-256 deriver, and a
   stored vault records its deriver's label and refuses to unlock under any other.
@@ -57,8 +59,9 @@ security expert who knows what questions to ask.
   or an unbundled import. Substituting a deriver still commits every vault made under it to its
   label, as above.
 * 2026-10-14: every encryption binds its context as AES-GCM additional data
-  (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus passphraseEpoch
-  for key wraps and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
+  (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus unlockEpoch
+  for key wraps (since 2026-10-15, the device record's only: an unlock envelope binds its own
+  header instead, below) and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
   moved between users, vaults, boxes or revisions refuses to open.
 * 2026-10-14: a wrong passphrase is learned from the vaultKey envelope's AEAD failure, never a
   comparison; there is no separate passphrase verifier field.
@@ -79,7 +82,7 @@ security expert who knows what questions to ask.
 * 2026-10-14: `zod` moved from a regular dependency to a peer dependency (`^4.0.0`): the host app
   supplies it, so safebyok validates with whatever zod instance that app ships.
 * 2026-10-15: storage writes are versioned updates (`VaultDB.updateBundle`, `updateBox`). A
-  bundle update carries the `vault_id` and `passphrase_epoch` it was proven against, and lands
+  bundle update carries the `vault_id` and `unlock_epoch` it was proven against, and lands
   only while the standing bundle has both. A lockbox update carries the `vault_id` its whisper
   was sealed for and the `revision_id` it read (or null for none), and lands only while the
   scope's standing bundle has that `vault_id` and the standing lockbox that `revision_id` (or
@@ -98,7 +101,8 @@ security expert who knows what questions to ask.
   destroys and makes anew in between can still lose a lockbox (`eraseBox`) or be erased whole
   (`eraseVault`). Its `eraseVault` also lists the vault's rows in one transaction and deletes
   them in another: a lockbox another tab writes in between survives the erase, orphaned without
-  a bundle. Doing these inside one IndexedDB transaction is a ruled TODO, not yet built.
+  a bundle. Doing these inside one IndexedDB transaction is a ruled TODO, not yet built. (Built
+  when the store moved to `safebyok-indexeddb`: see the entry on it below.)
 * 2026-10-14: a lockbox's ciphertext length reveals its whisper's length to the backend: there is
   no padding yet (TODO). `store()` refuses a whisper over `maxWhisperBytes` of JSON, an
   `openVault` option defaulting to `MaxWhisperBytes` (40444), checked on write only.
@@ -117,7 +121,7 @@ security expert who knows what questions to ask.
   erases the successor. On a vault the handle has never seen created, `destroy()` erases only
   the device-local record: lockboxes orphaned without a bundle are not reached.
   `changePassphrase()` and `unlock()` re-read the bundle first, as they must to prove the
-  passphrase against it. A passphrase changed elsewhere does not stop a stale session's
+  passphrase against it. An unlock changed elsewhere (a passphrase or passkey added, removed or changed) does not stop a stale session's
   `store()` or `erase()` (their expectations carry no epoch); the session relocks on its next
   look at the bundle.
 * 2026-10-14 (the option was named `rememberForMs` until its rename on 2026-10-15): the unlock
@@ -131,7 +135,7 @@ security expert who knows what questions to ask.
   window of `FarFuture - FarPast` ms, so the deadline it sets from any in-bounds clock reading is
   `FarFuture` (see the next entry), and the stored `ask_passphrase_at` is a finite number; no schema
   past that parse, and no stored field, accepts `Infinity`. What still ends such an unlock: `lock()`
-  (memory and device record), a passphrase change on another device (the next look at the bundle
+  (memory and device record), a change to the unlocks on another device (the next look at the bundle
   sees a new epoch), and the vault being destroyed or made anew (a new `vault_id`). Nothing else
   does: no timer, and no idle detection. Two consequences: an open handle sees that new epoch only
   when it next reads the bundle (an unlock, a write, or a change the vaultDB pushes), so a handle
@@ -227,7 +231,7 @@ security expert who knows what questions to ask.
   user's rows.
 * 2026-10-15: the Convex component validates records structurally only (fields, types,
   optionality, the `format` literal); the label grammar, non-empty ids, a positive whole
-  `passphrase_epoch` and a note's length are checked by the client's Zod records, not on the
+  `unlock_epoch` and a note's length are checked by the client's Zod records, not on the
   server. A signed-in user can therefore store malformed rows in their own vaults, which their
   own clients then refuse as `corrupt_record`.
 * 2026-10-15: the Convex component checks each update's and erase's expectation by reading the
@@ -342,7 +346,7 @@ security expert who knows what questions to ask.
   on the same handle; that device then asks for the passphrase at its next open. An unlock (or
   the unlock after a passphrase change) also takes up nothing, and throws `vault_locked`, when the
   bundle standing at its end is not the one its passphrase was proven against, by `vault_id` and
-  `passphrase_epoch`: a vault destroyed, remade, or re-keyed elsewhere while the passphrase was
+  `unlock_epoch`: a vault destroyed, remade, or re-keyed elsewhere while the passphrase was
   being checked. Without that, the old vault's vaultKey was taken up against the new bundle, and a
   `store()` sealed boxes into the new vault that its owner could never open.
 * 2026-10-15: `lockSoon(graceSeconds = 5)`, at most 60 seconds, closes the entry gate at once
@@ -409,3 +413,161 @@ security expert who knows what questions to ask.
   the bytes it derives: a stand-in is the host's to test against `argon2idWebV1Deriver`. A host's
   own label is not checked against anything, since a vault stores only the label; the host must
   never change a label's parameters. The stored format is unchanged.
+* 2026-10-15: a bundle holds its ways in as `unlocks`, a list of one to `MaxUnlocks` (8) unlock
+  envelopes, each the one vaultKey wrapped under its own key. A passphrase envelope has its own
+  random `salt_b64` (never shared between envelopes) and its own `unlock_id`, and its wrap's
+  additional data is the format, scope, `vault_id`, a purpose per method
+  (`vault_key_passphrase_wrapped`), and the envelope's whole public header (`method`,
+  `unlock_id`, `unlocklabel`, `key_deriver_label`, `salt_b64`) as key-sorted JSON. The
+  `unlock_epoch` is no longer in it, since a change to one envelope bumps the epoch and the
+  others, whose passphrases the device does not hold, must still open: a backend can therefore
+  splice an envelope from an older bundle of the same vault (a removed passphrase's, or one from
+  before a change) into the current one, and that old passphrase opens the vault again, as it
+  always opens the older bundle itself. The list's order and length, and the bundle's other
+  fields, are not bound.
+* 2026-10-15: removing an unlock envelope (`removeUnlock`) is not revocation. Whoever knew the
+  removed passphrase and kept any earlier bundle holds the vaultKey, which never rotates; the
+  removal bumps `unlock_epoch`, so devices unlocked under it lock at their next look, and the
+  vault refuses to remove its last envelope (`last_unlock`). Every change to the envelopes
+  (`addPassphrase`, `removeUnlock`, `changePassphrase`) asks for a passphrase that opens one,
+  even on an unlocked vault: the session's vaultKey handle is non-extractable, so wrapping it
+  anew needs the extractable transient that a proof unwraps.
+* 2026-10-15: an `unlock()` or a proof not aimed at one envelope (`unlockId`) tries each
+  passphrase envelope in the bundle's order, one key derivation apiece, and stops at the first
+  that opens: a wrong passphrase costs as many derivations as there are envelopes, at most
+  `MaxUnlocks` (8, about 4.8 s with the noble deriver in Node 24), a bound enforced on read, so a
+  backend cannot make one unlock derive more. Which envelope opened shows in how long the unlock
+  took, on the device only. Envelopes made by a key deriver the vault was not opened with are
+  passed over, and refused as `unknown_key_deriver` only when no envelope is left to try.
+* 2026-10-15: a way in may be a passkey (WebAuthn PRF extension; a security key's `hmac-secret`).
+  Its envelope holds `credential_id` and `prf_salt_b64` (32 random bytes, minted by the React
+  binding's `createPasskey` with `crypto.getRandomValues`, checked for length by the core). The
+  passkeyKey is HKDF-SHA256 over the 32-byte PRF answer, with an empty salt and `info` =
+  `["safebyok-vault-v1", "vault_key_passkey_wrapped", credential_id]` as JSON; the wrap's additional
+  data is the format, scope, `vault_id`, purpose `vault_key_passkey_wrapped` and the envelope's
+  public header, as for a passphrase envelope. A stored salt that is not base64url of 32 bytes
+  refuses as `corrupt_record`, checked at unlock rather than in the schema (the size budget, as for
+  passphrase salts). The core never calls WebAuthn and never stores the answer; the answer passes
+  through host JavaScript as a `Uint8Array` the vault does not wipe.
+* 2026-10-15: what a passkey way in rests on. The PRF answer is a long-term secret as strong as a
+  passphrase for that vault, and needs no key derivation to try, so a captured answer opens the
+  vault (and every copy of its bundle) for good. The authenticator gives it only after user
+  verification (`userVerification: 'required'` on every call, which also keeps the answer stable:
+  hmac-secret answers differently with and without UV). A platform passkey synced by iCloud
+  Keychain or Google Password Manager answers on any device signed in to that account, so the vault
+  then rests on that account's security too. Any script running on a page under the passkey's RP
+  ID can ask the authenticator for the answer (with the user's touch), as it could read a typed
+  passphrase. The credential's challenge is random and never verified, and no attestation is
+  checked: the authenticator is the user's to trust.
+* 2026-10-15: any way in proves any change. A passkey's answer is accepted as proof by
+  `addPassphrase`, `addPasskey` and `removeUnlock`, so whoever holds one passkey can set a new
+  passphrase and remove the user's others: the vault is as strong as its weakest way in. A vault
+  always keeps one passphrase envelope (`last_unlock` refuses removing the last), and is created
+  with one. `createPasskey` registers each passkey under a random user handle, so it cannot replace
+  a sign-in passkey on the same RP; removing a passkey from the vault does not delete it from the
+  authenticator, and (as for passphrases) is not revocation.
+* 2026-10-15: `addPasskey` proves first and asks the authenticator after, so a refused proof
+  leaves no orphaned passkey; the cost is that the proven vaultKey's extractable transient handle
+  (`wrapKey` usage only) is held from the proof until the new envelope is sealed, across the
+  WebAuthn prompt: human time, not one derivation. Acceptable because the handle lives only in a
+  closure inside `reviseUnlocks`, never in the snapshot, a field or an error, so no host script
+  can reach it, and a script able to hook SubtleCrypto already sees every unwrap; while unlocked
+  the session's non-extractable handle opens every lockbox anyway, and extractability adds only
+  the export of the raw bytes. It is bounded by the prompt: the WebAuthn `timeout`
+  (`createPasskey`'s option, or the browser's default, minutes) ends it, a dismissal or a refusal
+  drops the reference, and the change then writes nothing. A `lock()` during the prompt does not
+  cut it short: the passkey still lands and the vault stays locked, as for any change to the ways
+  in.
+* 2026-10-15: `safebyok-postgres` authorizes on the server, per request: `postgresVaultDB` is
+  made with the `userId` the host's auth verified, and refuses (`not_permitted`) any other user's
+  scope, or any while signed out, before querying; that check is the whole of the authorization.
+  Row-level security is on with no policy (the owner role bypasses it; every other role,
+  Supabase's Data API roles among them, reaches no row). The NOTIFY payload is the scope, which
+  any role able to connect may LISTEN for. The server holds a vault to a lockbox count of its own
+  (see the `maxLockboxes` entry below), and to no size in bytes. Past
+  scope and boxlabel, a route's bundles, lockboxes and expectations are validated only as the
+  core's VaultDB validates them. A driver's error rides as `cause` and may quote key columns, or
+  (a malformed record refused by a NOT NULL) the whole failing row, its ciphertext included; the
+  README's route recipe sends the browser only a refusal's kind and message.
+* 2026-10-15: `safebyok-graphql` carries the verbs over GraphQL and authorizes nothing itself:
+  each resolver calls the VaultDB `vaultDBFor(context)` makes for the request, so the rule is
+  `postgresVaultDB`'s (or the host's own ServedVaultDB's), fed the user the host's auth verified.
+  A refusal crosses as a fresh GraphQLError holding only the VaultError's message and
+  `extensions.kind`; the VaultError (and through it the driver's error) is kept as that error's
+  unenumerable `cause`, set after construction, never as its `originalError`: Yoga masks an error
+  whose original is not a GraphQLError, and in development mode sends the original's message,
+  stack and `cause` to the browser. Anything a VaultDB throws that is not a VaultError crosses as
+  `storage_unavailable`. Unlock envelopes cross as opaque JSON that GraphQL does not check; only
+  the core's VaultDB validation does, so a user can write a malformed envelope into their own
+  vault and no one else's. The browser's urql Client may keep vault records (ciphertext and public
+  fields) in its document cache, though every vault query is `network-only` and never answered
+  from it. A subscription's user is fixed when it starts (over a websocket, when the connection
+  opened), so a session revoked meanwhile keeps hearing the vault's scope -- never a record --
+  until the subscription ends.
+* 2026-10-15: **a second implementation behind one label.** `safebyok-argon2-wasm` runs Argon2id
+  through `hash-wasm` (4.12.0, MIT, no dependencies; its Argon2 is C written for it after Go's
+  `x/crypto/argon2`, compiled to WebAssembly and embedded in its JavaScript; widely used, but
+  with no published audit, as the core's `@noble/hashes` Argon2id has none: its README says its
+  one audit left `argon2` out of scope), under the same specs and
+  labels as the core's `@noble/hashes` deriver, `argon2id_web_v1` included. It checks a spec with
+  the core's own `parseKeyDeriverSpec`, so its bounds are the core's by construction; hash-wasm's
+  own limits (a salt of at least 8 bytes, memory of at least 8 KiB a lane, below 4 GiB) are no
+  narrower. That the two derive the same bytes is a test, not a claim: both are held to Argon2id's
+  reference test vector, and to each other byte for byte across the supplied spec and cheap specs
+  that press on lane counts, memory not divisible into segments, the shortest and longest salts,
+  and non-ASCII passphrases; a vault made under each opens under the other. A difference would
+  strand vaults across devices rather than weaken them. Its derivation runs in one synchronous
+  WebAssembly call (about 130 ms at `argon2id_web_v1` in Node, against the core's 580 ms), so it
+  holds the thread rather than yielding as the core's does. It needs `'wasm-unsafe-eval'` in a
+  page's Content-Security-Policy, and refuses (`bad_option`) where WebAssembly will not compile
+  or is missing (Hermes): it never falls back to another deriver on its own. Unlike
+  `@noble/hashes`, which zeroes its Argon2 blocks and H0 when a derivation ends, hash-wasm leaves
+  its working memory (the spec's whole memory_kib, in a fresh WebAssembly instance, and in Node
+  the passphrase's UTF-8 bytes in a pooled Buffer) as it is, for the garbage collector: material
+  from which the passphraseKey follows stays in the heap until then.
+* 2026-10-15: **Dependencies: hash-wasm has no published audit.** `safebyok-argon2-wasm`'s one
+  runtime dependency, `hash-wasm`, derives the passphraseKey for every vault made or opened
+  through it, and no audit of it, or of the C its WebAssembly is compiled from, has been
+  published. Nor has one of the core's Argon2id: `@noble/hashes`'s one audit (Cure53, January
+  2022, at 1.0.0) left its `argon2` out of scope. hash-wasm's working memory is never zeroed
+  (the entry above).
+* 2026-10-15: the IndexedDB vault store moved to a package of its own, `safebyok-indexeddb`, and
+  each of its write verbs (`createBundle`, `updateBundle`, `updateBox`, `eraseBox`, `eraseVault`)
+  is now one readwrite IndexedDB transaction, which reads the standing rows, compares them with
+  the expectation, and writes; a failure anywhere in it aborts it, writing nothing. IndexedDB runs
+  readwrite transactions over one store one after another, across the origin's tabs, so the
+  windows the `idbVaultDB` entry above records are closed: no write lands over a row another tab
+  changed meanwhile, two tabs creating a vault settle on one, and no lockbox outlives an erased
+  vault. The guarantee rests on the work inside awaiting only IndexedDB's own requests (awaiting
+  anything else lets the browser commit the transaction early, and the next request throws);
+  `src/shelf.ts`'s `inOneTransaction` says so. Its rows, ckeys and database name are unchanged,
+  and its change bell, a BroadcastChannel per database, still carries no scope and no record.
+* 2026-10-15: every `VaultDB` declares a `maxLockboxes`, the most lockboxes its backend holds in
+  one vault (`Infinity` for none), and `openVault` refuses (`bad_option`) a `maxLockboxes` above
+  it, defaulting to the smaller of it and `MaxLockboxes`. The core offers no "unlimited" constant:
+  each store sets its own. `localVaultDB` and `idbVaultDB` declare `Infinity` and enforce nothing;
+  `convexVaultDB` declares the component's 8,000; `graphqlVaultDB` declares what its host says the
+  server enforces (default 1000), which only moves `openVault`'s check: the server's own refusal
+  is the limit. `postgresVaultDB` enforces its `maxLockboxes` (default 1000; a host wanting none
+  passes a large safe integer) inside the one statement that inserts a new lockbox, against a
+  `lockbox_count` column on the bundle row that an `AFTER INSERT OR DELETE` row trigger on
+  `safebyok_lockboxes` keeps, so writes by any statement, the host's own SQL included, keep it
+  true (a `TRUNCATE` of the lockboxes alone does not). The insert locks the bundle row
+  (`FOR UPDATE`) and compares the count it locked: under READ COMMITTED, a statement that waited
+  for the lock is handed the row as its forerunner left it (Postgres re-reads a row it waited to
+  lock), so two inserts racing for the last place cannot both land; under REPEATABLE READ or
+  SERIALIZABLE, the waiter fails with a serialization error, refused as `storage_unavailable`. A
+  bare `count(*)` in the insert would not hold under READ COMMITTED, each statement counting from
+  its own snapshot. This is reasoned from Postgres's documented semantics; the tests run on PGlite,
+  one connection, and cannot race. `eraseBox` locks the bundle row before deleting, so an erase's
+  count update and a waiting insert cannot deadlock. Holding the lock also keeps the bundle, so the
+  insert no longer meets a foreign-key failure from a vault erased meanwhile. A replacement is never
+  refused for the count, nor is a first write whose boxlabel is already taken (it refuses as
+  `stale_write`): the insert re-reads only the locked bundle row, its view of the lockboxes being
+  the statement's snapshot, so a full vault is told from a stale writer by one fresh read of the
+  vault and that boxlabel before refusing. Under REPEATABLE READ or SERIALIZABLE, any two concurrent writes that
+  add or remove a lockbox in one vault can fail with a serialization error (`storage_unavailable`),
+  each moving the bundle row's count. A host's own SQL deleting lockboxes must lock the bundle row
+  first, or it may deadlock with `eraseVault`; the DDL's comments and the README say so, and give
+  the recount statement for a count gone astray. The refusal's message names the limit, never a
+  boxlabel or a record.

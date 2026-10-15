@@ -26,7 +26,7 @@
     "build": "SAFEBYOK_SKIP_BUILD_DEPS=1 pnpm -r --stream build",
     "justify:root": "pnpm lint:root && pnpm typecheck:root && pnpm test:root",
     "justify": "all() { pnpm install || exit; pnpm lint; lint=$?; pnpm typecheck; typecheck=$?; pnpm test; exit $(( lint || typecheck || $? )); }; all",
-    "size": "pnpm --filter safebyok build && size-limit",
+    "size": "pnpm --filter safebyok --filter safebyok-argon2-wasm build && size-limit",
     "demo:react": "SAFEBYOK_SKIP_BUILD_DEPS=1 pnpm --filter 'safebyok-demo-react^...' build && pnpm --filter safebyok-demo-react dev",
     "newb": "scripts/newb",
     "changeset": "node scripts/changeset.ts",

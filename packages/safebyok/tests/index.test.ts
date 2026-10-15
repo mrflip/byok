@@ -6,9 +6,9 @@ import * as safebyok from '../src/index'
 describe("the package's entry point", () => {
   it("exports exactly the public surface", () => {
     expect(Object.keys(safebyok)).to.have.members([
-      'Argon2idWebV1', 'argon2idDeriver', 'argon2idWebV1Deriver',
+      'Argon2idWebV1', 'argon2idDeriver', 'argon2idWebV1Deriver', 'parseKeyDeriverSpec',
       'openVault',
-      'Ciphered', 'EpochMillis', 'FarFuture', 'FarPast', 'ForcePassphraseReentryHours', 'Label', 'Lockbox', 'LockboxNote', 'LockboxSummary', 'MaxLockboxes', 'MaxWhisperBytes', 'VaultBundle', 'VaultScope', 'Whisper', 'wallClock',
+      'Ciphered', 'EpochMillis', 'FarFuture', 'FarPast', 'ForcePassphraseReentryHours', 'Label', 'Lockbox', 'LockboxNote', 'LockboxSummary', 'MaxLockboxes', 'MaxUnlocks', 'MaxWhisperBytes', 'PasskeyEnvelope', 'PasskeySaltBytes', 'PassphraseEnvelope', 'UnlockEnvelope', 'UnlockMethodVals', 'VaultBundle', 'VaultScope', 'Whisper', 'wallClock',
       'VaultError', 'VaultErrorFamilyForKind', 'VaultErrorFamilyVals', 'VaultErrorKindVals', 'isVaultCondition', 'isVaultError',
       'VaultDB', 'localVaultDB', 'memoryDeviceDB',
       'domStore', 'memoryStore',
@@ -51,6 +51,13 @@ describe("the main entry's tree-shaking", () => {
 
   it("brings Argon2id in for an app that imports the deriver: the check above can fail", async () => {
     expect(await bundleOf('argon2idWebV1Deriver')).to.match(Argon2Implementation)
+  }, 30_000)
+
+  // A deriver over another Argon2id implementation (safebyok-argon2-wasm) checks its spec this way.
+  it("leaves Argon2id out of an app that imports only the spec check", async () => {
+    const shipped = await bundleOf('parseKeyDeriverSpec')
+    expect(shipped).to.include('keyDeriverSpec')
+    expect(shipped).to.not.match(Argon2Implementation)
   }, 30_000)
 
   it("leaves Argon2id out of an app that imports only the supplied spec", async () => {

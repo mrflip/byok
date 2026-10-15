@@ -13,6 +13,7 @@ import * as TH from './test-helpers'
 class MapVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
   readonly maxVaultBytes = Infinity
+  readonly maxLockboxes = Infinity
   readonly rows = new Map<string, unknown>()
   private bundleCkey(scope: VaultScope) { return `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}` }
   private boxCkey(scope: VaultScope, boxlabel: string) { return `${this.bundleCkey(scope)}/${boxlabel}` }
@@ -27,7 +28,7 @@ class MapVaultDB extends VaultDB {
 
   protected doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation) {
     const standing = this.standingBundle(bundle)
-    if (standing?.vault_id !== expected.vault_id || standing.passphrase_epoch !== expected.passphrase_epoch) { return Promise.resolve(false) }
+    if (standing?.vault_id !== expected.vault_id || standing.unlock_epoch !== expected.unlock_epoch) { return Promise.resolve(false) }
     this.rows.set(this.bundleCkey(bundle), bundle)
     return Promise.resolve(true)
   }
@@ -84,10 +85,11 @@ TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
 TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB())
 
 describe("localVaultDB", () => {
-  it("holds a mebibyte in one record, and sets no limit on a vault", () => {
+  it("holds a mebibyte in one record, and sets no limit on a vault, in bytes or in lockboxes", () => {
     const vaultDB = localVaultDB(memoryStore())
     expect(vaultDB.maxRecordBytes).to.eq(1_048_576)
     expect(vaultDB.maxVaultBytes).to.eq(Infinity)
+    expect(vaultDB.maxLockboxes).to.eq(Infinity)
   })
 
   it("reads a vault stored before the storage verbs: the same rows, at the same ckeys", async () => {
@@ -248,20 +250,20 @@ describe("the abstract VaultDB, around an adapter's half", () => {
 /** Writes a VaultDB refuses before its adapter's half sees them: none is one a vault builds. */
 const RefusedWrites = [
   // the records:
-  ['bad_option', (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 }),                          'a bundle with a fractional passphrase_epoch'],
-  ['bad_option', (vaultDB: VaultDB) => vaultDB.createBundle(omit(TH.bundleOf('u1'), ['vault_key_passphrase_wrapped']) as VaultBundle),  'a bundle missing its wrapped vaultKey'],
+  ['bad_option', (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), unlock_epoch: 1.5 }),                              'a bundle with a fractional unlock_epoch'],
+  ['bad_option', (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), unlocks: [omit(TH.envelopeOf('passphrase'), ['vault_key_wrapped'])] } as VaultBundle), 'a bundle whose envelope is missing its wrapped vaultKey'],
   ['bad_label',  (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), applabel: 'Acme' }),                               'a bundle whose applabel breaks the label rules'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { note: 'n'.repeat(257) }), TH.noBoxYet), 'a lockbox whose note no read would accept'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { changed_at: 1_792_022_400 }), TH.noBoxYet), 'a lockbox time in epoch seconds'],
   ['bad_label',  (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), undefined as unknown as Lockbox, TH.noBoxYet),               'no lockbox at all'],
   // the expectations:
-  ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', passphrase_epoch: 0 }),     'a bundle expectation at epoch zero'],
+  ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 0 }),          'a bundle expectation at epoch zero'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBundle(TH.bundleOf('u1'), undefined as unknown as BundleExpectation),            'no bundle expectation at all'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1' } as LockboxExpectation), 'a lockbox expectation missing its revision_id'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.eraseBox(TH.scopeOf('u1'), 'anthropic', {} as EraseExpectation),                        'an erase expectation naming no vault'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.eraseVault(TH.scopeOf('u1'), { vault_id: '' }),                                         'an erase expectation naming an empty vault_id'],
   // the two together:
-  ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBundle(TH.bundleOf('u1', { vault_id: 'vault-id-new', passphrase_epoch: 2 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'a bundle update that would change the vault_id'],
+  ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBundle(TH.bundleOf('u1', { vault_id: 'vault-id-new', unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'a bundle update that would change the vault_id'],
 ] as const
 
 describe("the abstract VaultDB, on the way in", () => {

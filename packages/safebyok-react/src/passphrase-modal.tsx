@@ -1,5 +1,6 @@
 import { useState, type SubmitEvent } from 'react'
 import { FarFuture, FarPast, ForcePassphraseReentryHours, VaultError, isVaultCondition, isVaultError, type Vault } from 'safebyok'
+import { PasskeyUnlockButton } from './passkey-unlock-button'
 
 const MinutesPerHour = 60
 const MinutesPerDay = 24 * MinutesPerHour
@@ -98,6 +99,7 @@ export const PassphraseModal = ({ vault, onDone, reentryHours = ForcePassphraseR
         <p className="quiet">{unlockedFor(reentryHours)}</p>
         <div className="row">
           <button type="submit">{creating ? 'Create vault' : 'Unlock'}</button>
+          {! creating && <PasskeyUnlockButton vault={vault} onDone={onDone} onGripe={setGripe} />}
           <button type="button" onClick={() => { onDone(false) }}>Cancel</button>
         </div>
       </form>

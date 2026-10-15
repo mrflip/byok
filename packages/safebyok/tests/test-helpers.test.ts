@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { localVaultDB, memoryStore, openVault } from '../src/index'
+import { localVaultDB, memoryStore, openVault, type StringStore } from '../src/index'
 import { Ciphered, fromB64, toB64 } from '../src/crypto'
 import { VaultError } from '../src/errors'
-import { Lockbox, VaultBundle, VaultScope, type DeviceUnlock } from '../src/types'
+import { Lockbox, PasskeySaltBytes, VaultBundle, VaultScope, type DeviceUnlock } from '../src/types'
 import * as TH from './test-helpers'
 
 const TweakCases = [
@@ -195,7 +195,7 @@ describe("the fixtures", () => {
 
   it("bundleOf: a shape-valid VaultBundle, with any field overridden", () => {
     expect(VaultBundle.safeParse(TH.bundleOf('u1')).success).to.be.true
-    expect(TH.bundleOf('u1', { passphrase_epoch: 2 })).to.deep.equal({ ...TH.bundleOf('u1'), passphrase_epoch: 2 })
+    expect(TH.bundleOf('u1', { unlock_epoch: 2 })).to.deep.equal({ ...TH.bundleOf('u1'), unlock_epoch: 2 })
   })
 
   it("noBoxYet and thisVault: the expectations u1's vault meets, before its first box and for an erase", async () => {
@@ -206,6 +206,26 @@ describe("the fixtures", () => {
     expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
     expect(Object.isFrozen(TH.noBoxYet)).to.be.true
     expect(Object.isFrozen(TH.thisVault)).to.be.true
+  })
+
+  it("passkeyEnvelopeOf: a shape-valid passkey envelope, with any field overridden", () => {
+    const bundle = TH.bundleOf('u1', { unlocks: [TH.envelopeOf('passphrase'), TH.passkeyEnvelopeOf('laptop')] })
+    expect(VaultBundle.safeParse(bundle).success).to.be.true
+    expect(TH.passkeyEnvelopeOf('laptop')).to.include({ method: 'passkey', unlock_id: 'unlock-laptop', credential_id: 'cred-laptop' })
+    expect(TH.passkeyEnvelopeOf('laptop', { credential_id: 'other' }).credential_id).to.eq('other')
+  })
+
+  it("passkeyOf: the same passkey and salt answer the same, another salt or passkey otherwise", async () => {
+    const laptop = await TH.passkeyOf('laptop')
+    expect(laptop.prfBytes).to.have.lengthOf(32)
+    expect(fromB64(laptop.prfSaltB64)).to.have.lengthOf(PasskeySaltBytes)
+    expect(new TextDecoder().decode(fromB64(laptop.credentialId))).to.eq('cred-laptop')
+    expect(await TH.passkeyOf('laptop')).to.deep.equal(laptop)
+    const phone = await TH.passkeyOf('phone')
+    const elsewhere = await TH.passkeyOf('laptop', phone.prfSaltB64)
+    expect(elsewhere.credentialId).to.eq(laptop.credentialId)
+    expect(elsewhere.prfBytes).to.not.deep.equal(laptop.prfBytes)
+    expect(phone.prfBytes).to.not.deep.equal(laptop.prfBytes)
   })
 
   it("boxOf: a shape-valid Lockbox, with any field overridden", () => {
@@ -373,4 +393,94 @@ TH.describeDeviceDB('describeDeviceDB, over the smallest honest DeviceDB', () =>
     eraseUnlock: (scope) => { rows.delete(ckeyOf(scope)); return Promise.resolve() },
     eraseAll:    () => { rows.clear(); return Promise.resolve() },
   }
+})
+
+/**
+ * A server's VaultDB for one signed-in user, over a store every user's vaults share: it refuses
+ * any scope naming someone else, as a server's must, so the VaultDB suite reaches it only through
+ * `perUser`.
+ */
+const servingOnly = (userId: string, store: StringStore): TH.VaultDBVerbs => {
+  const shared = localVaultDB(store)
+  const permitted = ({ user_id }: { user_id: string }): void => {
+    if (user_id !== userId) { throw new VaultError('not_permitted', "That vault belongs to someone else.") }
+  }
+  return {
+    maxRecordBytes: shared.maxRecordBytes,
+    maxVaultBytes:  shared.maxVaultBytes,
+    maxLockboxes:   shared.maxLockboxes,
+    readBundle:     async (scope) => { permitted(scope); return await shared.readBundle(scope) },
+    createBundle:   async (bundle) => { permitted(bundle); return await shared.createBundle(bundle) },
+    updateBundle:   async (bundle, expected) => { permitted(bundle); await shared.updateBundle(bundle, expected) },
+    readBox:        async (scope, boxlabel) => { permitted(scope); return await shared.readBox(scope, boxlabel) },
+    listBoxes:      async (scope) => { permitted(scope); return await shared.listBoxes(scope) },
+    updateBox:      async (scope, lockbox, expected) => { permitted(scope); await shared.updateBox(scope, lockbox, expected) },
+    eraseBox:       async (scope, boxlabel, expected) => { permitted(scope); await shared.eraseBox(scope, boxlabel, expected) },
+    eraseVault:     async (scope, expected) => { permitted(scope); await shared.eraseVault(scope, expected) },
+    subscribe:      (scope, onChange) => { permitted(scope); return shared.subscribe(scope, onChange) },
+  }
+}
+
+TH.describeVaultDB('perUser, over a VaultDB serving one user', () => {
+  const store = memoryStore()
+  return TH.perUser((userId) => servingOnly(userId, store))
+})
+
+/** perUser over servingOnly, with the user ids it asked a VaultDB for, in order. */
+const counted = () => {
+  const store = memoryStore()
+  const askedFor: string[] = []
+  const vaultDB = TH.perUser((userId) => { askedFor.push(userId); return servingOnly(userId, store) })
+  return { vaultDB, askedFor, store }
+}
+
+describe("perUser", () => {
+  it("sends each verb to the VaultDB of the user its scope or bundle names", async () => {
+    const { vaultDB, store } = counted()
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.createBundle(TH.bundleOf('u2'))
+    await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
+    expect(await servingOnly('u2', store).readBox(TH.scopeOf('u2'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'two'))
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
+  })
+
+  it("sends updateBundle, subscribe, eraseBox and eraseVault to the user named, too", async () => {
+    const { vaultDB, store } = counted()
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.createBundle(TH.bundleOf('u2'))
+    await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
+    await vaultDB.updateBundle({ ...TH.bundleOf('u2'), unlock_epoch: 2 }, { vault_id: 'vault-id-u2', unlock_epoch: 1 })
+    vaultDB.subscribe(TH.scopeOf('u2'), () => undefined)()
+    await vaultDB.eraseBox(TH.scopeOf('u2'), 'anthropic', { vault_id: 'vault-id-u2' })
+    expect(await servingOnly('u2', store).listBoxes(TH.scopeOf('u2'))).to.have.lengthOf(0)
+    await vaultDB.eraseVault(TH.scopeOf('u2'), { vault_id: 'vault-id-u2' })
+    expect(await servingOnly('u2', store).readBundle(TH.scopeOf('u2'))).to.be.null
+    expect(await servingOnly('u1', store).readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
+  })
+
+  it("makes each user's VaultDB once, and keeps it", async () => {
+    const { vaultDB, askedFor } = counted()
+    await vaultDB.readBundle(TH.scopeOf('u1'))
+    await vaultDB.readBundle(TH.scopeOf('u1', 'spare'))
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    vaultDB.subscribe(TH.scopeOf('u2'), () => undefined)()
+    expect(askedFor).to.deep.equal(['anyone', 'u1', 'u2'])
+  })
+
+  it("has the limits of the VaultDB it made for anyone", () => {
+    const store = memoryStore()
+    const limitedBy = (userId: string): TH.VaultDBVerbs => ({
+      ...servingOnly(userId, store),
+      maxRecordBytes: userId === 'anyone' ? 4096 : 1,
+      maxVaultBytes:  userId === 'anyone' ? 65_536 : 1,
+      maxLockboxes:   userId === 'anyone' ? 250 : 1,
+    })
+    expect(TH.perUser(limitedBy)).to.include({ maxRecordBytes: 4096, maxVaultBytes: 65_536, maxLockboxes: 250 })
+  })
+
+  it("passes on a refusal from the user's VaultDB", async () => {
+    const store = memoryStore()
+    const onlyU1 = TH.perUser(() => servingOnly('u1', store))
+    await TH.expectRefusal(onlyU1.readBundle(TH.scopeOf('u2')), 'not_permitted')
+  })
 })

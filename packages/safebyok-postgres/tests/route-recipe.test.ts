@@ -1,0 +1,233 @@
+// The README's route recipe, run: its server half (a web-standard POST handler) and its client half
+// (a VaultDB over fetch), with only the wiring a test needs changed -- the request's user comes
+// from a header instead of a session cookie, and fetch calls the handler in-process. Change one
+// and the README changes with it.
+import { describe, expect, it } from 'vitest'
+import type { Client } from 'pg'
+import { VaultDB, VaultError, VaultErrorKindVals, memoryDeviceDB, openVault } from 'safebyok'
+import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultErrorKind, VaultScope } from 'safebyok'
+import * as TH from './test-helpers'
+import { VaultChangeChannel, postgresVaultDB } from '../src/index'
+import type { PostgresClient, PostgresListen, PostgresVaultDB } from '../src/index'
+
+// ------------------------------------------------------------------------- the server half
+
+/** One verb a browser's vault may call, as the route serves it from the arguments the browser sent. */
+type Served = (vaultDB: PostgresVaultDB, args: unknown[]) => Promise<unknown>
+
+/**
+ * The verbs a browser's vault may call -- VaultDB's own, and nothing else -- each passed to the
+ * VaultDB, which checks the scope and the boxlabel and refuses another user's vault. A listing
+ * goes as the stored records, which the browser's VaultDB validates.
+ */
+const served = new Map<string, Served>([
+  ['readBundle',   (vaultDB, [scope]) => vaultDB.readBundle(scope as VaultScope)],
+  ['createBundle', (vaultDB, [bundle]) => vaultDB.createBundle(bundle as VaultBundle)],
+  ['updateBundle', (vaultDB, [bundle, expected]) => vaultDB.updateBundle(bundle as VaultBundle, expected as BundleExpectation)],
+  ['readBox',      (vaultDB, [scope, boxlabel]) => vaultDB.readBox(scope as VaultScope, boxlabel as string)],
+  ['listBoxes',    (vaultDB, [scope]) => vaultDB.listBoxRecords(scope as VaultScope)],
+  ['updateBox',    (vaultDB, [scope, lockbox, expected]) => vaultDB.updateBox(scope as VaultScope, lockbox as Lockbox, expected as LockboxExpectation)],
+  ['eraseBox',     (vaultDB, [scope, boxlabel, expected]) => vaultDB.eraseBox(scope as VaultScope, boxlabel as string, expected as EraseExpectation)],
+  ['eraseVault',   (vaultDB, [scope, expected]) => vaultDB.eraseVault(scope as VaultScope, expected as EraseExpectation)],
+])
+
+/** What a request posts: its verb and arguments, or nothing when its body is not a JSON object. */
+const postedCall = async (request: Request): Promise<{ verb?: unknown, args?: unknown }> => {
+  try {
+    const posted: unknown = await request.json()
+    return typeof posted === 'object' && posted !== null ? posted : {}
+  } catch {
+    return {}
+  }
+}
+
+/** The README's POST handler, over `pool`, its signed-in user found by `signedInUserId`. */
+const vaultRoute = (pool: PostgresClient, signedInUserId: (request: Request) => Promise<string | null>) => (
+  async (request: Request): Promise<Response> => {
+    const { verb, args } = await postedCall(request)
+    const serve = typeof verb === 'string' ? served.get(verb) : undefined
+    if (! serve || ! Array.isArray(args)) {
+      return Response.json({ refusal: { kind: 'bad_option', message: 'That is not a vault verb.' } }, { status: 400 })
+    }
+    // Made per request, for the user your own auth signed in -- never one the request names.
+    const vaultDB = postgresVaultDB({ client: pool, userId: await signedInUserId(request) })
+    try {
+      return Response.json({ result: (await serve(vaultDB, args)) ?? null })
+    } catch (err) {
+      if (! (err instanceof VaultError)) { throw err }
+      // A refusal crosses as its kind and its calm message; never its cause, the driver's own error.
+      return Response.json({ refusal: { kind: err.kind, message: err.message } })
+    }
+  }
+)
+
+// ------------------------------------------------------------------------- the client half
+
+type Fetch = (url: string, init: RequestInit) => Promise<Response>
+
+/** Where the route is served. */
+const VaultRouteUrl = '/api/safebyok'
+
+/** The README's client VaultDB: each verb one POST to the route, a refusal rethrown as its VaultError. */
+class RouteVaultDB extends VaultDB {
+  readonly maxRecordBytes = 1024 * 1024
+  readonly maxVaultBytes = Infinity
+  readonly maxLockboxes = 1000 // the server's postgresVaultDB maxLockboxes
+
+  private readonly fetcher: Fetch
+
+  constructor(fetcher: Fetch) {
+    super()
+    this.fetcher = fetcher
+  }
+
+  protected doReadBundle(scope: VaultScope) { return this.call('readBundle', scope) }
+  protected doCreateBundle(bundle: VaultBundle) { return this.call('createBundle', bundle) }
+  protected async doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation) {
+    await this.call('updateBundle', bundle, expected)
+    return true
+  }
+  protected doReadBox(scope: VaultScope, boxlabel: string) { return this.call('readBox', scope, boxlabel) }
+  protected async doListBoxes(scope: VaultScope) { return await this.call('listBoxes', scope) as unknown[] }
+  protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation) {
+    await this.call('updateBox', scope, lockbox, expected)
+    return true
+  }
+  protected async doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation) {
+    await this.call('eraseBox', scope, boxlabel, expected)
+    return true
+  }
+  protected async doEraseVault(scope: VaultScope, expected: EraseExpectation) {
+    await this.call('eraseVault', scope, expected)
+    return true
+  }
+
+  // A stale write refuses on the server and crosses as its kind, so a write that answers lands.
+  private async call(verb: string, ...args: unknown[]): Promise<unknown> {
+    const response = await this.fetcher(VaultRouteUrl, {
+      method:  'POST',
+      headers: { 'content-type': 'application/json' },
+      body:    JSON.stringify({ verb, args }),
+    })
+    const { result, refusal } = await response.json() as { result?: unknown, refusal?: { kind?: unknown, message?: unknown } }
+    if (refusal && isKind(refusal.kind) && typeof refusal.message === 'string') {
+      throw new VaultError(refusal.kind, refusal.message)
+    }
+    if (! response.ok) { throw new Error(`The vault route answered ${String(response.status)}`) }
+    return result
+  }
+}
+
+const isKind = (kind: unknown): kind is VaultErrorKind => (VaultErrorKindVals as readonly unknown[]).includes(kind)
+
+// ------------------------------------------------------------------- the listen fan-out, for pg
+
+/** The README's fan-out: one pg connection LISTENs, and hands each notification to every hearer. */
+const fanOut = (listener: Pick<Client, 'on'>): PostgresListen => {
+  const hearers = new Set<(payload: string) => void>()
+  listener.on('notification', ({ channel, payload = '' }) => {
+    if (channel === VaultChangeChannel) {
+      for (const hear of hearers) { hear(payload) }
+    }
+  })
+  return (_channel, onNotify) => {
+    hearers.add(onNotify)
+    return () => { hearers.delete(onNotify) }
+  }
+}
+
+// ------------------------------------------------------------------------------------- tests
+
+/** The route over this file's database, signing each request in as its `x-test-user` header. */
+const routeOver = async () => vaultRoute(await TH.emptyDatabase(), byHeader)
+
+/** The test's stand-in for a session: the request's `x-test-user` header. */
+const byHeader = (request: Request) => Promise.resolve(request.headers.get('x-test-user'))
+
+/** A POST of `body` to the route. */
+const postOf = (body: unknown) => new Request(`https://app.example.test${VaultRouteUrl}`, { method: 'POST', body: JSON.stringify(body) })
+
+/** A browser for `userId`: its fetch reaches `route` in-process, signed in as that user. */
+const browserFor = (route: (request: Request) => Promise<Response>, userId: string | null) => (
+  new RouteVaultDB((url, init) => {
+    const headers = new Headers(init.headers)
+    if (userId !== null) { headers.set('x-test-user', userId) }
+    return route(new Request(`https://app.example.test${url}`, { ...init, headers }))
+  })
+)
+
+TH.bootDatabaseFirst()
+
+TH.describeVaultDB('the README route recipe, over postgresVaultDB', async () => {
+  const route = await routeOver()
+  return TH.perUser((userId) => browserFor(route, userId))
+})
+
+describe("the README route recipe", () => {
+  it("carries a real vault, made and opened by the core in the browser", async () => {
+    const route = await routeOver()
+    const vault = await openVault({
+      applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: browserFor(route, 'u1'), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver,
+    })
+    await vault.unlock('correct horse battery staple')
+    await vault.store('anthropic_api_key', 'sk-ant-test-not-a-real-key')
+    expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
+    vault.close()
+  })
+
+  it("carries a refusal's kind across: another user's vault is not_permitted, a stale write stale_write", async () => {
+    const route = await routeOver()
+    const browser = browserFor(route, 'u1')
+    const notMine = await TH.refusalOf(browser.readBundle(TH.scopeOf('u2')))
+    expect(notMine).to.be.instanceOf(VaultError)
+    expect(notMine.kind).to.eq('not_permitted')
+    await browser.createBundle(TH.bundleOf('u1'))
+    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 7 }))
+    expect(stale.kind).to.eq('stale_write')
+  })
+
+  it("refuses a signed-out browser with not_permitted", async () => {
+    const route = await routeOver()
+    const refusal = await TH.refusalOf(browserFor(route, null).readBundle(TH.scopeOf('u1')))
+    expect(refusal.kind).to.eq('not_permitted')
+  })
+
+  it("answers 400 to anything but a vault verb, a malformed body among them, and the client says so as storage_unavailable", async () => {
+    const route = await routeOver()
+    for (const body of [{ verb: 'subscribe', args: [] }, { verb: 'constructor', args: [] }, { verb: 'readBundle', args: 'nope' }, null, 42]) {
+      const response = await route(postOf(body))
+      expect(response.status).to.eq(400)
+    }
+    const notJson = await route(new Request(`https://app.example.test${VaultRouteUrl}`, { method: 'POST', body: '{"verb": "readBundle", ' }))
+    expect(notJson.status).to.eq(400)
+    const broken = new RouteVaultDB(() => Promise.resolve(Response.json({}, { status: 502 })))
+    const refusal = await TH.refusalOf(broken.readBundle(TH.scopeOf('u1')))
+    expect(refusal.kind).to.eq('storage_unavailable')
+  })
+
+  it("never sends the driver's own error to the browser", async () => {
+    const dbDown = new Error('password authentication failed for user "vault_owner"')
+    const route = vaultRoute(TH.failingClient(dbDown), () => Promise.resolve('u1'))
+    const response = await route(postOf({ verb: 'readBundle', args: [TH.scopeOf('u1')] }))
+    const sent = await response.text()
+    expect(sent).to.include('storage_unavailable')
+    expect(sent).to.not.include('vault_owner')
+  })
+})
+
+describe("the README's pg fan-out", () => {
+  it("hands each notification on the vault channel to every hearer, until it unlistens", () => {
+    const handlers: ((notice: { channel: string, payload?: string }) => void)[] = []
+    const listener = { on: (_event: string, handler: (typeof handlers)[number]) => { handlers.push(handler) } }
+    const emit = (notice: { channel: string, payload?: string }) => { for (const handler of handlers) { handler(notice) } }
+    const listen = fanOut(listener as unknown as Pick<Client, 'on'>)
+    const heard: string[] = []
+    const unlisten = listen(VaultChangeChannel, (payload) => { heard.push(payload) }) as () => void
+    emit({ channel: VaultChangeChannel, payload: '{"applabel":"acme"}' })
+    emit({ channel: 'someone_elses_channel', payload: 'ignored' })
+    emit({ channel: VaultChangeChannel })
+    unlisten()
+    emit({ channel: VaultChangeChannel, payload: 'too late' })
+    expect(heard).to.deep.equal(['{"applabel":"acme"}', ''])
+  })
+})

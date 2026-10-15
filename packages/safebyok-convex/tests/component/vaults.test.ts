@@ -64,14 +64,14 @@ describe("getBundle and createBundle", () => {
 })
 
 describe("updateBundle", () => {
-  const rewrapped = TH.bundleOf('u1', { passphrase_epoch: 2, vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv-new', ciphertext_b64: 'ct-new' } })
+  const rewrapped = TH.bundleOf('u1', { unlock_epoch: 2, unlocks: [TH.envelopeOf('passphrase', { vault_key_wrapped: { cipher_iv_b64: 'iv-new', ciphertext_b64: 'ct-new' } })] })
 
   const UpdateCases = [
     // the expectation holds:
-    [{ vault_id: 'vault-id-u1', passphrase_epoch: 1 },  true,   'lands while the standing bundle has the expected vault_id and epoch'],
+    [{ vault_id: 'vault-id-u1', unlock_epoch: 1 },  true,   'lands while the standing bundle has the expected vault_id and epoch'],
     // it fails:
-    [{ vault_id: 'vault-id-u1', passphrase_epoch: 2 },  false,  'refuses when the passphrase changed since it was read'],
-    [{ vault_id: 'vault-id-gone', passphrase_epoch: 1 }, false, 'refuses when the vault was made anew since it was read'],
+    [{ vault_id: 'vault-id-u1', unlock_epoch: 2 },  false,  'refuses when the unlocks changed since it was read'],
+    [{ vault_id: 'vault-id-gone', unlock_epoch: 1 }, false, 'refuses when the vault was made anew since it was read'],
   ] as const
 
   for (const [expected, landed, blurb] of UpdateCases) {
@@ -84,7 +84,7 @@ describe("updateBundle", () => {
 
   it("refuses when the scope holds no bundle at all, and creates none", async () => {
     const t = TH.componentTest()
-    expect(await t.mutation(TH.vaults.updateBundle, { bundle: rewrapped, expected: { vault_id: 'vault-id-u1', passphrase_epoch: 1 } })).to.be.false
+    expect(await t.mutation(TH.vaults.updateBundle, { bundle: rewrapped, expected: { vault_id: 'vault-id-u1', unlock_epoch: 1 } })).to.be.false
     expect(await t.query(TH.vaults.getBundle, { scope: u1 })).to.be.null
   })
 })
@@ -248,7 +248,7 @@ describe("eraseVault", () => {
 describe("watchVault", () => {
   it("signs an empty scope with nulls and no boxes", async () => {
     const t = TH.componentTest()
-    expect(await t.query(TH.vaults.watchVault, { scope: u1 })).to.deep.equal({ vault_id: null, passphrase_epoch: null, boxes: [] })
+    expect(await t.query(TH.vaults.watchVault, { scope: u1 })).to.deep.equal({ vault_id: null, unlock_epoch: null, boxes: [] })
   })
 
   it("signs the vault with its bundle's ids and each box's revision, in boxlabel order", async () => {
@@ -257,7 +257,7 @@ describe("watchVault", () => {
     await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
     expect(await t.query(TH.vaults.watchVault, { scope: u1 })).to.deep.equal({
       vault_id:         'vault-id-u1',
-      passphrase_epoch: 1,
+      unlock_epoch: 1,
       boxes:            [['anthropic_api_key', 'rev-a1'], ['openai_api_key', 'rev-o1']],
     })
   })
@@ -276,7 +276,7 @@ describe("watchVault", () => {
     await sign()
     await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })
     await sign()
-    await t.mutation(TH.vaults.updateBundle, { bundle: TH.bundleOf('u1', { passphrase_epoch: 2 }), expected: { vault_id: 'vault-id-u1', passphrase_epoch: 1 } })
+    await t.mutation(TH.vaults.updateBundle, { bundle: TH.bundleOf('u1', { unlock_epoch: 2 }), expected: { vault_id: 'vault-id-u1', unlock_epoch: 1 } })
     await sign()
     await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })
     await sign()
@@ -532,7 +532,8 @@ describe("a vault's weight limit", () => {
 const wholeDocumentBundle = () => {
   const bundle = TH.bundleOf('u1')
   const padding = 'a'.repeat(1_048_576 - getDocumentSize(bundle) - 64)
-  return TH.bundleOf('u1', { passphrase_salt_b64: bundle.passphrase_salt_b64 + padding })
+  const envelope = TH.envelopeOf('passphrase', { vault_key_wrapped: TH.fakeCiphered('bundle-u1') })
+  return TH.bundleOf('u1', { unlocks: [{ ...envelope, salt_b64: envelope.salt_b64 + padding }] })
 }
 
 /**

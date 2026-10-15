@@ -1,0 +1,220 @@
+import { GraphQLError } from 'graphql'
+import { VaultError } from 'safebyok'
+import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultDB, VaultScope } from 'safebyok'
+import { BundleFields, LockboxFields, ScopeFields, recordOf } from './fields'
+
+/**
+ * What the resolvers need of the VaultDB they serve: the verbs a browser's vault calls, and
+ * `listBoxRecords`, which lists a vault's lockboxes as stored records -- what the browser's
+ * VaultDB must hand back from its own listing -- where a VaultDB's `listBoxes` gives the
+ * summaries a vault shows. `safebyok-postgres`'s `PostgresVaultDB` is one as it stands; a VaultDB
+ * of your own is one once it has `listBoxRecords`.
+ */
+export type ServedVaultDB = Pick<VaultDB, 'readBundle' | 'createBundle' | 'updateBundle' | 'readBox' | 'updateBox' | 'eraseBox' | 'eraseVault' | 'subscribe'> & {
+  listBoxRecords(scope: VaultScope): Promise<unknown[]>
+}
+
+/** What {@link vaultResolvers} is made with, once, at your server's start. */
+export type VaultResolversOpts<ContextT> = {
+  /**
+   * The VaultDB for one request, made from your server's context for it: for the user your own
+   * auth signed in, never one the request names. Called for every vault field resolved, so it
+   * should be cheap -- `postgresVaultDB` is, connecting to nothing.
+   */
+  vaultDBFor: (context: ContextT) => ServedVaultDB
+}
+
+/** A root field's arguments, as {@link VaultSchemaSdl} names them and GraphQL has coerced them. */
+export type VaultFieldArgs = {
+  scope?:    unknown
+  boxlabel?: unknown
+  bundle?:   unknown
+  lockbox?:  unknown
+  expected?: unknown
+}
+
+/** One query or mutation's resolver, as every GraphQL server calls it. */
+export type VaultFieldResolver<ContextT> = (parent: unknown, args: VaultFieldArgs, context: ContextT) => Promise<unknown>
+
+/**
+ * The resolvers {@link vaultResolvers} makes, keyed as {@link VaultSchemaSdl} names its root
+ * fields: the shape Yoga, Apollo Server, Mercurius and graphql-tools all take.
+ */
+export type VaultResolvers<ContextT> = {
+  Query: {
+    safebyokReadBundle: VaultFieldResolver<ContextT>
+    safebyokReadBox:    VaultFieldResolver<ContextT>
+    safebyokListBoxes:  VaultFieldResolver<ContextT>
+  }
+  Mutation: {
+    safebyokCreateBundle: VaultFieldResolver<ContextT>
+    safebyokUpdateBundle: VaultFieldResolver<ContextT>
+    safebyokUpdateBox:    VaultFieldResolver<ContextT>
+    safebyokEraseBox:     VaultFieldResolver<ContextT>
+    safebyokEraseVault:   VaultFieldResolver<ContextT>
+  }
+  Subscription: {
+    safebyokVaultChanged: {
+      subscribe: (parent: unknown, args: VaultFieldArgs, context: ContextT) => AsyncIterableIterator<VaultScope>
+      resolve:   (scope: VaultScope) => VaultScope
+    }
+  }
+}
+
+/**
+ * The resolvers for {@link VaultSchemaSdl}: each root field one verb of the VaultDB that
+ * `vaultDBFor` makes for the request, so they drop into any GraphQL server beside your own.
+ *
+ * * **Who may reach a vault** is the VaultDB's to say: `postgresVaultDB`, made for the signed-in
+ *   user, refuses every other user's vault with `not_permitted`.
+ * * **A refusal crosses as a GraphQL error** whose message is the VaultError's calm one and whose
+ *   `extensions.kind` is its kind, which the browser's `graphqlVaultDB` throws as the same
+ *   VaultError. Never a record, and never the VaultError's `cause` -- your driver's own error,
+ *   which may name your database. That stays on the server, as the GraphQL error's `cause`, for
+ *   your own logs. Anything else a VaultDB throws crosses as `storage_unavailable`, what it threw
+ *   kept as that VaultError's cause.
+ * * **`safebyokVaultChanged`** sends the vault's scope after every write to it, as the VaultDB's
+ *   `subscribe` hears them -- for `postgresVaultDB`, through its `listen` -- and stops listening
+ *   when the subscriber goes. Changes that come while the subscriber is still busy with the last
+ *   one are sent as one.
+ *
+ * @param opts - `vaultDBFor`, which makes the VaultDB for a request from its context.
+ * @returns The resolver map, for your GraphQL server beside your own.
+ *
+ * @example
+ *   const resolvers = vaultResolvers({
+ *     vaultDBFor: (context: AppContext) => postgresVaultDB({ client: pool, userId: context.userId, listen }),
+ *   })
+ */
+export const vaultResolvers = <ContextT>(opts: VaultResolversOpts<ContextT>): VaultResolvers<ContextT> => {
+  const vaultDBFor = (opts as Partial<VaultResolversOpts<ContextT>> | null | undefined)?.vaultDBFor
+  if (typeof vaultDBFor !== 'function') {
+    throw new VaultError('bad_option', "vaultResolvers needs a `vaultDBFor`: (context) => the VaultDB for that request's signed-in user, such as postgresVaultDB({ client, userId }).")
+  }
+  /** A resolver calling `verb` on the request's VaultDB, any refusal made one a wire can carry. */
+  const served = (verb: (vaultDB: ServedVaultDB, args: VaultFieldArgs) => Promise<unknown>): VaultFieldResolver<ContextT> => (
+    async (_parent, args, context) => {
+      try {
+        return await verb(vaultDBFor(context), args)
+      } catch (err) {
+        throw crossing(err)
+      }
+    }
+  )
+  return {
+    Query: {
+      safebyokReadBundle: served((vaultDB, args) => vaultDB.readBundle(scopeIn(args))),
+      safebyokReadBox:    served((vaultDB, args) => vaultDB.readBox(scopeIn(args), args.boxlabel as string)),
+      // As stored records, which the browser's VaultDB validates: not listBoxes' summaries.
+      safebyokListBoxes:  served((vaultDB, args) => vaultDB.listBoxRecords(scopeIn(args))),
+    },
+    Mutation: {
+      safebyokCreateBundle: served((vaultDB, args) => vaultDB.createBundle(bundleIn(args))),
+      safebyokUpdateBundle: served(async (vaultDB, args) => {
+        await vaultDB.updateBundle(bundleIn(args), bundleExpectationIn(args))
+        return true
+      }),
+      safebyokUpdateBox: served(async (vaultDB, args) => {
+        await vaultDB.updateBox(scopeIn(args), recordOf(args.lockbox, LockboxFields) as Lockbox, lockboxExpectationIn(args))
+        return true
+      }),
+      safebyokEraseBox: served(async (vaultDB, args) => {
+        await vaultDB.eraseBox(scopeIn(args), args.boxlabel as string, eraseExpectationIn(args))
+        return true
+      }),
+      safebyokEraseVault: served(async (vaultDB, args) => {
+        await vaultDB.eraseVault(scopeIn(args), eraseExpectationIn(args))
+        return true
+      }),
+    },
+    Subscription: {
+      safebyokVaultChanged: {
+        subscribe: (_parent, args, context) => {
+          try {
+            return changesOf(vaultDBFor(context), scopeIn(args))
+          } catch (err) {
+            throw crossing(err)
+          }
+        },
+        resolve: (scope) => scope,
+      },
+    },
+  }
+}
+
+// The arguments as the schema shapes them, rebuilt field by field as plain records: the
+// VaultDB checks them as it would any caller's.
+const scopeIn = (args: VaultFieldArgs) => recordOf(args.scope, ScopeFields) as VaultScope
+const bundleIn = (args: VaultFieldArgs) => recordOf(args.bundle, BundleFields) as VaultBundle
+
+const bundleExpectationIn = (args: VaultFieldArgs): BundleExpectation => {
+  const { vault_id, unlock_epoch } = args.expected as BundleExpectation
+  return { vault_id, unlock_epoch }
+}
+
+// A revision_id left out, as a GraphQL client may leave out a null, is the null it means.
+const lockboxExpectationIn = (args: VaultFieldArgs): LockboxExpectation => {
+  const { vault_id, revision_id = null } = args.expected as { vault_id: string, revision_id?: string | null }
+  return { vault_id, revision_id }
+}
+
+const eraseExpectationIn = (args: VaultFieldArgs): EraseExpectation => {
+  const { vault_id } = args.expected as EraseExpectation
+  return { vault_id }
+}
+
+/**
+ * Each change `vaultDB` hears to the vault in `scope`, as its scope, until the subscriber goes:
+ * ending the iteration -- which a GraphQL server does when the subscription ends -- cancels the
+ * stream, which unsubscribes. A change heard while one is still waiting to be read is that one:
+ * either says the vault changed. A refusal from `subscribe` throws at once, before any stream is
+ * made. The stream is read through a reader, not its own iterator: that one's `return` waits for
+ * a pending `next`, which for a quiet vault is forever, so a subscriber gone while it waited would
+ * keep the VaultDB listening. A reader's `cancel` ends the pending read as done, at once. The
+ * iterator is its own iterable, as a GraphQL server expects: graphql-js asks for it twice.
+ */
+const changesOf = (vaultDB: ServedVaultDB, scope: VaultScope): AsyncIterableIterator<VaultScope> => {
+  let unsubscribe = noUnsubscribing
+  const changes = new ReadableStream<VaultScope>({
+    start: (controller) => {
+      unsubscribe = vaultDB.subscribe(scope, () => {
+        // Room only while none waits; none, too, once the stream has closed.
+        if ((controller.desiredSize ?? 0) > 0) { controller.enqueue(scope) }
+      })
+    },
+    cancel: () => { unsubscribe() },
+  })
+  const reader = changes.getReader()
+  const iterator: AsyncIterableIterator<VaultScope> = {
+    next:   () => reader.read(),
+    return: async () => {
+      await reader.cancel()
+      return { done: true, value: undefined }
+    },
+    [Symbol.asyncIterator]: () => iterator,
+  }
+  return iterator
+}
+
+const noUnsubscribing = (): void => undefined
+
+/**
+ * A refusal as the wire carries it: a GraphQL error with the VaultError's message and its kind as
+ * `extensions.kind`, and nothing more. A GraphQL server sends a GraphQLError of its resolvers'
+ * as it stands, where it hides anything else behind "Unexpected error" (Yoga) or sends its
+ * message as it is (Apollo). The VaultError rides along as the error's `cause`, unenumerable, as
+ * an Error's own cause is, for the server's logs: no GraphQL server sends a cause.
+ */
+const crossing = (err: unknown): GraphQLError => {
+  const refusal = err instanceof VaultError ? err : storageTrouble(err)
+  const crossed = new GraphQLError(refusal.message, { extensions: { kind: refusal.kind } })
+  // Set after, never as the constructor's `cause` or `originalError`: either becomes the error's
+  // originalError, and Yoga masks a GraphQLError whose originalError is not a GraphQLError too.
+  Object.defineProperty(crossed, 'cause', { value: refusal, configurable: true, writable: true })
+  return crossed
+}
+
+/** What a VaultDB threw that is not a VaultError, as the one a VaultDB would have thrown. */
+const storageTrouble = (err: unknown): VaultError => (
+  new VaultError('storage_unavailable', "The vault's storage could not be reached, or failed partway: try again shortly. The storage adapter's own error is this error's cause.", { cause: err })
+)

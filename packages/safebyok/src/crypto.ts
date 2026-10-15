@@ -30,23 +30,38 @@ export const randomBytes = (count: number): Uint8Array => (
 /** A fresh random identifier (for a vaultId or revisionId): a UUID, minted by the platform. */
 export const randomId = (): string => crypto.randomUUID()
 
-/** Bytes as base64url text, the `_b64` form every stored record uses. */
+/**
+ * Bytes as base64url text, unpadded: the `_b64` form every stored record uses.
+ *
+ * @example toB64(new TextEncoder().encode('cred-laptop'))  // 'Y3JlZC1sYXB0b3A'
+ */
 export const toB64 = (bytes: Uint8Array): string => base64urlnopad.encode(bytes)
 
-/** Base64url text back to bytes. Throws on text that is not base64url. */
+/**
+ * Base64url text back to bytes. Throws on text that is not base64url.
+ *
+ * @example new TextDecoder().decode(fromB64('Y3JlZC1sYXB0b3A'))  // 'cred-laptop'
+ */
 export const fromB64 = (b64: string): Uint8Array => base64urlnopad.decode(b64)
 
 const AesGcm = { name: 'AES-GCM', length: 256 } as const
 const IvBytes = 12
 
 /**
+ * One part of a {@link cipherBinding}: a string or number, or a flat record of them -- the public
+ * header of an unlock envelope, say -- encoded with its keys sorted.
+ */
+export type CipherBindingPart = string | number | Readonly<Record<string, string | number>>
+
+/**
  * The context an encryption is bound to, as AES-GCM additional data: a deterministic encoding of
  * the given parts (app, user, vault, lockbox, revision, purpose -- whatever names the slot).
  * Rebuilt rather than stored; if any part differs at decryption, the ciphertext refuses to open.
  *
- * @example cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', vaultId, 1, 'vault_key_passphrase_wrapped')
+ * @example cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', vaultId, 1, 'vault_key_local_wrapped')
+ * @example cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', vaultId, 'vault_key_passphrase_wrapped', { method: 'passphrase', unlock_id, unlocklabel, key_deriver_label, salt_b64 })
  */
-export const cipherBinding = (...parts: readonly (string | number)[]): Uint8Array => (
+export const cipherBinding = (...parts: readonly CipherBindingPart[]): Uint8Array => (
   new TextEncoder().encode(stableJsonify(parts))
 )
 
@@ -83,6 +98,25 @@ export const makeLocalUnlockKey = (): Promise<CryptoKey> => (
 export const importWrappingKeyBytes = (keyBytes: Uint8Array): Promise<CryptoKey> => (
   crypto.subtle.importKey('raw', keyBytes as BufferSource, AesGcm, false, ['wrapKey', 'unwrapKey'])
 )
+
+/**
+ * A non-extractable AES-GCM wrapping key made from secret bytes that are already uniformly random
+ * -- a passkey's PRF output -- by HKDF-SHA256 (RFC 5869), with no salt (the RFC's default, for
+ * input that is already uniform) and `info` naming what the key is for, so the same bytes put to
+ * another use make another key: the passkeyKey. The bytes stay with the caller; drop them promptly.
+ *
+ * @example await deriveWrappingKey(prfBytes, cipherBinding('safebyok-vault-v1', 'vault_key_passkey_wrapped', credentialId))
+ */
+export const deriveWrappingKey = async (keyBytes: Uint8Array, info: Uint8Array): Promise<CryptoKey> => {
+  const inputKey = await crypto.subtle.importKey('raw', keyBytes as BufferSource, 'HKDF', false, ['deriveKey'])
+  return crypto.subtle.deriveKey(
+    { name: 'HKDF', hash: 'SHA-256', salt: new Uint8Array(0), info: info as BufferSource },
+    inputKey,
+    AesGcm,
+    false,
+    ['wrapKey', 'unwrapKey'],
+  )
+}
 
 /**
  * `plainBytes` encrypted under `cipherKey`, bound to `binding`: a fresh cipherIv every call,

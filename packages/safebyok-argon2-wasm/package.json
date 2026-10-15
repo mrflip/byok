@@ -1,0 +1,97 @@
+{
+  "name": "safebyok-argon2-wasm",
+  "private": false,
+  "version": "0.0.0",
+  "description": "A WebAssembly key deriver for safebyok: Argon2id through hash-wasm, under the same keyDeriverSpecs and labels as the core's pure-JavaScript deriver, deriving the same bytes.",
+  "keywords": [
+    "safebyok",
+    "argon2",
+    "argon2id",
+    "webassembly",
+    "wasm",
+    "vault",
+    "e2ee"
+  ],
+  "license": "Apache-2.0",
+  "author": "Philip (flip) Kromer <flip@mrflip.com>",
+  "homepage": "https://github.com/mrflip/safebyok#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrflip/safebyok.git",
+    "directory": "packages/safebyok-argon2-wasm"
+  },
+  "bugs": {
+    "url": "https://github.com/mrflip/safebyok/issues"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "prebuild": "pnpm build:deps",
+    "build:watch": "tsdown --watch",
+    "build:deps": "[ \"$SAFEBYOK_SKIP_BUILD_DEPS\" = 1 ] || SAFEBYOK_SKIP_BUILD_DEPS=1 pnpm --filter 'safebyok-argon2-wasm^...' build",
+    "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "pretest": "pnpm build:deps",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "pretest:coverage": "pnpm build:deps",
+    "justify": "pnpm install && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "prepublishOnly": "node ../../scripts/require-pnpm.ts && pnpm justify"
+  },
+  "dependencies": {
+    "hash-wasm": "^4.12.0"
+  },
+  "devDependencies": {
+    "@arethetypeswrong/core": "^0.18.5",
+    "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^24.19.2",
+    "@vitest/coverage-v8": "^5.0.4",
+    "@vitest/eslint-plugin": "^1.6.27",
+    "eslint": "^10.12.0",
+    "eslint-import-resolver-typescript": "^4.4.5",
+    "eslint-plugin-chai-expect": "^4.1.1",
+    "eslint-plugin-chai-friendly": "^1.2.1",
+    "eslint-plugin-import-x": "^4.17.1",
+    "eslint-plugin-sonarjs": "^4.2.2",
+    "eslint-plugin-unicorn": "^78.0.0",
+    "publint": "^0.3.25",
+    "safebyok": "workspace:*",
+    "tsdown": "^0.23.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.71.2",
+    "vitest": "^5.0.4",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "safebyok": "workspace:^"
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.cts",
+  "exports": {
+    ".": {
+      "@safebyok/source": "./src/index.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      },
+      "./package.json": "./package.json"
+    }
+  }
+}

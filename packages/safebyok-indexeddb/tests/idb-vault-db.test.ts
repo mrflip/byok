@@ -1,0 +1,259 @@
+// fake-indexeddb installs a Node-side indexedDB global before the adapter loads: these tests
+// exercise real IndexedDB semantics -- transactions, structured clone -- without a browser.
+import 'fake-indexeddb/auto'
+import { describe, expect, it, vi } from 'vitest'
+import { createStore, get, set } from 'idb-keyval'
+import { memoryDeviceDB, openVault, VaultError } from 'safebyok'
+import { idbVaultDB } from '../src/idb-vault-db'
+import type { IdbVaultDBOpts } from '../src/idb-opts'
+import { inspectIdbVaultDB } from '../src/inspect-idb-vault-db'
+import * as TH from './test-helpers'
+
+TH.describeVaultDB('idbVaultDB', () => idbVaultDB({ dbName: TH.freshDbName() }))
+
+/** The shelf's object store, opened as the adapter opens it, for a test to read or plant rows. */
+const rawShelf = (dbName: string) => createStore(`${dbName}:vault_db`, 'records')
+
+/** Option bags idbVaultDB never takes: each refused as it is made, before a database opens. */
+const BadOpts = [
+  [{ dbName: "" },                             'an empty dbName'],
+  [{ dbName: 42 },                             'a dbName that is not text'],
+  [{ dbName: null },                           'a null dbName'],
+  ["acme",                                     'a dbName passed bare, not in a bag'],
+] as const
+
+describe("idbVaultDB's options", () => {
+  for (const [opts, blurb] of BadOpts) {
+    it(`refuses ${blurb} with kind 'bad_option'`, () => {
+      expect(() => idbVaultDB(opts as unknown as IdbVaultDBOpts)).to.throw(VaultError, /^idbVaultDB takes an optional dbName/).with.property('kind', 'bad_option')
+    })
+  }
+
+  it("keeps its records in 'safebyok' given no options, or no dbName", async () => {
+    await idbVaultDB().createBundle(TH.bundleOf('default_u1'))
+    expect(await get('vault:acme:default_u1:main', rawShelf('safebyok'))).to.deep.equal(TH.bundleOf('default_u1'))
+    expect(await idbVaultDB({ dbName: undefined }).readBundle(TH.scopeOf('default_u1'))).to.deep.equal(TH.bundleOf('default_u1'))
+  })
+})
+
+describe("idbVaultDB", () => {
+  it("declares no per-record or per-vault limit, in bytes or in lockboxes: IndexedDB has neither", () => {
+    expect(idbVaultDB().maxRecordBytes).to.eq(Infinity)
+    expect(idbVaultDB().maxVaultBytes).to.eq(Infinity)
+    expect(idbVaultDB().maxLockboxes).to.eq(Infinity)
+  })
+
+  it("keeps each record as itself, field by field, at the ckey it always had", async () => {
+    const dbName = TH.freshDbName()
+    const vaultDB = idbVaultDB({ dbName })
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    expect(await inspectIdbVaultDB({ dbName }).rows()).to.deep.equal([
+      { ckey: 'box:acme:u1:main:anthropic', row: TH.boxOf('anthropic', 'one') },
+      { ckey: 'vault:acme:u1:main',         row: TH.bundleOf('u1') },
+    ])
+  })
+
+  it("reads a vault the core's safebyok/idb wrote: the same database, rows and ckeys", async () => {
+    const dbName = TH.freshDbName()
+    await set('vault:acme:u1:main', TH.bundleOf('u1'), rawShelf(dbName))
+    await set('box:acme:u1:main:anthropic', TH.boxOf('anthropic', 'one'), rawShelf(dbName))
+    const vaultDB = idbVaultDB({ dbName })
+    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
+    expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'one'))
+  })
+
+  it("strips a field the record does not have before storing it", async () => {
+    const dbName = TH.freshDbName()
+    const stray = { ...TH.bundleOf('u1'), stray_field: 'never stored' }
+    await idbVaultDB({ dbName }).createBundle(stray)
+    expect(await get('vault:acme:u1:main', rawShelf(dbName))).to.deep.equal(TH.bundleOf('u1'))
+  })
+
+  it("refuses a damaged bundle as corrupt_record, and leaves it as it is", async () => {
+    const dbName = TH.freshDbName()
+    await set('vault:acme:u1:main', { vault_id: 'vault-id-u1', unlock_epoch: 'one' }, rawShelf(dbName))
+    const refusal = await TH.refusalOf(idbVaultDB({ dbName }).readBundle(TH.scopeOf('u1')))
+    expect(refusal.kind).to.eq('corrupt_record')
+    expect(await get('vault:acme:u1:main', rawShelf(dbName))).to.deep.equal({ vault_id: 'vault-id-u1', unlock_epoch: 'one' })
+  })
+
+  it("lands no update on a damaged bundle, even one that shows the expected vault_id", async () => {
+    const dbName = TH.freshDbName()
+    await set('vault:acme:u1:main', { vault_id: 'vault-id-u1' }, rawShelf(dbName))
+    const refusal = await TH.refusalOf(idbVaultDB({ dbName }).updateBundle(TH.bundleOf('u1', { unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }))
+    expect(refusal.kind).to.eq('stale_write')
+  })
+
+  it("refuses trouble from IndexedDB itself as storage_unavailable", async () => {
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
+    const blocked = vi.spyOn(globalThis.indexedDB, 'open').mockImplementation(() => { throw new DOMException('IndexedDB is off', 'InvalidStateError') })
+    try {
+      const refusal = await TH.refusalOf(vaultDB.readBundle(TH.scopeOf('u1')))
+      expect(refusal.kind).to.eq('storage_unavailable')
+    } finally {
+      blocked.mockRestore()
+    }
+  })
+
+  it("serves openVault: a vault made, stored in and reopened over it", async () => {
+    const dbName = TH.freshDbName()
+    const opts = { applabel: 'acme', userId: 'u1', vaultlabel: 'main', keyDeriver: TH.testDeriver, deviceDB: memoryDeviceDB() }
+    const vault = await openVault({ ...opts, vaultDB: idbVaultDB({ dbName }) })
+    await vault.unlock('correct horse')
+    await vault.store('anthropic', 'sk-not-a-real-key')
+    vault.close()
+    const reopened = await openVault({ ...opts, vaultDB: idbVaultDB({ dbName }) })
+    await reopened.unlock('correct horse')
+    expect(await reopened.read('anthropic')).to.eq('sk-not-a-real-key')
+    reopened.close()
+  })
+})
+
+describe("idbVaultDB, every verb one transaction", () => {
+  const scope = TH.scopeOf('u1')
+
+  it("settles two creates at once on one bundle: the second gets the first's back", async () => {
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
+    const made = await Promise.all([
+      vaultDB.createBundle(TH.bundleOf('u1', { vault_id: 'vault-one' })),
+      vaultDB.createBundle(TH.bundleOf('u1', { vault_id: 'vault-two' })),
+    ])
+    expect(made.map((bundle) => bundle.vault_id)).to.deep.equal(['vault-one', 'vault-one'])
+  })
+
+  it("lands one of two bundle updates proven against the same bundle, and refuses the other", async () => {
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    const expected = { vault_id: 'vault-id-u1', unlock_epoch: 1 }
+    const outcomes = await Promise.allSettled([
+      vaultDB.updateBundle(TH.bundleOf('u1', { unlock_epoch: 2 }), expected),
+      vaultDB.updateBundle(TH.bundleOf('u1', { unlock_epoch: 3 }), expected),
+    ])
+    expect(outcomes.map((outcome) => outcome.status)).to.deep.equal(['fulfilled', 'rejected'])
+    const standing = await vaultDB.readBundle(scope)
+    expect(standing?.unlock_epoch).to.eq(2)
+  })
+
+  it("lands one of two first writes of a lockbox, and refuses the other", async () => {
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    const expected = { vault_id: 'vault-id-u1', revision_id: null }
+    const outcomes = await Promise.allSettled([
+      vaultDB.updateBox(scope, TH.boxOf('anthropic', 'one'), expected),
+      vaultDB.updateBox(scope, TH.boxOf('anthropic', 'two'), expected),
+    ])
+    expect(outcomes.map((outcome) => outcome.status)).to.deep.equal(['fulfilled', 'rejected'])
+    const standing = await vaultDB.readBox(scope, 'anthropic')
+    expect(standing?.revision_id).to.eq('rev-one')
+  })
+
+  it("leaves no lockbox behind a vault erased while it was being written", async () => {
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    const outcomes = await Promise.allSettled([
+      vaultDB.eraseVault(scope, { vault_id: 'vault-id-u1' }),
+      vaultDB.updateBox(scope, TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null }),
+    ])
+    expect(outcomes.map((outcome) => outcome.status)).to.deep.equal(['fulfilled', 'rejected'])
+    expect(await vaultDB.readBox(scope, 'anthropic')).to.be.null
+    expect(await vaultDB.readBundle(scope)).to.be.null
+  })
+
+  it("erases a whole vault or none of it: a deletion failing midway undoes the ones before it", async () => {
+    const dbName = TH.freshDbName()
+    const vaultDB = idbVaultDB({ dbName })
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.updateBox(scope, TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    const failing = vi.spyOn(IDBObjectStore.prototype, 'delete').mockImplementationOnce(function (this: IDBObjectStore, ckey) {
+      this.delete(ckey)
+      throw new DOMException('the disk is full', 'QuotaExceededError')
+    })
+    try {
+      const refusal = await TH.refusalOf(vaultDB.eraseVault(scope, { vault_id: 'vault-id-u1' }))
+      expect(refusal.kind).to.eq('storage_unavailable')
+    } finally {
+      failing.mockRestore()
+    }
+    expect(await vaultDB.readBundle(scope)).to.deep.equal(TH.bundleOf('u1'))
+    expect(await vaultDB.readBox(scope, 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'one'))
+  })
+})
+
+/** A host's listener that throws, as a careless one might. */
+const throwing = () => { throw new Error('a listener of the host') }
+
+describe("idbVaultDB's subscribe", () => {
+  it("rings its subscribers after a write, and unsubscribing silences it", async () => {
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
+    let heardCount = 0
+    const unsubscribe = vaultDB.subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vi.waitFor(() => { expect(heardCount).to.eq(1) })
+    unsubscribe()
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    await TH.wakeupAtNextTick()
+    expect(heardCount).to.eq(1)
+  })
+
+  it("rings for no write that was refused", async () => {
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
+    let heardCount = 0
+    vaultDB.subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
+    await TH.refusalOf(vaultDB.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 1 }))
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.createBundle(TH.bundleOf('u1', { vault_id: 'too-late' }))
+    await TH.wakeupAtNextTick()
+    expect(heardCount).to.eq(1)
+  })
+
+  it("hears another tab's write, over the BroadcastChannel", async () => {
+    const dbName = TH.freshDbName()
+    let heardCount = 0
+    idbVaultDB({ dbName }).subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
+    const otherTab = new BroadcastChannel(`safebyok-idb:${dbName}:vault_db`)
+    otherTab.postMessage('changed')
+    await vi.waitFor(() => { expect(heardCount).to.eq(1) })
+    otherTab.close()
+  })
+
+  it("tells other tabs of a write, though nothing in this tab listens", async () => {
+    const dbName = TH.freshDbName()
+    const otherTab = new BroadcastChannel(`safebyok-idb:${dbName}:vault_db`)
+    let heardCount = 0
+    otherTab.addEventListener('message', () => { heardCount += 1 })
+    await idbVaultDB({ dbName }).createBundle(TH.bundleOf('u1'))
+    await vi.waitFor(() => { expect(heardCount).to.eq(1) })
+    otherTab.close()
+  })
+
+  it("lands a write whose subscriber throws, and calls the others, letting nothing escape uncaught", async () => {
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
+    let heardCount = 0
+    const thrower = vi.fn(throwing)
+    vaultDB.subscribe(TH.scopeOf('u1'), thrower)
+    vaultDB.subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
+    // Whatever would escape the bell's microtasks, as the platform's uncaught error, lands here.
+    const escaped: unknown[] = []
+    const queueMicrotask = globalThis.queueMicrotask.bind(globalThis)
+    const catching = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => {
+      queueMicrotask(() => {
+        try {
+          task()
+        } catch (err) {
+          escaped.push(err)
+        }
+      })
+    })
+    try {
+      await vaultDB.createBundle(TH.bundleOf('u1'))
+      await vi.waitFor(() => { expect(heardCount).to.eq(1) })
+      await TH.wakeupAtNextTick()
+    } finally {
+      catching.mockRestore()
+    }
+    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
+    expect(thrower).toHaveBeenCalledOnce()
+    expect(escaped).to.be.empty
+  })
+})

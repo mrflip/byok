@@ -16,7 +16,11 @@ otherwise write itself.
   7 days", "for 15 minutes", "until you lock it" -- from the `forcePassphraseReentryHours` the
   provider opened the vault with (a hand-rendered dialog takes it as `reentryHours`). A wrong
   passphrase, or any other condition the unlock meets (storage out of reach), shows in the dialog
-  in place; misuse is thrown while rendering, to your error boundary.
+  in place; misuse is thrown while rendering, to your error boundary. For a vault with a passkey,
+  it offers "Use a passkey" beside the passphrase field.
+* `createPasskey()`, `askPasskey()`, `passkeysAvailable()` and `PasskeyUnlockButton` -- the
+  WebAuthn half of a fingerprint (passkey, security key) unlock, below. The three functions import
+  no React.
 
 ## Install
 
@@ -82,6 +86,55 @@ shows it and a different user (or a sign-out and back in) gets a fresh attempt:
   </VaultProvider>
 </ErrorBoundary>
 ```
+
+## Fingerprint unlock (passkeys)
+
+A vault may let the user in with a passkey -- a fingerprint, a face, a phone, a security key --
+beside their passphrase. The core takes the passkey's answer as bytes and never calls WebAuthn;
+these helpers make the calls, through the WebAuthn PRF extension (passkeys and security keys
+alike: a security key's `hmac-secret` is what PRF runs on).
+
+```tsx
+import { askPasskey, createPasskey, passkeysAvailable } from 'safebyok-react'
+
+// Adding one asks for a passphrase as proof, even while unlocked: the vault keeps no copy of its
+// vaultKey to wrap anew. The vault checks it first, and only then calls createPasskey, so a
+// mistyped passphrase leaves no passkey on the authenticator.
+const addFingerprint = async (passphrase: string) => {
+  const makePasskey = () => createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName: fullName } })
+  const unlockId = await vault.addPasskey(passphrase, makePasskey, { unlocklabel: 'laptop_fingerprint' })
+  if (unlockId === null) { return }  // the user dismissed the prompt
+}
+
+// Unlocking: the browser offers each of the vault's passkeys, and the one touched answers.
+const passkey = await askPasskey(vault.getSnapshot().unlocks)
+if (passkey !== null) { await vault.unlock(passkey) }
+```
+
+* **Show the button only where it can work.** `passkeysAvailable()` says whether the browser
+  offers WebAuthn; whether its authenticator offers PRF is learned only by trying, and
+  `createPasskey` refuses with kind `passkey_unavailable` when it does not (as do older
+  browsers, and some authenticators). Offer the passphrase then.
+* **A dismissed prompt resolves null**, from either helper: WebAuthn reports a dismissal, a timeout
+  and "none of these passkeys is on this device" alike, on purpose. A `createPasskey` whose second
+  touch (on authenticators that answer only when asked again) is dismissed, or whose authenticator
+  has no PRF, has still made a passkey: it stays on the authenticator, useless to the vault, until
+  the user deletes it.
+* **The passkey prompt comes after the proof.** `vault.addPasskey` checks the passphrase (a key
+  derivation, and a read of storage) before it calls `createPasskey`, so the browser asks for the
+  new passkey a moment after the click. Current browsers allow that; older Safari releases
+  wanted WebAuthn called straight from the click and refused it otherwise, which `createPasskey`
+  reports as a dismissal (null). Try it on the Safari versions you support.
+* **These passkeys are not logins.** Each is a new credential under a random user handle, so it
+  never replaces a passkey your sign-in uses; its challenge is random and nothing on your server
+  checks it. If you pass `rp.id` to `createPasskey`, pass the same `rpId` to `askPasskey` (and to
+  `PasskeyUnlockButton`): a passkey answers only under the relying party it was made for.
+* **The dialog.** `PassphraseModal` shows `PasskeyUnlockButton` when the vault lists a passkey and
+  the browser offers WebAuthn, under the page's own relying party. A dialog of your own can place
+  `<PasskeyUnlockButton vault={vault} onDone={close} onGripe={setGripe} />` beside its field.
+* **A passkey can stand in for a forgotten passphrase**: `vault.addPassphrase(passkey, fresh, {
+  unlocklabel })`, then `vault.removeUnlock(passkey, oldId)`. A vault always keeps one passphrase:
+  removing the last refuses with kind `last_unlock`.
 
 ## Development
 

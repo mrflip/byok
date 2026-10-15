@@ -8,13 +8,14 @@
  *   boundary or the dev overlay; do not show it to the user, and do not retry.
  * - **Condition**: something the app handles at run time, which may reach the user: ask again,
  *   show a message, retry, or tell them to free room. `vault_locked`, `wrong_passphrase`,
- *   `absent_box`, `absent_vault`, `whisper_too_large`, `vault_full`, `corrupt_record`,
+ *   `wrong_passkey`, `passkey_unavailable`, `absent_box`, `absent_vault`, `absent_unlock`,
+ *   `whisper_too_large`, `vault_full`, `too_many_unlocks`, `last_unlock`, `corrupt_record`,
  *   `stale_write`, `not_permitted`, `storage_unavailable`.
  *
  * `vault_full` means a new lockbox in a vault already holding its `maxLockboxes` (a limit the
  * client keeps), and also that storage has no room for the write (a limit of the backend's own,
- * such as the Convex component's). Either way the user erases a lockbox, or the host raises
- * `maxLockboxes` where the backend allows. `whisper_too_large` is the user's value over
+ * such as the Convex component's or the Postgres server's). Either way the user erases a lockbox,
+ * or the host raises `maxLockboxes` where the backend allows. `whisper_too_large` is the user's value over
  * `maxWhisperBytes`, so a condition; `bad_label` is the app's own label, a misuse -- a label the
  * user types is checked first with the exported `Label`.
  *
@@ -23,12 +24,17 @@
 export const VaultErrorKindVals = [
   'vault_locked',        // a whisper was asked for before the vault was unlocked
   'wrong_passphrase',    // the passphrase given did not unlock the vault
+  'wrong_passkey',       // the passkey's answer did not unlock the vault, or was for another salt
+  'passkey_unavailable', // this browser or authenticator cannot answer for a passkey unlock (no WebAuthn, or no PRF)
   'absent_box',          // no lockbox under that label
   'absent_vault',        // the vault has never been created, and this call will not create it
+  'absent_unlock',       // no unlock envelope of that unlock_id, or none of the method asked for
   'bad_label',           // a label that does not meet the Label rules
   'bad_whisper',         // a whisper JSON cannot carry (undefined, a function, a class), or a non-string
   'whisper_too_large',   // a whisper over the vault's maxWhisperBytes
   'vault_full',          // a new lockbox in a vault already holding its maxLockboxes, or a write storage has no room for
+  'too_many_unlocks',    // a new unlock envelope in a vault already holding MaxUnlocks
+  'last_unlock',         // removing the vault's last passphrase, which would leave no sure way in
   'bad_option',          // an option or argument out of its range: openVault's, mask's, argon2idDeriver's, a store()'s note, a VaultDB write's record
   'vault_closed',        // the vault handle was closed and cannot be used again
   'corrupt_record',      // a stored record failed validation or decryption verification
@@ -88,12 +94,17 @@ export type VaultErrorFamily = typeof VaultErrorFamilyVals[number]
 export const VaultErrorFamilyForKind = {
   vault_locked:        'condition',
   wrong_passphrase:    'condition',
+  wrong_passkey:       'condition',
+  passkey_unavailable: 'condition',
   absent_box:          'condition',
   absent_vault:        'condition',
+  absent_unlock:       'condition',
   bad_label:           'misuse',
   bad_whisper:         'misuse',
   whisper_too_large:   'condition',
   vault_full:          'condition',
+  too_many_unlocks:    'condition',
+  last_unlock:         'condition',
   bad_option:          'misuse',
   vault_closed:        'misuse',
   corrupt_record:      'condition',

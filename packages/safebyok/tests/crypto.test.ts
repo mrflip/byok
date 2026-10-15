@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  cipherBinding, cipherBytes, decipherBytes, fromB64,
+  cipherBinding, cipherBytes, decipherBytes, deriveWrappingKey, fromB64, importWrappingKeyBytes,
   makeLocalUnlockKey, makeLockboxKey, makeVaultKey, randomBytes, randomId, toB64, unwrapKeyUnder, wrapKeyUnder,
 } from '../src/crypto'
 import * as TH from './test-helpers'
@@ -118,5 +118,38 @@ describe("wrap and unwrap", () => {
     const wrapped = await wrapKeyUnder(localUnlockKey, vaultKey, binding)
     const recovered = await unwrapKeyUnder(localUnlockKey, wrapped, binding, { extractable: true, usage: ['wrapKey', 'unwrapKey'] })
     expect(recovered).to.be.instanceOf(CryptoKey)
+  })
+})
+
+/** Hex text to bytes, for a published test vector. */
+const hexBytes = (hex: string) => Uint8Array.from(hex.match(/../gu) ?? [], (pair) => Number.parseInt(pair, 16))
+
+describe("deriveWrappingKey", () => {
+  it("is HKDF-SHA256 with no salt: RFC 5869's test case 3 makes the same key", async () => {
+    // RFC 5869, A.3: IKM 22 bytes of 0x0b, no salt, no info; the first 32 bytes of its OKM.
+    const derived = await deriveWrappingKey(new Uint8Array(22).fill(0x0B), new Uint8Array(0))
+    const expected = await importWrappingKeyBytes(hexBytes('8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d'))
+    const vaultKey = await makeVaultKey()
+    const wrapped = await wrapKeyUnder(derived, vaultKey, cipherBinding('kat'))
+    const recovered = await unwrapKeyUnder(expected, wrapped, cipherBinding('kat'), { extractable: true, usage: ['wrapKey'] })
+    const rawOf = async (handle: CryptoKey) => toB64(new Uint8Array(await crypto.subtle.exportKey('raw', handle)))
+    expect(await rawOf(recovered)).to.eq(await rawOf(vaultKey))
+  })
+
+  it("makes another key for other info, from the same bytes", async () => {
+    const keyBytes = randomBytes(32)
+    const one = await deriveWrappingKey(keyBytes, utf8('one'))
+    const two = await deriveWrappingKey(keyBytes, utf8('two'))
+    const wrapped = await wrapKeyUnder(one, await makeVaultKey(), cipherBinding('slot'))
+    await expect(unwrapKeyUnder(two, wrapped, cipherBinding('slot'), { extractable: false, usage: ['wrapKey'] })).rejects.toThrow()
+    const again = await deriveWrappingKey(keyBytes, utf8('one'))
+    expect(await unwrapKeyUnder(again, wrapped, cipherBinding('slot'), { extractable: false, usage: ['wrapKey'] })).to.be.instanceOf(CryptoKey)
+  })
+
+  it("is a non-extractable wrapping key", async () => {
+    const derived = await deriveWrappingKey(randomBytes(32), utf8('info'))
+    expect(derived.extractable).to.be.false
+    expect(derived.usages).to.have.members(['wrapKey', 'unwrapKey'])
+    await expect(crypto.subtle.exportKey('raw', derived)).rejects.toThrow()
   })
 })

@@ -1,10 +1,11 @@
 import { domStore, memoryStore, type StringStore } from 'safebyok'
-import { idbVaultDB, inspectIdb } from 'safebyok/idb'
+import { inspectIdbDeviceDB } from 'safebyok/idb'
+import { idbVaultDB, inspectIdbVaultDB } from 'safebyok-indexeddb'
 import { OutageVaultDB, makeOutage } from './outage'
 
 /**
  * DEMO JANK: concrete storage wiring. The vault's records live in this browser's IndexedDB,
- * through the real safebyok/idb adapters:
+ * through the real adapters, safebyok-indexeddb's vault store and safebyok/idb's device store:
  *
  *  * the `vault_db` shelf stands in for the remote database a backend would hold -- rows of
  *    ciphertext that never open without your passphrase
@@ -37,5 +38,5 @@ export const outage = makeOutage()
 export const vaultDB = new OutageVaultDB(idbVaultDB({ dbName: Applabel }), outage)
 
 /** Raw windows onto the two IndexedDB shelves, for the inspection panels. */
-export const vaultDbInspector = inspectIdb({ dbName: Applabel, shelf: 'vault_db' })
-export const deviceDbInspector = inspectIdb({ dbName: Applabel, shelf: 'device_db' })
+export const vaultDbInspector = inspectIdbVaultDB({ dbName: Applabel })
+export const deviceDbInspector = inspectIdbDeviceDB({ dbName: Applabel })

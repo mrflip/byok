@@ -12,8 +12,9 @@ pnpm justify                 # from demos/safebyok-demo-react: lint, typecheck, 
 
 Whispers are encrypted on this device before anything reaches storage: the inspection panels show
 the ciphertext rows a backend would hold, and the remembered unlock around a key handle the
-browser will not export. The vault's records live in IndexedDB (through `safebyok/idb`); only the
-fake auth's scaffolding rows sit in localStorage.
+browser will not export. The vault's records live in IndexedDB (through `safebyok-indexeddb`, and the
+remembered unlock through `safebyok/idb`); only the fake auth's scaffolding rows sit in
+localStorage.
 
 ## The page
 
@@ -26,6 +27,10 @@ fake auth's scaffolding rows sit in localStorage.
   direct manipulation of the vault: add, view, edit, delete and *use* lockboxes. Whisper-touching
   actions summon the passphrase dialog only when the vault is actually locked; an unlock is
   remembered on the device for seven days. Signing out locks the vault.
+* **Ways in** ([src/components/WaysIn.tsx](src/components/WaysIn.tsx)) -- the vault's passphrases
+  and passkeys, listed even while locked, and an "Add fingerprint" button: `vault.addPasskey()` checks your
+  passphrase, then has `createPasskey()` make the passkey and adds it, and the passphrase dialog then
+  offers "Use a passkey". Needs a browser and authenticator with the WebAuthn PRF extension.
 * **Inspection panels** ([src/components/inspection/](src/components/inspection/)) -- the raw
   rows of the pretend-backend store and the device-local store, rendered straight from storage by
   machinery that never talks to the vault. The backend's panel has an outage switch

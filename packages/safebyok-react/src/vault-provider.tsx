@@ -51,6 +51,7 @@ const emptySnapshot: VaultSnapshot = {
   scope:           { applabel: 'none', user_id: 'none', vaultlabel: 'none' },
   boxes:           [],
   askPassphraseAt: null,
+  unlocks:         [],
 }
 const getEmptySnapshot = () => emptySnapshot
 const unsubscribeFromNothing = () => { /* nothing was heard */ }

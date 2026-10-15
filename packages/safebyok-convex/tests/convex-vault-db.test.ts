@@ -5,6 +5,7 @@ import { VaultError, openVault } from 'safebyok'
 import * as TH from './test-helpers'
 import { convexVaultDB } from '../src/index'
 import { toConvexLockbox } from '../src/convex-vault-db'
+import { MaxVaultLockboxes } from '../src/component/tallies'
 import type { ConvexVaultClient, SafebyokApi } from '../src/index'
 import { fakeDeployment } from './fake-deployment'
 
@@ -27,38 +28,10 @@ const ClientCases: [string, (deployment: Deployment, subject: string | null) => 
   ['ConvexReactClient', (deployment, subject) => deployment.reactClient(subject)],
 ]
 
-/**
- * One VaultDB per user, each over its own client signed in as that user: the core's suite
- * reaches two users' vaults through one adapter, where a real app has one user per client.
- */
-const perUser = (connect: (subject: string | null) => ConvexVaultClient, api: SafebyokApi): TH.VaultDBVerbs => {
-  const vaultDBs = new Map<string, TH.VaultDBVerbs>()
-  const as = ({ user_id }: { user_id: string }): TH.VaultDBVerbs => {
-    const known = vaultDBs.get(user_id)
-    if (known) { return known }
-    const vaultDB = convexVaultDB(connect(user_id || null), api)
-    vaultDBs.set(user_id, vaultDB)
-    return vaultDB
-  }
-  return {
-    maxRecordBytes: convexVaultDB(connect(null), api).maxRecordBytes,
-    maxVaultBytes:  convexVaultDB(connect(null), api).maxVaultBytes,
-    readBundle:     (scope) => as(scope).readBundle(scope),
-    createBundle:   (bundle) => as(bundle).createBundle(bundle),
-    updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
-    readBox:        (scope, boxlabel) => as(scope).readBox(scope, boxlabel),
-    listBoxes:      (scope) => as(scope).listBoxes(scope),
-    updateBox:      (scope, lockbox, expected) => as(scope).updateBox(scope, lockbox, expected),
-    eraseBox:       (scope, boxlabel, expected) => as(scope).eraseBox(scope, boxlabel, expected),
-    eraseVault:     (scope, expected) => as(scope).eraseVault(scope, expected),
-    subscribe:      (scope, onChange) => as(scope).subscribe(scope, onChange),
-  }
-}
-
 for (const [clientTitle, connect] of ClientCases) {
   TH.describeVaultDB(`convexVaultDB over a ${clientTitle}`, () => {
     const deployment = deploy()
-    return perUser((subject) => connect(deployment, subject), deployment.api.safebyok)
+    return TH.perUser((userId) => convexVaultDB(connect(deployment, userId || null), deployment.api.safebyok))
   })
 }
 
@@ -91,6 +64,12 @@ describe("convexVaultDB, as it is made", () => {
   it("holds at most half of what one Convex function may read in one vault, since erasing reads it twice", () => {
     const deployment = deploy()
     expect(convexVaultDB(deployment.client('u1'), deployment.api.safebyok).maxVaultBytes).to.eq(8 * 1024 * 1024)
+  })
+
+  it("declares the component's own limit on lockboxes, which the component enforces", () => {
+    const deployment = deploy()
+    expect(convexVaultDB(deployment.client('u1'), deployment.api.safebyok).maxLockboxes).to.eq(MaxVaultLockboxes)
+    expect(MaxVaultLockboxes).to.eq(8000)
   })
 
   const NotClientCases = [
@@ -129,7 +108,7 @@ describe("convexVaultDB, refusing", () => {
   const EveryVerb: [string, (vaultDB: ReturnType<typeof convexVaultDB>) => Promise<unknown>][] = [
     ['readBundle',   (vaultDB) => vaultDB.readBundle(u1)],
     ['createBundle', (vaultDB) => vaultDB.createBundle(TH.bundleOf('u1'))],
-    ['updateBundle', (vaultDB) => vaultDB.updateBundle(TH.bundleOf('u1', { passphrase_epoch: 2 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 })],
+    ['updateBundle', (vaultDB) => vaultDB.updateBundle(TH.bundleOf('u1', { unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 })],
     ['readBox',      (vaultDB) => vaultDB.readBox(u1, 'anthropic_api_key')],
     ['listBoxes',    (vaultDB) => vaultDB.listBoxes(u1)],
     ['updateBox',    (vaultDB) => vaultDB.updateBox(u1, TH.boxOf('anthropic_api_key', 'a1'), TH.noBoxYet)],
@@ -221,12 +200,12 @@ describe("a record the deployment refused", () => {
   // Distinctive values throughout, so that finding one in what is thrown means it was quoted.
   const subject = 'user_quotable'
   const scope = { applabel: 'quotable_app', user_id: subject, vaultlabel: 'quotable_vault' }
-  const standing = TH.bundleOf(subject, { ...scope, passphrase_epoch: 52_871 })
-  const nextBundle = { ...standing, passphrase_epoch: 52_872, vault_key_passphrase_wrapped: TH.fakeCiphered('rewrapped_quotable') }
+  const standing = TH.bundleOf(subject, { ...scope, unlock_epoch: 52_871 })
+  const nextBundle = { ...standing, unlock_epoch: 52_872, vault_key_passphrase_wrapped: TH.fakeCiphered('rewrapped_quotable') }
   const lockbox = TH.boxOf('quotable_box', 'quotable_rev', { note: 'a quotable note' })
 
   const RefusedWrites: [string, unknown, (vaultDB: ReturnType<typeof convexVaultDB>) => Promise<unknown>][] = [
-    ['updateBundle', nextBundle, (vaultDB) => vaultDB.updateBundle(nextBundle, { vault_id: standing.vault_id, passphrase_epoch: 52_871 })],
+    ['updateBundle', nextBundle, (vaultDB) => vaultDB.updateBundle(nextBundle, { vault_id: standing.vault_id, unlock_epoch: 52_871 })],
     ['updateBox',    lockbox,    (vaultDB) => vaultDB.updateBox(scope, lockbox, { vault_id: standing.vault_id, revision_id: null })],
   ]
 

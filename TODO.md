@@ -55,6 +55,68 @@ the vault's logger (`VaultLogger`, #65): first the Convex adapter's failing watc
 IndexedDB device store, the React binding) for any other swallowed failure. The console stays the fallback when no
 logger is given.
 
+## Open from big_feats (2026-10-15)
+
+What the big_feats sprint and its amendments leave open. Each item is its own later thread, so the
+Coach can merge the stack and try it first. Already built in the amendments: the `unlock_epoch`
+rename ([#84](https://github.com/mrflip/safebyok/pull/84)); a `maxLockboxes` each store declares,
+which Postgres also enforces on the server ([#89](https://github.com/mrflip/safebyok/pull/89));
+`addPasskey` checking its proof first, and the IndexedDB channel's `unref` and catch
+([#88](https://github.com/mrflip/safebyok/pull/88)); `TH.perUser` in `safebyok/testing` and the
+package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
+
+* **Audit the VaultDB implementations and grow the standard battery.** `TH.describeVaultDB`
+  (`safebyok/testing`) is already the shared suite. Convex, IndexedDB, Postgres and GraphQL each
+  import it and run it on themselves, and the core runs it over `localVaultDB(memoryStore())`, the
+  test-pony memory store it exports. The thread:
+  * audits every adapter against the `VaultDB` contract;
+  * moves into the battery whatever each package proves by hand that is really the contract;
+  * then simplifies each package's bespoke tests to what is truly its own. Extra testing is fine,
+    vacuous testing is not.
+* **A race helper in the battery.** Concurrent writers are hard to prove, and every adapter must
+  prove them. Give `safebyok/testing` a helper that opens two writers, each through its own store
+  (the two-tab or two-connection case), interleaves them at the points that matter, and asserts
+  the outcome: one lands, the other is `stale_write`. Today's race tests share one connection; a
+  second writer through its own `createStore` would show the two-tab case directly.
+* **Stores share a base class, and its error handling.** One theme runs through several open
+  questions: common error classes, how failures are reported, no-op fallbacks where a verb is
+  irrelevant to a store, and sugar methods. `VaultDB` is already an abstract class; this is the
+  thread that decides how much more the base carries, so each adapter writes less. Swallowed
+  failures belong here:
+  * a rejected Postgres `listen`, a failed GraphQL client subscription and the Convex watch go
+    silent today, and should reach the vault's logger;
+  * a throwing listener is caught and dropped by IndexedDB's channel ([#88](https://github.com/mrflip/safebyok/pull/88)),
+    while the core's in-memory store lets it escape the write that rang it. One catch in the
+    shared `subscribe` fixes every adapter, and `reportError`, where the platform has it, is the
+    option for not dropping it silently.
+* **No null as an error's cause.** IndexedDB's `request.error` can be null on an abort, so a
+  failed write's `cause` can be null. Report a calm "the write failed for an unknown reason"
+  error instead, and never null.
+* **IndexedDB reads only the scope's rows.** `listBoxes` and `eraseVault` read the whole store,
+  every user's rows in that database, where a key range over the scope's prefix would do. The
+  same thread revisits the bell's BroadcastChannel lifetime (it is `unref`'d since #88, but never
+  closed).
+* **The vault cap as a soft limit.** The Coach: the app's `maxLockboxes` is an alarm bell for the
+  implementor (100 lockboxes may be unexpected) and, for some stores, a hard capacity limit. So
+  the vault refuses additions past the app's number, and whether a store also *guarantees* it is
+  that store's decision. #89's Postgres machinery is a lot of weight for that: a counter column, a
+  trigger, a bundle-row lock on every lockbox insert and erase, and serialization failures at
+  stricter isolation. Revisit whether Postgres should guarantee it at all, or simply declare a
+  limit the vault enforces. No backward compatibility needed.
+* **`listBoxRecords`** ([#73](https://github.com/mrflip/safebyok/pull/73), used by
+  [#78](https://github.com/mrflip/safebyok/pull/78)): the recommendation is to move it into the
+  `VaultDB` base class, so no store writes it (`human/20261015-sprint_big_feats_rulings.md`). It
+  belongs with the base-class thread.
+* **Try passkeys on a real authenticator** (Chrome platform passkey, Safari, a security key) once
+  [#76](https://github.com/mrflip/safebyok/pull/76) merges: it is tested only against a fake
+  `navigator.credentials`. Also check that `addPasskey`'s proof-first order still gets the prompt
+  on a slow device or an older Safari, where the click's user activation may run out
+  ([#88](https://github.com/mrflip/safebyok/pull/88)).
+* **Still awaiting a ruling** (the rulings note explains each): adding `vault_id` and the scope to
+  the passkey HKDF `info`; the epoch revocation note in `notes/security.md`; pnpm's
+  `minimumReleaseAge` as a repo-wide age rule; `addPasskey`'s function-argument shape; Postgres's
+  default limit of 1000.
+
 ## Sand in the sandals
 
 Small irritants, each a few lines, picked up by whoever is nearby.
@@ -127,14 +189,14 @@ is bound into every encryption, so a reshaped record cannot be upgraded in place
 re-wrapped at the next unlock). One thread, cut from `main` once storage_verbs lands, before the
 first release; the Convex sprint's component thread puts the same columns in its tables now.
 
-* **The bundle holds a list of unlock envelopes, not one.** Today: `key_deriver_label`,
+* **The bundle holds a list of unlock envelopes, not one.** *Built: [#71](https://github.com/mrflip/safebyok/pull/71) (sprint big_feats), with several passphrases; `passphrase_epoch` kept its name (see *Open from big_feats*).* Today: `key_deriver_label`,
   `passphrase_salt_b64`, `vault_key_passphrase_wrapped`. Reserved: `unlocks`, a list of
   `{ method: 'passphrase', key_deriver_label, salt_b64, vault_key_wrapped }`, where a passkey
   envelope later adds `credential_id` and a recovery envelope its own method. The binding's
   purpose string already names the method (`vault_key_passphrase_wrapped`), so each method gets
-  its own purpose and nothing already bound changes. `passphrase_epoch` stays bundle-wide (it is
-  the `versionedUpdate` expectation) and bumps when any envelope changes; whether it is renamed
-  `unlock_epoch` is the thread's call. This is what makes fingerprint unlock (8) and recovery
+  its own purpose and nothing already bound changes. `unlock_epoch` stays bundle-wide (it is
+  the `versionedUpdate` expectation) and bumps when any envelope changes (renamed from
+  `passphrase_epoch`, built). This is what makes fingerprint unlock (8) and recovery
   keys (*Not yet*) additive.
 * **The lockbox names its whisper codec and schema version.** `whisper_codec` (default
   `json_v1`, the stringifier label a pluggable stringifier will later vary) and
@@ -170,7 +232,7 @@ first release; the Convex sprint's component thread puts the same columns in its
   `changed_at` standing still across a write tells the backend two consecutive payloads were
   equal, one bit, only when a host re-stores identical content); bundle `registered_at`. Today's `created_at`/`updated_at` go: `updated_at` bumps on every
   store whether or not the contents changed, so it is a row fact under a content name, and the
-  bundle's is redundant with the passphrase epoch. The lockbox's ISO strings and the device
+  bundle's is redundant with the unlock epoch. The lockbox's ISO strings and the device
   record's epoch numbers become one convention (integers, which the clock seam already yields
   and any index sorts).
 * **`note` goes; a bound `public` bag is reserved in its place** (recommended, awaiting the
@@ -201,7 +263,7 @@ first release; the Convex sprint's component thread puts the same columns in its
 * **Surface names that are breaking after `0.1.0` and free before it**: `keyDeriver` required
   (low-hanging-fruit thread 2); `rememberForMs` -> `forcePassphraseReentryHours` and the
   snapshot's `expiresAt` -> `askPassphraseAt` (the field names ship now even if the shut timer
-  comes with 4); and a decision on `safebyok/idb`: if `idbVaultDB` is to move to its own package
+  comes with 4); and a decision on `safebyok/idb` (*settled: it moves before the release, [#77](https://github.com/mrflip/safebyok/pull/77)*): if `idbVaultDB` is to move to its own package
   (*Side quests*), either it moves before the release or `safebyok/idb` keeps re-exporting it
   forever. `store()` and `openVault` already take bags, and error kinds are additive, so those
   need nothing.
@@ -251,7 +313,7 @@ once, and leaves a timer only the vaultKey; inside an operation already started,
 `ensureUnlocked()` drops an expired key itself today, which the timer would take over. Not yet
 public: `shutVaultAt` in the snapshot.
 
-### 6. hash-wasm as a pluggable KDF
+### 6. hash-wasm as a pluggable KDF -- built, [#74](https://github.com/mrflip/safebyok/pull/74)
 
 Depends on low-hanging-fruit thread 2 (`keyDeriver` required, so noble tree-shakes out when
 another deriver is passed). A package (`safebyok-argon2-wasm` or so) exporting one KeyDeriver
@@ -282,7 +344,7 @@ every entry fell by about 14 kB brotlied, and a bare `stableJsonify` from 25 kB 
 in it. A host's label policy (*Pluggable label validator*, below) should be typed as
 `Z.core.$ZodType`, so a classic or a mini schema both fit.
 
-### 8. Fingerprint unlock (passkeys, hardware keys)
+### 8. Fingerprint unlock (passkeys, hardware keys) -- built, [#76](https://github.com/mrflip/safebyok/pull/76)
 
 The WebAuthn PRF extension yields 32 bytes per credential; `importWrappingKeyBytes` turns them
 into a wrapping key. With the envelope list reserved in 3, this is additive: a second envelope
@@ -295,13 +357,13 @@ Depends on 3 and 5 (the unlock path) and on 4 (the README has to explain it).
 
 Straightforward, likely to be done, not needed yet. Each is a thread cut from `main`.
 
-* **The IndexedDB vault store as its own package**, `safebyok-indexeddb`: the documented
+* *Built, [#77](https://github.com/mrflip/safebyok/pull/77):* **The IndexedDB vault store as its own package**, `safebyok-indexeddb`: the documented
   example of a KV-store backend, "duplicate this and type here, here and here", with its own
   tests, tsdown config and changeset, so it is the template for packaging as much as for the
   adapter. `idbDeviceDB` stays in the core (`safebyok/idb`): the device store is a fact about the
   device, not a backend choice. Duplicating the bell and BroadcastChannel plumbing (about forty
   lines) is fine: a template wants to be self-contained. After the core move and storage_verbs.
-* **Postgres vault store**, `safebyok-postgres`: the example of a SQL backend; `versionedUpdate`
+* *Built, [#73](https://github.com/mrflip/safebyok/pull/73):* **Postgres vault store**, `safebyok-postgres`: the example of a SQL backend; `versionedUpdate`
   is an `UPDATE ... WHERE revision_id = $1`, listing is a `WHERE`, subscribe is `LISTEN/NOTIFY`
   or polling. It earns Supabase nearly for free (Postgres plus row-level security as the
   `getUserId` equivalent, PostgREST as the wire, and Supabase realtime for subscribe), as a
@@ -324,10 +386,10 @@ Straightforward, likely to be done, not needed yet. Each is a thread cut from `m
   the DOM; calls `lockSoon()` on `visibilitychange`. `lockSoon()` exists now, and the core
   README's *A screen-lock recipe* is the handful of lines the prop would wrap; the prop removes
   its listener when the provider closes the vault.
-* **IndexedDB `versionedUpdate` truly atomic**, inside one IndexedDB transaction (idb-keyval's
+* *Built, [#77](https://github.com/mrflip/safebyok/pull/77):* **IndexedDB `versionedUpdate` truly atomic**, inside one IndexedDB transaction (idb-keyval's
   `update()`, throw-to-abort mapped to `stale_write`), closing the window `notes/security.md`
   records. After storage_verbs.
-* **A GraphQL vault store** (urql): listed because the Coach asked; it is not actually easy.
+* *Built, [#78](https://github.com/mrflip/safebyok/pull/78):* **A GraphQL vault store** (urql): listed because the Coach asked; it is not actually easy.
   Subscribe and `versionedUpdate` depend on a schema we do not own, so it needs resolvers on
   the host's GraphQL server as well as a client, and no host's existing schema has our tables.
   Do the REST one first; GraphQL is the same recipe with more ceremony.

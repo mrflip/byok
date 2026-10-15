@@ -54,7 +54,7 @@ export const createBundle = mutation({
 
 /**
  * Replace the bundle with `bundle`, only while the standing one has `expected.vault_id` and
- * `expected.passphrase_epoch`. True when written; false, writing nothing, otherwise -- including
+ * `expected.unlock_epoch`. True when written; false, writing nothing, otherwise -- including
  * when no bundle stands.
  */
 export const updateBundle = mutation({
@@ -64,7 +64,7 @@ export const updateBundle = mutation({
     const standing = await findBundleRow(ctx.db, scopeOfBundle(bundle))
     const meetsExpectation = standing !== null
       && standing.vault_id === expected.vault_id
-      && standing.passphrase_epoch === expected.passphrase_epoch
+      && standing.unlock_epoch === expected.unlock_epoch
     if (! meetsExpectation) { return false }
     await ctx.db.replace('safebyok_bundles', standing._id, bundle)
     return true
@@ -192,7 +192,7 @@ export const watchVault = query({
     const boxes = await vaultBoxRows(ctx.db, scope)
     return {
       vault_id:         bundle?.vault_id ?? null,
-      passphrase_epoch: bundle?.passphrase_epoch ?? null,
+      unlock_epoch: bundle?.unlock_epoch ?? null,
       boxes:            boxes.map((row) => [row.boxlabel, row.revision_id]),
     }
   },
