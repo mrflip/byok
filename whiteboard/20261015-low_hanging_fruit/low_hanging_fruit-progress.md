@@ -8,7 +8,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 
 | #  | Thread | Base | Status |
 | -- | ------ | ---- | ------ |
-| 1  | `vault_size_cap` | `origin/main` | underway |
+| 1  | `vault_size_cap` | `origin/main` | in review |
 | 2  | `explicit_options` | thread 1 | pending |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
@@ -26,6 +26,19 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   `.changeset/YYYYMMDD-<label>.md` naming comes from `scripts/changeset.ts`, which arrives with
   [#30](https://github.com/mrflip/safebyok/pull/30). Rename yours by hand to
   `.changeset/20261015-<label>.md` so the PRs match the rule that is coming.
+* *Orchestrator:* **Thread 1** (`vault_size_cap`) -- **for threads 2, 6, 7**:
+  - The open-time check is **not the preplan's product**: it refuses when
+    `maxLockboxes * (maxWhisperBytes + 1 KiB) > maxVaultBytes / 2`. The plain product let 207
+    default-size lockboxes onto Convex, measured un-erasable (base64 and per-row fields). Defaults
+    still fit (100 at 40444 bytes). YOLO: accepted as the stronger guard; the PR's first lines
+    say so.
+  - `store()` counts from the vault's current box list; `readBox` decides new-or-replacement; a
+    vault that looks full triggers `ensureRoomFor`, which refreshes and recounts before refusing
+    `vault_full`. It sits right after `readBox`, so thread 7's retry re-runs it.
+  - Thread 2's landing spots: `maxLockboxes` follows `maxWhisperBytes` in `OpenVaultOpts`;
+    option parsing is `parseMaxWhisperBytes`, `parseMaxLockboxes`, `ensureLimitsFit(vaultDB, ...)`;
+    the provider adds `maxLockboxes` at the end of its destructure, `openOpts` and the deps.
+  - `maxVaultBytes` is abstract: every third-party adapter must declare it (Coach, below).
 * *Orchestrator:* **Thread 4** found almost nothing to change outside the stored fields: the demo's
   account `created_at` and one test clock. `DeviceUnlock.expires_at` and `expiresAt` were
   already numbers. Thread 2's rename of `expiresAt` inherits a number.
@@ -57,6 +70,11 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   matching a pushed branch of another agent's, is not the review's.
 
 ## For the Coach
+
+* **Thread 1's fit check departs from the preplan** (above): stronger, measured, and the
+  defaults still fit. And `maxVaultBytes` is abstract, so third-party adapters must declare it;
+  a default of `Infinity` would be gentler but lets a limited backend forget. `vault_full` should
+  join TODO.md's *Error families* as a condition (#26 owns TODO.md).
 
 * **`storage_unavailable` in the React provider** (thread 3): the preplan said every pre-vault
   rejection is misuse or unfixable storage trouble, so it is thrown to the boundary; its own
