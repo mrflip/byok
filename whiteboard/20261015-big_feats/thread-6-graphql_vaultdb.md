@@ -1,7 +1,9 @@
 # Thread 6: graphql_vaultdb (2026-10-15)
 
-Branch `20261015-graphql_vaultdb`, PR [#78](https://github.com/mrflip/safebyok/pull/78), stacked on [#73](https://github.com/mrflip/safebyok/pull/73) (thread 5, tip `d55eb9c`). Justify green: core 759,
-convex 269, postgres 132, react 28, graphql 140, demo 61, root 105.
+Branch `20261015-graphql_vaultdb`, PR [#78](https://github.com/mrflip/safebyok/pull/78), stacked on [#73](https://github.com/mrflip/safebyok/pull/73) (thread 5, tip `39fcfaa`), which stands on
+[#76](https://github.com/mrflip/safebyok/pull/76), then [#71](https://github.com/mrflip/safebyok/pull/71): merge in order #71, #76, #73, #78. Built on
+#73's earlier tip `d55eb9c`, restacked at the Coach's word without conflict. Justify green: core
+804, convex 272, postgres 132, react 47, graphql 140, demo 61, root 105.
 
 * **Built**: `packages/safebyok-graphql/`, packaged like `safebyok-postgres` (ESM+CJS, tsdown-written
   `exports`, its own eslint cut from the core's, README, changeset, a place in the `fixed` group).
