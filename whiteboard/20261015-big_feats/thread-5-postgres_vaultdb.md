@@ -1,7 +1,7 @@
 # Thread 5: postgres_vaultdb (2026-10-15)
 
-Branch `20261015-postgres_vaultdb`, PR not yet filed, stacked on #71 (thread 2, tip `983bd0c`;
-cut from #63's `ea4b93d`, rebased onto #71 before filing). Justify: see the PR's **Tests:** line.
+Branch `20261015-postgres_vaultdb`, PR [#73](https://github.com/mrflip/safebyok/pull/73), stacked on [#71](https://github.com/mrflip/safebyok/pull/71) (thread 2, tip `983bd0c`;
+cut from #63's `ea4b93d`, rebased onto #71 before filing). Justify green: root 105, core 759, convex 269, postgres 132, react 28, demo 61.
 
 * **Built**: `packages/safebyok-postgres/`, packaged like the core and React binding (ESM+CJS,
   tsdown-written `exports`, `safebyok` a peer, its own eslint cut from the core's, a README, a
