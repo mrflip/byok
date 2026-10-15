@@ -251,9 +251,10 @@ export const MaxLockboxes = 100
 /**
  * Injected time source, so expiry is testable; defaults to the wall clock. `now()` returns whole
  * epoch ms between {@link FarPast} and {@link FarFuture}. Nothing checks it, and a clock outside
- * those bounds breaks expiry: counting in seconds, its remembered unlocks never read back, so the
- * vault asks for the passphrase on every open; counting in microseconds, every unlock has expired
- * the moment it is made.
+ * those bounds breaks expiry. Counting in seconds, an unlock in memory outlasts its window a
+ * thousandfold, while one remembered under any usual window lands before 1981 and never reads
+ * back, so the vault asks for the passphrase on every open; counting in microseconds, every
+ * unlock has expired the moment it is made.
  */
 export type Clock = { now(): number }
 
