@@ -144,6 +144,30 @@ describe("loggedText", () => {
     }
   })
 
+  it("ends a cause cycle rather than walking it forever", () => {
+    const spy = TH.spyLogger()
+    const first = new Error('first')
+    const second = new Error('second', { cause: first })
+    Object.defineProperty(first, 'cause', { value: second })
+    spy.logger.warn('a cycle', undefined, first)
+    const text = TH.loggedText(spy.calls)
+    expect(text).to.include('first')
+    expect(text).to.include('second')
+    expect(text).to.include('[cause seen above]')
+  })
+
+  it("writes a placeholder for an own property or a story JSON cannot write, and still walks the causes", () => {
+    const spy = TH.spyLogger()
+    const looped: Record<string, unknown> = {}
+    looped['self'] = looped
+    const circular = Object.assign(new Error('circular', { cause: new Error('the cause below') }), { looped })
+    spy.logger.error('a loop', { looped }, circular)
+    const text = TH.loggedText(spy.calls)
+    expect(text).to.include('[not JSON]')
+    expect(text).to.include('circular')
+    expect(text).to.include('the cause below')
+  })
+
   it("puts each call on a line of its own, and is blank for none", () => {
     const spy = TH.spyLogger()
     expect(TH.loggedText(spy.calls)).to.eq('')

@@ -196,7 +196,9 @@ export const spyLogger = () => {
 /**
  * Everything a logger was handed, as one text to search for what must never be there: each
  * call's message, its story as JSON, and its error -- message, stack, own properties -- down
- * through every cause.
+ * through every cause. It never throws: a cause seen before is written `[cause seen above]`, and
+ * a story or own properties JSON cannot write (a circular reference, a bigint) are written
+ * `[not JSON]`, so what they hold goes unsearched.
  *
  * @param calls - What a {@link spyLogger} heard.
  * @returns The text, one call to a line.
@@ -204,14 +206,28 @@ export const spyLogger = () => {
  * @example expect(TH.loggedText(spy.calls)).to.not.include(passphrase)
  */
 export const loggedText = (calls: readonly LoggedCall[]): string => (
-  calls.map((call) => [call.level, call.message ?? '', JSON.stringify(call.story ?? {}), errorText(call.err)].join(' ')).join('\n')
+  calls.map((call) => [call.level, call.message ?? '', jsonOrPlaceholder(call.story ?? {}), errorText(call.err, new Set())].join(' ')).join('\n')
 )
 
-/** An error and every cause under it as text: message, stack and own properties each. Anything else thrown, as JSON. */
-const errorText = (thrown: unknown): string => {
+/**
+ * An error and every cause under it as text: message, stack and own properties each. Anything
+ * else thrown, as JSON. `seen` holds the errors already written, so a cause cycle ends.
+ */
+const errorText = (thrown: unknown, seen: Set<unknown>): string => {
   if (thrown === undefined || thrown === null) { return '' }
-  if (! (thrown instanceof Error)) { return JSON.stringify(thrown) }
-  return [thrown.message, thrown.stack ?? '', JSON.stringify(thrown), errorText(thrown.cause)].join(' ')
+  if (seen.has(thrown)) { return '[cause seen above]' }
+  seen.add(thrown)
+  if (! (thrown instanceof Error)) { return jsonOrPlaceholder(thrown) }
+  return [thrown.message, thrown.stack ?? '', jsonOrPlaceholder(thrown), errorText(thrown.cause, seen)].join(' ')
+}
+
+/** `val` as JSON, or `[not JSON]` where JSON.stringify throws on it. */
+const jsonOrPlaceholder = (val: unknown): string => {
+  try {
+    return JSON.stringify(val)
+  } catch {
+    return '[not JSON]'
+  }
 }
 
 /**
