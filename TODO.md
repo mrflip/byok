@@ -390,6 +390,9 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
 
 ### Others
 
+* **Provide built-as-a-whole recommended KDFs, and functions to roll your own.** Follows from
+  [#68](https://github.com/mrflip/safebyok/pull/68)'s `argon2idDeriver(spec)`; replaces its open
+  question of adding RFC 9106's second recommended option as a supplied spec.
 * Style guide audit
   - A few comment lines exceed 100 columns.
 
