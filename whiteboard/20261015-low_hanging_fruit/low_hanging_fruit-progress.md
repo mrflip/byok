@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 5, 10, 11 building; 1 and 9 filing; 3 and 4 filed. Newer than the plan wherever the two disagree.
+**Status**: 11 building; 5 (second review) and 10 in review; 1 and 9 filing; 3 and 4 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -12,12 +12,12 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 2  | `explicit_options` | thread 1 | pending |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | underway (review flagged; resumed) |
+| 5  | `mask_utils` | `origin/main` | in second review |
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
 | 9  | `docs_sweep` | `origin/main` | filing |
-| 10 | `sandals` | `origin/main` | underway |
+| 10 | `sandals` | `origin/main` | in review |
 | 11 | `label_grammar_report` | `origin/main` | underway |
 
 ## What the threads have taught
@@ -68,7 +68,16 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   `maxLen` below `head + tail + 9` collapsed into a *longer* result -- now refused as
   `bad_option`, so the result is never longer than `maxLen`; (2) bidi controls survived the
   strip -- now `\p{Bidi_Control}`, U+200B, U+2060 and U+FEFF are stripped too (ZWJ, ZWNJ,
-  variation selectors and tags kept). A second review covers the new commits only.
+  variation selectors and tags kept). A second review covers the new commits only. Built; the
+  worker added that an omitted `maxLen` defaults to `max(15, head + tail + 9)`, so a raised
+  `head` alone is not refused for a default the caller never typed.
+* *Orchestrator:* **Thread 10** (`sandals`): **for every thread whose tests change, after
+  thread 10 merges**: `packages/safebyok/tests/helpers.ts` is now `test-helpers.ts`, star-imported
+  as `TH` in every core test; a rebased test that uses a bare `testDeriver`, `scopeOf` or
+  `tweakB64` fails typecheck -- write `TH.x`. Root scripts now run the root check and then
+  `pnpm -r --no-bail`, failing if either fails. `safebyok` is a peer (and dev) dependency of
+  `safebyok-convex`. The slow justify is 13 tsdown builds (core rebuilt by each dependent's
+  `pre*` scripts); cheapest fix: build once at the start of justify and let `pre*` skip it.
 * *Orchestrator:* **Thread 9** found the core README had no locking section: it appended
   *Locking* (`visibilitychange` -> `vault.lock()`, "when `lockSoon()` lands") and *No recovery*
   at the README's end, so threads 1 and 2's README edits rebase mechanically. The expiry thread
@@ -85,6 +94,11 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   matching a pushed branch of another agent's, is not the review's.
 
 ## For the Coach
+
+* **Merge order and thread 10's `TH` rename.** Thread 10 rewrites the import line and helper
+  uses of nearly every core test; the chain (1, 2, 6, 7) adds tests on the old names. Whichever
+  lands second rebases: merging the chain first and thread 10 last keeps the stacked PRs
+  rebase-free and puts all the `TH.x` repairs in one rebase of thread 10.
 
 * **The ruled screen-lock recipe defeats the remembered unlock** (thread 9's review): `lock()`
   also erases the device's seven-day unlock, so `visibilitychange` -> `lock()` asks for the
