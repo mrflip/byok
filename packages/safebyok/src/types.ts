@@ -163,6 +163,47 @@ export const VaultBundle = Z.object({
 export type VaultBundle = Z.infer<typeof VaultBundle>
 
 /**
+ * The latest instant the package accepts, in epoch ms: the microsecond epochalypse, the last
+ * millisecond whose epoch *microseconds* still fit a safe integer, 2255-06-05T23:47:34.740Z. No
+ * deadline the vault makes, and no stored time it reads, lies past it; see {@link EpochMillis}.
+ *
+ * `askPassphraseAt` equals it when the vault never asks for the passphrase again on this device
+ * until `lock()`: `forcePassphraseReentryHours: Infinity`, or a window so large its deadline
+ * would pass it. A host compares against it to show "until locked" rather than a date in 2255.
+ *
+ * @example askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toLocaleString()
+ * @example new Date(FarFuture).toISOString()   // '2255-06-05T23:47:34.740Z'
+ */
+export const FarFuture = 9_007_199_254_740 // Math.floor(Number.MAX_SAFE_INTEGER / 1000)
+
+/**
+ * The earliest instant the package accepts, in epoch ms: 1981-01-01T00:00:00Z. No time this
+ * package writes is older; see {@link EpochMillis}.
+ *
+ * @example new Date(FarPast).toISOString()   // '1981-01-01T00:00:00.000Z'
+ */
+export const FarPast = 347_155_200_000 // Date.UTC(1981, 0, 1)
+
+/**
+ * Validator for an instant, as every time in this package is kept: whole UTC epoch milliseconds,
+ * from {@link FarPast} (1981) to {@link FarFuture} (2255), both included. A host can check its
+ * own times with it.
+ *
+ * The bounds catch a unit mistake either way. Epoch *seconds* read as milliseconds land in
+ * January 1970, below the floor; epoch *microseconds* read as milliseconds land tens of
+ * thousands of years out, above the ceiling.
+ *
+ * @example EpochMillis.parse(Date.UTC(2026, 9, 15))                // 1792022400000
+ * @example EpochMillis.safeParse(1_792_022_400).success            // false: seconds, not ms
+ * @example EpochMillis.safeParse(1_792_022_400_000_000).success    // false: microseconds, not ms
+ * @example EpochMillis.safeParse(1_792_022_400_000.5).success      // false: whole milliseconds only
+ */
+export const EpochMillis = Z.number()
+  .int("An instant is whole epoch milliseconds")
+  .min(FarPast, "An instant is epoch milliseconds no earlier than 1981; a smaller number is likely epoch seconds")
+  .max(FarFuture, "An instant is epoch milliseconds no later than 2255; a larger number is likely epoch microseconds")
+
+/**
  * The device-local record of a remembered unlock: this browser's localUnlockKey (a
  * non-extractable handle -- it cannot leave the device even through the code that made it) and
  * the vaultKey wrapped under it. Held only by structured-clone storage (IndexedDB) or memory;
@@ -180,8 +221,8 @@ export const DeviceUnlock = Z.object({
   local_unlock_key: cryptoKeyHandle,
   /** The vaultKey, wrapped under the localUnlockKey. */
   vault_key_local_wrapped: Ciphered,
-  /** Epoch milliseconds after which the remembered unlock no longer counts. */
-  expires_at:       Z.number(),
+  /** The instant after which the remembered unlock no longer counts: an {@link EpochMillis}. */
+  expires_at:       EpochMillis,
 })
 export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 
@@ -190,19 +231,6 @@ export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
  * unless the caller says otherwise: seven days.
  */
 export const ForcePassphraseReentryHours = 168 // seven days
-
-/**
- * The latest instant a JavaScript `Date` can hold, in epoch ms: 8.64e15 (the year 275760).
- *
- * `askPassphraseAt` equals it when the vault never asks for the passphrase again on this device
- * until `lock()`: `forcePassphraseReentryHours: Infinity`, or a window so large its deadline
- * would pass it. A host compares against it to show "until locked" rather than a date in the
- * year 275760, and `new Date(askPassphraseAt)` is always a valid date.
- *
- * @example askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toLocaleString()
- * @example new Date(FarFuture).getTime() === FarFuture   // true: the last instant a Date holds
- */
-export const FarFuture = 8.64e15
 
 /**
  * The largest whisper a vault stores unless the caller says otherwise, in bytes of its JSON:
@@ -219,7 +247,7 @@ export const MaxWhisperBytes = 40_444 // searchable: 40444
  */
 export const MaxLockboxes = 100
 
-/** Injected time source, so expiry is testable; defaults to the wall clock. */
+/** Injected time source, so expiry is testable; defaults to the wall clock. `now()` is epoch ms, within {@link EpochMillis}'s bounds. */
 export type Clock = { now(): number }
 
 /** The wall clock: the default `Clock`. */

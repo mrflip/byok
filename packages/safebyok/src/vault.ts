@@ -30,9 +30,9 @@ export type VaultSnapshot = {
   boxes:     readonly LockboxSummary[]
   /**
    * Epoch ms from which the vault asks for the passphrase again, while unlocked; null otherwise.
-   * The unlock's time plus `forcePassphraseReentryHours`, never later than the last instant a
-   * `Date` can hold (8.64e15): with `Infinity` hours, a vault that asks again only after
-   * `lock()` reads as that far-future time, and `new Date(askPassphraseAt)` still works.
+   * The unlock's time plus `forcePassphraseReentryHours`, never later than {@link FarFuture}
+   * (in 2255): with `Infinity` hours, a vault that asks again only after `lock()` reads as
+   * exactly that instant.
    */
   askPassphraseAt: number | null
 }
@@ -57,7 +57,7 @@ export type OpenVaultOpts = {
    * the vault asks for it again. Default: {@link ForcePassphraseReentryHours}, 168 (seven days).
    * Any number above zero, fractions too: 0.25 is fifteen minutes. `Infinity` means never on
    * this device: the vault stays unlocked until `lock()` (or the vault changes under it), and
-   * `askPassphraseAt` reads as the latest instant a `Date` can hold, however large the number.
+   * `askPassphraseAt` reads as {@link FarFuture}, however large the number.
    */
   forcePassphraseReentryHours?: number | undefined
   /** Time source for expiry; tests inject one. Default: the wall clock. */
@@ -691,7 +691,7 @@ const forcePassphraseReentryHours = Z.union([Z.number().positive(), Z.literal(In
   .transform((hours) => Math.round(hours * MsPerHour))
   .pipe(Z.union([Z.number().min(1), Z.literal(Infinity)]))
 
-/** The deadline for a passphrase entered at `nowMs`: `reentryMs` later, but never past what a Date holds. */
+/** The deadline for a passphrase entered at `nowMs`: `reentryMs` later, but never past {@link FarFuture}. */
 const deadlineAfter = (nowMs: number, reentryMs: number): number => Math.min(nowMs + reentryMs, FarFuture)
 
 const parseForcePassphraseReentryHours = (candidate: number | undefined): number => {
