@@ -1,5 +1,5 @@
 import * as Z from 'zod'
-import { Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import {
@@ -345,18 +345,25 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     })
   }
 
-  /** Pick up a remembered unlock, if this device holds one that still fits and still opens. */
+  /**
+   * Pick up a remembered unlock, if this device holds one that still fits and still opens. The
+   * deviceDB may be the host's own, so what it hands back is checked here, whoever wrote it: a
+   * record that does not pass reads as "no remembered unlock", the safe failure.
+   */
   const rememberedUnlock = async () => {
     if (bundle === UnreadBundle || bundle === null) { return }
-    const remembered = await deviceDB.readUnlock(scope)
-    if (remembered === null) { return }
-    const fits = remembered.vault_id === bundle.vault_id
-      && remembered.passphrase_epoch === bundle.passphrase_epoch
-      && remembered.expires_at > clock.now()
+    const kept = await deviceDB.readUnlock(scope)
+    if (kept === null) { return }
+    const checked = DeviceUnlock.safeParse(kept)
+    const fits = checked.success
+      && checked.data.vault_id === bundle.vault_id
+      && checked.data.passphrase_epoch === bundle.passphrase_epoch
+      && checked.data.expires_at > clock.now()
     if (! fits) {
       await deviceDB.eraseUnlock(scope)
       return
     }
+    const remembered = checked.data
     try {
       // Nothing on the remembered path ever re-wraps the vaultKey, so no extractable handle
       // exists on it at all.

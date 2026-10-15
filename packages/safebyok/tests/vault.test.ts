@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
-import { memoryDeviceDB } from '../src/device-db'
+import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts, type Vault } from '../src/vault'
@@ -169,6 +169,61 @@ describe("the remembered unlock", () => {
       await expectRefusal(world.open({ forcePassphraseReentryHours: nonsense }), 'bad_option')
     }
   })
+})
+
+const ckeyOf = (scope: VaultScope) => `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}`
+
+/**
+ * A DeviceDB as a host might write its own: rows kept as handed in, and handed back unchecked, so
+ * a test can reach in and spoil one the way a damaged store or an older version would.
+ */
+const uncheckingDeviceDB = () => {
+  const rows = new Map<string, unknown>()
+  const deviceDB: DeviceDB = {
+    readUnlock:  (scope) => Promise.resolve((rows.get(ckeyOf(scope)) ?? null) as DeviceUnlock | null),
+    writeUnlock: (unlock) => { rows.set(ckeyOf(unlock), unlock); return Promise.resolve() },
+    eraseUnlock: (scope) => { rows.delete(ckeyOf(scope)); return Promise.resolve() },
+    eraseAll:    () => { rows.clear(); return Promise.resolve() },
+  }
+  /** Rewrite the one stored row through `spoil`. */
+  const spoilRow = (spoil: (row: Record<string, unknown>) => unknown) => {
+    const [[ckey, row]] = [...rows] as [[string, Record<string, unknown>]]
+    rows.set(ckey, spoil(row))
+  }
+  return { deviceDB, rows, spoilRow }
+}
+
+const SpoiledUnlocks = [
+  [(row: Record<string, unknown>) => ({ ...row, format: 'byok-unlock-v1' }),     'a record under the format tag before the rename'],
+  [(row: Record<string, unknown>) => ({ ...row, expires_at: '99999999999999' }), 'a deadline written as text, which would compare as a number'],
+  [(row: Record<string, unknown>) => ({ ...row, expires_at: Infinity }),         'a deadline that never comes'],
+  [({ expires_at: _gone, ...row }: Record<string, unknown>) => row,              'a record missing its deadline'],
+  [() => 'not a record at all',                                                 'a row that is not a record'],
+] as const
+
+describe("the remembered unlock, from a host's own DeviceDB", () => {
+  it("is checked by the vault: a sound record spares the passphrase", async () => {
+    const world = makeWorld()
+    const device = uncheckingDeviceDB()
+    const vault = await world.open({ deviceDB: device.deviceDB })
+    await vault.unlock('pw one')
+    const later = await world.open({ deviceDB: device.deviceDB })
+    expect(later.getSnapshot().state).to.eq('unlocked')
+  })
+
+  for (const [spoil, blurb] of SpoiledUnlocks) {
+    it(`reads ${blurb} as no remembered unlock, and erases it`, async () => {
+      const world = makeWorld()
+      const device = uncheckingDeviceDB()
+      const vault = await world.open({ deviceDB: device.deviceDB })
+      await vault.unlock('pw one')
+      device.spoilRow(spoil)
+      const later = await world.open({ deviceDB: device.deviceDB })
+      expect(later.getSnapshot().state).to.eq('locked')
+      expect(later.getSnapshot().askPassphraseAt).to.be.null
+      expect(device.rows.size).to.eq(0)
+    })
+  }
 })
 
 const RoundTrips: readonly (readonly [Whisper, string])[] = [
