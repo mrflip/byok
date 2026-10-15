@@ -11,8 +11,11 @@ import * as TH from './test-helpers'
 
 /**
  * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, a
- * logger that keeps what it hears, the options a vault opens with, and an opener. Unlocks derive through the cheap testDeriver, so
- * the suite is not a benchmark of Argon2id; the real deriver has its own tests in key-deriver.test.ts.
+ * logger that keeps what it hears, the options a vault opens with (`defaults` among them), an
+ * opener, one that unlocks what it opens, the state a vault opened now settles into, and the
+ * unlock this device remembers for `u1`. Unlocks
+ * derive through the cheap testDeriver, so the suite is not a benchmark of Argon2id; the real
+ * deriver has its own tests in key-deriver.test.ts.
  */
 const makeWorld = (defaults?: Partial<OpenVaultOpts>) => {
   const dbStore = memoryStore()
@@ -31,8 +34,16 @@ const makeWorld = (defaults?: Partial<OpenVaultOpts>) => {
     await vault.unlock(passphrase)
     return vault
   }
-  return { dbStore, vaultDB, deviceDB, clock, advance, logged, optsWith, open, openUnlocked }
+  const rememberedUnlock = () => deviceDB.readUnlock(TH.scopeOf('u1'))
+  const stateOnOpen = async (overrides?: Partial<OpenVaultOpts>) => {
+    const vault = await open(overrides)
+    return vault.getSnapshot().state
+  }
+  return { dbStore, vaultDB, deviceDB, clock, advance, logged, optsWith, open, openUnlocked, rememberedUnlock, stateOnOpen }
 }
+
+/** Boxlabels in the snapshot, in order. */
+const boxlabelsOf = (vault: Vault) => vault.getSnapshot().boxes.map((summary) => summary.boxlabel)
 
 /** Storage adapters openVault refuses: short of a verb the vault calls. */
 const MisfitStores: readonly (readonly [Partial<OpenVaultOpts>, string])[] = [
@@ -105,8 +116,7 @@ describe("openVault", () => {
 
   it("takes a store of the host's own that carries every verb, prototype and all", async () => {
     const world = makeWorld()
-    const vault = await world.open({ vaultDB: Object.create(world.vaultDB) as OpenVaultOpts['vaultDB'], deviceDB: uncheckingDeviceDB().deviceDB })
-    expect(vault.getSnapshot().state).to.eq('absent')
+    expect(await world.stateOnOpen({ vaultDB: Object.create(world.vaultDB) as OpenVaultOpts['vaultDB'], deviceDB: uncheckingDeviceDB().deviceDB })).to.eq('absent')
   })
 })
 
@@ -154,7 +164,7 @@ describe("the host's clock", () => {
     reading /= 1000
     await TH.expectRefusal(vault.unlock('pw'), 'bad_option')
     expect(vault.getSnapshot().state).to.eq('locked')
-    expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+    expect(await world.rememberedUnlock()).to.be.null
   })
 
   it("refuses an unlock that would create the vault, writing nothing, when the clock has gone wrong", async () => {
@@ -177,14 +187,14 @@ describe("the host's clock", () => {
     expect(world.logged[0]?.message).to.match(/locked at once/)
     expect(world.logged[0]?.message).to.not.include('NaN')
     expect(vault.getSnapshot().state).to.eq('locked')
-    expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+    expect(await world.rememberedUnlock()).to.be.null
     reading = world.clock.now()
     await TH.expectRefusal(vault.read('anthropic'), 'vault_locked')
     await vault.unlock('pw')
     reading = 0
     await vault.lock()
     expect(vault.getSnapshot().state).to.eq('locked')
-    expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+    expect(await world.rememberedUnlock()).to.be.null
   })
 
   it("fails closed: a reading gone wrong while unlocked drops the vaultKey before it refuses the clock", async () => {
@@ -265,8 +275,7 @@ describe("unlock and lock", () => {
     const vault = await world.openUnlocked('pw one')
     await vault.lock()
     expect(vault.getSnapshot().state).to.eq('locked')
-    const again = await world.open()
-    expect(again.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen()).to.eq('locked')
   })
 
   it("refuses a passphrase that is not text with kind 'bad_option', and stays as it was", async () => {
@@ -281,7 +290,7 @@ describe("unlock and lock", () => {
 
 /** The deadline this world's device remembers, or null when it remembers no unlock. */
 const rememberedDeadlineOf = async (world: ReturnType<typeof makeWorld>): Promise<number | null> => {
-  const remembered = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
+  const remembered = await world.rememberedUnlock()
   return remembered?.ask_passphrase_at ?? null
 }
 
@@ -300,8 +309,7 @@ describe("the remembered unlock", () => {
     const world = makeWorld()
     await world.openUnlocked('pw one')
     world.advance(SevenDaysMs + 1)
-    const later = await world.open()
-    expect(later.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen()).to.eq('locked')
   })
 
   it("lapses mid-session too: no whisper comes out past the deadline", async () => {
@@ -322,11 +330,9 @@ describe("the remembered unlock", () => {
     const vault = await world.openUnlocked('pw one', { forcePassphraseReentryHours: 12 })
     expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + twelveHoursMs)
     world.advance(twelveHoursMs - 1)
-    const justBefore = await world.open({ forcePassphraseReentryHours: 12 })
-    expect(justBefore.getSnapshot().state).to.eq('unlocked')
+    expect(await world.stateOnOpen({ forcePassphraseReentryHours: 12 })).to.eq('unlocked')
     world.advance(1)
-    const onTheHour = await world.open({ forcePassphraseReentryHours: 12 })
-    expect(onTheHour.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen({ forcePassphraseReentryHours: 12 })).to.eq('locked')
     await TH.expectRefusal(vault.read('anthropic'), 'vault_locked')
   })
 
@@ -370,7 +376,7 @@ describe("the remembered unlock", () => {
       const world = makeWorld()
       const vault = await world.openUnlocked('pw one', { forcePassphraseReentryHours: Infinity })
       await vault.store('anthropic', 'sk-fake')
-      const remembered = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
+      const remembered = await world.rememberedUnlock()
       expect(remembered?.ask_passphrase_at).to.eq(FarFuture)
       world.advance(10 * 365 * 24 * HourMs)
       const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
@@ -386,8 +392,7 @@ describe("the remembered unlock", () => {
       expect(vault.getSnapshot().state).to.eq('locked')
       expect(vault.getSnapshot().askPassphraseAt).to.be.null
       await TH.expectRefusal(vault.read('anthropic'), 'vault_locked')
-      const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
-      expect(reopened.getSnapshot().state).to.eq('locked')
+      expect(await world.stateOnOpen({ forcePassphraseReentryHours: Infinity })).to.eq('locked')
     })
 
     it("holds through a passphrase change on this device, with the same deadline", async () => {
@@ -396,7 +401,7 @@ describe("the remembered unlock", () => {
       await vault.changePassphrase('pw one', 'pw two')
       expect(vault.getSnapshot().state).to.eq('unlocked')
       expect(vault.getSnapshot().askPassphraseAt).to.eq(FarFuture)
-      const remembered = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
+      const remembered = await world.rememberedUnlock()
       expect(remembered?.ask_passphrase_at).to.eq(FarFuture)
     })
   })
@@ -404,7 +409,7 @@ describe("the remembered unlock", () => {
   it("reads a remembered deadline of exactly FarFuture as unlocked, under Infinity hours", async () => {
     const world = makeWorld()
     await world.openUnlocked('pw one')
-    const written = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
+    const written = await world.rememberedUnlock()
     if (written === null) { throw new Error('expected a remembered unlock on the device') }
     await world.deviceDB.writeUnlock({ ...written, ask_passphrase_at: FarFuture })
     const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
@@ -416,14 +421,14 @@ describe("the remembered unlock", () => {
     it(`reads a remembered deadline of ${blurb} as no remembered unlock, and erases it`, async () => {
       const world = makeWorld()
       await world.openUnlocked('pw one')
-      const written = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
+      const written = await world.rememberedUnlock()
       if (written === null) { throw new Error('expected a remembered unlock on the device') }
       await world.deviceDB.writeUnlock({ ...written, ask_passphrase_at: askPassphraseAt })
       // Under Infinity no window check refuses it: only the bounds can.
       const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
       expect(reopened.getSnapshot().state).to.eq('locked')
       expect(reopened.getSnapshot().askPassphraseAt).to.be.null
-      expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+      expect(await world.rememberedUnlock()).to.be.null
     })
   }
 
@@ -441,10 +446,9 @@ describe("the remembered unlock", () => {
     const fractionalClock = { now: () => world.clock.now() + 0.25 }
     const vault = await world.openUnlocked('pw one', { clock: fractionalClock })
     expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + SevenDaysMs)
-    const remembered = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
+    const remembered = await world.rememberedUnlock()
     expect(remembered?.ask_passphrase_at).to.eq(world.clock.now() + SevenDaysMs)
-    const reopened = await world.open({ clock: fractionalClock })
-    expect(reopened.getSnapshot().state).to.eq('unlocked')
+    expect(await world.stateOnOpen({ clock: fractionalClock })).to.eq('unlocked')
   })
 
   it("leaves a window that fits before the latest deadline exactly as asked", async () => {
@@ -463,11 +467,10 @@ describe("the remembered unlock, when the host changes forcePassphraseReentryHou
     world.advance(30 * 24 * HourMs)
     const lowered = await world.open({ forcePassphraseReentryHours: 1 })
     expect(lowered.getSnapshot().state).to.eq('locked')
-    expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+    expect(await world.rememberedUnlock()).to.be.null
     await lowered.unlock('pw one')
     expect(lowered.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + HourMs)
-    const reloaded = await world.open({ forcePassphraseReentryHours: 1 })
-    expect(reloaded.getSnapshot().state).to.eq('unlocked')
+    expect(await world.stateOnOpen({ forcePassphraseReentryHours: 1 })).to.eq('unlocked')
   })
 
   it("writes no record on any open, shortened or not", async () => {
@@ -490,9 +493,8 @@ describe("the remembered unlock, when the host changes forcePassphraseReentryHou
       return kept
     })
     await world.open({ forcePassphraseReentryHours: 1 })
-    expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
-    const later = await world.open({ forcePassphraseReentryHours: 1 })
-    expect(later.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+    expect(await world.stateOnOpen({ forcePassphraseReentryHours: 1 })).to.eq('locked')
   })
 
   it("raised, lengthens no unlock already remembered", async () => {
@@ -521,11 +523,9 @@ describe("the remembered unlock, when the host changes forcePassphraseReentryHou
     await world.openUnlocked('pw one', { forcePassphraseReentryHours: 12 })
     const oneMsShort = 12 - (1 / HourMs)
     world.advance(1)
-    const exactly = await world.open({ forcePassphraseReentryHours: oneMsShort })
-    expect(exactly.getSnapshot().state).to.eq('unlocked')
+    expect(await world.stateOnOpen({ forcePassphraseReentryHours: oneMsShort })).to.eq('unlocked')
     world.advance(-1)
-    const pastIt = await world.open({ forcePassphraseReentryHours: oneMsShort })
-    expect(pastIt.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen({ forcePassphraseReentryHours: oneMsShort })).to.eq('locked')
   })
 })
 
@@ -571,8 +571,7 @@ describe("the remembered unlock, from a host's own DeviceDB", () => {
     const world = makeWorld()
     const device = uncheckingDeviceDB()
     await world.openUnlocked('pw one', { deviceDB: device.deviceDB })
-    const later = await world.open({ deviceDB: device.deviceDB })
-    expect(later.getSnapshot().state).to.eq('unlocked')
+    expect(await world.stateOnOpen({ deviceDB: device.deviceDB })).to.eq('unlocked')
   })
 
   for (const [spoil, blurb] of SpoiledUnlocks) {
@@ -666,7 +665,7 @@ describe("store and read", () => {
     const vault = await world.openUnlocked('pw', { maxWhisperBytes: 10 })
     await vault.store('the_box', 'éééé')
     await TH.expectRefusal(vault.store('other_box', 'ééééé'), 'whisper_too_large')
-    expect(vault.getSnapshot().boxes.map((summary) => summary.boxlabel)).to.deep.equal(['the_box'])
+    expect(boxlabelsOf(vault)).to.deep.equal(['the_box'])
   })
 
   it("checks the limit on write only, so lowering it strands nothing already stored", async () => {
@@ -937,9 +936,6 @@ const heaviestRowOf = async (whisperBytes: number) => {
   }
 }
 
-/** Boxlabels in the snapshot, in order. */
-const boxlabelsOf = (vault: Vault) => vault.getSnapshot().boxes.map((summary) => summary.boxlabel)
-
 describe("the lockbox limit", () => {
   afterEach(() => { vi.restoreAllMocks() })
 
@@ -1021,8 +1017,7 @@ describe("the lockbox limit", () => {
 
   it("opens with the defaults on a backend holding 8 MiB of a vault, as Convex does", async () => {
     const world = makeWorld()
-    const vault = await world.open({ vaultDB: declaringVaultBytes(world.vaultDB, 8 * 1024 * 1024) })
-    expect(vault.getSnapshot().state).to.eq('absent')
+    expect(await world.stateOnOpen({ vaultDB: declaringVaultBytes(world.vaultDB, 8 * 1024 * 1024) })).to.eq('absent')
   })
 
   it("refuses a maxLockboxes and maxWhisperBytes the adapter might not hold together, naming both and its limit", async () => {
@@ -1120,7 +1115,7 @@ describe("while locked", () => {
     await warm.lock()
     const cold = await world.open()
     expect(cold.getSnapshot().state).to.eq('locked')
-    expect(cold.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
+    expect(boxlabelsOf(cold)).to.deep.equal(['anthropic'])
   })
 })
 
@@ -1207,8 +1202,7 @@ describe("scoping", () => {
   it("one user's remembered unlock opens nothing for another", async () => {
     const world = makeWorld()
     await world.openUnlocked('pw one', { userId: 'u1' })
-    const two = await world.open({ userId: 'u2' })
-    expect(two.getSnapshot().state).to.eq('absent')
+    expect(await world.stateOnOpen({ userId: 'u2' })).to.eq('absent')
   })
 })
 
@@ -1248,7 +1242,7 @@ describe("the snapshot and its subscribers", () => {
     const here = await world.openUnlocked('pw')
     const there = await world.open()
     await there.store('anthropic', 'written elsewhere')
-    await vi.waitFor(() => { expect(here.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic']) })
+    await vi.waitFor(() => { expect(boxlabelsOf(here)).to.deep.equal(['anthropic']) })
   })
 })
 
@@ -1371,9 +1365,10 @@ describe("changePassphrase", () => {
 })
 
 /**
- * A world whose slow waits can be held mid-flight, to land a lock inside an unlock: each `holdNext`
- * arms a gate on the next look at the bundle, passphrase derivation, device-record write, or (to
- * hold a store in hand) read of a lockbox, and hands it back. Its key deriver is its own copy of testDeriver, so a spy on it stays here.
+ * A world whose slow waits can be held mid-flight, to land a lock inside an unlock: each
+ * `holdNext` arms a gate on the next look at the bundle, passphrase derivation, device-record
+ * write, or (to hold a store in hand) read of a lockbox, and hands it back. Its key deriver is its
+ * own copy of testDeriver, so a spy on it stays here.
  */
 const makeRacingWorld = () => {
   const keyDeriver: KeyDeriver = { ...TH.testDeriver }
@@ -1382,8 +1377,7 @@ const makeRacingWorld = () => {
   const holdNextDerive = () => TH.holdNextCall(keyDeriver, 'deriveKeyBytes')
   const holdNextRemember = () => TH.holdNextCall(world.deviceDB, 'writeUnlock')
   const holdNextBoxRead = () => TH.holdNextCall(world.vaultDB, 'readBox')
-  const rememberedUnlock = async () => await world.deviceDB.readUnlock(TH.scopeOf('u1'))
-  return { ...world, holdNextLook, holdNextDerive, holdNextRemember, holdNextBoxRead, rememberedUnlock }
+  return { ...world, holdNextLook, holdNextDerive, holdNextRemember, holdNextBoxRead }
 }
 
 describe("a lock that lands while an unlock is under way", () => {
@@ -1406,8 +1400,7 @@ describe("a lock that lands while an unlock is under way", () => {
     expect(await world.rememberedUnlock()).to.be.null
     // Well within the seven days a remembered unlock would last: the reopen is locked all the same.
     world.advance(HourMs)
-    const reopened = await world.open()
-    expect(reopened.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen()).to.eq('locked')
   })
 
   it("an unlock begun after the lock is untouched by it", async () => {
@@ -1451,8 +1444,7 @@ describe("a lock that lands while an unlock is under way", () => {
     await unlocking
     expect(vault.getSnapshot().state).to.eq('locked')
     expect(await world.rememberedUnlock()).to.be.null
-    const reopened = await world.open()
-    expect(reopened.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen()).to.eq('locked')
   })
 
   it("during the look at storage: the lock wins before a first unlock makes the vault", async () => {
@@ -1647,8 +1639,7 @@ describe("lockSoon", () => {
     const vault = await world.openUnlocked('pw one')
     await vault.lockSoon()
     expect(await world.rememberedUnlock()).to.be.null
-    const reopened = await world.open()
-    expect(reopened.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen()).to.eq('locked')
   })
 
   it("lets work in hand finish: a store already under way lands within the grace", async () => {
@@ -2079,8 +2070,7 @@ describe("a failed open", () => {
     const tally = TH.tallyWatches(world.vaultDB)
     vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(new VaultError('not_permitted', 'Sign in to reach this vault.'))
     await TH.expectRefusal(world.open(), 'not_permitted')
-    const vault = await world.open()
-    expect(vault.getSnapshot().state).to.eq('absent')
+    expect(await world.stateOnOpen()).to.eq('absent')
     expect(tally.opened - tally.closed).to.eq(1)
   })
 
@@ -2180,7 +2170,7 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
   it("store() of a box the reborn vault has never held is refused all the same", async () => {
     const { vaultOne, vaultTwo } = await rebornWorld()
     await TH.expectRefusal(vaultOne.store('openai', 'sk-fake-stale'), 'vault_locked')
-    expect(vaultTwo.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
+    expect(boxlabelsOf(vaultTwo)).to.deep.equal(['anthropic'])
   })
 
   it("erase() is refused by storage as stale, and relocks: the reborn vault keeps its box", async () => {
@@ -2445,7 +2435,7 @@ describe("versioned updates: two devices writing at once", () => {
     await TH.expectRefusal(drivenToEnd(here.store('gemini', 'sk-fake-mine')), 'vault_full')
     expect(readBox).toHaveBeenCalledTimes(2)
     expect(updateBox).toHaveBeenCalledTimes(1)
-    expect(here.getSnapshot().boxes.map((box) => box.boxlabel)).to.have.members(['anthropic', 'openai'])
+    expect(boxlabelsOf(here)).to.have.members(['anthropic', 'openai'])
   })
 
   it("a retry that finds the passphrase changed elsewhere finds the device relocked, and writes nothing", async () => {
@@ -2668,8 +2658,7 @@ describe("the logger", () => {
     const device = uncheckingDeviceDB()
     await world.openUnlocked('pw', { deviceDB: device.deviceDB })
     device.spoilRow((row) => ({ ...row, ask_passphrase_at: 'soon' }))
-    const later = await world.open({ deviceDB: device.deviceDB })
-    expect(later.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen({ deviceDB: device.deviceDB })).to.eq('locked')
     expect(world.logged).to.have.lengthOf(1)
     expect(world.logged[0]).to.deep.include({ level: 'warn', story: { call: 'openVault' }, err: undefined })
     expect(world.logged[0]?.message).to.match(/remembered unlock could not be read/)
@@ -2683,8 +2672,7 @@ describe("the logger", () => {
       const wrapped = row['vault_key_local_wrapped'] as { cipher_iv_b64: string, ciphertext_b64: string }
       return { ...row, vault_key_local_wrapped: { ...wrapped, ciphertext_b64: TH.tweakB64(wrapped.ciphertext_b64) } }
     })
-    const later = await world.open({ deviceDB: device.deviceDB })
-    expect(later.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen({ deviceDB: device.deviceDB })).to.eq('locked')
     expect(world.logged.map((heard) => heard.level)).to.deep.equal(['warn'])
   })
 
@@ -2703,13 +2691,11 @@ describe("the logger", () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
     world.advance(SevenDaysMs + 1)
-    const expired = await world.open()
-    expect(expired.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen()).to.eq('locked')
     await vault.unlock('pw')
     const elsewhere = await world.open({ deviceDB: memoryDeviceDB() })
     await elsewhere.changePassphrase('pw', 'pw two')
-    const outdated = await world.open()
-    expect(outdated.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen()).to.eq('locked')
     expect(world.logged).to.have.lengthOf(0)
   })
 
@@ -2757,8 +2743,7 @@ describe("the logger", () => {
     // an open that forgets an unreadable remembered unlock
     await vault.unlock('pw')
     device.spoilRow(() => 'not a record')
-    const reopened = await world.open({ logger, deviceDB: device.deviceDB, clock })
-    expect(reopened.getSnapshot().state).to.eq('locked')
+    expect(await world.stateOnOpen({ logger, deviceDB: device.deviceDB, clock })).to.eq('locked')
     // a failed open whose watch would not close
     vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(new VaultError('not_permitted', 'Sign in to reach this vault.'))
     vi.spyOn(world.vaultDB, 'subscribe').mockReturnValueOnce(() => { throw new Error('the adapter could not unsubscribe') })
