@@ -92,5 +92,11 @@ reworks `store()`'s "never refused for room" sentence (below).
     small doc conflict for whichever lands second.
   - Not checked (review): production Convex's read accounting against `getDocumentSize`, and a
     rollback deploy beside the leftover tally table.
-  - Should a host be able to set a *lower* server-side limit (a trusted `api({ maxLockboxes })`)?
-    Not built; easy to add without touching stored data.
+  - **Settled by the Coach:** should a host be able to set a *lower* server-side limit? No.
+    "deploying different size limits on host and db is undefined behavior (not a bug, but we
+    won't say what will happen)". There is no host knob; the Convex README (after *How big a
+    vault can be*) and `VaultDB.maxVaultBytes`' doc block now say that client-side limits
+    (`maxLockboxes`, `maxWhisperBytes`, the adapter's `maxVaultBytes`) that disagree with the
+    storage's, or an adapter declaring a `maxVaultBytes` its store does not hold to, are
+    undefined behaviour. The README's *Refusals* bullet and `store()`'s doc block are untouched
+    (PR #50, stacked on this, rewrites the bullet).
