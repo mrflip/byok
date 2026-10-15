@@ -230,7 +230,7 @@ export type Vault = {
   /**
    * Delete the vault's every stored record, remote and device-local: the vault half of deleting
    * an account. Deliberately does NOT require unlock -- an authenticated owner can always delete
-   * their own rows server-side, and pretending otherwise would be false comfort.
+   * their own rows server-side, and requiring unlock here would only look like protection.
    *
    * Deletes the vault this handle last read, and only that one: if it was destroyed, or
    * destroyed and made anew, elsewhere since, storage keeps what stands there now and the call
@@ -347,7 +347,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const refresh = async () => {
     const fresh = await vaultDB.readBundle(scope)
     // A passphrase change elsewhere (new epoch) or a deletion ends this device's unlock: the
-    // vaultKey in hand still works on old rows, but pretending to be current invites confusion.
+    // vaultKey in hand still works on old rows, but passing as current invites confusion.
     const outlived = vaultKey !== null && bundle !== UnreadBundle && bundle !== null
       && (fresh?.passphrase_epoch !== bundle.passphrase_epoch || fresh.vault_id !== bundle.vault_id)
     if (outlived) {

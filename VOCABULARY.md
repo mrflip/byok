@@ -16,8 +16,9 @@ use safebyok; if you do, the last column of each table gives the usual term.
 
 ## Keys
 
-safebyok has four keys. Each is a 256-bit AES-GCM key, named for whose it is, and none ever leaves the
-user's device unencrypted. There are no public or private keys: everything is symmetric.
+safebyok has four keys. Each is a 256-bit AES-GCM key, named for whose it is, and none ever
+leaves the user's device unencrypted. There are no public or private keys: everything is
+symmetric.
 
 | Name               | What it is                                                                                                                                                         | Standard term                       |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
@@ -64,12 +65,35 @@ wrong or has been tampered with, decryption fails.
 | **keyDeriverLabel**      | The keyDeriverSpec's name (`argon2id_web_v1` for the supplied one), stored with each vault so that the vault says how it was made. A label always means the same parameters. | KDF identifier       |
 | **key deriver**          | What makes the passphraseKey under a keyDeriverSpec: `argon2idWebV1Deriver` for the supplied one, `argon2idDeriver(spec)` for a host's own. One standing in for a supplied spec carries its parameters, or the vault refuses it. | KDF                  |
 | **cipherIv**             | 12 random bytes, fresh for every encryption, stored beside the ciphertext it opens.                                                                                  | IV, nonce            |
-| **cipherAdditionalData** | The context an encryption is bound to: which app, user and vault, which lockbox and revision, and for what purpose. It is rebuilt rather than stored, so ciphertext copied anywhere else will not open. | associated data (AAD) |
+| **cipherAdditionalData** | The context an encryption is bound to: the record's format, which app, user and vault, which lockbox and revision (or, for a key wrap, which passphraseEpoch), and which field it is. It is rebuilt rather than stored, so ciphertext copied anywhere else will not open. | associated data (AAD) |
 | **ciphertext**           | The encrypted bytes, with their authentication tag on the end.                                                                                                       | ciphertext           |
 | **vaultId**              | A random id minted when the vault is made, and never changed; part of every cipherAdditionalData.                                                                   | --                   |
 | **revisionId**           | A fresh id for each write of a lockbox. It is part of the cipherAdditionalData; storage refuses (`stale_write`) a write made from a stale read.                     | version, CAS token   |
 | **passphraseEpoch**      | A counter that goes up whenever the passphrase changes, so other devices and remembered unlocks know to ask for it again.                                            | key epoch            |
-| **whisperSchemaVersion** | Your own version number for the shape of a whisper, so you can migrate old ones after reading them.                                                                  | --                   |
+
+## Names, records and times
+
+How a vault is addressed, what the storage layer holds, and when. A label (`Label`) is lowercase
+words of letters and digits joined by single underscores, such as `anthropic_api_key`.
+
+| Name                            | What it is                                                                                                                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **applabel**                    | Your app's own label, so several apps can share one backend without colliding. Stored as `applabel`.                                                                        |
+| **vaultlabel**                  | The label of one of a user's vaults, such as `main`. Stored as `vaultlabel`.                                                                                                |
+| **boxlabel**                    | The label of a lockbox within its vault: what you pass to `store`, `read`, `use` and `erase`. Stored as `boxlabel`.                                                         |
+| **userId**                      | The signed-in user's id from your own auth, the one name in a scope that is not a label. Stored as `user_id`.                                                               |
+| **scope**                       | An applabel, a userId and a vaultlabel together: it names one vault (`VaultScope`).                                                                                         |
+| **note**                        | A lockbox's public text, up to 256 characters, which your UI may show while the vault is locked. It is never encrypted: never put a secret in it.                           |
+| **bundle**                      | The one record per vault that every device syncs (`VaultBundle`): the vaultId, passphraseEpoch, keyDeriverLabel, passphraseSalt and vaultKeyPassphraseWrapped. Nothing in it opens without the passphrase. |
+| **device unlock**               | (Also a remembered unlock.) What a device keeps to unlock without the passphrase (`DeviceUnlock`): the localUnlockKey, the vaultKeyLocalWrapped, the vaultId, the passphraseEpoch and the askPassphraseAt. It stays on the device. |
+| **vaultDB**                     | The storage plug-in for what syncs: bundles and lockboxes, ciphertext only (`VaultDB`; `localVaultDB`, `idbVaultDB` and `convexVaultDB` are supplied).                      |
+| **deviceDB**                    | The storage plug-in for this device's device unlock (`DeviceDB`; `memoryDeviceDB` and `idbDeviceDB` are supplied).                                                          |
+| **registeredAt**, **changedAt** | When a lockbox was first stored, and when its whisper last changed; the bundle has a registeredAt too: when the vault was made. Stored as `registered_at` and `changed_at`. |
+| **askPassphraseAt**             | The instant from which a device stops honoring its device unlock and asks for the passphrase again (`ask_passphrase_at` in the record). `FarFuture` means "until it is locked". |
+| **forcePassphraseReentryHours** | The `openVault` option for how long a device stays unlocked after the passphrase is entered. The default is 168 (`ForcePassphraseReentryHours`); `Infinity` means until it is locked. |
+| **EpochMillis**                 | Every time safebyok keeps: whole UTC milliseconds since 1970, from `FarPast` (1981) to `FarFuture` (2255). The bounds catch seconds and microseconds passed by mistake.      |
+| **format**                      | The tag at the head of every stored record (`safebyok-vault-v1`, `safebyok-lockbox-v1`, `safebyok-unlock-v1`). It is also the first part of the cipherAdditionalData.        |
+| **clock**, **logger**           | Two options your app may pass to `openVault`: a source of the time (`Clock`), and a place for the vault to say what it has no one to throw to (`VaultLogger`).             |
 
 ## Other credentials
 
@@ -84,7 +108,7 @@ wrong or has been tampered with, decryption fails.
   storage address is a `ckey`.
 * **data, contents, payload.** The secret is a whisper; encrypted, it is a whisperCiphered.
 * **device key.** The key behind "remember this device" is the localUnlockKey.
-* **KEK, DEK, KDF, AAD.** They appear above only so a security reviewer can map safebyok's names onto
-  the usual ones. Nothing in safebyok's API asks you to learn them.
+* **KEK, DEK, KDF, AAD.** They appear above only so a security reviewer can map safebyok's names
+  onto the usual ones. Nothing in safebyok's API asks you to learn them.
 
 Stored records spell every name in underbar_case: `whisper_ciphered`, `key_deriver_label`.
