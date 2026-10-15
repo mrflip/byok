@@ -107,6 +107,25 @@ describe("Envelope.openWithPassphrase", () => {
     await expectRefusal(Envelope.openWithPassphrase(alienDeriver, 'first', scope, bundle), 'unknown_key_deriver')
   })
 
+  it("refuses as corrupt_record, deriving nothing, when an envelope it would try has a salt of another length", async () => {
+    const vaultKey = await makeVaultKey()
+    // 'c2FsdA' is four bytes: base64url that decodes, so it passes the schema, but no 16-byte deriver made it.
+    const bundle = bundleWith([await sealed('first', 'one', vaultKey), { ...await sealed('second', 'two', vaultKey), salt_b64: 'c2FsdA' }])
+    const { keyDeriver, derivations } = countingDeriver()
+    await expectRefusal(Envelope.openWithPassphrase(keyDeriver, 'first', scope, bundle), 'corrupt_record')
+    expect(derivations).not.toHaveBeenCalled()
+  })
+
+  for (const [saltB64, blurb] of [['not base64!', 'text that is not base64url'], ['aaaaa', 'base64url letters that decode to no whole bytes']] as const) {
+    it(`refuses as corrupt_record, deriving nothing, when an envelope it would try has a salt of ${blurb}`, async () => {
+      const vaultKey = await makeVaultKey()
+      const bundle = bundleWith([await sealed('first', 'one', vaultKey), { ...await sealed('second', 'two', vaultKey), salt_b64: saltB64 }])
+      const { keyDeriver, derivations } = countingDeriver()
+      await expectRefusal(Envelope.openWithPassphrase(keyDeriver, 'first', scope, bundle), 'corrupt_record')
+      expect(derivations).not.toHaveBeenCalled()
+    })
+  }
+
   it("passes over envelopes another deriver made, and opens one this deriver did", async () => {
     const vaultKey = await makeVaultKey()
     const alienDeriver = { ...TH.testDeriver, key_deriver_label: 'someone_elses_deriver_v9' }

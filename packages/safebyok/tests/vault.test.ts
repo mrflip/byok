@@ -1477,6 +1477,19 @@ describe("several passphrases", () => {
     await TH.expectRefusal(vault.addPassphrase('pw', 'one too many', { unlocklabel: 'extra' }), 'too_many_unlocks')
   })
 
+  it("a blank passphrase offered as proof is refused at once, deriving nothing", async () => {
+    const world = makeWorld()
+    const { keyDeriver, derivations } = countingDeriver()
+    const vault = await world.open({ keyDeriver })
+    await vault.unlock('pw')
+    const unlockId = await vault.addPassphrase('pw', 'pw two', { unlocklabel: 'two' })
+    derivations.mockClear()
+    await TH.expectRefusal(vault.addPassphrase(' '.repeat(2), 'pw three', { unlocklabel: 'three' }), 'wrong_passphrase')
+    await TH.expectRefusal(vault.removeUnlock('', unlockId), 'wrong_passphrase')
+    await TH.expectRefusal(vault.changePassphrase('\t', 'pw four'), 'wrong_passphrase')
+    expect(derivations).not.toHaveBeenCalled()
+  })
+
   it("a refusal for what addPassphrase asks costs no key derivation", async () => {
     const world = makeWorld()
     const { keyDeriver, derivations } = countingDeriver()
