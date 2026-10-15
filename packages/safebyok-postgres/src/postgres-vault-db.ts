@@ -89,7 +89,7 @@ const DefaultMaxLockboxes = 1000
  *   `vault_full`, checked in the statement that inserts it, so two writes racing for the last
  *   place cannot both land. A lockbox replacing one already there is never refused for the count.
  *   A refusal for the count costs one read more, to tell a full vault from a writer who missed a
- *   lockbox it would replace (`stale_write`).
+ *   lockbox it would replace, or whose vault changed meanwhile (`stale_write`).
  * * **Isolation**: under READ COMMITTED, Postgres's default, every write holds as said. Under
  *   REPEATABLE READ or SERIALIZABLE, any two writes adding or removing a lockbox in one vault at
  *   once may fail with a serialization error, as `storage_unavailable` (each moves the count on
@@ -176,7 +176,7 @@ const ListBoxesSql = `SELECT ${Columns.selected(ListedLockboxColumns)} FROM safe
 // never both land. The lock also holds the bundle in place, so no erase lands between the read and
 // the insert, and the foreign key never refuses it. Only the locked row is re-read: the lockboxes
 // are seen as the statement began, so whether a full vault already holds this boxlabel -- the
-// write it waited on may have stored it -- is BoxStandsSql's to say, afresh.
+// write it waited on may have stored it -- is StillFullSql's to say, afresh.
 const InsertBoxSql = `WITH vault AS (
     SELECT applabel, user_id, vaultlabel, vault_id, lockbox_count FROM safebyok_bundles
     WHERE ${ScopeIs} AND vault_id = $4::text
@@ -190,9 +190,16 @@ const InsertBoxSql = `WITH vault AS (
   )
   SELECT EXISTS (SELECT 1 FROM inserted) AS landed, EXISTS (SELECT 1 FROM vault WHERE lockbox_count >= $5::bigint) AS full`
 
-// Whether a lockbox stands under the boxlabel in the vault of that vault_id: asked, as a statement
-// of its own and so as things stand now, only after a first write found the vault full.
-const BoxStandsSql = `SELECT 1 FROM safebyok_lockboxes WHERE ${ScopeIs} AND boxlabel = $4::text AND vault_id = $5::text`
+// Whether the vault of that vault_id still stands full, with no lockbox under the boxlabel: asked
+// only after a first write found the vault full, as a statement of its own. Under READ COMMITTED, or
+// outside a transaction, it sees things as they stand now, and so it also sees a lockbox erased, or the vault erased, since
+// the insert let go of the bundle's row: either leaves the writer only stale. Inside a host's
+// REPEATABLE READ or SERIALIZABLE transaction it shares the insert's snapshot, which is still
+// current for this vault: the insert holds the bundle's row until the transaction ends, and would
+// have failed to lock it had any lockbox come or gone in the vault since the snapshot was taken.
+const StillFullSql = `SELECT 1 FROM safebyok_bundles
+  WHERE ${ScopeIs} AND vault_id = $5::text AND lockbox_count >= $6::bigint
+    AND NOT EXISTS (SELECT 1 FROM safebyok_lockboxes WHERE ${ScopeIs} AND boxlabel = $4::text AND vault_id = $5::text)`
 
 // A lockbox over the revision read. Its vault_id column is its bundle's (the foreign key holds
 // them together), so matching it is matching the bundle that stands.
@@ -278,10 +285,11 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
     const { rows } = await this.client.query(InsertBoxSql, [...scopeParams(scope), expected.vault_id, this.maxLockboxes, ...boxParams])
     const outcome = rows[0] as { landed: boolean, full: boolean }
     if (! outcome.full) { return outcome.landed }
-    // A full vault that holds this boxlabel after all: the writer missed a lockbox it would
-    // replace, which is never refused for the count, and is only stale.
-    const { rows: standing } = await this.client.query(BoxStandsSql, [...scopeParams(scope), lockbox.boxlabel, expected.vault_id])
-    if (standing.length > 0) { return false }
+    // A vault that holds this boxlabel after all, has room again, or is gone: the writer missed a
+    // lockbox it would replace (never refused for the count), or its vault moved under it, and it
+    // is only stale.
+    const { rows: stillFull } = await this.client.query(StillFullSql, [...scopeParams(scope), lockbox.boxlabel, expected.vault_id, this.maxLockboxes])
+    if (stillFull.length === 0) { return false }
     throw new VaultError('vault_full', `This vault already holds the ${String(this.maxLockboxes)} lockboxes its storage keeps in one vault: erase one before storing another.`)
   }
 

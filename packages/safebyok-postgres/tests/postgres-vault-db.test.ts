@@ -316,10 +316,31 @@ describe("postgresVaultDB, its lockbox limit", () => {
     const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 2 })
     await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake-mine'), noBoxYet), 'stale_write')
     expect(spy.sent).to.have.lengthOf(2)
-    expect(spy.sent[1]?.params).to.deep.equal(['acme', 'u1', 'main', 'anthropic', 'vault-id-u1'])
+    expect(spy.sent[1]?.params).to.deep.equal(['acme', 'u1', 'main', 'anthropic', 'vault-id-u1', 2])
   })
 
-  it("refuses vault_full when the fresh look finds no lockbox under that boxlabel", async () => {
+  it("refuses as stale_write, not vault_full, a full vault given room again before the fresh look: the retry stale_write earns will land", async () => {
+    // As a race leaves it: the insert found the vault full, then another device erased a lockbox.
+    const db = await TH.emptyDatabase()
+    const other = await filledTo(db, 1, ['openai'])
+    await other.eraseBox(u1, 'openai', { vault_id: 'vault-id-u1' })
+    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, full: true }] }) : undefined))
+    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 1 })
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'stale_write')
+    expect(spy.sent).to.have.lengthOf(2)
+  })
+
+  it("refuses as stale_write, not vault_full, a full vault erased before the fresh look", async () => {
+    const db = await TH.emptyDatabase()
+    const other = await filledTo(db, 1, ['openai'])
+    await other.eraseVault(u1, { vault_id: 'vault-id-u1' })
+    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, full: true }] }) : undefined))
+    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 1 })
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'stale_write')
+    expect(spy.sent).to.have.lengthOf(2)
+  })
+
+  it("refuses vault_full when the fresh look finds the vault still full, with no lockbox under that boxlabel", async () => {
     const db = await TH.emptyDatabase()
     await filledTo(db, 1, ['openai'])
     const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, full: true }] }) : undefined))
