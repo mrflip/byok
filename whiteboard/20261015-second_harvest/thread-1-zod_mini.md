@@ -1,6 +1,6 @@
 # Thread 1: zod_mini (2026-10-15)
 
-Branch `20261015-zod_mini`, PR not yet filed, stacked on [#51](https://github.com/mrflip/safebyok/pull/51) (the top of
+Branch `20261015-zod_mini`, PR [#62](https://github.com/mrflip/safebyok/pull/62), stacked on [#51](https://github.com/mrflip/safebyok/pull/51) (the top of
 the merge stack, `origin/20261015-low_hanging_fruit` at `d9dfa94`). Justify: green (root 105 tests;
 core 628, convex 259, react 27, demo 61; `pnpm size` passes at the lowered limits).
 
