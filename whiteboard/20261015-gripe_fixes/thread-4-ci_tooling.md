@@ -1,6 +1,6 @@
 # Thread 4: ci_tooling (2026-10-15)
 
-Branch `20261015-ci_tooling`, PR not yet filed, stacked on #66. Justify: green (root 119, core
+Branch `20261015-ci_tooling`, PR #72, stacked on #66. Justify: green (root 119, core
 705, convex 265, react 28, demo 61).
 
 * **Built**:
@@ -27,7 +27,8 @@ Branch `20261015-ci_tooling`, PR not yet filed, stacked on #66. Justify: green (
     package's `build:deps` stands down: `build` goes in dependency order, each package once, and
     `test` builds first, then runs the packages' tests four at a time. A package run alone still
     builds its dependencies first, each once (its `build:deps` sets the variable for its own
-    nested build; a package's `justify` sets it for the build after its tests). A planted type
+    nested build; a package's `justify` sets it for the build after its tests). It stands down
+    only on exactly `1` (from review). A planted type
     error and failing test were both reported, exit 1. The slow-justify TODO entry is gone.
   - **#36's items**: root `test:coverage` runs the root's tests with coverage over `scripts/`
     (`@vitest/coverage-v8` added at the root: a plainly boring devDependency, matching the
@@ -53,6 +54,8 @@ Branch `20261015-ci_tooling`, PR not yet filed, stacked on #66. Justify: green (
   - The root `pnpm test` now builds every package (it built the core before, via `pretest`), so
     `node-compat` runs the builds on Node 22 and 26 too.
   - `pnpm changeset status --since` sees only committed changesets.
+  - pnpm still sorts a recursive run at concurrency 4: the core's tests alone, then convex and
+    react together, then the demo (review; `pnpm-workspace.yaml`'s comment says so).
 * **For the Coach**:
   - The Version PR's skip trusts the branch name `changeset-release/`; anyone may name a branch
     so to skip the changeset check. Pre-existing; tightening it needs the App's bot login.
