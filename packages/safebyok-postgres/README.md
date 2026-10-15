@@ -38,7 +38,8 @@ SQL:
   ... FOR UPDATE`, in the same transaction), as the adapter does: otherwise the trigger may
   deadlock with an erase of the whole vault.
 * **Never `TRUNCATE` the lockboxes alone**, as a truncate fires no row trigger. If a count goes
-  astray, after that or after a restore with triggers off, this sets every vault's right:
+  astray, after that or after a restore with triggers off, this sets every vault's right. Run
+  it while nothing writes to these tables: a lockbox stored while it runs may go uncounted.
 
 ```sql
 UPDATE safebyok_bundles AS bundle SET lockbox_count = (SELECT count(*) FROM safebyok_lockboxes AS box WHERE (box.applabel, box.user_id, box.vaultlabel, box.vault_id) = (bundle.applabel, bundle.user_id, bundle.vaultlabel, bundle.vault_id));
