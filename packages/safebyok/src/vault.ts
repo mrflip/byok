@@ -340,9 +340,10 @@ export type Vault = {
   /**
    * Remove the lockbox `boxlabel` entirely, whatever revision of it stands -- even one whose
    * stored record fails verification, and so reads as 'corrupt_record': erasing it needs nothing
-   * from it, and is the remedy for it. Requires unlocked; kind 'absent_box' when absent. The erase lands only in the vault this device last read: if
-   * it was destroyed, or destroyed and made anew, elsewhere, nothing is erased and the call
-   * throws kind 'stale_write', after catching up with storage -- which relocks this device.
+   * from it, and is the remedy for it. Requires unlocked; kind 'absent_box' when absent. The
+   * erase lands only in the vault this device last read: if it was destroyed, or destroyed and
+   * made anew, elsewhere, nothing is erased and the call throws kind 'stale_write', after
+   * catching up with storage -- which relocks this device.
    * Unlike `store()`, an erase is never retried: that is its only expectation, and trying again
    * could not meet it.
    */
