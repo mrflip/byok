@@ -1,6 +1,6 @@
 # Thread 3: provider_open_rejection (2026-10-15)
 
-Branch `20261015-provider_open_rejection`, PR not yet filed, cut from `origin/main`. Justify: green
+Branch `20261015-provider_open_rejection`, PR [#32](https://github.com/mrflip/safebyok/pull/32), cut from `origin/main`. Justify: green
 (core 242, convex 210, react 12, demo 24 tests; root 67).
 
 * **Built**: `VaultProvider` (`packages/safebyok-react/src/vault-provider.tsx`) holds an
