@@ -1,5 +1,6 @@
 import { useState, type SubmitEvent } from 'react'
 import { ForeverMs, isVaultCondition, isVaultError, type Vault } from 'safebyok'
+import { Boundary } from './boundary'
 import { PasskeyUnlockButton } from './passkey-unlock-button'
 
 const MinutesPerHour = 60
@@ -46,8 +47,12 @@ const unlockedFor = (reentryWindowMs: number, creating: boolean): string => {
  *
  * A condition the unlock meets (storage that cannot be reached, a record that fails
  * verification) shows in the dialog in place, in the vault's own calm words, and the user may
- * try again or cancel. Misuse, or anything that is no VaultError, is thrown while rendering, for
- * the nearest error boundary above the dialog to catch.
+ * try again or cancel. Anything else -- misuse, such as a closed vault handle, or a failure that
+ * is no VaultError -- never reaches the host's page: the dialog shows a calm notice in its place,
+ * "Something went wrong", whose Close calls `onDone(false)`,
+ * and React reports the error through the root's `onCaughtError` (the console, by default, with
+ * the component stack), where the developer and an error tracker meet it. A passkey that fails
+ * that way takes its button away and leaves the passphrase.
  *
  * How long an unlock lasts it reads from the vault itself (its `reentryWindowMs`, the
  * `forcePassphraseReentryHours` it was opened with): 'Locks again on this device in 7 days', 'in 15
@@ -58,10 +63,39 @@ const unlockedFor = (reentryWindowMs: number, creating: boolean): string => {
  * @example
  *   <PassphraseModal vault={vault} onDone={(unlocked) => { setAsking(false) }} />
  */
-export const PassphraseModal = ({ vault, onDone }: {
+export const PassphraseModal = (props: PassphraseModalProps) => (
+  <Boundary fallback={<DialogTrouble onDone={props.onDone} />}>
+    <UnlockForm {...props} />
+  </Boundary>
+)
+
+/** What PassphraseModal is handed. */
+type PassphraseModalProps = {
   vault:  Vault
   onDone: (unlocked: boolean) => void
-}) => {
+}
+
+/**
+ * What the dialog shows once something has gone wrong inside it that is not the user's to mend:
+ * a calm word, and the way out.
+ */
+const DialogTrouble = ({ onDone }: { onDone: (unlocked: boolean) => void }) => (
+  <div className="modal-scrim">
+    <div className="modal">
+      <h3>Something went wrong</h3>
+      <p className="gripe" role="alert">
+        This app ran into a problem of its own, not one you caused, and could not unlock your vault. Your secrets are safe. Close this, reload the page, and try again.
+      </p>
+      <div className="row">
+        {/* eslint-disable-next-line jsx-a11y/no-autofocus -- the field that held focus is gone; the WAI-ARIA dialog pattern moves focus to the dialog's one control */}
+        <button type="button" autoFocus onClick={() => { onDone(false) }}>Close</button>
+      </div>
+    </div>
+  </div>
+)
+
+/** The dialog itself, inside PassphraseModal's boundary. */
+const UnlockForm = ({ vault, onDone }: PassphraseModalProps) => {
   const [passphrase, setPassphrase] = useState('')
   const [gripe, setGripe] = useState<string | null>(null)
   // Wrapped, so that a failure carrying any value at all still reads as "failed".
@@ -79,8 +113,8 @@ export const PassphraseModal = ({ vault, onDone }: {
       if (isVaultError(err, 'vault_locked')) { onDone(false); return }
       // A condition (a wrong passphrase, storage out of reach): shown calmly, to try again.
       if (isVaultCondition(err)) { setGripe(err.message); return }
-      // Misuse, or no VaultError at all: not for the user. Rethrown in render, where a boundary
-      // catches it; thrown from here it would vanish into the voided promise.
+      // Misuse, or no VaultError at all: not for the user. Rethrown in render, where
+      // PassphraseModal's boundary catches it; thrown from here it would miss every boundary.
       setFailure({ err })
     }
   }
