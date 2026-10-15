@@ -1,9 +1,9 @@
 # Thread 7: pluggable_logger (2026-10-15)
 
 Branch `20261015-pluggable_logger`, PR not yet filed, stacked on [#64](https://github.com/mrflip/safebyok/pull/64)
-(thread 6, the top of the merge stack, `c186978`). Justify green: core 701, convex 265, react 28,
-demo 61, root 105. `pnpm size` within every limit, none raised (everything 22.45 -> 22.82 kB,
-openVault 15.43 -> 15.92 kB of 16.5; stableJsonify unchanged at 2.32 kB).
+(thread 6, the top of the merge stack, `c186978`). Justify green: core 705, convex 265, react 28,
+demo 61, root 105. `pnpm size` within every limit, none raised (everything 22.45 -> 22.85 kB,
+openVault 15.43 -> 15.90 kB of 16.5; stableJsonify unchanged at 2.32 kB).
 
 * **Built**:
   - `packages/safebyok/src/logger.ts`: the exported `VaultLogger` type (`log`, `warn`, `error`,
@@ -42,6 +42,14 @@ openVault 15.43 -> 15.92 kB of 16.5; stableJsonify unchanged at 2.32 kB).
     `notes/security.md` (two entries replace thread 6's console note), changeset (minor, core and
     react), and thread 6's changeset now says the bad-clock warning goes "through the vault's
     `logger` (the console by default)".
+  - **After review** (reviewed `fixed`, five reviewer commits kept): the guard settles any
+    thenable a logger returns, not only a same-realm `Promise`; the unreadable-unlock warning
+    follows the erase; the docs say `logger: console` prints a missing story or error as
+    `undefined`/`null`, and that the vault adds no secret to what it logs while a host's own
+    clock or adapter error is the host's to keep clean. Then, at the orchestrator's word:
+    `loggedText` never throws (a cause cycle ends at `[cause seen above]`, what JSON cannot
+    write becomes `[not JSON]`), and the sweep breaks the host clock under `lockSoon`, so one
+    logged error carries a `cause` and the sweep proves it walked down to it.
 * **Decisions taken**:
   - `story` is typed `Record<string, unknown>`, not `any`: a host logger typed with `any` (the
     Coach's signature) and `Console` both fit, a type test proves it.
@@ -64,7 +72,12 @@ openVault 15.43 -> 15.92 kB of 16.5; stableJsonify unchanged at 2.32 kB).
   - CLAUDE.md still says "`src/` writes nothing to the console (the linter enforces it)", and the
     core's `eslint.config.mjs` comment says the same; both are now true but for the fallback
     module. Left for the Coach (agents do not edit CLAUDE.md on their own word).
-  - A watch-rung refresh against storage that stays broken warns once per change event.
+  - A watch-rung refresh against storage that stays broken warns once per change event, with no
+    rate limit.
+  - Left open by the review: a failed catch-up after a stale write is logged as "a background
+    refresh" beside the thrown `stale_write`; an inline JSX `logger` reopens the vault each render
+    (the provider's recorded design, warned of in the README); `log` is required though nothing
+    calls it yet (the agreed signature).
 * **For the Coach**:
   - Confirm the file-wide `no-console` disable in `src/console-logger.ts`, as relayed: "yes with
     no logger console is the fallback".
