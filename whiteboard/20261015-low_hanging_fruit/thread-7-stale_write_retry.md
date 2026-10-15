@@ -40,16 +40,19 @@ disconnected). Tip updated after the coordinator's erase-wins ruling.
     and one that finds it created meanwhile retries over the new revision. Tests: erase wins
     (exactly one `updateBox`, box stays erased) and created-meanwhile retries. An earlier draft of
     this thread re-created the box; the coordinator caught it against the ruling.
-  - **The cap recount is structural, not exercised**: after this rule a retry can never be a new
-    box (`prev === null`) -- a stale write needs the box to have changed, and a box absent at the
-    first read that stays absent is not stale -- so `ensureRoomFor` sits in the attempt but never
-    runs a second time. A new label's uncontended box never retries, so no recount; a rival filling
-    the other slots races past the cap (thread 1's security note covers it). No test, as none can
-    reach it.
+  - **The cap recount is exercised** (the coordinator corrected my first note, which said it
+    could not run): attempt one reads the box absent, a rival creates it, the write is refused as
+    stale, and the rival erases it before the retry's read; the retry has `prev === null`,
+    `boxStood` is false, so `ensureRoomFor` runs again and refuses `vault_full` at the cap.
+    Test: a hook on the second `readBox`, one `updateBox` call in all. A new label whose box is
+    uncontended never retries; a rival filling the other slots races past the cap unseen
+    (thread 1's security note covers it).
   - `twoDeviceWorld` in the test file now gives `here` its own `VaultDB` over the shared store, so
-    a spy on `here`'s writes counts attempts without catching the rival's writes.
+    a spy on `here`'s writes counts attempts without catching the rival's writes; it takes
+    `OpenVaultOpts` overrides for `here`.
   - TODO.md's conflict-handler item says "after the retry (low-hanging-fruit thread 6)"; it is
     thread 7. Not edited here.
-* **For the Coach**: the TODO.md slip above; the cap-race note above; and whether `vault_locked` (over the original `stale_write`) is right when a
+* **For the Coach**: a distinct error kind for erase-wins (it shares `stale_write` with an
+  exhausted retry, so a host cannot tell them apart); the TODO.md slip above; the cap-race note above; and whether `vault_locked` (over the original `stale_write`) is right when a
   retry finds the device relocked. It is the orchestrator's stated expectation and tells the host
   the useful thing (ask for the passphrase), but it changes what an existing host catches.

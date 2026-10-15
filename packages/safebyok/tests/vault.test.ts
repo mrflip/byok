@@ -1092,12 +1092,12 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
  * Two devices on one vault, and a way to slip `there`'s doings between `here`'s look at storage
  * and its write: `beforeNextWrite` runs once, inside the next call to the verb it names, before
  * the write itself reaches storage. `here` has a vaultDB of its own over the shared store, so
- * `hereDB` sees only its writes, whatever `there` does.
+ * `hereDB` sees only its writes, whatever `there` does. `hereOpts` override `here`'s options.
  */
-const twoDeviceWorld = async () => {
+const twoDeviceWorld = async (hereOpts?: Partial<OpenVaultOpts>) => {
   const world = makeWorld()
   const hereDB = localVaultDB(world.dbStore)
-  const here = await world.open({ vaultDB: hereDB })
+  const here = await world.open({ vaultDB: hereDB, ...hereOpts })
   await here.unlock('shared pw')
   const there = await world.open({ deviceDB: memoryDeviceDB() })
   await there.unlock('shared pw')
@@ -1191,6 +1191,28 @@ describe("versioned updates: two devices writing at once", () => {
     await here.store('anthropic', 'sk-ant-fake-mine')
     expect(updateBox).toHaveBeenCalledTimes(2)
     expect(await there.read('anthropic')).to.eq('sk-ant-fake-mine')
+  })
+
+  it("a retry that finds its new box gone again counts the lockboxes afresh: refused as full, nothing written", async () => {
+    const { hereDB, here, there, beforeNextWrite } = await twoDeviceWorld({ maxLockboxes: 2 })
+    await here.store('anthropic', 'sk-ant-fake-one')
+    // Attempt one reads gemini as absent and room for it; before its write, a rival makes gemini
+    // and openai, so the write is refused as stale. Before the retry's read, the rival erases
+    // gemini: the retry meets an absent box in a vault already holding its two others.
+    beforeNextWrite('updateBox', async () => {
+      await there.store('gemini', 'sk-fake-theirs')
+      await there.store('openai', 'sk-fake-theirs')
+    })
+    const original = hereDB.readBox.bind(hereDB)
+    const readBox = vi.spyOn(hereDB, 'readBox').mockImplementation(async (...args) => {
+      if (readBox.mock.calls.length === 2) { await there.erase('gemini') }
+      return await original(...args)
+    })
+    const updateBox = vi.spyOn(hereDB, 'updateBox')
+    await expectRefusal(here.store('gemini', 'sk-fake-mine'), 'vault_full')
+    expect(readBox).toHaveBeenCalledTimes(2)
+    expect(updateBox).toHaveBeenCalledTimes(1)
+    expect(here.getSnapshot().boxes.map((box) => box.boxlabel)).to.have.members(['anthropic', 'openai'])
   })
 
   it("a retry that finds the passphrase changed elsewhere finds the device relocked, and writes nothing", async () => {
