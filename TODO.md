@@ -389,6 +389,13 @@ Straightforward, likely to be done, not needed yet. Each is a thread cut from `m
 * *Built, [#77](https://github.com/mrflip/safebyok/pull/77):* **IndexedDB `versionedUpdate` truly atomic**, inside one IndexedDB transaction (idb-keyval's
   `update()`, throw-to-abort mapped to `stale_write`), closing the window `notes/security.md`
   records. After storage_verbs.
+* **Dependabot runtime-dependency PRs get their changeset without the Coach.** Today
+  ([#72](https://github.com/mrflip/safebyok/pull/72)'s gate) a Dependabot PR that changes a
+  published package's runtime dependencies fails CI until someone pushes a changeset to it. A
+  workflow on Dependabot PRs could write `.changeset/dependabot-<n>.md` (a patch bump naming the
+  dependency and versions) and push it, so the PR goes green on its own and the release notes say
+  what moved. Decide: does the bot's push need a token that re-triggers CI, and is patch always
+  the right level for a runtime dependency bump before 1.0?
 * *Built, [#78](https://github.com/mrflip/safebyok/pull/78):* **A GraphQL vault store** (urql): listed because the Coach asked; it is not actually easy.
   Subscribe and `versionedUpdate` depend on a schema we do not own, so it needs resolvers on
   the host's GraphQL server as well as a client, and no host's existing schema has our tables.
@@ -436,6 +443,16 @@ the validation is replaceable** -- a default check (a length cap, no control cha
 whatever the ckey stringifier above needs) that a host can swap for its own auth provider's id
 shape. Same seam family as the label validator; decide them together.
 
+### A lockbox row that breaks the listing locks the vault out
+
+Found by [#87](https://github.com/mrflip/safebyok/pull/87)'s review: a stored lockbox row that
+fails the listing's check (not JSON, a malformed note or timestamp) makes `listBoxes`, so every
+`refresh()` and every `openVault`, throw `corrupt_record`. With no handle, neither `erase()` nor
+`destroy()` can reach it; the only way back is clearing storage by hand. Decide: should the
+listing skip a bad row, or list it marked as damaged so `erase()` can remove it (and the snapshot
+can show it)? Either way, `erase()` should not report `corrupt_record` after its own delete has
+landed because a different box broke the refresh that follows.
+
 ### A conflict-handler hook
 
 Ruled "with the retry work": a way for a host to hear about an erase-versus-update collision
@@ -448,6 +465,15 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
 * **Provide built-as-a-whole recommended KDFs, and functions to roll your own.** Follows from
   [#68](https://github.com/mrflip/safebyok/pull/68)'s `argon2idDeriver(spec)`; replaces its open
   question of adding RFC 9106's second recommended option as a supplied spec.
+* **CI questions left by [#72](https://github.com/mrflip/safebyok/pull/72)**, each its own
+  conversation:
+  - the Dependabot changeset gate recognizes a Dependabot PR by its author;
+  - the release workflow skips by the `changeset-release/` branch name (predates #72);
+  - the runtime-dependency comparison skips removed or made-private packages,
+    `peerDependenciesMeta` and `bundledDependencies`;
+  - `justify:root` is defined and never used;
+  - in `justify`, a build failure skips every package's tests, not only its own;
+  - `safebyok-convex`'s `./test` entry imports a devDependency.
 * Style guide audit
   - A few comment lines exceed 100 columns.
 
