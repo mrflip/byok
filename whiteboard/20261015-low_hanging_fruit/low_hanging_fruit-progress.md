@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 2 building; 5 filing; 1, 3, 4, 9, 10, 11 filed. Newer than the plan wherever the two disagree.
+**Status**: 2 building; 1, 3, 4, 5, 9, 10, 11 filed; 6, 7, 8 wait on 2. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -12,7 +12,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | underway |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | filing |
+| 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37) |
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
@@ -78,7 +78,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 * **Thread 4** (`epoch_millis`, [#31](https://github.com/mrflip/safebyok/pull/31)): almost nothing
   to change outside the stored fields: the demo's account `created_at` and one test clock.
   *Review:* clean.
-* **Thread 5** (`mask_utils`): `safebyok/utils` with `mask`. **For any new entry**: tsdown's
+* **Thread 5** (`mask_utils`, [#37](https://github.com/mrflip/safebyok/pull/37)): `safebyok/utils` with `mask`. **For any new entry**: tsdown's
   `exports: true` does not write `typesVersions`; attw's node10 check fails until it is added by
   hand. **For thread 8**: `mask`'s budget waits on thread 5 merging (4.1 kB built). Graphemes via
   `Intl.Segmenter`, code points without it; `maskAll` struck. *Review:* flagged; orchestrator
