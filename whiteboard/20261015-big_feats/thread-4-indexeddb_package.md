@@ -2,7 +2,7 @@
 
 Branch `20261015-indexeddb_package`, PR not yet filed, stacked on #70 (gripe_fixes
 `vaultdb_validation`, cut at `d874db3`). Justify: green -- root 105, safebyok 734, safebyok-convex
-267, safebyok-indexeddb 98, safebyok-react 28, demo 62; publint, attw and `pnpm size` clean.
+267, safebyok-indexeddb 101, safebyok-react 28, demo 62; publint, attw and `pnpm size` clean.
 
 * **Built**:
   - `packages/safebyok-indexeddb/`, packaged as `safebyok-postgres` is (ESM + CJS through tsdown,
@@ -69,6 +69,19 @@ Branch `20261015-indexeddb_package`, PR not yet filed, stacked on #70 (gripe_fix
     Its built `index.js` is 15.5 kB, almost all doc comments.
   - CLAUDE.md's *Layout* still lists three packages; #73 did not add `safebyok-postgres` either.
     A sweep after both land.
+* **Review** (`fixed`, two commits): the bell no longer calls a listener unsubscribed between
+  the ring and its microtask (`997823f`; a closed vault met it as a failed refresh and a logged
+  warning), and `vaultMeetsExpectation` also needs a finite `passphrase_epoch`, as the core's
+  `StandingBundle` does (`eb0b3ce`). Left, minor, and in the PR's open questions:
+  - the bell's BroadcastChannel is never closed or unref'd, so a Node or Bun process using the
+    adapter stays alive (a platform call for the Coach);
+  - a throwing listener, on its own microtask, crashes a Node process (`reportError` is an
+    option where the platform has it);
+  - the core's device-store bell keeps its old behaviours;
+  - `listBoxes` and `eraseVault` read the whole store where a key range would do;
+  - a failed write's `cause` can be null (IndexedDB's `request.error` on an abort);
+  - the race tests share one connection, so they prove IndexedDB's serialization within one
+    tab's connection, not across two.
 * **For the Coach**:
   - The no-shim break: `safebyok/idb` stops exporting `idbVaultDB`, `inspectIdb` and `IdbShelf`.
     The changeset tells hosts the one import to change.
