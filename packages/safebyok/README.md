@@ -401,15 +401,38 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `vault_full`          | a new lockbox in a vault already holding its `maxLockboxes`, a lockbox whose names and note would take the vault past its storage's `maxVaultBytes`, or a write the storage backend has no room for | Tell the user to erase a lockbox first; the host may raise `maxLockboxes` where the backend allows |
 | `too_many_unlocks`    | a passphrase or passkey added to a vault already holding `MaxUnlocks` (8) ways in | Tell the user to remove one first             |
 | `last_unlock`         | removing the vault's last passphrase: a vault always keeps one, since a passkey can be lost with its device | Add another passphrase first; to be rid of the vault, `destroy()` it |
-| `corrupt_record`      | a stored record failed validation or decryption verification     | Nothing was changed. Do not retry; tell the user, and see a developer: the record is damaged, was moved, or came from a newer safebyok. A lockbox whose damage leaves the vault's listing readable (altered ciphertext, a missing whisper, a record naming another boxlabel) can be removed with `erase()`; a lockbox row that breaks the listing still stops `openVault` |
+| `corrupt_record`      | a stored record failed validation or decryption verification     | Nothing was changed. Do not retry; tell the user, and see a developer: the record is damaged, was moved, or came from a newer safebyok. A damaged lockbox can be removed with `erase()` or written afresh with `store()` (see *Damaged lockboxes*); a damaged vault bundle stops `openVault` |
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
 | `not_permitted`       | the storage backend refused this user: signed out, or not theirs to reach | Have the user sign in again                             |
 | `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause` |
 
 `openVault` itself can refuse with `bad_option`, `bad_label`, and, as it reads the vault from
-storage, `storage_unavailable`, `not_permitted` or `corrupt_record`: the last three are
-conditions, though they surface at open. A refused open leaves nothing running behind it, so the
-host simply opens again.
+storage, `storage_unavailable`, `not_permitted` or `corrupt_record` (for the vault's bundle: a
+damaged lockbox never stops an open): the last three are conditions, though they surface at
+open. A refused open leaves nothing running behind it, so the host simply opens again.
+
+### Damaged lockboxes
+
+A lockbox whose stored record does not read back -- not JSON, a malformed note or time, a
+record naming another boxlabel than the one it is stored under, or one from a newer safebyok --
+is listed in the snapshot as damaged, `{ boxlabel, damaged: true }`, sorted among the sound
+ones, which carry `damaged: false`. The rest of the vault opens and works as ever. `read()` and
+`use()` refuse a damaged lockbox with `corrupt_record`; `erase()` removes it, and `store()`
+writes a fresh lockbox over it, carrying nothing from the old record (neither its note nor
+when it was first stored). Show it as removable:
+
+```ts
+for (const box of vault.getSnapshot().boxes) {
+  if (box.damaged) { showDamaged(box.boxlabel) }   // offer erase(box.boxlabel), or a fresh store()
+  else { showSummary(box.boxlabel, box.note, box.changed_at) }
+}
+```
+
+Damage the listing cannot see -- altered ciphertext, a missing whisper -- shows only when the
+lockbox is read: it lists as sound, `read()` refuses it with `corrupt_record`, and `erase()` and
+`store()` remedy it the same way. A storage adapter's `doListBoxes` hands up each lockbox as a
+`StoredLockbox`, the boxlabel it is stored under beside its record exactly as stored, so a record
+too damaged to name itself is still listed under the boxlabel that reaches it.
 
 In code, `VaultErrorFamilyForKind` gives each kind's family (`VaultErrorFamilyVals`: `misuse`,
 `condition`), and `isVaultCondition(err)` is true for a `VaultError` of the condition family:
