@@ -19,40 +19,59 @@ export interface MaskOpts {
 /** The stars-and-dots a masked whisper collapses to once the result would pass `maxLen`. */
 const Collapsed = '***...***'
 
-const wholeCount = Z.number().int().nonnegative()
+/** The most characters `head`, `tail` or `minStars` may ask for: a whiff, not a copy. */
+const MaxShown = 1000
+
+const shownCount = Z.number().int().nonnegative().max(MaxShown)
 const maskOpts = Z.object({
-  head:     wholeCount.default(2),
-  tail:     wholeCount.default(4),
-  minStars: wholeCount.default(6),
-  maxLen:   Z.union([Z.literal(Infinity), wholeCount]).default(15),
+  head:     shownCount.default(2),
+  tail:     shownCount.default(4),
+  minStars: shownCount.default(6),
+  maxLen:   Z.union([Z.literal(Infinity), Z.number().int().nonnegative()]).default(15),
 })
 
 const parseMaskOpts = (candidate: MaskOpts | undefined): Record<keyof MaskOpts, number> => {
   const checked = maskOpts.safeParse(candidate ?? {})
   if (! checked.success) {
-    throw new VaultError('bad_option', 'mask takes head, tail, minStars and maxLen as whole numbers of characters, none below zero (maxLen may be Infinity).')
+    throw new VaultError('bad_option', `mask takes head, tail and minStars as whole numbers of characters from 0 to ${String(MaxShown)}, and maxLen as a whole number from 0 to ${String(Number.MAX_SAFE_INTEGER)} or Infinity.`)
   }
   return checked.data
 }
 
 /**
- * Everything `plainLine` removes: combining marks, every control, format, surrogate, private-use
- * and unassigned code point, every space and line or paragraph separator, anything a renderer is
- * told to ignore, the bidirectional controls, and the two symbols drawn blank (the blank braille
- * pattern and the musical null notehead).
+ * The code points whose default bidirectional class is strong right-to-left (R or AL) or Arabic
+ * number (AN): the Hebrew, Arabic, Syriac, Thaana, N'Ko, Samaritan, Mandaic and extended Arabic
+ * blocks, the Hebrew and Arabic presentation forms, and the right-to-left scripts of the
+ * supplementary planes (Phoenician, Kharoshthi, Old Hungarian, Old Turkic, Hatran, Nabataean,
+ * Palmyrene, Manichaean, the Pahlavis, Sogdian, Chorasmian, Elymaic, Yezidi, Hanifi Rohingya,
+ * Garay, Mende Kikakui, Adlam, the Siyaq numerals, the Arabic mathematical alphabet and the rest).
+ * They are the spans DerivedBidiClass.txt, in the Unicode Character Database, gives those classes
+ * by default. JavaScript regexes have no Bidi_Class property, and a list of script names would
+ * miss the Arabic numbers and any script added later.
  */
-const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}\u{1D159}]/gu
+const StrongRtl = /[\u{590}-\u{8FF}\u{FB1D}-\u{FDFF}\u{FE70}-\u{FEFF}\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/gu
+
+/**
+ * Everything else `plainLine` removes: combining marks, every control, format, surrogate,
+ * private-use and unassigned code point, every space and line or paragraph separator, anything a
+ * renderer is told to ignore, the bidirectional controls, the symbols drawn blank (the blank
+ * braille pattern and the musical null notehead), and the object replacement character, which is
+ * drawn as a boxed "OBJ".
+ */
+const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}\u{1D159}\u{FFFC}]/gu
+
+const composeAndStrip = (text: string): string => text.normalize('NFC').replaceAll(Unsafe, '').replaceAll(StrongRtl, '')
 
 /**
  * `text` reduced to one compact, safe line: composed (so a letter and its accent are one letter),
  * then stripped, never escaped, of every combining mark (stacked "Zalgo" marks among them),
- * invisible or control character, lone surrogate, bidirectional control and space of any kind.
- * Whatever is left is visible, stays on one line and cannot overwrite its neighbours, though a
- * wide character (an ideograph, an emoji) takes two columns. Letters of right-to-left scripts
- * stay: they are text, and the controls that could force an order are gone, but like any such
- * letters they run right to left and can carry the digits and punctuation beside them along.
+ * invisible or control character, lone surrogate, bidirectional control, strong right-to-left
+ * letter and space of any kind. Whatever is left is visible, stays on one line, runs left to
+ * right and cannot overwrite its neighbours, though a wide character (an ideograph, an emoji)
+ * takes two columns. Composed and stripped twice, since removing an invisible from between two
+ * Hangul jamo leaves them to compose.
  */
-const plainLine = (text: string): string => text.normalize('NFC').replaceAll(Unsafe, '')
+const plainLine = (text: string): string => composeAndStrip(composeAndStrip(text))
 
 /** `text` as a list of its code points, so that a surrogate pair is never parted. */
 const codePointsOf = (text: string): string[] => text.match(/./gsu) ?? []
@@ -62,8 +81,9 @@ const codePointsOf = (text: string): string[] => text.match(/./gsu) ?? []
  * with stars between, so a user can tell which API key a lockbox holds without the key being
  * revealed. It is best effort, not a copy: the result is always one plain line, and fidelity
  * gives way to that. Combining marks (so, the accents of scripts that rely on them), invisible
- * characters and every kind of space are dropped from the whisper first, and the result is
- * cleaned the same way once more before it is returned. The result is public: show it, but
+ * characters, every kind of space and the letters and numbers of right-to-left scripts (Hebrew,
+ * Arabic and the rest, which would reorder what stands beside them) are dropped from the whisper
+ * first, and the result is cleaned the same way once more before it is returned. The result is public: show it, but
  * never count on it to hide more than it does -- it gives away the whisper's ends, and (up to
  * `maxLen`) its length.
  *
@@ -82,7 +102,7 @@ const codePointsOf = (text: string): string[] => text.match(/./gsu) ?? []
  * @param whisper - Text to mask: an API key, say.
  * @param opts - How much to keep and hide; see {@link MaskOpts}.
  * @returns The masked text. Throws a VaultError of kind 'bad_option' for an option that is not a
- *   whole number of at least zero, or 'bad_whisper' for a whisper that is not a string; neither
+ *   whole number of at least zero (`head`, `tail` and `minStars` at most 1000), or 'bad_whisper' for a whisper that is not a string; neither
  *   message quotes the whisper.
  *
  * @example mask('sk-ant-api03-abcdefghijklmnopqrstuvwxyz')  // 'sk***...***wxyz'

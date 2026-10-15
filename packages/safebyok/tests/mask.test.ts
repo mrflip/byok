@@ -12,8 +12,33 @@ const Family = `${Man}\u{200D}${Woman}\u{200D}${Girl}`
 const EAcute = 'e\u{0301}'
 const Alphabet = 'abcdefghijklmnopqrstuvwxyz'
 
+/** Code points that draw nothing, or a box, or something that moves: none may ever be returned. */
+const KnownBlanks = [
+  0x1_D1_59, 0x28_00, 0x31_64, 0x11_5F, 0x11_60, 0xFF_A0, 0xFF_FC, 0x18_0E, 0x3_4F, 0xAD,
+  0x20_0B, 0x20_0C, 0x20_0D, 0x20_60, 0xFE_FF, 0x20_2E, 0x20_66, 0x20_69, 0x6_1C, 0x20_0F,
+  0xA0, 0x30_00, 0x20_28, 0x85, 0x16_80, 0x17_B4, 0xFE_0F, 0xE_00_20, 0x1_D1_73,
+].map((cp) => String.fromCodePoint(cp))
+
 /** What no result may contain: marks, controls, spaces of any kind, ignorables, bidi controls, blank symbols. */
 const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}\u{1D159}]/u
+
+/** Every letter and digit of the scripts written right to left, by the engine's own script data. */
+const RtlScripts = [
+  'Hebrew', 'Arabic', 'Syriac', 'Thaana', 'Nko', 'Samaritan', 'Mandaic', 'Adlam', 'Hanifi_Rohingya',
+  'Mende_Kikakui', 'Old_South_Arabian', 'Old_North_Arabian', 'Avestan', 'Imperial_Aramaic', 'Phoenician',
+  'Kharoshthi', 'Old_Hungarian', 'Old_Turkic', 'Nabataean', 'Palmyrene', 'Hatran', 'Manichaean',
+  'Psalter_Pahlavi', 'Inscriptional_Pahlavi', 'Inscriptional_Parthian', 'Elymaic', 'Sogdian', 'Old_Sogdian',
+  'Chorasmian', 'Yezidi', 'Garay', 'Lydian', 'Cypriot', 'Meroitic_Cursive', 'Meroitic_Hieroglyphs', 'Old_Uyghur',
+]
+const RtlClass = RtlScripts.map((script) => String.raw`\p{Script=${script}}`).join('')
+const AnyRtlLetter = new RegExp(`[${RtlClass}]`, 'u')
+
+const rtlLettersOf = (script: string): string => {
+  const inScript = new RegExp(String.raw`^\p{Script=${script}}$`, 'u')
+  return Array.from({ length: 0x2_00_00 }, (_, cp) => String.fromCodePoint(cp))
+    .filter((chr) => /^[\p{L}\p{N}]$/u.test(chr) && inScript.test(chr))
+    .join('')
+}
 
 const thrownBy = (run: () => void): unknown => {
   try {
@@ -79,7 +104,7 @@ describe("mask", () => {
     [Alphabet,                                  { minStars: 24 },      "***...***yz",      'a collapse with two showable characters keeps them as tail'],
     [Alphabet,                                  { minStars: 26 },      "***...***",        'a collapse with nothing showable shows nothing'],
     [Alphabet,                                  { minStars: 40 },      "***...***",        'minStars beyond the whisper collapses to bare stars'],
-    ["abc",                                     { minStars: 2 ** 40 }, "***...***",        'a vast minStars collapses without building the stars it would discard'],
+    ["abc",                                     { minStars: 1000, maxLen: 5 }, "*****",    'the largest minStars with a small maxLen is maxLen stars'],
 
     // nothing at all, and nothing but removed characters:
     ["",                                        undefined,             "",                 'an empty whisper has nothing to show'],
@@ -116,12 +141,28 @@ describe("mask", () => {
     // characters cut by code point:
     [`${KeyEmoji}${KeyEmoji}abcdefghij${Rocket}${Rocket}`, undefined,  `${KeyEmoji}${KeyEmoji}********ij${Rocket}${Rocket}`, 'an emoji is one character, and never loses half its surrogate pair'],
     [`${Family}${Family}abcdefghij${Family}${Family}`,     undefined,  `${Man}${Woman}***...***${Girl}${Man}${Woman}${Girl}`, 'a joined emoji sequence comes apart into its emoji, which are cut whole'],
-    ["\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}\u{5D5}\u{5D6}\u{5D7}\u{5D8}\u{5D9}\u{5DA}\u{5DB}", undefined, "\u{5D0}\u{5D1}******\u{5D8}\u{5D9}\u{5DA}\u{5DB}", 'letters of a right-to-left script stay: they are visible text'],
+
+    // letters and numbers of right-to-left scripts are removed, whatever the controls around them:
+    ["\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}\u{5D5}\u{5D6}\u{5D7}\u{5D8}\u{5D9}\u{5DA}\u{5DB}\u{5DC}\u{5DE}\u{5E0}123", undefined, "******", 'a Hebrew key with digits is only the digits, so stars'],
+    ["\u{627}\u{644}\u{645}\u{641}\u{62A}\u{627}\u{62D}\u{661}\u{662}\u{663}", undefined, "******", 'an Arabic key, Arabic-Indic digits and all, is stars'],
+    ["sk-ant-\u{5D0}\u{5D1}abcd\u{627}\u{661}1234", undefined,      "sk*********1234",  'a mixed key keeps its Latin ends'],
+    ["sk-ant-abcd\u{1E900}\u{10C80}\u{10800}\u{1EE00}1234", undefined, "sk*********1234", 'right-to-left scripts of the supplementary planes are removed'],
+    ["sk-ant-abcd\u{FB1D}\u{FB50}\u{FE70}1234", undefined,          "sk*********1234",  'Hebrew and Arabic presentation forms are removed'],
+
+    // marks that only compose once an invisible character is gone:
+    ["\u{1100}\u{200B}\u{1161}bcdefghijkl",   undefined,             "\u{AC00}b******ijkl", 'Hangul jamo parted by an invisible character compose once it is gone'],
+    ["sk-ant-abcd12\u{FFFC}34\u{1D159}",       undefined,             "sk*********1234",  'the object replacement character and the musical null notehead are removed'],
+    ["sk-ant-abcd12\u{FFFD}34",                undefined,             "sk***...***2\u{FFFD}34", 'the replacement character is visible, so it stays'],
   ]
 
   for (const [whisper, opts, expected, blurb] of Cases) {
     it(blurb, () => { expect(mask(whisper, opts)).to.eq(expected) })
   }
+
+  it("allows head, tail and minStars up to the ceiling", () => {
+    expect(mask('sk-ant-abcd1234', { head: 1000, tail: 1000, minStars: 1000, maxLen: Infinity })).to.eq('*'.repeat(1000))
+    expect(mask('sk-ant-abcd1234', { maxLen: Number.MAX_SAFE_INTEGER })).to.eq('sk*********1234')
+  })
 
   it("takes a partial bag of options, filling in the rest", () => {
     expect(mask('abcdefghijkl', { head: undefined, tail: 1 })).to.eq('ab*********l')
@@ -129,6 +170,17 @@ describe("mask", () => {
 
   it("is the same every time it is asked", () => {
     expect(mask('sk-ant-abcd1234')).to.eq(mask('sk-ant-abcd1234'))
+  })
+
+  describe("right-to-left scripts", () => {
+    for (const script of RtlScripts) {
+      it(`removes every letter and number of ${script}`, () => {
+        const letters = rtlLettersOf(script)
+        expect(letters.length).to.be.greaterThan(0)
+        expect(mask(letters, { head: 5, tail: 5, minStars: 0, maxLen: Infinity })).to.eq("")
+        expect(mask(`sk-${letters}abcd1234`, { head: 3, tail: 4, minStars: 0, maxLen: Infinity })).to.eq("sk-****1234")
+      })
+    }
   })
 
   describe("whatever it is given", () => {
@@ -144,6 +196,9 @@ describe("mask", () => {
       '\u{E0001}\u{E0020}tag\u{E007F}\u{FE0F}\u{180B}\u{180E}\u{34F}\u{115F}\u{1160}\u{1D159}',
       '\u{A0}\u{1680}\u{2000}\u{200A}\u{202F}\u{205F}\u{3000}key\u{FEFF}',
       '\u{627}\u{644}\u{645}\u{641}\u{62A}\u{627}\u{62D}sk-12345\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}',
+      '\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}\u{5D5}\u{5D6}\u{5D7}\u{5D8}\u{5D9}\u{5DB}\u{5DC}\u{5DE}\u{5E0}123',
+      `sk-${KnownBlanks.join('')}abcd1234${KnownBlanks.join('')}`,
+      '\u{1100}\u{200B}\u{1161}\u{1100}\u{200D}\u{1161}\u{11A8}',
       '\u{E000}\u{F8FF}\u{FFFE}\u{FFFF}\u{10FFFF}\u{378}',
       ...[1, 2, 3, 4, 5, 6].map((seed) => randomCodePoints(40, seed)),
       ...[7, 8, 9].map((seed) => randomCodePoints(400, seed)),
@@ -164,6 +219,8 @@ describe("mask", () => {
         for (const opts of Variants) {
           const masked = mask(adversary, opts)
           expect(masked).not.to.match(Unsafe)
+          expect(masked).not.to.match(AnyRtlLetter)
+          for (const blank of KnownBlanks) { expect(masked).not.to.contain(blank) }
           expect(masked).not.to.match(/[\n\r]/)
           expect(masked.normalize('NFC')).to.eq(masked)
           expect((masked.match(/./gsu) ?? []).length).to.be.at.most(opts.maxLen ?? 15)
@@ -180,6 +237,11 @@ describe("mask", () => {
       [{ maxLen: -3 },                     'a negative maxLen'],
       [{ maxLen: 2.5 },                    'a fractional maxLen'],
       [{ maxLen: NaN },                    'a maxLen that is not a number'],
+      [{ maxLen: 1e300 },                  'a maxLen past the safe integers'],
+      [{ minStars: 1001 },                 'a minStars past the ceiling'],
+      [{ minStars: 2 ** 40, maxLen: Infinity }, 'a vast minStars, which would be a run of stars too long to build'],
+      [{ head: 1001 },                     'a head past the ceiling'],
+      [{ tail: Infinity },                 'an infinite tail'],
       [{ head: '2' as unknown as number }, 'a head that is text'],
     ]
     for (const [opts, blurb] of BadOpts) {
