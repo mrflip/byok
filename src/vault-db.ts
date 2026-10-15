@@ -322,7 +322,7 @@ export const bundleMeetsExpectation = (standingBundle: unknown, expected: Bundle
 }
 
 /** True when the bundle row standing in storage belongs to the vault `expected` names. */
-export const vaultMeetsExpectation = (standingBundle: unknown, expected: EraseExpectation): boolean => {
+export const vaultMeetsExpectation = (standingBundle: unknown, expected: { vault_id: string }): boolean => {
   const standing = StandingBundle.safeParse(standingBundle)
   return standing.success && standing.data.vault_id === expected.vault_id
 }
