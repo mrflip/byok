@@ -10,7 +10,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
 | 1 | argon2_wasm       | #68 (kdf_configs) `80ac694`            | underway                       |
 | 2 | unlock_envelopes  | #63 `ea4b93d`                          | in review                      |
 | 3 | passkey_unlock    | thread 2                               | pending                        |
-| 4 | indexeddb_package | gripe_fixes `vaultdb_validation`       | waiting on vaultdb_validation  |
+| 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | waiting for a slot             |
 | 5 | postgres_vaultdb  | #63 `ea4b93d`, rebased onto 2 to file  | underway                        |
 | 6 | graphql_vaultdb   | thread 5                               | pending                        |
 
@@ -37,3 +37,11 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
     proof, through a generalized `reviseUnlocks`, never an extractable vaultKey.
   - The envelope binding is `[format, scope, vault_id, purpose-per-method, header]`, with the
     epoch out, so one envelope's change never needs the other passphrases.
+* *Orchestrator:* **Thread 4's base is [#70](https://github.com/mrflip/safebyok/pull/70)**
+  (gripe_fixes `vaultdb_validation`, `d874db3`). What it changes under thread 4: `idbVaultDB`'s
+  `dbName` is checked by a private parser, `src/idb-opts.ts`, shared with `idbDeviceDB`,
+  `browserOpts` and `inspectIdb`. VaultDB's write verbs now validate each record and expectation
+  before `do*` sees it, and hand the adapter the *parsed* record (unknown fields stripped).
+  `openVault` duck-types `vaultDB`, since `instanceof` breaks across package copies. And #68 plus
+  #70 together likely exceed the 16.5 kB `openVault` budget; thread 2 already raised it to 17.5 kB
+  on its branch.
