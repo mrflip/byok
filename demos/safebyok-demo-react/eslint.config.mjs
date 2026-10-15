@@ -298,13 +298,14 @@ export default defineConfig([
 
   {
     name: 'safebyok-demo/react-filenames',
-    files: ['src/App.tsx', 'src/components/**/*.tsx'],
+    // A component's test is named for it too: tests/ mirrors src/ path for path.
+    files: ['src/App.tsx', 'src/components/**/*.tsx', 'tests/App.test.tsx', 'tests/components/**/*.test.tsx'],
     // VaultDB and DeviceDB are the vocabulary's names (VOCABULARY.md), not `VaultDb`.
     rules: { 'unicorn/filename-case': ['error', { cases: { pascalCase: true }, checkDirectories: false, ignore: [/DB/u] }] },
   },
   {
     name: 'safebyok-demo/hook-filenames',
-    files: ['src/hooks/**/*.ts'],
+    files: ['src/hooks/**/*.ts', 'tests/hooks/**/*.test.tsx'],
     rules: { 'unicorn/filename-case': ['error', { cases: { camelCase: true }, checkDirectories: false }] },
   },
 

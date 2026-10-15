@@ -1,17 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { isVaultError, localVaultDB, memoryStore } from 'safebyok'
+import { localVaultDB, memoryStore } from 'safebyok'
 import * as TH from 'safebyok/testing'
 import { OutageVaultDB, makeOutage } from '../../src/lib/outage'
-
-/** The kind of VaultError `operation` rejected with, or null for anything else; fails the test if it resolved. */
-const refusalKind = async (operation: Promise<unknown>): Promise<string | null> => {
-  try {
-    await operation
-  } catch (err) {
-    return isVaultError(err) ? err.kind : null
-  }
-  throw new Error('expected a rejection, but the operation resolved')
-}
 
 const scope = TH.scopeOf('u1')
 const bundle = TH.bundleOf('u1')
@@ -54,14 +44,14 @@ describe("OutageVaultDB, while down", () => {
   it("refuses a read as storage_unavailable, as a real adapter whose backend is down", async () => {
     const { outage, vaultDB } = downOver()
     outage.setDown(true)
-    expect(await refusalKind(vaultDB.readBundle(scope))).to.eq('storage_unavailable')
-    expect(await refusalKind(vaultDB.listBoxes(scope))).to.eq('storage_unavailable')
+    await TH.expectRefusal(vaultDB.readBundle(scope), 'storage_unavailable')
+    await TH.expectRefusal(vaultDB.listBoxes(scope), 'storage_unavailable')
   })
 
   it("refuses a write, and writes nothing", async () => {
     const { outage, vaultDB } = downOver()
     outage.setDown(true)
-    expect(await refusalKind(vaultDB.createBundle(bundle))).to.eq('storage_unavailable')
+    await TH.expectRefusal(vaultDB.createBundle(bundle), 'storage_unavailable')
     outage.setDown(false)
     expect(await vaultDB.readBundle(scope)).to.be.null
   })
@@ -70,7 +60,7 @@ describe("OutageVaultDB, while down", () => {
     const { outage, vaultDB } = downOver()
     await vaultDB.createBundle(bundle)
     outage.setDown(true)
-    expect(await refusalKind(vaultDB.readBundle(scope))).to.eq('storage_unavailable')
+    await TH.expectRefusal(vaultDB.readBundle(scope), 'storage_unavailable')
     outage.setDown(false)
     expect(await vaultDB.readBundle(scope)).to.deep.equal(bundle)
   })
