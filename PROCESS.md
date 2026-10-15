@@ -107,7 +107,9 @@ CI runs on every PR, over the root and every workspace package: `lint-typecheck`
 no merge commits, a changeset) and `test-build` (tests with coverage, then the builds with their
 package checks) must pass; `node-compat` runs the tests on the other Node majors and reports.
 CodeQL scans the code and the workflows, and a finding shows on the PR. Dependabot opens grouped
-`deps:` PRs weekly, asked for no changeset; they get the same review as any other.
+`deps:` PRs weekly; they get the same review as any other. One is asked for a changeset only when
+it moves a public package's runtime dependencies (`scripts/runtime-deps.ts`), and the Coach adds it
+by hand; a devDependency or lockfile bump needs none.
 
 ## Releases
 
