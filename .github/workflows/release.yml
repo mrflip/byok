@@ -20,9 +20,12 @@ name: Release
 # in the repository's secrets, and the trusted publisher allows `npm stage publish` and not
 # `npm publish`. It is bound to this file's name and to the `npm` environment, so both stay.
 #
-# The GITHUB_TOKEN this workflow writes with starts no other workflow: CI does not run by itself
-# on the Version PR (PROCESS.md says how to start it), and a tag or GitHub release made here
-# triggers nothing, which is why staging happens here rather than on a `release: published` event.
+# `version` writes the Version PR with a token from the repository's GitHub App, so CI and CodeQL
+# run on it like any other PR: a GITHUB_TOKEN push or PR starts no other workflow. The App's key
+# lives in the `releasing` environment, which only `main` may use, and the token is cut down to
+# contents and pull requests. Everything else here writes with the GITHUB_TOKEN, so a tag or GitHub
+# release made here triggers nothing, which is why staging happens here rather than on a
+# `release: published` event.
 #
 # Each job holds only the permissions it needs. Only `publish` can mint an npm token, and it runs
 # no package's scripts: it stages the tarballs `pack` built. A failed `publish` is mended by
@@ -63,9 +66,10 @@ jobs:
     needs: select-mode
     if: needs.select-mode.outputs.mode == 'version'
     runs-on: ubuntu-latest
+    environment: releasing
+    # The App token does the writing; the GITHUB_TOKEN only reads.
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -75,8 +79,18 @@ jobs:
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
+      # Minted after the install, so no install script runs while it exists. GitHub accepts an
+      # App's numeric ID wherever it asks for the Client ID.
+      - id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
       - uses: changesets/action/version@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
+          github-token: ${{ steps.app-token.outputs.token }}
           script: pnpm release:version
           commit-message: 'rel: version the packages for release'
           pr-title: Version the packages for release

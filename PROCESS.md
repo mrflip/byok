@@ -121,9 +121,8 @@ numbers and the CHANGELOGs; `.github/workflows/release.yml` does the rest.
   last one released: the next is not knowable until release time.
 * **The Version PR**, "Version the packages for release", is rebuilt from main's tip by every push
   to main while changesets wait: the bumps, the CHANGELOG entries and the spent changesets, as one
-  `rel:` commit. It is the bot's: nobody rebases, edits or merges it but the Coach. CI does not
-  start on it by itself (one workflow's token cannot start another): close and reopen it to run
-  the checks before merging.
+  `rel:` commit. It is the bot's: nobody rebases, edits or merges it but the Coach. The release
+  workflow writes it with the repository's GitHub App, so CI runs on it as on any PR.
 * **Merging it is the release.** `release.yml` then checks the lockstep group, runs
   `pnpm justify`, packs each package whose version npm lacks, stages each tarball, and tags each
   package staged (`safebyok@0.2.0`) with a GitHub release from its CHANGELOG. A prerelease
