@@ -10,7 +10,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
 | 1 | argon2_wasm       | #68 (kdf_configs) `80ac694`            | filed #74                      |
 | 2 | unlock_envelopes  | main (#63 merged; was `ea4b93d`)       | filed #71                      |
 | 3 | passkey_unlock    | #71 `983bd0c`                          | filing                         |
-| 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | filing                         |
+| 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | filed #77                      |
 | 5 | postgres_vaultdb  | #71 `983bd0c` (rebased from `ea4b93d`) | filed #73                      |
 | 6 | graphql_vaultdb   | #73 `d55eb9c`                          | in review                      |
 
