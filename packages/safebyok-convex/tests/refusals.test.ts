@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { VaultErrorKindVals } from 'safebyok'
 import { SafebyokErrorKindVals, isSafebyokErrorData } from '../src/refusals'
 
 const ErrorDataCases = [
   // safebyok's own refusals:
   [{ kind: "not_permitted", message: "Sign in, then try again." },  true,   'a not_permitted refusal with its message'],
+  [{ kind: "vault_full", message: "Erase a box, then try again." },  true,   'a vault_full refusal with its message'],
   // anything else a ConvexError may carry:
   [{ kind: "stale_write", message: "Read it again." },              false,  'a VaultError kind the functions never throw'],
   [{ kind: "not_permitted" },                                       false,  'a known kind without a message'],
@@ -20,6 +22,12 @@ describe("isSafebyokErrorData", () => {
   }
 
   it("knows exactly the kinds the functions throw", () => {
-    expect(SafebyokErrorKindVals).to.deep.equal(['not_permitted'])
+    expect(SafebyokErrorKindVals).to.deep.equal(['not_permitted', 'vault_full'])
+  })
+})
+
+describe("SafebyokErrorKindVals", () => {
+  it("names only kinds the core's VaultErrorKindVals lists", () => {
+    for (const kind of SafebyokErrorKindVals) { expect(VaultErrorKindVals).to.include(kind) }
   })
 })

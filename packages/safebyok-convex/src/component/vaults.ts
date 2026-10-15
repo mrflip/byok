@@ -1,8 +1,10 @@
-import { v } from 'convex/values'
+import { ConvexError, v } from 'convex/values'
 import type { Infer } from 'convex/values'
+import type { SafebyokErrorData } from '../refusals'
 import { mutation, query } from './_generated/server'
-import type { DatabaseReader } from './_generated/server'
-import type { Doc } from './_generated/dataModel'
+import type { DatabaseReader, DatabaseWriter } from './_generated/server'
+import type { Doc, Id } from './_generated/dataModel'
+import * as Tallies from './tallies'
 import {
   BundleExpectation, EraseExpectation, ListedLockbox, Lockbox, LockboxExpectation, VaultBundle, VaultScope, VaultSignature,
 } from './validators'
@@ -16,6 +18,10 @@ import {
  * mutations serializably, so the check holds for real. A failed expectation writes nothing and
  * resolves `false` (the client refuses it as `stale_write`); it is not an error. Erases expect
  * only the vault: an erase wins over any lockbox revision, but never lands in a vault made anew.
+ *
+ * Every vault is held to the limits in `./tallies`, whatever its client asks, so that it can
+ * always be erased whole: a lockbox write that would take the vault past one is refused with a
+ * `ConvexError` of kind `vault_full`. Erases are never refused for room.
  */
 
 // ------------------------------------------------------------------------------- the bundle
@@ -98,6 +104,11 @@ export const listBoxSummaries = query({
  * Write `lockbox` under its boxlabel, only while the scope's bundle has `expected.vault_id` and
  * the standing lockbox has `expected.revision_id` -- or, for null, there is none. True when
  * written; false, writing nothing, otherwise -- including when the scope holds no bundle.
+ *
+ * Refuses, writing nothing, with a `ConvexError` of kind `vault_full` a write that would take the
+ * vault past {@link Tallies.MaxVaultLockboxes} lockboxes or {@link Tallies.MaxVaultLockboxBytes}
+ * bytes and leave it larger than it was: a new lockbox in a full vault, or a heavier replacement.
+ * A vault with no tally yet is counted first, reading it once.
  */
 export const updateBox = mutation({
   args:    { scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation },
@@ -110,11 +121,20 @@ export const updateBox = mutation({
     if (standingRevisionId !== expected.revision_id) { return false }
     //
     const row = boxRowOf(scope, lockbox)
-    if (standing === null) {
-      await ctx.db.insert('safebyok_lockboxes', row)
-    } else {
-      await ctx.db.replace('safebyok_lockboxes', standing._id, row)
+    const reckoning = await Tallies.reckon(ctx.db, bundle._id, vaultBoxQuery(ctx.db, scope))
+    const standingBytes = standing === null ? 0 : Tallies.weigh(standing)
+    // A new row is weighed with Convex's estimate of an `_id` until it has one.
+    const growthAs = (rowId?: Id<'safebyok_lockboxes'>) => ({
+      lockbox_count: standing === null ? 1 : 0,
+      lockbox_bytes: Tallies.weigh(row, rowId) - standingBytes,
+    })
+    if (Tallies.refuses(reckoning.tally, growthAs(standing?._id))) {
+      throw new ConvexError<SafebyokErrorData>({ kind: 'vault_full', message: 'This vault is full: erase a lockbox to make room, then try again.' })
     }
+    const rowId = standing === null
+      ? await ctx.db.insert('safebyok_lockboxes', row)
+      : await replaceBoxRow(ctx.db, standing._id, row)
+    await Tallies.record(ctx.db, bundle._id, reckoning, growthAs(rowId))
     return true
   },
 })
@@ -131,7 +151,10 @@ export const eraseBox = mutation({
     const bundle = await findBundleRow(ctx.db, scope)
     if (bundle?.vault_id !== expected.vault_id) { return false }
     const standing = await findBoxRow(ctx.db, scope, boxlabel)
-    if (standing) { await ctx.db.delete('safebyok_lockboxes', standing._id) }
+    if (standing) {
+      await ctx.db.delete('safebyok_lockboxes', standing._id)
+      await Tallies.forget(ctx.db, bundle._id, standing)
+    }
     return true
   },
 })
@@ -151,6 +174,7 @@ export const eraseVault = mutation({
     if (bundle?.vault_id !== expected.vault_id) { return false }
     const boxes = await vaultBoxRows(ctx.db, scope)
     await Promise.all(boxes.map((row) => ctx.db.delete('safebyok_lockboxes', row._id)))
+    await Tallies.drop(ctx.db, bundle._id)
     await ctx.db.delete('safebyok_bundles', bundle._id)
     return true
   },
@@ -197,11 +221,19 @@ const findBoxRow = (db: DatabaseReader, scope: VaultScope, boxlabel: string) => 
 )
 
 // One vault's range of one index: bounded by that vault, not by the table.
-const vaultBoxRows = (db: DatabaseReader, scope: VaultScope) => (
+const vaultBoxQuery = (db: DatabaseReader, scope: VaultScope) => (
   db.query('safebyok_lockboxes')
     .withIndex('by_box', (idx) => idx.eq('user_id', scope.user_id).eq('applabel', scope.applabel).eq('vaultlabel', scope.vaultlabel))
-    .collect()
 )
+
+// Every lockbox row of one vault, which the tallies' limits keep within one transaction's reads.
+const vaultBoxRows = (db: DatabaseReader, scope: VaultScope) => vaultBoxQuery(db, scope).collect()
+
+/** Replace a lockbox row in place, handing back its `_id`, which a replacement keeps. */
+const replaceBoxRow = async (db: DatabaseWriter, rowId: Id<'safebyok_lockboxes'>, row: ReturnType<typeof boxRowOf>) => {
+  await db.replace('safebyok_lockboxes', rowId, row)
+  return rowId
+}
 
 /** A bundle row as the record it holds: Convex's system fields stripped. */
 const bundleOfRow = ({ _id, _creationTime, ...bundle }: Doc<'safebyok_bundles'>): VaultBundle => bundle

@@ -1,9 +1,13 @@
+import type { VaultErrorKind } from 'safebyok'
+
 /**
  * Every refusal safebyok's Convex functions throw, as the `kind` in a `ConvexError`'s `data`. Each
- * is the `VaultError` kind of the same name: `not_permitted`, for a caller who is signed out or is
- * not the vault's user. A failed expectation is not a refusal: the update or erase resolves `false`.
+ * is the `VaultError` kind of the same name, and the compiler holds the list to the core's
+ * `VaultErrorKindVals`: `not_permitted`, for a caller who is signed out or is not the vault's
+ * user; `vault_full`, for a lockbox write that would take the vault past the component's limits.
+ * A failed expectation is not a refusal: the update or erase resolves `false`.
  */
-export const SafebyokErrorKindVals = ['not_permitted'] as const
+export const SafebyokErrorKindVals = ['not_permitted', 'vault_full'] as const satisfies readonly VaultErrorKind[]
 export type SafebyokErrorKind = typeof SafebyokErrorKindVals[number]
 
 /**

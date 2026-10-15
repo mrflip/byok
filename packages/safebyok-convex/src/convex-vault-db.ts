@@ -50,6 +50,9 @@ export type ConvexVaultClient = ConvexWatchingClient | ConvexReactWatchingClient
  *   does not lock a vault already unlocked: close it when your user signs out.
  * * **Other devices' writes** reach this one live: the vault subscribes to the safebyok function
  *   `watchVault`, and refreshes when it changes.
+ * * **A full vault**: the component holds every vault to limits of its own, whatever a client
+ *   asks, and refuses a write past them with kind `vault_full`. A vault within its
+ *   `maxLockboxes` stays well inside them.
  * * **Offline**, a call waits for the connection, as every Convex call does, rather than failing.
  *   A failure Convex reports (a deployment missing the safebyok functions, say) refuses with kind
  *   `storage_unavailable`, Convex's own error as its `cause`.
