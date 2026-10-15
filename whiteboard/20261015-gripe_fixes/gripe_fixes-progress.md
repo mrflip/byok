@@ -7,7 +7,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 | # | Thread             | Base                  | Status  |
 | - | ------------------ | --------------------- | ------- |
-| 1 | kdf_configs        | #66 tip `dfdbbec`     | underway |
+| 1 | kdf_configs        | #66 tip `dfdbbec`     | in review |
 | 2 | vaultdb_validation | #66 tip `dfdbbec`     | underway |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
 | 4 | ci_tooling         | #66 tip `5fefc90`     | underway |
@@ -31,3 +31,11 @@ settles the `withUnlockedVault` promise (follow-up: changes `onDone`'s contract)
 window reads "1 minute"; the dialog's 168 default and recomputed `ForeverMs` can drift from the
 core, which a core accessor for the window would end; the modal test's local helpers are thread
 7's to consider.
+
+*Orchestrator:* thread 1, kdf_configs, is `ready`. What later threads should know: `Argon2idWebV1`
+moved to `src/key-deriver-spec.ts` (no Argon2 code, no Zod), `argon2idDeriver(spec)` is exported,
+and a `KeyDeriver` now carries its spec's fields beside `deriveKeyBytes`. `openVault` refuses a
+deriver labelled `argon2id_web_v1` without exactly that spec's parameters, and `unlock()` and
+`changePassphrase()` refuse key bytes that are not 32 long. `keyDeriverShape` bounds `salt_bytes` to
+1..65536 (`testDeriver` still passes). VOCABULARY and `notes/security.md` (appended at the end)
+carry its lines; thread 5 should leave them be.
