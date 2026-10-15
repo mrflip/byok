@@ -178,7 +178,7 @@ export const tweakB64 = (b64: string): string => {
  *
  * @returns A promise for the next tick.
  *
- * @example await wakeupAtNextTick() // background refreshes have landed
+ * @example await wakeupAtNextTick() // a refresh already settled has run its continuation
  */
 export const wakeupAtNextTick = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 0) })
 

@@ -11,16 +11,27 @@ const Idb6_3 = { dependencies: { 'idb-keyval': '^6.3.0' } }
 const Idb6_4 = { dependencies: { 'idb-keyval': '^6.4.0' } }
 const Bumped: RuntimeDeps.RuntimeDepChange = { pkgname: 'safebyok', field: 'dependencies', depname: 'idb-keyval', ante: '^6.3.0', post: '^6.4.0' }
 
+/** A change to the core's manifest, as runtimeDepChanges reports it */
+const moved = (field: RuntimeDeps.RuntimeField, depname: string, ante: string | undefined, post: string | undefined): RuntimeDeps.RuntimeDepChange => (
+  { pkgname: 'safebyok', field, depname, ante, post }
+)
+const Vitest5_0_3 = { ...Idb6_3, devDependencies: { vitest: '^5.0.3' } }
+const Vitest5_0_4 = { ...Idb6_3, devDependencies: { vitest: '^5.0.4' } }
+const Zod4_0      = { peerDependencies: { zod: '^4.0.0' } }
+const Zod4_1      = { peerDependencies: { zod: '^4.1.0' } }
+const OptVitest   = { optionalDependencies: { vitest: '^5.0.0' } }
+const IdbAsPeer   = { peerDependencies: { 'idb-keyval': '^6.3.0' } }
+
 const ChangeCases = [
   // regular usage:
-  [Idb6_3,                                         Idb6_4,                                            [Bumped],                                                                  'a dependency\'s range moved'],
-  [Idb6_3,                                         Idb6_3,                                            [],                                                                        'nothing moved'],
-  [{ ...Idb6_3, devDependencies: { vitest: "^5.0.3" } }, { ...Idb6_3, devDependencies: { vitest: "^5.0.4" } }, [],                                                   'a devDependency is not shipped, so it never counts'],
-  [{ peerDependencies: { zod: "^4.0.0" } },        { peerDependencies: { zod: "^4.1.0" } },           [{ pkgname: 'safebyok', field: 'peerDependencies', depname: 'zod', ante: "^4.0.0", post: "^4.1.0" }], 'a peer\'s range counts'],
-  [{},                                             { optionalDependencies: { vitest: "^5.0.0" } },    [{ pkgname: 'safebyok', field: 'optionalDependencies', depname: 'vitest', ante: undefined, post: "^5.0.0" }], 'an optional dependency added counts'],
+  [Idb6_3,       Idb6_4,       [Bumped],                                          'a dependency\'s range moved'],
+  [Idb6_3,       Idb6_3,       [],                                                'nothing moved'],
+  [Vitest5_0_3,  Vitest5_0_4,  [],                                                'a devDependency is not shipped, so it never counts'],
+  [Zod4_0,       Zod4_1,       [moved('peerDependencies', 'zod', '^4.0.0', '^4.1.0')],     'a peer\'s range counts'],
+  [{},           OptVitest,    [moved('optionalDependencies', 'vitest', undefined, '^5.0.0')], 'an optional dependency added counts'],
   // edge cases:
-  [Idb6_3,                                         {},                                                [{ ...Bumped, post: undefined }],                                          'a dependency dropped counts'],
-  [Idb6_3,                                         { peerDependencies: { 'idb-keyval': "^6.3.0" } },  [{ ...Bumped, post: undefined }, { ...Bumped, field: 'peerDependencies', ante: undefined, post: "^6.3.0" }], 'a dependency moved from one field to another counts in both'],
+  [Idb6_3,       {},           [{ ...Bumped, post: undefined }],                  'a dependency dropped counts'],
+  [Idb6_3,       IdbAsPeer,    [{ ...Bumped, post: undefined }, moved('peerDependencies', 'idb-keyval', undefined, '^6.3.0')], 'a dependency moved from one field to another counts in both'],
 ] as const
 
 describe("runtimeDepChanges", () => {

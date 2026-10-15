@@ -10,7 +10,7 @@ const WhisperCases = [
   [42,                                true,   'a number'],
   [true,                              true,   'a boolean'],
   [["a", "b"],                        true,   'an array'],
-  [{ apiKey: "fake", tier: 2 },     true,   'a plain object'],
+  [{ apiKey: "fake", tier: 2 },      true,   'a plain object'],
   [{ orgId: null },                   true,   'null inside a structure: real JSON carries it'],
   [{ deep: { list: [1, null] } },     true,   'nesting, arbitrarily'],
   // what JSON cannot carry is refused, not mangled:
@@ -67,7 +67,7 @@ const ScopeCases = [
   // refused:
   [{ ...TH.scopeOf('u1'), user_id: '' },              false,  'an empty user_id names no one'],
   [{ ...TH.scopeOf('u1'), applabel: 'Acme' },         false,  'an applabel outside the label grammar'],
-  [{ applabel: 'acme', user_id: 'u1' },            false,  'a scope missing its vaultlabel'],
+  [{ applabel: 'acme', user_id: 'u1' },              false,  'a scope missing its vaultlabel'],
 ] as const
 
 describe("VaultScope", () => {
@@ -82,7 +82,7 @@ const { registered_at: _bundleTime, ...bundleWithoutTime } = TH.bundleOf('u1')
 
 const BundleCases = [
   // regular usage:
-  [TH.bundleOf('u1'),                                         true,   'a whole bundle'],
+  [TH.bundleOf('u1'),                                       true,   'a whole bundle'],
   // refused, as a damaged or foreign record:
   [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },    false,  'a format this version does not know'],
   [{ ...TH.bundleOf('u1'), passphrase_epoch: 0 },            false,  'an epoch starts at one'],
@@ -92,7 +92,7 @@ const BundleCases = [
   [{ ...TH.bundleOf('u1'), registered_at: 1_792_022_400 },   false,  'a registered_at in epoch seconds'],
   [{ ...TH.bundleOf('u1'), registered_at: Infinity },        false,  'a registered_at that never comes'],
   [{ ...TH.bundleOf('u1'), registered_at: OldIso },          false,  'a registered_at as an ISO string'],
-  [bundleWithoutTime,                                      false,  'a bundle missing its registered_at'],
+  [bundleWithoutTime,                                       false,  'a bundle missing its registered_at'],
   [{ ...bundleWithoutTime, created_at: OldIso, updated_at: OldIso }, false, 'a bundle from before its time was named registered_at'],
 ] as const
 
@@ -106,7 +106,7 @@ const { note: _note, ...notelessBox } = TH.boxOf('anthropic_api_key', 'a1')
 const { registered_at: _boxRegistered, changed_at: _boxChanged, ...boxWithoutTimes } = notelessBox
 const LockboxCases = [
   // regular usage:
-  [TH.boxOf('anthropic_api_key', 'a1'),                       true,   'a whole lockbox, with its note'],
+  [TH.boxOf('anthropic_api_key', 'a1'),                   true,   'a whole lockbox, with its note'],
   [notelessBox,                                            true,   'a lockbox with no note field at all'],
   // a stored vault is a contract: earlier versions wrote a lockbox with no note as `note:
   // undefined`, which IndexedDB's structured clone keeps, so it still reads as no note
