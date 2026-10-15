@@ -3,17 +3,23 @@ import { ForcePassphraseReentryHours, FarFuture, FarPast, Lockbox, LockboxNote, 
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
-import { memoryStore, type StringStore } from '../src/string-store'
+import { memoryStore } from '../src/string-store'
 import { LockboxFieldsBytes, StoredBytesPerWhisperByte, openVault, type OpenVaultOpts, type Vault } from '../src/vault'
 import { cipherBinding, cipherBytes, makeLockboxKey, makeVaultKey, randomBytes, wrapKeyUnder } from '../src/crypto'
 import type { KeyDeriver } from '../src/key-deriver'
 import * as TH from './test-helpers'
 
+/** An unsubscribe with nothing to undo. */
+const silence = (): void => undefined
+/** A store's subscribe that never rings. */
+const neverRings = () => silence
+
 /**
  * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, a
  * logger that keeps what it hears, the options a vault opens with (`defaults` among them), an
- * opener, one that unlocks what it opens, the state a vault opened now settles into, and the
- * unlock this device remembers for `u1`. Unlocks
+ * opener, one that unlocks what it opens, the state a vault opened now settles into, the
+ * unlock this device remembers for `u1`, and a second vaultDB over the same store that hears no
+ * change bells, for a device that does not notice another's doings. Unlocks
  * derive through the cheap testDeriver, so the suite is not a benchmark of Argon2id; the real
  * deriver has its own tests in key-deriver.test.ts.
  */
@@ -35,11 +41,12 @@ const makeWorld = (defaults?: Partial<OpenVaultOpts>) => {
     return vault
   }
   const rememberedUnlock = () => deviceDB.readUnlock(TH.scopeOf('u1'))
+  const deafVaultDB = () => localVaultDB({ ...dbStore, subscribe: neverRings })
   const stateOnOpen = async (overrides?: Partial<OpenVaultOpts>) => {
     const vault = await open(overrides)
     return vault.getSnapshot().state
   }
-  return { dbStore, vaultDB, deviceDB, clock, advance, logged, optsWith, open, openUnlocked, rememberedUnlock, stateOnOpen }
+  return { dbStore, vaultDB, deviceDB, clock, advance, logged, optsWith, open, openUnlocked, rememberedUnlock, stateOnOpen, deafVaultDB }
 }
 
 /** Boxlabels in the snapshot, in order. */
@@ -2122,16 +2129,12 @@ describe("the session vaultKey is non-extractable", () => {
   })
 })
 
-const silence = (): void => undefined
-const neverRings = () => silence
-
 // vaultOne's adapter hears no change bells, so it genuinely does not notice vaultTwo's doings
 // until it next touches the backend: the stale-device scenario, miniaturized. The reborn vault
 // has a new vault_id and its own passphrase.
 const rebornWorld = async () => {
   const world = makeWorld()
-  const deafStore: StringStore = { ...world.dbStore, subscribe: neverRings }
-  const vaultOne = await world.openUnlocked('pw one', { vaultDB: localVaultDB(deafStore) })
+  const vaultOne = await world.openUnlocked('pw one', { vaultDB: world.deafVaultDB() })
   await vaultOne.store('anthropic', 'sk-ant-fake-old')
   const vaultTwo = await world.open()
   await vaultTwo.destroy()
@@ -2215,8 +2218,7 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
 
   it("store() into a vault destroyed elsewhere, and not remade, is refused and finds it absent", async () => {
     const world = makeWorld()
-    const deafStore: StringStore = { ...world.dbStore, subscribe: neverRings }
-    const vaultOne = await world.openUnlocked('pw one', { vaultDB: localVaultDB(deafStore) })
+    const vaultOne = await world.openUnlocked('pw one', { vaultDB: world.deafVaultDB() })
     const vaultTwo = await world.open()
     await vaultTwo.destroy()
     await TH.expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'vault_locked')
@@ -2226,8 +2228,7 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
 
   it("destroy() of a vault destroyed elsewhere, and not remade, is refused as stale; a second destroy() is quiet", async () => {
     const world = makeWorld()
-    const deafStore: StringStore = { ...world.dbStore, subscribe: neverRings }
-    const vaultOne = await world.openUnlocked('pw one', { vaultDB: localVaultDB(deafStore) })
+    const vaultOne = await world.openUnlocked('pw one', { vaultDB: world.deafVaultDB() })
     const vaultTwo = await world.open()
     await vaultTwo.destroy()
     await TH.expectRefusal(vaultOne.destroy(), 'stale_write')
@@ -2439,8 +2440,7 @@ describe("versioned updates: two devices writing at once", () => {
 
   it("an erase refused as stale is thrown at once, never tried again", async () => {
     const world = makeWorld()
-    const deafStore: StringStore = { ...world.dbStore, subscribe: neverRings }
-    const hereDB = localVaultDB(deafStore)
+    const hereDB = world.deafVaultDB()
     const here = await world.openUnlocked('pw one', { vaultDB: hereDB })
     await here.store('anthropic', 'sk-ant-fake-old')
     const there = await world.open({ deviceDB: memoryDeviceDB() })
