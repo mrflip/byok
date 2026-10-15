@@ -53,9 +53,11 @@ What happens when `openVault` rejects depends on the error's family (safebyok's
 kind, its family, and what it means.
 
 **A condition stays in place.** Storage that cannot be reached (`storage_unavailable`), a user
-storage will not serve (`not_permitted`, as when signed out of the backend) or a stored record
-that fails verification (`corrupt_record`) arrives as `openError`, a `VaultError`, with `vault`
-still null. Show it where the vault's UI would be, and offer `retryOpen()`, which clears it and
+storage will not serve (`not_permitted`, as when signed out of the backend) or a stored vault
+bundle that fails verification (`corrupt_record`) arrives as `openError`, a `VaultError`, with
+`vault` still null. (A damaged lockbox never stops the open: the snapshot lists it with
+`damaged: true`, for your UI to offer `erase()` or a fresh `store()`; see the `safebyok`
+README's *Damaged lockboxes*.) Show it where the vault's UI would be, and offer `retryOpen()`, which clears it and
 opens again; a failed open leaves no storage watch behind, so retrying costs nothing:
 
 ```tsx
