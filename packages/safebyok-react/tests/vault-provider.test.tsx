@@ -169,7 +169,12 @@ describe("VaultProvider", () => {
     expect(isVaultError(refusal, 'whisper_too_large')).to.be.true
     // One lockbox fills the vault: a second is refused for room.
     await vault.store('openai_api_key', 'sk')
-    const full = await vault.store('mistral_api_key', 'sk').catch((err: unknown) => err)
+    let full: unknown = null
+    try {
+      await vault.store('mistral_api_key', 'sk')
+    } catch (err) {
+      full = err
+    }
     expect(isVaultError(full, 'vault_full')).to.be.true
   })
 })
