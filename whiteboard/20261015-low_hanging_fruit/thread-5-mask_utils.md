@@ -104,3 +104,9 @@ tests, convex 213, react 7, demo 24, root 91).
   text, whitespace removed rather than collapsed, and the 1000 cap. The changeset is `minor`. #37
   conflicts with `main` (`notes/security.md`, the core README, `package.json`, `errors.ts`,
   `tsdown.config.ts`); the rework was added as fast-forward commits, with no rebase.
+
+*Orchestrator, after the squash:* at the Coach's word the branch's 26 commits became four (`api:`,
+`docs:`, `tools:`, `plan:`) over `23e38a2`, the tree unchanged; the SHAs above, and the
+fast-forward-without-rebase note, describe the history before it. The Coach confirmed the reading
+of ruling 3: right-to-left letters kept, only the direction markers stripped. The rebase onto
+main was done before the squash, so #37 no longer conflicts.
