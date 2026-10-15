@@ -1,6 +1,6 @@
 # Thread 6: thin_tests (2026-10-15)
 
-Branch `20261015-thin_tests`, PR not yet filed, stacked on #70 (tip `d874db3`), which stands on
+Branch `20261015-thin_tests`, PR #75, stacked on #70 (tip `d874db3`), which stands on
 #66. Justify: green (root 105, safebyok 780, safebyok-convex 268, safebyok-react 28, demo 119;
 publint, attw and `pnpm size` clean).
 
@@ -49,6 +49,12 @@ publint, attw and `pnpm size` clean).
     `tests/components/**` (PascalCase) and `tests/hooks/**` (camelCase).
   - Changeset `20261015-thin_tests.md` (safebyok minor). The core README's `safebyok/testing`
     sentence names the new helpers.
+
+* **Review** (`fixed`): cbcb860, the missing-store cases each check their own field's message;
+  ed955db, the demo outage tests check `isVaultError` against the host's class again;
+  dd20171, the changeset says `describeVaultDB` now requires the name `VaultError`. Then, by
+  the worker: the knock-knock Cancel test runs over an unlocked vault, so it can fail
+  (mutation-checked). The review's remaining minor findings are the PR's open questions.
 
 * **Decisions taken**:
   - **Blank text throws** rather than being handled. A tamper test aimed at an empty field is
