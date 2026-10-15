@@ -9,7 +9,7 @@ describe("the package's entry point", () => {
       'Argon2idWebV1', 'argon2idWebV1Deriver',
       'openVault',
       'Ciphered', 'ForcePassphraseReentryHours', 'Label', 'Lockbox', 'LockboxSummary', 'MaxLockboxes', 'MaxWhisperBytes', 'VaultBundle', 'VaultScope', 'Whisper', 'wallClock',
-      'VaultError', 'VaultErrorKindVals', 'isVaultError',
+      'VaultError', 'VaultErrorFamilyForKind', 'VaultErrorFamilyVals', 'VaultErrorKindVals', 'isVaultCondition', 'isVaultError',
       'VaultDB', 'localVaultDB', 'memoryDeviceDB',
       'domStore', 'memoryStore',
       'stableJsonify',
