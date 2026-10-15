@@ -1,6 +1,6 @@
 # Sprint convex_vaultdb: progress
 
-**Status**: threads 1, 2 filed (#17, #18); thread 3 underway
+**Status**: thread 1 filed (#17); thread 2 (#18) adding the erase expectation; thread 3 underway
 
 The orchestrator's document: newer than the plan wherever they disagree. Each worker's own
 account is in `thread-<N>-<label>.md` on its branch.
@@ -10,7 +10,7 @@ account is in `thread-<N>-<label>.md` on its branch.
 | Thread | Label            | Branch                       | Base               | Status   |
 | ------ | ---------------- | ---------------------------- | ------------------ | -------- |
 | 1      | convex_skills    | `20261014-convex_skills`     | origin/main        | filed [#17](https://github.com/mrflip/safebyok/pull/17) (no review: docs only) |
-| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18) |
+| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18); reopened for the erase ruling, underway |
 | 3      | convex_component | `20261014-convex_component`  | #18 at d3c0961     | underway |
 | 4      | convex_client    | `20261014-convex_client`     | thread 3, on filing | pending  |
 
@@ -80,6 +80,9 @@ protected `do*` method the adapter writes:
   (21 tests) over `VaultDBVerbs`, a structural type of the public verbs, so an adapter built against
   `dist/` qualifies. From `packages/safebyok-convex/tests/` it is `../../../tests/vault-db-suite`
   (`../../safebyok/tests/vault-db-suite` once #16 lands). `safebyok` must be built first.
-* **`eraseBox` carries no expectation**, as ruled ("erase wins"). Thread 2 asks whether it should carry a
-  `vault_id`-only one, which would close the reborn-vault window for erase too. That is the Coach's call.
-  Until they make it, thread 3 builds `eraseBox` without one. Adding an optional argument later is additive.
+* **Erases carry a `vault_id` expectation** (Coach, in chat, 2026-10-15, superseding "erase wins" for this
+  case): `eraseBox` and `eraseVault` each take `{ vault_id }` and land only if the scope's standing bundle has
+  that `vault_id`; otherwise `stale_write`, a scope with no bundle included. An absent box still erases
+  quietly; no revision expectation. Thread 2 adds it to #18 as new commits on d3c0961 (worktree
+  `/workspace/byok-storage_verbs_erase`); thread 3 builds its mutations to it and is restacked onto the new tip
+  (`git rebase --onto <tip> d3c0961`) before it files.

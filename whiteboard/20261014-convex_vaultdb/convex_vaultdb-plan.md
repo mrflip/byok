@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **Threads at once**: up to 3
 * **Issued by**: the Coach (flip), via `/sprint`
-* **Status**: threads 1, 2 filed (#17, #18); thread 3 underway
+* **Status**: thread 1 filed (#17); thread 2 (#18) adding the erase expectation; thread 3 underway
 
 ## The request, verbatim
 
@@ -229,6 +229,11 @@ are follow-ups for the Coach to call.
 Threads 1 and 2 start together from `origin/main`. Thread 3 is cut from thread 2's tip once
 thread 2 files; thread 4 from thread 3's tip once thread 3 files. The Coach merges
 1 and 2 (either order), then 3, then 4.
+
+## Coach's rulings during the sprint
+
+* 2026-10-15: **`eraseBox` carries a `vault_id`-only expectation** -- "it's the most likely cause of a vault
+  replacing another one" -- and, asked, **`eraseVault` too**. Built in thread 2 (#18), mirrored in thread 3.
 
 ## For the Coach
 
