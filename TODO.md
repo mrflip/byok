@@ -193,7 +193,7 @@ three change what the documents say:
   adapter, the Convex tables).
 * **VOCABULARY.md** checked line by line against the exports.
 
-### 5. Expiry and the unlock window (ruled, not yet built)
+### 5. Expiry and the unlock window (ruled; `lockSoon` built, natural expiry's timer not)
 
 Not on the Coach's lists, but ruled in `whiteboard/20261014-crypto/rulings.md` (*The unlock
 window*, *Expiry*) and placed here because fingerprint unlock (8) reworks the same unlock path
@@ -206,6 +206,17 @@ grace, or `lockSoon(graceSeconds = 5.0)`'s now plus grace; when it passes the ke
 device-remember record erased, the snapshot flips). In-flight work is never clawed back.
 The names ship with 3; this thread builds the timer, `lockSoon`, and the shut-forgets-both rule.
 Public surface change; a `notes/security.md` entry.
+
+Built (second_harvest thread 5): `vault.lockSoon(graceSeconds = 5)`, at most 60 seconds, with
+the core README's screen-lock recipe. It closes the entry gate and erases the device record at
+once, and leaves a timer only the vaultKey; inside an operation already started, `store()` and
+`erase()` look for the key in hand, not at `askPassphraseAt`. Every lock (`lock`, `lockSoon`,
+`destroy`) erases the device record. Left: **natural expiry's timer**, `shutVaultAt` =
+`askPassphraseAt` + 60 s. `shutAfter()` in `vault.ts` is the mechanism, armed from
+`takeUpUnlock` and `rememberedUnlock`; two things to settle first: `setTimeout` holds at most
+2^31-1 ms (24.8 days), so a longer window re-arms (or arms only once within reach), and
+`ensureUnlocked()` drops an expired key itself today, which the timer would take over. Not yet
+public: `shutVaultAt` in the snapshot.
 
 ### 6. hash-wasm as a pluggable KDF
 
@@ -272,7 +283,9 @@ Straightforward, likely to be done, not needed yet. Each is a thread cut from `m
 * **`safebyok-vue`**: a `shallowRef` plus `onScopeDispose` binding, about ten lines, so Nuxt
   apps have what React apps have. After the react package is published (its shape is the model).
 * **`lockWhenHidden`** opt-in prop on `safebyok-react` (ruled, not yet): the binding may touch
-  the DOM; calls `lockSoon()` on `visibilitychange`. After 4.
+  the DOM; calls `lockSoon()` on `visibilitychange`. `lockSoon()` exists now, and the core
+  README's *A screen-lock recipe* is the handful of lines the prop would wrap; the prop removes
+  its listener when the provider closes the vault.
 * **IndexedDB `versionedUpdate` truly atomic**, inside one IndexedDB transaction (idb-keyval's
   `update()`, throw-to-abort mapped to `stale_write`), closing the window `notes/security.md`
   records. After storage_verbs.

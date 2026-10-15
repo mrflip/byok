@@ -241,3 +241,16 @@ security expert who knows what questions to ask.
   `passphrase_epoch`: a vault destroyed, remade, or re-keyed elsewhere while the passphrase was
   being checked. Without that, the old vault's vaultKey was taken up against the new bundle, and a
   `store()` sealed boxes into the new vault that its owner could never open.
+* 2026-10-15: `lockSoon(graceSeconds = 5)`, at most 60 seconds, closes the entry gate at once
+  (`askPassphraseAt` set to now, so the snapshot reads `locked` and every operation started
+  afterwards throws `vault_locked`), erases the device record at once, and moves the shut counter
+  (an unlock under way loses); a `setTimeout` drops the in-memory vaultKey after the grace. In the
+  grace, `store()`'s retries and `erase()`'s second look check only that the key is still held,
+  not `askPassphraseAt`, so an operation begun before the gate closed finishes; under natural
+  expiry too, an operation begun before `askPassphraseAt` now finishes past it. An `unlock()`
+  that lands in the grace cancels the timer, including one begun in the grace and still deriving
+  when it would have fired: the timer does not move the counter. A second `lockSoon()` never
+  lengthens a grace, only shortens it. `close()` now moves the counter and drops the key from
+  memory (clearing the timer) but leaves the device record: an unlock under way on a closed
+  handle writes no record (erasing one it already wrote) and throws `vault_closed`. The timer is
+  per handle and per tab, like the counter.
