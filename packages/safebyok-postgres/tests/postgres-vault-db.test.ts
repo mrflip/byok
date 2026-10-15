@@ -82,7 +82,7 @@ describe("postgresVaultDB, as the README has it", () => {
     await second.unlock('correct horse battery staple')
     expect(await second.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
     expect(await second.read('openai_api_key')).to.deep.equal({ apiKey: 'sk-test-not-a-real-key', orgId: null })
-    expect(second.getSnapshot().boxes.map((box) => box.note)).to.deep.equal(['work account', null])
+    expect(second.getSnapshot().boxes.map((box) => box.damaged ? null : box.note)).to.deep.equal(['work account', null])
     await second.erase('openai_api_key')
     expect(second.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic_api_key'])
     second.close()

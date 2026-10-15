@@ -4,6 +4,7 @@ import 'fake-indexeddb/auto'
 import { describe, expect, it, vi } from 'vitest'
 import { createStore, get, set } from 'idb-keyval'
 import { memoryDeviceDB, openVault, VaultError } from 'safebyok'
+import { boxCkey, bundleCkey } from '../src/ckeys'
 import { idbVaultDB } from '../src/idb-vault-db'
 import type { IdbVaultDBOpts } from '../src/idb-opts'
 import { inspectIdbVaultDB } from '../src/inspect-idb-vault-db'
@@ -63,6 +64,16 @@ describe("idbVaultDB", () => {
     expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.be.null
     expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
     expect(await inspectIdbVaultDB({ dbName }).rows()).to.have.lengthOf(2)
+  })
+
+  it("lists a row that is no lockbox as damaged, under the boxlabel it is stored under", async () => {
+    const dbName = TH.freshDbName()
+    await set(bundleCkey(TH.scopeOf('u1')), TH.bundleOf('u1'), rawShelf(dbName))
+    await set(boxCkey(TH.scopeOf('u1'), 'anthropic'), 'not a lockbox', rawShelf(dbName))
+    await set(boxCkey(TH.scopeOf('u1'), 'openai'), TH.boxOf('openai', 'two'), rawShelf(dbName))
+    const listed = await idbVaultDB({ dbName }).listBoxes(TH.scopeOf('u1'))
+    expect(listed[0]).to.deep.equal({ boxlabel: 'anthropic', damaged: true })
+    expect(listed[1]).to.include({ boxlabel: 'openai', damaged: false })
   })
 
   it("strips a field the record does not have before storing it", async () => {

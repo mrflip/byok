@@ -1,6 +1,6 @@
 import { entries, get, promisifyRequest } from 'idb-keyval'
-import { VaultDB } from 'safebyok'
-import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultScope } from 'safebyok'
+import { Ckeys, VaultDB } from 'safebyok'
+import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, StoredLockbox, VaultBundle, VaultScope } from 'safebyok'
 import { onBell, ringBell } from './bell'
 import { boxCkey, bundleCkey, isBoxCkeyOf } from './ckeys'
 import { bundleMeetsExpectation, lockboxMeetsExpectation, vaultMeetsExpectation } from './expectations'
@@ -76,11 +76,12 @@ class IdbVaultDB extends VaultDB {
     return (await get(boxCkey(scope, boxlabel), this.shelf)) ?? null
   }
 
-  protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
+  protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
     const rows = await entries(this.shelf)
     return rows
-      .filter(([ckey]) => isBoxCkeyOf(scope, ckey))
-      .map(([, row]) => row as unknown)
+      .filter((entry): entry is [string, unknown] => isBoxCkeyOf(scope, entry[0]))
+      .map(([ckey, row]) => ({ boxlabel: Ckeys.boxlabelOf(ckey), lockbox: row }))
+      .filter((stored): stored is StoredLockbox => stored.boxlabel !== null)
   }
 
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
