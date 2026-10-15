@@ -215,6 +215,19 @@ export default defineConfig([
     },
   },
 
+  // And it costs the host only what it uses. src/ validates with zod/mini, whose builders a host's
+  // bundler drops when nothing reaches them; classic zod's it cannot, so one import of classic
+  // would put all of it in every host's bundle.
+  {
+    name: 'safebyok/tree-shaking',
+    files: ['src/**/*.ts'],
+    rules: {
+      'no-restricted-imports': ['error', {
+        paths: [{ name: 'zod', message: "Import zod/mini (`import * as Z from 'zod/mini'`): classic zod does not tree-shake, and would ride along in every host's bundle." }],
+      }],
+    },
+  },
+
   // == [3d. Plugin defaults our own documents contradict] ==
   // Each of these is a reasonable default that STYLE.md rules out explicitly. Turned off here
   // rather than disabled at every call site.
