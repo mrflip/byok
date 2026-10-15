@@ -130,5 +130,6 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `not_permitted`       | the storage backend refused this user: signed out, or not theirs to reach | Have the user sign in again                             |
 | `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause` |
 
-`openVault` itself can refuse with `bad_option`, `bad_label`, and, when storage cannot be read,
-`storage_unavailable` or `not_permitted`: the last two are conditions, though they surface at open.
+`openVault` itself can refuse with `bad_option`, `bad_label`, and, as it reads the vault from
+storage, `storage_unavailable`, `not_permitted` or `corrupt_record`: the last three are
+conditions, though they surface at open.
