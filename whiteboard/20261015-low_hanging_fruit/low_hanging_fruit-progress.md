@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 6 building; 8 in review; 1, 2, 3, 4, 5, 9, 10, 11 filed; 7 waits on 6. Newer than the plan wherever the two disagree.
+**Status**: 6 building; 8 filing; 1, 2, 3, 4, 5, 9, 10, 11 filed; 7 waits on 6. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -15,7 +15,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37) |
 | 6  | `boundary_audit` | thread 2 (#40, ea3dc98) | underway |
 | 7  | `stale_write_retry` | thread 6 | pending |
-| 8  | `size_budget` | thread 2 (#40, ea3dc98) | in review |
+| 8  | `size_budget` | thread 2 (#40, ea3dc98) | filing |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
 | 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
@@ -108,6 +108,8 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   module-level schemas are not shaken out -- the zod-mini target), `argon2idWebV1Deriver` 5.0,
   `idbDeviceDB` 25.7, `browserOpts` 30.5. `pnpm size` builds the core first; CI runs it after the
   build; not in justify. The `argon2` grep test stays beside it. A `mask` entry waits on #37.
+  *Review:* fixed (the CLAUDE.md line wrapped). Left: CI builds the core twice; size-limit wants
+  Node `^22.19 || ^24.5 || >=26` against the root's `>=22`; a zod bump alone can trip it.
 * **Thread 9** (`docs_sweep`, [#33](https://github.com/mrflip/safebyok/pull/33)): appended
   *Locking* and *No recovery* to the core README; the recipe is a `lockWhenHidden(vault)`
   function returning an unsubscribe -- the same name as the planned core API, so the expiry
