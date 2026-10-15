@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { memoryStore } from 'safebyok'
+import { LockboxSummary, memoryStore } from 'safebyok'
 import { RealPassphrase, RealWhispers, boxOf, bundleOf, componentTest, openOver, realRecords, scopeOf, vaults } from '../helpers'
 
 const u1 = scopeOf('u1')
@@ -312,7 +312,7 @@ describe("a real vault's records", () => {
     vault.close()
   })
 
-  it("list as the core lists them", async () => {
+  it("list what the core reads as the summaries it lists", async () => {
     const real = await realRecords('u1')
     const t = componentTest()
     await t.mutation(vaults.createBundle, { bundle: real.bundle })
@@ -321,7 +321,8 @@ describe("a real vault's records", () => {
     }
     const vault = await openOver(memoryStoreHolding(real))
     const listed = await t.query(vaults.listBoxSummaries, { scope: u1 })
-    expect(listed.map(({ format: _format, ...summary }) => summary)).to.deep.equal(vault.getSnapshot().boxes)
+    // The core's summary strips `format` and nulls a missing note; the listing itself holds neither.
+    expect(listed.map((row) => LockboxSummary.parse(row))).to.deep.equal(vault.getSnapshot().boxes)
     vault.close()
   })
 })

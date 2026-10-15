@@ -134,8 +134,8 @@ export abstract class VaultDB {
   }
 
   /**
-   * Public faces of every lockbox in the vault -- ciphered fields stripped, sorted by boxlabel --
-   * valid while locked.
+   * Public faces of every lockbox in the vault -- ciphered fields stripped, `note` null where a
+   * lockbox has none, sorted by boxlabel -- valid while locked.
    */
   async listBoxes(scope: VaultScope): Promise<LockboxSummary[]> {
     const asked = checkScope(scope)
