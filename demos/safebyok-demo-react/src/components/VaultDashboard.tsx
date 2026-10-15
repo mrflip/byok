@@ -15,13 +15,23 @@ type FormState = { editing: string | null, boxlabelText: string, whisperText: st
 const blankForm: FormState = { editing: null, boxlabelText: '', whisperText: '', noteText: '' }
 
 export const VaultDashboard = () => {
-  const { vault, withUnlockedVault } = useVault()
+  const { vault, openError, retryOpen, withUnlockedVault } = useVault()
   const snapshot = useVaultSnapshot()
   const [form, setForm] = useState<FormState | null>(null)
   const [shown, setShown] = useState<Record<string, Whisper>>({})
   const [psst, setPsst] = useState<{ boxlabel: string, whisper: Whisper } | null>(null)
   const [gripe, setGripe] = useState<string | null>(null)
 
+  // A condition that stopped the vault opening -- storage unreachable, signed out of the
+  // backend -- is shown here, in place, with a way to try again. (Misuse would have gone to an
+  // error boundary instead.)
+  if (openError !== null) {
+    return (
+      <p className="gripe">
+        {"Can't reach your vault. "}{openError.message} <button onClick={retryOpen}>Retry</button>
+      </p>
+    )
+  }
   if (vault === null) { return <p className="quiet">Opening vault…</p> }
 
   // A whisper is never null (the vault refuses a bare one), so null from withUnlockedVault can
