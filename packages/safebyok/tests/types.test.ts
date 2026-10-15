@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import * as ZClassic from 'zod'
 import { EpochMillis, FarFuture, FarPast, Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
 import { boxOf, bundleOf, scopeOf } from '../src/testing'
 
@@ -224,5 +225,20 @@ describe("EpochMillis", () => {
     expect(EpochMillis.safeParse(1_792_022_400).success).to.be.false
     expect(EpochMillis.safeParse(1_792_022_400_000_000).success).to.be.false
     expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.false
+  })
+})
+
+describe("the exported validators, inside a host's own Zod", () => {
+  // A host on classic Zod holds them in its own schemas, as a form checking a lockbox might.
+  const BoxForm = ZClassic.object({ scope: VaultScope, boxlabel: Label, note: ZClassic.optional(LockboxNote) })
+
+  it("compose into a classic Zod schema and check as they do alone", () => {
+    const form = { scope: scopeOf('u1'), boxlabel: 'anthropic_api_key', note: 'work account' }
+    expect(BoxForm.parse(form)).to.deep.equal(form)
+  })
+
+  it("refuse inside a classic Zod schema what they refuse alone", () => {
+    expect(BoxForm.safeParse({ scope: scopeOf('u1'), boxlabel: 'ANTHROPIC' }).success).to.be.false
+    expect(BoxForm.safeParse({ scope: scopeOf('u1'), boxlabel: 'anthropic', note: 'n'.repeat(257) }).success).to.be.false
   })
 })

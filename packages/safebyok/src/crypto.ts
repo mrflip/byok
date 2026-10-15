@@ -1,5 +1,5 @@
 import { base64urlnopad } from '@scure/base'
-import * as Z from 'zod'
+import * as Z from 'zod/mini'
 import { stableJsonify } from './stable-jsonify'
 
 /**
@@ -17,8 +17,8 @@ import { stableJsonify } from './stable-jsonify'
  * A wrapped key and a ciphered whisper are both this shape.
  */
 export const Ciphered = Z.object({
-  cipher_iv_b64:  Z.string().min(1),
-  ciphertext_b64: Z.string().min(1),
+  cipher_iv_b64:  Z.string().check(Z.minLength(1)),
+  ciphertext_b64: Z.string().check(Z.minLength(1)),
 })
 export type Ciphered = Z.infer<typeof Ciphered>
 

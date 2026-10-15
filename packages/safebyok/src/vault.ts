@@ -1,4 +1,4 @@
-import * as Z from 'zod'
+import * as Z from 'zod/mini'
 import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
@@ -864,7 +864,7 @@ const retryStale = async <ResultT>(attempt: () => Promise<ResultT>, attemptsLeft
 }
 
 /** A note as `store()` is handed one: some text, null for none, or undefined to keep the note standing. */
-const noteOption = LockboxNote.nullable().optional()
+const noteOption = Z.optional(Z.nullable(LockboxNote))
 
 const parseNote = (candidate: string | null | undefined): string | null | undefined => {
   const checked = noteOption.safeParse(candidate)
@@ -903,10 +903,10 @@ const WhisperShareOfStorage = 0.5
  */
 const LockboxFieldsBytes = 1024
 
-const maxWhisperBytes = Z.number().int().positive().default(MaxWhisperBytes)
-const maxLockboxes = Z.number().int().positive().default(MaxLockboxes)
+const maxWhisperBytes = Z._default(Z.int().check(Z.positive()), MaxWhisperBytes)
+const maxLockboxes = Z._default(Z.int().check(Z.positive()), MaxLockboxes)
 /** A limit as an adapter declares one: some bytes, or none at all. */
-const declaredBytes = Z.union([Z.number().positive(), Z.literal(Infinity)])
+const declaredBytes = Z.union([Z.number().check(Z.positive()), Z.literal(Infinity)])
 
 const MsPerHour = 60 * 60 * 1000
 
@@ -916,8 +916,9 @@ const LockSoonGraceSeconds = 5
 const MaxLockSoonGraceSeconds = 60
 
 /** A grace in seconds, as the host thinks of it, to whole milliseconds. Zod's number refuses NaN and Infinity. */
-const graceSeconds = Z.number().min(0).max(MaxLockSoonGraceSeconds).default(LockSoonGraceSeconds)
-  .transform((seconds) => Math.round(seconds * 1000))
+const graceSecondsGiven = Z._default(Z.number().check(Z.gte(0), Z.lte(MaxLockSoonGraceSeconds)), LockSoonGraceSeconds)
+const secondsToMs = Z.transform((seconds: number) => Math.round(seconds * 1000))
+const graceSeconds = Z.pipe(graceSecondsGiven, secondsToMs)
 
 const parseGraceSeconds = (candidate: number | undefined): number => {
   const checked = graceSeconds.safeParse(candidate)
@@ -928,9 +929,11 @@ const parseGraceSeconds = (candidate: number | undefined): number => {
 }
 
 /** Hours, as the host thinks of them, to whole milliseconds, as every time inside is kept. */
-const forcePassphraseReentryHours = Z.union([Z.number().positive(), Z.literal(Infinity)]).default(ForcePassphraseReentryHours)
-  .transform((hours) => Math.round(hours * MsPerHour))
-  .pipe(Z.union([Z.number().min(1), Z.literal(Infinity)]))
+const someHours = Z.union([Z.number().check(Z.positive()), Z.literal(Infinity)])
+const reentryHours = Z._default(someHours, ForcePassphraseReentryHours)
+const hoursToMs = Z.transform((hours: number) => Math.round(hours * MsPerHour))
+const reentryWindowMs = Z.union([Z.number().check(Z.gte(1)), Z.literal(Infinity)])
+const forcePassphraseReentryHours = Z.pipe(Z.pipe(reentryHours, hoursToMs), reentryWindowMs)
 
 /** The deadline for a passphrase entered at `nowMs`: `reentryMs` later, in whole ms, but never past {@link FarFuture}. */
 const deadlineAfter = (nowMs: number, reentryMs: number): number => Math.min(Math.floor(nowMs + reentryMs), FarFuture)
@@ -961,8 +964,8 @@ const parseMaxLockboxes = (candidate: number | undefined): number => {
 
 /** What a KeyDeriver must carry. Checked only: openVault keeps the deriver it was handed, prototype and all. */
 const keyDeriverShape = Z.object({
-  key_deriver_label: Z.string().min(1),
-  salt_bytes:        Z.number().int().positive(),
+  key_deriver_label: Z.string().check(Z.minLength(1)),
+  salt_bytes:        Z.int().check(Z.positive()),
   deriveKeyBytes:    Z.custom<KeyDeriver['deriveKeyBytes']>((candidate) => typeof candidate === 'function'),
 })
 

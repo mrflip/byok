@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest'
 import { defineTestApp } from 'convex-test'
 import { defineSchema } from 'convex/server'
 import { v } from 'convex/values'
+import * as Z from 'zod/mini'
 import type { GenericValidator, Infer } from 'convex/values'
 import * as Records from 'safebyok'
 import type {
@@ -60,7 +61,7 @@ const convexShape = (validator: GenericValidator): Shape => {
   }
 }
 
-const listedZod = Records.Lockbox.omit({ lockbox_key_wrapped: true, whisper_ciphered: true })
+const listedZod = Z.omit(Records.Lockbox, { lockbox_key_wrapped: true, whisper_ciphered: true })
 
 const ShapeCases = [
   [Records.Ciphered,     Ciphered,      'Ciphered: the shared encrypted-value shape'],

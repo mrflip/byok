@@ -1,4 +1,4 @@
-import * as Z from 'zod'
+import * as Z from 'zod/mini'
 import { Ciphered } from './crypto'
 
 /**
@@ -26,7 +26,7 @@ const isPlainBag = (val: unknown): val is Record<string, unknown> => {
   return proto === Object.prototype || proto === null
 }
 
-const whisperJson: Z.ZodType<WhisperJson> = Z.lazy(() => Z.union([
+const whisperJson: Z.ZodMiniType<WhisperJson> = Z.lazy(() => Z.union([
   Z.string(),
   Z.number(),
   Z.boolean(),
@@ -35,7 +35,7 @@ const whisperJson: Z.ZodType<WhisperJson> = Z.lazy(() => Z.union([
   whisperBag,
 ]))
 const whisperRecord = Z.record(Z.string(), whisperJson)
-const whisperBag = Z.custom<Record<string, unknown>>(isPlainBag, 'a whisper object must be a plain object').pipe(whisperRecord)
+const whisperBag = Z.pipe(Z.custom<Record<string, unknown>>(isPlainBag, 'a whisper object must be a plain object'), whisperRecord)
 const whisperArr = Z.array(whisperJson)
 
 /**
@@ -48,7 +48,7 @@ const whisperArr = Z.array(whisperJson)
  * @example Whisper.safeParse(null).success              // false: emptying a lockbox is erase's job
  * @example Whisper.safeParse({ orgId: null }).success   // true: null inside a structure is JSON
  */
-export const Whisper: Z.ZodType<Whisper> = Z.union([
+export const Whisper: Z.ZodMiniType<Whisper> = Z.union([
   Z.string(),
   Z.number(),
   Z.boolean(),
@@ -66,9 +66,10 @@ export const Whisper: Z.ZodType<Whisper> = Z.union([
  * @example Label.safeParse('ANTHROPIC_API_KEY').success  // false: lowercase only
  * @example Label.safeParse('_nope').success              // false
  */
-export const Label = Z.string()
-  .max(40, "A label is at most forty characters")
-  .regex(/^[a-z](_?[a-z0-9])+$/, "A label is lowercase words of letters and digits joined by single underscores, starting with a letter")
+export const Label = Z.string().check(
+  Z.maxLength(40, "A label is at most forty characters"),
+  Z.regex(/^[a-z](_?[a-z0-9])+$/, "A label is lowercase words of letters and digits joined by single underscores, starting with a letter"),
+)
 
 /**
  * What names one vault: the host application's label, the authenticated user, and the vault's own
@@ -77,7 +78,7 @@ export const Label = Z.string()
  */
 export const VaultScope = Z.object({
   applabel:   Label,
-  user_id:    Z.string().min(1),
+  user_id:    Z.string().check(Z.minLength(1)),
   vaultlabel: Label,
 })
 export type VaultScope = Z.infer<typeof VaultScope>
@@ -93,7 +94,7 @@ const cryptoKeyHandle = Z.custom<CryptoKey>((val) => val instanceof CryptoKey, '
  * @example LockboxNote.parse('work account')
  * @example LockboxNote.safeParse('n'.repeat(257)).success  // false: 256 characters at most
  */
-export const LockboxNote = Z.string().max(256)
+export const LockboxNote = Z.string().check(Z.maxLength(256))
 
 /**
  * One lockbox as the storage layer holds it: the whisper ciphered under its own lockboxKey, that
@@ -109,7 +110,7 @@ export const LockboxNote = Z.string().max(256)
 export const Lockbox = Z.object({
   format:              Z.literal('safebyok-lockbox-v1'),
   boxlabel:            Label,
-  revision_id:         Z.string().min(1),
+  revision_id:         Z.string().check(Z.minLength(1)),
   /** This lockbox's lockboxKey, wrapped under the vaultKey. */
   lockbox_key_wrapped: Ciphered,
   /** The whisper, ciphered under this lockbox's lockboxKey. */
@@ -118,7 +119,7 @@ export const Lockbox = Z.object({
    * The lockbox's {@link LockboxNote}. Written only when there is one; read as absent when
    * undefined too, as earlier versions stored it and IndexedDB keeps it.
    */
-  note:                LockboxNote.optional(),
+  note:                Z.optional(LockboxNote),
   created_at:          Z.string(),
   updated_at:          Z.string(),
 })
@@ -131,9 +132,10 @@ export type Lockbox = Z.infer<typeof Lockbox>
  *
  * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', created_at, updated_at }).note  // null
  */
-export const LockboxSummary = Lockbox
-  .omit({ format: true, lockbox_key_wrapped: true, whisper_ciphered: true })
-  .extend({ note: LockboxNote.nullable().default(null) })
+export const LockboxSummary = Z.extend(
+  Z.omit(Lockbox, { format: true, lockbox_key_wrapped: true, whisper_ciphered: true }),
+  { note: Z._default(Z.nullable(LockboxNote), null) },
+)
 export type LockboxSummary = Z.infer<typeof LockboxSummary>
 
 /**
@@ -148,14 +150,14 @@ export type LockboxSummary = Z.infer<typeof LockboxSummary>
 export const VaultBundle = Z.object({
   format:              Z.literal('safebyok-vault-v1'),
   applabel:            Label,
-  user_id:             Z.string().min(1),
+  user_id:             Z.string().check(Z.minLength(1)),
   vaultlabel:          Label,
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
-  vault_id:            Z.string().min(1),
-  passphrase_epoch:    Z.number().int().positive(),
+  vault_id:            Z.string().check(Z.minLength(1)),
+  passphrase_epoch:    Z.int().check(Z.positive()),
   /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, as stored vaults self-describe. */
-  key_deriver_label:   Z.string().min(1),
-  passphrase_salt_b64: Z.string().min(1),
+  key_deriver_label:   Z.string().check(Z.minLength(1)),
+  passphrase_salt_b64: Z.string().check(Z.minLength(1)),
   /** The vaultKey, wrapped under the passphraseKey: decrypting this IS the passphrase check. */
   vault_key_passphrase_wrapped: Ciphered,
   created_at:          Z.string(),
@@ -200,10 +202,11 @@ export const FarPast = 347_155_200_000 // Date.UTC(1981, 0, 1)
  * @example EpochMillis.safeParse(1_792_022_400_000_000).success    // false: microseconds, not ms
  * @example EpochMillis.safeParse(1_792_022_400_000.5).success      // false: whole milliseconds only
  */
-export const EpochMillis = Z.number()
-  .min(FarPast, "An instant is epoch milliseconds no earlier than 1981; a smaller number is likely epoch seconds")
-  .max(FarFuture, "An instant is epoch milliseconds no later than 2255; a larger number is likely epoch microseconds")
-  .int("An instant is whole epoch milliseconds")
+export const EpochMillis = Z.number().check(
+  Z.gte(FarPast, "An instant is epoch milliseconds no earlier than 1981; a smaller number is likely epoch seconds"),
+  Z.lte(FarFuture, "An instant is epoch milliseconds no later than 2255; a larger number is likely epoch microseconds"),
+  Z.int("An instant is whole epoch milliseconds"),
+)
 
 /**
  * The device-local record of a remembered unlock: this browser's localUnlockKey (a
@@ -214,11 +217,11 @@ export const EpochMillis = Z.number()
 export const DeviceUnlock = Z.object({
   format:           Z.literal('safebyok-unlock-v1'),
   applabel:         Label,
-  user_id:          Z.string().min(1),
+  user_id:          Z.string().check(Z.minLength(1)),
   vaultlabel:       Label,
-  vault_id:         Z.string().min(1),
+  vault_id:         Z.string().check(Z.minLength(1)),
   /** The bundle's passphrase_epoch when this unlock was remembered; a mismatch voids it. */
-  passphrase_epoch: Z.number().int().positive(),
+  passphrase_epoch: Z.int().check(Z.positive()),
   /** This browser's localUnlockKey: non-extractable, usable only to unwrap what it wrapped. */
   local_unlock_key: cryptoKeyHandle,
   /** The vaultKey, wrapped under the localUnlockKey. */

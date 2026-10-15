@@ -317,3 +317,10 @@ security expert who knows what questions to ask.
   damaged bundle therefore reaches the app's own UI, beside a `retryOpen` that cannot mend it; the
   React README tells hosts to branch on `openError.kind`, and the error's message carries no
   secret material. Misuse still goes to the boundary.
+* 2026-10-15: every validator in the core is `zod/mini` (`import * as Z from 'zod/mini'`; the
+  core's lint refuses classic `zod` in `src/`). Same checks, limits and messages as before; mini
+  shares classic's parsing core, and the test suite passes against zod 4.0.0, the peer range's
+  floor, as against the current 4.6. Mini loads no locale, so a zod issue's default message is
+  generic, but no zod message ever reaches a caller: every refusal is a VaultError of our own
+  wording. The build keeps each module its own file in `dist/` (`unbundle`), so a host's bundle
+  carries only the modules its imports reach.

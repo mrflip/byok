@@ -1,4 +1,4 @@
-import * as Z from 'zod'
+import * as Z from 'zod/mini'
 import { VaultError } from './errors'
 
 /** How `mask` shows a whisper: how many characters to reveal, and how many stars to hide it behind. */
@@ -22,12 +22,13 @@ const Collapsed = '***...***'
 /** The most characters `head`, `tail` or `minStars` may ask for: a whiff, not a copy. */
 const MaxShown = 1000
 
-const shownCount = Z.number().int().nonnegative().max(MaxShown)
+const shownCount = Z.int().check(Z.nonnegative(), Z.lte(MaxShown))
+const resultLen = Z.union([Z.literal(Infinity), Z.int().check(Z.nonnegative())])
 const maskOpts = Z.object({
-  head:     shownCount.default(2),
-  tail:     shownCount.default(4),
-  minStars: shownCount.default(6),
-  maxLen:   Z.union([Z.literal(Infinity), Z.number().int().nonnegative()]).default(15),
+  head:     Z._default(shownCount, 2),
+  tail:     Z._default(shownCount, 4),
+  minStars: Z._default(shownCount, 6),
+  maxLen:   Z._default(resultLen, 15),
 })
 
 const parseMaskOpts = (candidate: MaskOpts | undefined): Record<keyof MaskOpts, number> => {

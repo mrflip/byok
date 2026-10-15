@@ -21,7 +21,8 @@ is a bug.
   `import { Lockbox, LockboxKinds } from './lockbox'`.
 * When a list of type imports grows cumbersome, import the types whole under a short name ending
   in `T`: `import type * as VT from './vault-types'`.
-* Follow a library's own import conventions where it has one: `import * as Z from 'zod'` is ours.
+* Follow a library's own import conventions where it has one: `import * as Z from 'zod/mini'` is ours
+  (see *Validation*).
 
 The test for a module between these rules: does the import put *one well-named noun* in scope,
 or several loose verbs? One noun is the goal.
@@ -134,6 +135,11 @@ between columns lets the editor align them (see *Tests*).
   After it, no ambiguity and no undefined-checking paranoia.
 * A Zod schema is the first choice for defaults, coercion, limits and collapsing unions: one
   schema, one message per limit, never a hand-written `if (n > 99) throw` beside it.
+* **`src/` uses `zod/mini`**, never classic `zod` (the linter refuses it): mini's builders
+  tree-shake, so a host pays only for the validators its imports reach. Its schemas are plain
+  functions, its limits checks: `Z.optional(Z.string().check(Z.maxLength(256)))` where classic
+  reads `z.string().max(256).optional()`. A test playing a host may import classic, as a host
+  would.
 * Enumerations lead with their values, then the type: `export const LockboxKindVals = [...] as
   const`, `export type LockboxKind = typeof LockboxKindVals[number]`.
 * Name a schema after what it checks, in the same case: the field `salt_bytes` has the validator
