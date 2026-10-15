@@ -1,5 +1,5 @@
 ---
-"safebyok": minor
+"safebyok": patch
 "safebyok-react": minor
 ---
 
