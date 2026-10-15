@@ -223,7 +223,11 @@ export default defineConfig([
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', {
-        paths: [{ name: 'zod', message: "Import zod/mini (`import * as Z from 'zod/mini'`): classic zod does not tree-shake, and would ride along in every host's bundle." }],
+        // `zod/v4` is classic too, under its version path, and `zod/v3` the classic before it.
+        paths: ['zod', 'zod/v4', 'zod/v3'].map((classicPath) => ({
+          name:    classicPath,
+          message: "Import zod/mini (`import * as Z from 'zod/mini'`): classic zod does not tree-shake, and would ride along in every host's bundle.",
+        })),
       }],
     },
   },
