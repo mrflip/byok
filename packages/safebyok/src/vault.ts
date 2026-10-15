@@ -9,6 +9,7 @@ import {
 import { stableJsonify } from './stable-jsonify'
 import type { DeviceDB } from './device-db'
 import type { VaultDB } from './vault-db'
+import { parseLogger, type VaultLogger } from './logger'
 
 /**
  * Where the vault stands, as the UI branches on it:
@@ -86,6 +87,14 @@ export type OpenVaultOpts = {
    * 'bad_option'.
    */
   maxLockboxes?: number | undefined
+  /**
+   * Where the vault says what it has nobody to throw to -- a lock that skipped its grace, a
+   * background refresh that failed, a remembered unlock it could not read -- as a
+   * {@link VaultLogger}: `log`, `warn` and `error` functions. Default: the console. Never handed
+   * secret material or an option's value; whatever it throws is ignored. Pass functions that do
+   * nothing for quiet. Kind 'bad_option' for anything else.
+   */
+  logger?: VaultLogger | undefined
 }
 
 /**
@@ -132,7 +141,7 @@ export type Vault = {
    *
    * `graceSeconds` is from 0 to 60, fractions too; kind 'bad_option' otherwise. 0 is `lock()`.
    * `close()` cuts the grace short. A clock reading out of bounds cannot time a grace: the vault
-   * then locks at once, as with `lock()`, and says so with a console warning.
+   * then locks at once, as with `lock()`, and says so through the logger's `warn`.
    *
    * @param graceSeconds - How long work in hand has to finish. Default 5.
    *
@@ -267,6 +276,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const scope: VaultScope = { applabel, user_id: opts.userId, vaultlabel }
   const { vaultDB, deviceDB } = opts
   const reentryMs = parseForcePassphraseReentryHours(opts.forcePassphraseReentryHours)
+  const logger = parseLogger(opts.logger)
   const clock = parseClock(opts.clock)
   // Every reading of the host's clock is checked, this first one so that a clock counting in the
   // wrong unit fails the open rather than some later call.
@@ -539,6 +549,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       && checked.data.ask_passphrase_at > now
       && checked.data.ask_passphrase_at <= deadlineAfter(now, reentryMs)
     if (! fits) {
+      // Expired, or outdated by a new passphrase or a shorter setting, is routine; unreadable is worth a word.
+      if (! checked.success) { forgetUnreadableUnlock() }
       await deviceDB.eraseUnlock(scope)
       return
     }
@@ -555,8 +567,15 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       askPassphraseAt = remembered.ask_passphrase_at
     } catch {
       // A record that no longer opens reads as "no remembered unlock": the safe failure.
+      forgetUnreadableUnlock()
       await deviceDB.eraseUnlock(scope)
     }
+  }
+
+  // Neither the record nor the reason it failed is told: the record holds key material, and its
+  // validator's issues may quote it.
+  const forgetUnreadableUnlock = () => {
+    logger.warn("This device's remembered unlock could not be read or would not open, so it was forgotten: the vault opens locked, and asks for the passphrase again.", { call: 'openVault' })
   }
 
   /**
@@ -664,12 +683,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       }
       try {
         shutAfter(graceMs)
-      } catch {
+      } catch (err) {
         // A clock gone wrong cannot time a grace, and the lock still wins: at once, as lock().
         await shut()
         bump()
-        // eslint-disable-next-line no-console -- the Coach's approved stopgap until a pluggable logger replaces it
-        console.warn("safebyok: lockSoon() could not read the clock passed to openVault, so the vault locked at once, without a grace. The clock's now() must return epoch milliseconds, as Date.now() does.")
+        logger.warn("lockSoon() could not read the clock passed to openVault, so the vault locked at once, without a grace. The clock's now() must return epoch milliseconds, as Date.now() does.", { call: 'lockSoon' }, asError(err))
         return
       }
       // A shut in all but the key: an unlock under way loses, no new operation starts, and this
@@ -834,8 +852,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const quietRefresh = async () => {
     try {
       await refresh()
-    } catch {
-      // nobody to throw to: see above
+    } catch (err) {
+      logger.warn("A background refresh from storage failed, so what the vault shows may lag behind storage until its next call, which will meet the same trouble and throw it.", { call: 'refresh' }, asError(err))
     }
   }
   const unsubscribeDB = vaultDB.subscribe(scope, () => { void quietRefresh() })
@@ -849,14 +867,18 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     // the adapter's unsubscribe throws too: what stopped the open is what the caller must act on.
     try {
       vault.close()
-    } catch {
-      // the open's own failure, rethrown below, is the one to report
+    } catch (closeErr) {
+      // The open's own failure, rethrown below, is the one to report; this one is only logged.
+      logger.error("The storage adapter's unsubscribe threw while a failed openVault was closing its storage watch. openVault rejects with the error that stopped the open; this one is the adapter's to mend.", { call: 'openVault' }, asError(closeErr))
     }
     throw err
   }
   bump()
   return vault
 }
+
+/** A thrown value, for a logger: an Error as it is, anything else -- which may be anything at all -- as null. */
+const asError = (thrown: unknown): Error | null => (thrown instanceof Error ? thrown : null)
 
 const lockedError = () => new VaultError('vault_locked', 'The vault is locked: ask the user for their passphrase and call unlock().')
 

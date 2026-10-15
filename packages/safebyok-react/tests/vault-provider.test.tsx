@@ -37,6 +37,22 @@ const Probe = () => {
   )
 }
 
+/** A component that grabs the vault its provider opens, and a wait for that vault. */
+const grabber = () => {
+  const seen: { vault: Vault | null } = { vault: null }
+  const Grab = () => {
+    const { vault } = useVault()
+    useEffect(() => { seen.vault = vault }, [vault])
+    return null
+  }
+  const opened = async (): Promise<Vault> => {
+    await waitFor(() => { expect(seen.vault).to.not.be.null })
+    if (seen.vault === null) { throw new Error('the provider opened no vault') }
+    return seen.vault
+  }
+  return { Grab, opened }
+}
+
 const makeWorld = () => {
   const vaultDB = localVaultDB(memoryStore())
   const deviceDB = memoryDeviceDB()
@@ -185,21 +201,14 @@ describe("VaultProvider", () => {
   it("passes every openVault option through, as given", async () => {
     // A fixed instant the vault accepts as a time: after 1981, before FarFuture.
     const ClockMs = Date.UTC(2026, 9, 15)
-    const seen: { vault: Vault | null } = { vault: null }
-    const Grab = () => {
-      const { vault } = useVault()
-      useEffect(() => { seen.vault = vault }, [vault])
-      return null
-    }
+    const { Grab, opened } = grabber()
     render(
       <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())} deviceDB={memoryDeviceDB()}
         keyDeriver={TH.testDeriver} clock={{ now: () => ClockMs }} forcePassphraseReentryHours={1} maxWhisperBytes={8} maxLockboxes={1}>
         <Grab />
       </VaultProvider>,
     )
-    await waitFor(() => { expect(seen.vault).to.not.be.null })
-    const { vault } = seen
-    if (vault === null) { throw new Error('the provider opened no vault') }
+    const vault = await opened()
 
     await vault.unlock('correct horse battery staple')
     // One hour, 3,600,000 ms, after the clock's time.
@@ -221,6 +230,25 @@ describe("VaultProvider", () => {
       full = err
     }
     expect(isVaultError(full, 'vault_full')).to.be.true
+  })
+
+  it("passes the logger through: what the vault has nobody to throw to reaches it", async () => {
+    const spy = TH.spyLogger()
+    let reading = Date.UTC(2026, 9, 15)
+    const clock = { now: () => reading }
+    const { Grab, opened } = grabber()
+    render(
+      <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())} deviceDB={memoryDeviceDB()}
+        keyDeriver={TH.testDeriver} clock={clock} logger={spy.logger}>
+        <Grab />
+      </VaultProvider>,
+    )
+    const vault = await opened()
+    await vault.unlock('correct horse battery staple')
+    reading = NaN
+    await vault.lockSoon()
+    expect(spy.calls.map((heard) => heard.level)).to.deep.equal(['warn'])
+    expect(spy.calls[0]?.story).to.deep.equal({ call: 'lockSoon' })
   })
 
   describe("when openVault rejects", () => {

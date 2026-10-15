@@ -12,8 +12,9 @@ Bring Your Own Key (BYOK) Browser Vault using E2EE (End-to-end Encryption) and p
 It is react-friendly (`safebyok-react`) and database agnostic: storage adapters implement a small
 abstract seam, IndexedDB adapters ship in `safebyok/idb`, and a Convex adapter is planned.
 `safebyok/testing` is for tests only, star-imported as `TH`: a cheap key deriver, shape-valid
-records with fake ciphertext, a live device unlock, small timing and tampering aids, and
-`describeVaultDB`, the vitest suite every storage adapter owes.
+records with fake ciphertext, a live device unlock, small timing and tampering aids, a logger
+that keeps what it hears (`spyLogger`), and `describeVaultDB`, the vitest suite every storage
+adapter owes.
 `safebyok/utils` holds small helpers for the app around the vault, such as `mask`, which shows
 which API key a lockbox holds (`sk***...***wxyz`) without showing the key. `mask` is intended
 for plain text; calling it with arbitrary blobs may give unusual behavior. It strips every
@@ -130,6 +131,45 @@ package, before this compiles.
 
 For a sign-out, call `lockSoon()` first, then close the handle (in React, unmount the provider)
 once what was under way has settled: closing ends the grace at once.
+
+## Logging
+
+Some things a vault cannot throw to anyone: they happen in the background, or in a call that
+must not fail. It says them to its logger, which `openVault` takes as `logger`, an object with
+three functions, each `(message?, story?, err?) => void`:
+
+```ts
+const vault = await openVault({
+  ...opts,
+  logger: {
+    log:   (message, story) => { telemetry.info(message, story) },
+    warn:  (message, story, err) => { telemetry.warn(message, story, err) },
+    error: (message, story, err) => { telemetry.error(message, story, err) },
+  },
+})
+```
+
+With no logger, the vault writes to the console, each message tagged `safebyok:`. Pass functions
+that do nothing for quiet, or `console` itself to drop the tag. A logger that throws, or returns
+a promise that rejects, is ignored: logging never breaks a lock, an open or a store. Anything
+else is refused as `bad_option`.
+
+Each call is a plain-language `message`; a `story` naming the vault call it happened in
+(`{ call: 'lockSoon' }`); and, when there is one, the error behind it, a `VaultError` or your own
+(your clock's, your storage adapter's). None of the three ever holds a whisper, a passphrase, a
+key, a ciphertext or an option's value, not even the `userId` or the labels: a host with several
+vaults gives each its own logger, bound to whatever context it wants in its logs. Today a vault
+says four things:
+
+* `warn`: `lockSoon()` could not read the clock, so it locked at once, without a grace.
+* `warn`: this device's remembered unlock could not be read or would not open, so it was
+  forgotten, and the vault opened locked. An unlock that simply ran out, or that a new
+  passphrase outdated, is routine, and says nothing.
+* `warn`: a background refresh failed -- one rung by a change in storage, or the catch-up after a
+  write storage refused -- so the snapshot may lag behind storage until the next call, which
+  meets the same trouble and throws it.
+* `error`: a failed `openVault`, closing its storage watch, found the adapter's unsubscribe
+  throwing. `openVault` still rejects with what stopped the open.
 
 ## No recovery
 

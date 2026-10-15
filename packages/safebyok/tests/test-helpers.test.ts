@@ -111,3 +111,44 @@ describe("the fixtures", () => {
     expect(TH.boxOf('anthropic_api_key', 'a1', { note: 'work account' }).note).to.eq('work account')
   })
 })
+
+describe("spyLogger", () => {
+  it("keeps every call it hears, in order, with what it was handed", () => {
+    const spy = TH.spyLogger()
+    const err = new Error('the storage adapter failed')
+    spy.logger.warn('a refresh failed', { call: 'refresh' }, err)
+    spy.logger.log()
+    expect(spy.calls).to.deep.equal([
+      { level: 'warn', message: 'a refresh failed', story: { call: 'refresh' }, err },
+      { level: 'log',  message: undefined,          story: undefined,           err: undefined },
+    ])
+  })
+
+  it("is a logger openVault takes", async () => {
+    const spy = TH.spyLogger()
+    const vault = await openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: localVaultDB(memoryStore()), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver, logger: spy.logger })
+    expect(vault.getSnapshot().state).to.eq('absent')
+    expect(spy.calls).to.have.lengthOf(0)
+  })
+})
+
+describe("loggedText", () => {
+  it("holds each message, story and error, down through every cause and own property", () => {
+    const spy = TH.spyLogger()
+    const deepest = new Error('deepest cause')
+    const tagged = Object.assign(new Error('middle', { cause: deepest }), { detail: 'an own property' })
+    spy.logger.error('the message', { call: 'openVault' }, new Error('the error', { cause: tagged }))
+    const text = TH.loggedText(spy.calls)
+    for (const piece of ['error', 'the message', '"call":"openVault"', 'the error', 'middle', 'an own property', 'deepest cause']) {
+      expect(text).to.include(piece)
+    }
+  })
+
+  it("puts each call on a line of its own, and is blank for none", () => {
+    const spy = TH.spyLogger()
+    expect(TH.loggedText(spy.calls)).to.eq('')
+    spy.logger.log('one')
+    spy.logger.log('two')
+    expect(TH.loggedText(spy.calls).split('\n')).to.have.lengthOf(2)
+  })
+})

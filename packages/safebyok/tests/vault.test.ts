@@ -9,9 +9,9 @@ import type { KeyDeriver } from '../src/key-deriver'
 import * as TH from './test-helpers'
 
 /**
- * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, and an
- * opener. Unlocks derive through the cheap testDeriver, so the suite is not a benchmark of
- * Argon2id; the real deriver has its own tests in key-deriver.test.ts.
+ * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, a
+ * logger that keeps what it hears, and an opener. Unlocks derive through the cheap testDeriver, so
+ * the suite is not a benchmark of Argon2id; the real deriver has its own tests in key-deriver.test.ts.
  */
 const makeWorld = () => {
   const dbStore = memoryStore()
@@ -20,10 +20,11 @@ const makeWorld = () => {
   let nowMs = Date.parse('2026-10-14T12:00:00Z')
   const clock = { now: () => nowMs }
   const advance = (byMs: number) => { nowMs += byMs }
+  const { logger, calls: logged } = TH.spyLogger()
   const open = (overrides?: Partial<OpenVaultOpts>) => (
-    openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB, clock, keyDeriver: TH.testDeriver, ...overrides })
+    openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB, clock, keyDeriver: TH.testDeriver, logger, ...overrides })
   )
-  return { dbStore, vaultDB, deviceDB, clock, advance, open }
+  return { dbStore, vaultDB, deviceDB, clock, advance, logged, open }
 }
 
 const HourMs = 60 * 60 * 1000
@@ -137,15 +138,11 @@ describe("the host's clock", () => {
     const vault = await world.open({ clock: { now: () => reading } })
     await vault.unlock('pw')
     reading = NaN
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => { /* kept out of the test output */ })
-    try {
-      await vault.lockSoon(5)
-      expect(warn).toHaveBeenCalledOnce()
-      expect(String(warn.mock.calls[0]?.[0])).to.match(/locked at once/)
-      expect(String(warn.mock.calls[0]?.[0])).to.not.include('NaN')
-    } finally {
-      warn.mockRestore()
-    }
+    await vault.lockSoon(5)
+    expect(world.logged).to.have.lengthOf(1)
+    expect(world.logged[0]?.level).to.eq('warn')
+    expect(world.logged[0]?.message).to.match(/locked at once/)
+    expect(world.logged[0]?.message).to.not.include('NaN')
     expect(vault.getSnapshot().state).to.eq('locked')
     expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
     reading = world.clock.now()
@@ -2442,9 +2439,10 @@ const delaysAsked = (waits: ReturnType<typeof stillClock>) => waits.mock.calls.m
 describe("versioned updates: two devices writing at once", () => {
   let waits: ReturnType<typeof stillClock>
   beforeEach(() => { waits = stillClock() })
+  // Mocks first: restoring the setTimeout spy after the real timers would put the fake one back.
   afterEach(() => {
-    vi.useRealTimers()
     vi.restoreAllMocks()
+    vi.useRealTimers()
   })
 
   it("a store over a box written meanwhile elsewhere is tried again, and lands over theirs", async () => {
@@ -2687,5 +2685,204 @@ describe("versioned updates: two devices writing at once", () => {
       expect(delaysAsked(waits)).to.have.lengthOf(1)
       await expectRefusal(world.there.read('anthropic'), 'absent_box')
     })
+  })
+})
+
+const drainDown = (): never => { throw new Error('the log drain is down') }
+/** A logger whose every call throws, as a broken log drain might. */
+const throwingLogger = () => ({ log: drainDown, warn: drainDown, error: drainDown })
+
+/** Every ciphertext, salt and wrapped key the backend holds, as base64url text. */
+const storedSecrets = (world: ReturnType<typeof makeWorld>): string[] => {
+  const everything = world.dbStore.ckeys().map((ckey) => world.dbStore.read(ckey) ?? '').join('\n')
+  return Array.from(everything.matchAll(/"(?:ciphertext_b64|passphrase_salt_b64)":"([^"]+)"/g), (hit) => hit[1]!)
+}
+
+describe("the logger", () => {
+  it("hears nothing from a vault going about its business", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake', { note: 'work account' })
+    await vault.read('anthropic')
+    await vault.changePassphrase('pw', 'pw two')
+    await vault.lockSoon(0.01)
+    await vault.unlock('pw two')
+    await vault.erase('anthropic')
+    await vault.lock()
+    world.advance(SevenDaysMs * 2)
+    await world.open()
+    await vault.destroy()
+    vault.close()
+    expect(world.logged).to.have.lengthOf(0)
+  })
+
+  it("is the console when the host passes none, each message tagged safebyok", async () => {
+    const world = makeWorld()
+    let reading = world.clock.now()
+    const vault = await world.open({ logger: undefined, clock: { now: () => reading } })
+    await vault.unlock('pw')
+    reading = NaN
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => { /* kept out of the test output */ })
+    try {
+      await vault.lockSoon()
+      expect(warn).toHaveBeenCalledOnce()
+      expect(String(warn.mock.calls[0]?.[0])).to.match(/^safebyok: lockSoon\(\) could not read the clock/)
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("refuses a logger that is not one, before reading storage", async () => {
+    const world = makeWorld()
+    const readBundle = vi.spyOn(world.vaultDB, 'readBundle')
+    for (const nonsense of [null, {}, { log: () => undefined, warn: () => undefined }, 'console']) {
+      const err = await expectRefusal(world.open({ logger: nonsense as unknown as OpenVaultOpts['logger'] }), 'bad_option')
+      expect(err.message).to.match(/log, warn and error functions/)
+    }
+    expect(readBundle).not.toHaveBeenCalled()
+  })
+
+  it("warns when lockSoon() locks at once on a clock gone wrong, the clock's refusal its error", async () => {
+    const world = makeWorld()
+    let reading = world.clock.now()
+    const vault = await world.open({ clock: { now: () => reading } })
+    await vault.unlock('pw')
+    reading = world.clock.now() / 1000
+    await vault.lockSoon()
+    expect(world.logged).to.have.lengthOf(1)
+    const [heard] = world.logged
+    expect(heard?.level).to.eq('warn')
+    expect(heard?.story).to.deep.equal({ call: 'lockSoon' })
+    expect(heard?.err).to.be.instanceOf(VaultError)
+    expect((heard?.err as VaultError).kind).to.eq('bad_option')
+  })
+
+  it("warns once when a remembered unlock could not be read, telling nothing of the record", async () => {
+    const world = makeWorld()
+    const device = uncheckingDeviceDB()
+    const vault = await world.open({ deviceDB: device.deviceDB })
+    await vault.unlock('pw')
+    device.spoilRow((row) => ({ ...row, ask_passphrase_at: 'soon' }))
+    const later = await world.open({ deviceDB: device.deviceDB })
+    expect(later.getSnapshot().state).to.eq('locked')
+    expect(world.logged).to.have.lengthOf(1)
+    expect(world.logged[0]).to.deep.include({ level: 'warn', story: { call: 'openVault' }, err: undefined })
+    expect(world.logged[0]?.message).to.match(/remembered unlock could not be read/)
+  })
+
+  it("warns when a remembered unlock would not open", async () => {
+    const world = makeWorld()
+    const device = uncheckingDeviceDB()
+    const vault = await world.open({ deviceDB: device.deviceDB })
+    await vault.unlock('pw')
+    device.spoilRow((row) => {
+      const wrapped = row['vault_key_local_wrapped'] as { cipher_iv_b64: string, ciphertext_b64: string }
+      return { ...row, vault_key_local_wrapped: { ...wrapped, ciphertext_b64: TH.tweakB64(wrapped.ciphertext_b64) } }
+    })
+    const later = await world.open({ deviceDB: device.deviceDB })
+    expect(later.getSnapshot().state).to.eq('locked')
+    expect(world.logged.map((heard) => heard.level)).to.deep.equal(['warn'])
+  })
+
+  it("says nothing of a remembered unlock that simply ran out, or that a new passphrase outdated", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    world.advance(SevenDaysMs + 1)
+    const expired = await world.open()
+    expect(expired.getSnapshot().state).to.eq('locked')
+    await vault.unlock('pw')
+    const elsewhere = await world.open({ deviceDB: memoryDeviceDB() })
+    await elsewhere.changePassphrase('pw', 'pw two')
+    const outdated = await world.open()
+    expect(outdated.getSnapshot().state).to.eq('locked')
+    expect(world.logged).to.have.lengthOf(0)
+  })
+
+  it("warns when a background refresh fails, storage's refusal its error", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    world.dbStore.write('box:acme:u1:main:anthropic', '{"not":"a lockbox"}')
+    await TH.wakeupAtNextTick()
+    expect(world.logged.map((heard) => heard.level)).to.deep.equal(['warn'])
+    expect(world.logged[0]?.story).to.deep.equal({ call: 'refresh' })
+    expect((world.logged[0]?.err as VaultError).kind).to.eq('corrupt_record')
+    expect(vault.getSnapshot().boxes).to.have.lengthOf(1)  // the snapshot stands as it was
+  })
+
+  it("tells error when a failed open's storage watch would not close, and the open still rejects with its own error", async () => {
+    const world = makeWorld()
+    const refusal = new VaultError('not_permitted', 'Sign in to reach this vault.')
+    const stuck = new Error('the adapter could not unsubscribe')
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(refusal)
+    vi.spyOn(world.vaultDB, 'subscribe').mockReturnValue(() => { throw stuck })
+    expect(await expectRefusal(world.open(), 'not_permitted')).to.eq(refusal)
+    expect(world.logged).to.have.lengthOf(1)
+    expect(world.logged[0]).to.deep.include({ level: 'error', story: { call: 'openVault' }, err: stuck })
+  })
+
+  it("never breaks a lock, an open, a refresh or a failed open when it throws", async () => {
+    const world = makeWorld()
+    const logger = throwingLogger()
+    const device = uncheckingDeviceDB()
+    let reading = world.clock.now()
+    const clock = { now: () => reading }
+    const vault = await world.open({ logger, deviceDB: device.deviceDB, clock })
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    // a refresh rung in the background, failing
+    const row = world.dbStore.read('box:acme:u1:main:anthropic') ?? ''
+    world.dbStore.write('box:acme:u1:main:anthropic', '{"not":"a lockbox"}')
+    await TH.wakeupAtNextTick()
+    world.dbStore.write('box:acme:u1:main:anthropic', row)
+    // a lock that cannot time its grace
+    reading = NaN
+    await vault.lockSoon()
+    expect(vault.getSnapshot().state).to.eq('locked')
+    reading = world.clock.now()
+    // an open that forgets an unreadable remembered unlock
+    await vault.unlock('pw')
+    device.spoilRow(() => 'not a record')
+    const reopened = await world.open({ logger, deviceDB: device.deviceDB, clock })
+    expect(reopened.getSnapshot().state).to.eq('locked')
+    // a failed open whose watch would not close
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(new VaultError('not_permitted', 'Sign in to reach this vault.'))
+    vi.spyOn(world.vaultDB, 'subscribe').mockReturnValueOnce(() => { throw new Error('the adapter could not unsubscribe') })
+    await expectRefusal(world.open({ logger }), 'not_permitted')
+  })
+
+  it("is never handed a whisper, a passphrase, a ciphertext or a salt, whatever it hears", async () => {
+    const world = makeWorld()
+    const device = uncheckingDeviceDB()
+    const whisper = 'sk-FAKESECRET-whisper'
+    const passphrase = 'FAKESECRET passphrase'
+    let reading = world.clock.now()
+    const clock = { now: () => reading }
+    const vault = await world.open({ deviceDB: device.deviceDB, clock })
+    await vault.unlock(passphrase)
+    await vault.store('anthropic', whisper, { note: 'FAKESECRET note' })
+    await vault.changePassphrase(passphrase, `${passphrase} two`)
+    const secrets = storedSecrets(world)
+    // every call site: a remembered unlock unreadable, a background refresh refused, a lock
+    // without its grace, a failed open's watch stuck open
+    device.spoilRow((row) => ({ ...row, ask_passphrase_at: `${passphrase} ${whisper}` }))
+    const reopened = await world.open({ deviceDB: device.deviceDB, clock })
+    reopened.close()
+    world.dbStore.write('box:acme:u1:main:anthropic', JSON.stringify({ ...storedRowOf(world, 'anthropic'), changed_at: whisper }))
+    await TH.wakeupAtNextTick()
+    reading = Infinity
+    await vault.lockSoon()
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(new VaultError('not_permitted', 'Sign in to reach this vault.'))
+    vi.spyOn(world.vaultDB, 'subscribe').mockReturnValueOnce(() => { throw new Error('the adapter could not unsubscribe') })
+    reading = world.clock.now()
+    await expectRefusal(world.open(), 'not_permitted')
+    expect(world.logged.map((heard) => heard.level)).to.deep.equal(['warn', 'warn', 'warn', 'error'])
+    const text = TH.loggedText(world.logged)
+    expect(text.toLowerCase()).to.not.include('fakesecret')
+    expect(secrets.length).to.be.greaterThan(2)
+    for (const secret of secrets) { expect(text).to.not.include(secret) }
   })
 })

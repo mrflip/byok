@@ -154,13 +154,24 @@ security expert who knows what questions to ask.
   `bad_option`, so a clock gone wrong never mints a deadline or a stored time, and leaves the vault
   locked in memory (the device record stays). A lock never waits on the clock: `lock()` reads
   none, and `lockSoon()`, unable to time its grace, locks at once and returns normally, with a
-  console warning (below). A clock that goes wrong in the middle of a `store()`, `erase()` or
+  warning to the vault's logger (below). A clock that goes wrong in the middle of a `store()`, `erase()` or
   `changePassphrase()` lets the write land, then throws `bad_option` from the refresh after it. A
   clock in bounds but wrong (set a year ahead, say) is not detected.
-* 2026-10-15: `lockSoon()` on a bad clock calls `console.warn` once, a fixed message quoting no
-  value. It is the package's one console write (`src/` otherwise writes none, the linter
-  enforcing it), under a single `eslint-disable-next-line no-console`, approved by the Coach until
-  a pluggable logger (second_harvest thread 7) replaces it.
+* 2026-10-15: `openVault` takes a host's `logger` (`log`, `warn`, `error`, each
+  `(message?, story?, err?)`), checked at the door (`bad_option`) and wrapped so that whatever it
+  throws or rejects with is dropped. The vault calls it in four places: `lockSoon()` locking
+  without its grace on a bad clock; a remembered unlock that fails its schema or will not unwrap,
+  erased; a background refresh that fails; and an adapter's unsubscribe throwing while a failed
+  open cleans up. Messages are fixed text; a story is `{ call }` alone, naming the vault call, so
+  no scope, label, `userId` or other option value goes to the logger; an `err` is the
+  `VaultError` the vault would otherwise have thrown (its `cause` the host's own clock or adapter
+  error, as `VaultError` already carries it) or the adapter's own error, never a record or a
+  validator's issues. A test sweeps every call for the fake passphrase, whisper, note, stored
+  ciphertexts and salts, down through each error's causes.
+* 2026-10-15: with no `logger`, the vault logs to the console: `src/console-logger.ts` is the one
+  module in `src/` that touches it, under a file-wide `eslint-disable no-console` (the Coach's
+  approval: "yes with no logger console is the fallback"); the lint rule itself is unchanged
+  everywhere else. A host silences it by passing a logger whose calls do nothing.
 * 2026-10-15: a lockbox keeps two times, `registered_at` (first stored, carried forward) and
   `changed_at`, which moves only when the whisper's serialized form (`stableJsonify`) differs from
   the one it replaces. To know, `store()` deciphers the previous record it already reads and

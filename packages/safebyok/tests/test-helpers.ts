@@ -2,12 +2,14 @@
  * safebyok's test helpers, everything in one module: star-import it as `TH` in this package's
  * tests (`import * as TH from './test-helpers'`), and from `safebyok/testing` in another package's.
  * A cheap key deriver, shape-valid records whose ciphertext is fake, a live device unlock, small
- * timing and tampering aids, and the suite every VaultDB adapter owes. For tests only, and under
+ * timing and tampering aids, a logger that keeps what it hears, and the suite every VaultDB
+ * adapter owes. For tests only, and under
  * vitest: the deriver is worthless against a brute-forcer.
  */
 import { describe, expect, it } from 'vitest'
 import type { Ciphered } from '../src/crypto'
 import type { KeyDeriver } from '../src/key-deriver'
+import type { VaultLogger } from '../src/logger'
 import type { DeviceUnlock, Lockbox, VaultBundle, VaultScope } from '../src/types'
 import type { VaultDB } from '../src/vault-db'
 
@@ -162,6 +164,54 @@ const deferred = () => {
   // eslint-disable-next-line unicorn/prefer-promise-with-resolvers -- Promise.withResolvers is ES2024, and every tsconfig's lib stops at ES2023
   const promise = new Promise<void>((resolver) => { resolve = resolver })
   return { promise, resolve }
+}
+
+/** One call a {@link spyLogger} heard: which of the three, and what it was handed. */
+export type LoggedCall = {
+  level:   keyof VaultLogger
+  message: string | undefined
+  story:   Record<string, unknown> | undefined
+  err:     Error | null | undefined
+}
+
+/**
+ * A VaultLogger that logs nowhere and keeps every call it hears, in order, for a test to look at.
+ *
+ * @returns The `logger` to hand openVault, and the `calls` it has heard so far.
+ *
+ * @example
+ *   const spy = TH.spyLogger()
+ *   const vault = await openVault({ ...opts, logger: spy.logger })
+ *   spy.calls.map((call) => call.level)  // => ['warn'], say
+ */
+export const spyLogger = () => {
+  const calls: LoggedCall[] = []
+  const hear = (level: keyof VaultLogger): VaultLogger[typeof level] => (message, story, err) => {
+    calls.push({ level, message, story, err })
+  }
+  const logger: VaultLogger = { log: hear('log'), warn: hear('warn'), error: hear('error') }
+  return { logger, calls }
+}
+
+/**
+ * Everything a logger was handed, as one text to search for what must never be there: each
+ * call's message, its story as JSON, and its error -- message, stack, own properties -- down
+ * through every cause.
+ *
+ * @param calls - What a {@link spyLogger} heard.
+ * @returns The text, one call to a line.
+ *
+ * @example expect(TH.loggedText(spy.calls)).to.not.include(passphrase)
+ */
+export const loggedText = (calls: readonly LoggedCall[]): string => (
+  calls.map((call) => [call.level, call.message ?? '', JSON.stringify(call.story ?? {}), errorText(call.err)].join(' ')).join('\n')
+)
+
+/** An error and every cause under it as text: message, stack and own properties each. Anything else thrown, as String does it. */
+const errorText = (thrown: unknown): string => {
+  if (thrown === undefined || thrown === null) { return '' }
+  if (! (thrown instanceof Error)) { return JSON.stringify(thrown) }
+  return [thrown.message, thrown.stack ?? '', JSON.stringify(thrown), errorText(thrown.cause)].join(' ')
 }
 
 /**
