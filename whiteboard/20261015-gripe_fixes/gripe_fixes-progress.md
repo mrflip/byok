@@ -10,7 +10,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 1 | kdf_configs        | #66 tip `5fefc90`     | filed [#68](https://github.com/mrflip/safebyok/pull/68) |
 | 2 | vaultdb_validation | #66 tip `5fefc90`     | filed [#70](https://github.com/mrflip/safebyok/pull/70) |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
-| 4 | ci_tooling         | #66 tip `5fefc90`     | filing |
+| 4 | ci_tooling         | #66 tip `5fefc90`     | filed [#72](https://github.com/mrflip/safebyok/pull/72) |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
 | 6 | thin_tests         | #70 tip `d874db3`     | underway |
 | 7 | test_helpers       | thread 6's tip        | pending (after 6 files) |
@@ -101,3 +101,12 @@ and fixed `wakeupAtNextTick`'s `@example` (doc block only) -- thread 7, leave th
 For the Coach: a Dependabot PR that moves a public package's runtime dependency now fails CI
 until a changeset is pushed to its branch (after which Dependabot stops rebasing it); the
 Version PR's skip trusts the `changeset-release/` branch name (predates).
+
+*Orchestrator:* thread 4 filed as [#72](https://github.com/mrflip/safebyok/pull/72). *Review:*
+`fixed` -- `dependabot.yml`'s comment lost its dated run record (a progress note); the worker then
+made `SAFEBYOK_SKIP_BUILD_DEPS` skip only on exactly `1` and corrected the "side by side" wording.
+Verified by reading: the npm hash check fails closed before the install; the gate fails if its
+script errors; every test path builds first. Not run: GitHub Actions itself. Left, as open
+questions: a build failure skips every package's tests (deliberate); the Dependabot gate keys on the
+PR's author; removed/made-private packages, `peerDependenciesMeta`, `bundledDependencies` not
+compared; `justify:root` unused; convex's `./test` entry imports a devDependency (predates).
