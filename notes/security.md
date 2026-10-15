@@ -17,7 +17,10 @@ security expert who knows what questions to ask.
   listing. `store()` over a lockbox whose record fails validation or verification now erases it
   (`eraseBox`, expecting only the `vault_id`) and then writes a fresh lockbox expecting no revision,
   carrying neither its note nor its `registered_at`; two steps, so a failure between them leaves
-  the box erased. What one who can write storage could already do -- erase or replace any row --
+  the box erased. Since that erase names no revision, it also removes a sound lockbox another
+  device stored under the boxlabel after this store read the damaged one (this store's write then
+  stands in its place, as a retried store's would, but should the write fail, neither stands),
+  and an erase of the damaged box elsewhere does not stop this store. What one who can write storage could already do -- erase or replace any row --
   is unchanged; what is new is that planting junk under a boxlabel shows the user a damaged box
   where a refused open used to show, and that the user's next `store()` to that boxlabel clears
   the junk rather than refusing. `read()` and `use()` still refuse a damaged box.
