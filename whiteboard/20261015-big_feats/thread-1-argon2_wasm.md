@@ -1,6 +1,6 @@
 # Thread 1: argon2_wasm (2026-10-15)
 
-Branch `20261015-argon2_wasm`, PR not yet filed, stacked on #68 (kdf_configs). Justify: green --
+Branch `20261015-argon2_wasm`, PR #74, stacked on #68 (kdf_configs). Justify: green --
 root 105, core 756, argon2-wasm 44, convex 265, react 28, demo 61. `pnpm size` within every budget.
 
 * **Built**: `packages/safebyok-argon2-wasm/`, a new public package (version 0.0.0, the
@@ -62,7 +62,7 @@ package's exports (a8c814e), and a security note that hash-wasm never zeroes its
 and older Safari may need `'unsafe-eval'`; `pnpm size` builds the core twice; `refusalOf` is
 duplicated between the core's tests and this package's.
 
-## For the Coach
+## For the Coach (also PR #74's open questions)
 
 * Confirm the new core export `parseKeyDeriverSpec` (public surface, minor).
 * hash-wasm has no published audit; it is the dependency you named. Worth a look by a security
