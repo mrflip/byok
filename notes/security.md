@@ -600,3 +600,28 @@ security expert who knows what questions to ask.
   first, or it may deadlock with `eraseVault`; the DDL's comments and the README say so, and give
   the recount statement for a count gone astray. The refusal's message names the limit, never a
   boxlabel or a record.
+* 2026-10-15: a host's own checks replace ours for every name and the note
+  (`openVault({ validators })`, any Zod 4 schema), with no floor beneath them, since the ckeys
+  (JSON tuples) and the cipher binding (a JSON array) take any text. What holds: **a check only
+  checks** -- what the host passed is what is stored and bound, never the schema's output, so a
+  trimming or lowercasing schema cannot move a user to another vault or strand ciphertext; **the
+  refusal is ours**, `bad_label` or `bad_option`, naming the field and never quoting the name or
+  the schema's issues (a host refine's thrown error rides along as `cause`, as a host's own error
+  does elsewhere); a schema that is async or throws is refused as misuse, never taken as a pass.
+  **Every name is checked everywhere**: the vault and every `VaultDB` verb check with the same
+  bag, records read back included, so a stored row whose name or note the vault's checks refuse
+  is `corrupt_record`, not trusted; the bag never reaches storage or the Convex server, which take
+  any text. The stored records (`Lockbox`, `VaultBundle`, `DeviceUnlock`, `VaultScope`) now check
+  names only as text, as does an unlock envelope's `unlocklabel`: the `Label` grammar holds when a
+  way in is added (`addPassphrase`, `addPasskey`), and a stored envelope under another label still
+  opens, since the host's validators have no slot for it. A host's schema runs on names and the note only, never on a whisper or a
+  passphrase. A host that admits any text (`AnyTextValidators`) shows its users labels that may
+  carry bidirectional or invisible characters, a spoofing risk in its UI that is the host's to
+  mind. **Sizes**: with names and notes unbounded, the static 2 KiB allowance no longer bounds a
+  lockbox's other fields. It stays only as openVault's plan for `maxLockboxes` at the default
+  checks; `updateBox` now weighs each lockbox with its scope as the UTF-8 bytes of its JSON and
+  refuses one over the adapter's `maxRecordBytes` (`lockbox_too_large`), and each `store()`
+  refuses a lockbox heavier than the one it replaces when the vault, each lockbox counted at twice
+  `maxWhisperBytes`, 512 bytes for its fixed-size fields and its measured names and note, would
+  pass `maxVaultBytes` (`vault_full`). The vault's total is reckoned from the snapshot's listing,
+  so a vault another device filled meanwhile is caught by the backend's own limit, as before.
