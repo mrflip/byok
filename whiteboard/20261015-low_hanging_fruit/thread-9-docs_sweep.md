@@ -1,0 +1,45 @@
+# Thread 9: docs_sweep (2026-10-15)
+
+Branch `20261015-docs_sweep`, PR not yet filed, cut from `origin/main` (eb75330). Justify: green
+(core 242 tests, convex 210, react 9, demo 28, root 67).
+
+* **Built**: each stale line the canvass found, in four commits by prefix.
+  - `docs:` doc blocks. `types.ts` `Label` no longer lists `userlabel` (and says `user_id` is the
+    host's auth identity, deliberately not a Label). `vault-db.ts` (`localVaultDB`, its
+    `maxRecordBytes` comment) and `string-store.ts` (the file header and `domStore`) lose "stub",
+    "pretend" and "stand-in": `localVaultDB` is described as a real device-only store.
+    `VOCABULARY.md`'s `revisionId` row now names `stale_write`.
+  - `docs:` `packages/safebyok/README.md` gains two sections at its end: *Locking* (the
+    `visibilitychange` -> `vault.lock()` recipe, Idle Detection as the only true screen-lock
+    signal, `lockSoon()` named as the gentler callee once it lands) and *No recovery*.
+    `notes/security.md`'s release bullet now describes the push-to-main workflow and the `pack`
+    job's `pnpm justify`, not the release-published trigger and `prepublishOnly`.
+  - `demo:` `src/lib/persist-storage.ts` (`keepStorage`, tested) is called from `main.tsx`, so the
+    demo calls `navigator.storage.persist()` as `src/idb.ts`'s doc block says a host should.
+  - `client:` the unlock dialog (the `locked` branch of `PassphraseModal`) now says a forgotten
+    passphrase cannot be recovered; the create branch already did. New
+    `tests/passphrase-modal.test.tsx`. Changeset `.changeset/20261015-docs_sweep.md`.
+
+* **Decisions taken**:
+  - Changeset is a real `safebyok-react` patch: the dialog's user-visible text changed. The
+    lockstep group moves both packages; the README and doc-block edits ride with it.
+  - The core README had no locking section (it is 15 lines); I added *Locking* and *No
+    recovery* at the end of the file, so threads 1 and 2's README edits rebase mechanically.
+  - The locked-state dialog sentence tells the user they would "start a new vault and re-enter
+    your secrets", the proposed README's "annoying, not catastrophic" in the user's terms.
+  - `notes/security.md`: only the release bullet changed; the `rememberForMs` wording stays
+    until roadmap 3, and the 2026-10-14 "replacing the plaintext stub" bullet is dated history.
+
+* **Deviations**: the demo's persist call needed a small module rather than a bare line, so it
+  could carry a doc block and tests (STYLE.md); `main.tsx` stays a boot line.
+
+* **Discoveries**:
+  - `vault.ts` still says "pretending otherwise" (line ~130) and "pretending to be current"
+    (~216); both are ordinary English about a design point, not the stub-era wording, so left.
+  - `.devcontainer/devcontainer.json` volumes are still `byok-${devcontainerId}-claude` and
+    `-node_modules`: not edited (the Coach's rebuild). Renaming them orphans the existing
+    volumes, which is the cost the Coach should weigh at rebuild.
+  - The dialog's unlock copy is not covered by the demo or other tests; only the new modal test.
+
+* **For the Coach**: the `.devcontainer` volume names above. The *Locking* recipe is the host
+  line the rulings asked for; the React `lockWhenHidden` prop stays ruled-but-not-yet.
