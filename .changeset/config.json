@@ -4,6 +4,6 @@
   "access": "public",
   "changelog": ["@changesets/changelog-github", { "repo": "mrflip/safebyok" }],
   "commit": false,
-  "fixed": [["safebyok", "safebyok-react", "safebyok-convex"]],
+  "fixed": [["safebyok", "safebyok-react", "safebyok-convex", "safebyok-indexeddb"]],
   "privatePackages": { "version": false, "tag": false }
 }
