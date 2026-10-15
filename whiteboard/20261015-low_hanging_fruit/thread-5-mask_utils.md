@@ -1,6 +1,6 @@
 # Thread 5: mask_utils (2026-10-15)
 
-Branch `20261015-mask_utils`, PR not yet filed, cut from `origin/main`. Justify: green (core 310
+Branch `20261015-mask_utils`, PR [#37](https://github.com/mrflip/safebyok/pull/37), cut from `origin/main`. Justify: green (core 310
 tests, convex 213, react 7, demo 24, root 72).
 
 * **Built**: `safebyok/utils`, a new entry point (`src/utils.ts`, a `tsdown.config.ts` line, the
@@ -69,3 +69,5 @@ tests, convex 213, react 7, demo 24, root 72).
   `api:`-prefixed, and d30cf0d (`utils:`) can be reworded to `api:` when filing.
 * **For the Coach**: the `maskAll` call (struck), `''` for an empty whisper, `maxLen` winning over
   `minStars` and refused below `head + tail + 9`, the strip list, and the changeset being `minor`.
+  Also open: should the strip list take U+00AD, U+2061-2064, U+180E and U+034F too, and should `mask`
+  validate lighter than `Z.object` (it ships zod)?
