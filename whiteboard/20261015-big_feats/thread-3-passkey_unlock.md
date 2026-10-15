@@ -1,6 +1,6 @@
 # Thread 3: passkey_unlock (2026-10-15)
 
-Branch `20261015-passkey_unlock`, PR not yet filed, stacked on #71. Justify green: root 105, core
+Branch `20261015-passkey_unlock`, PR [#76](https://github.com/mrflip/safebyok/pull/76), stacked on [#71](https://github.com/mrflip/safebyok/pull/71). Justify green: root 105, core
 804 (was 759), Convex 272 (was 269), React 47 (was 28), demo 61; `pnpm size` within the raised
 limits.
 
