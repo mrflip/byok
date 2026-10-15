@@ -7,11 +7,12 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
-* 2026-10-14: the package is staged on npm by `.github/workflows/release.yml`, run when a
-  GitHub release is published, authenticating by npm's trusted publishing (OIDC, no stored
-  token) from the `npm` environment, with provenance. `prepublishOnly` runs lint, typecheck,
-  tests and the build in that same job. A maintainer's 2FA approval makes the staged version
-  public; CI cannot give it.
+* 2026-10-14: the package is staged on npm by `.github/workflows/release.yml`, run on every push
+  to main (when the Coach has merged the Version PR, and a version npm lacks is waiting),
+  authenticating by npm's trusted publishing (OIDC, no stored token) from the `npm`
+  environment, with provenance. The `pack` job runs `pnpm justify` (lint, typecheck, tests and
+  the build) before `publish`, which runs no package's scripts. A maintainer's 2FA approval makes
+  the staged version public; CI cannot give it.
 * 2026-10-14: the npm trusted publisher allows `npm stage publish` and `npm dist-tag`, and not
   `npm publish`. A run of the release workflow can therefore repoint a dist-tag (`latest`,
   `next`) at any version already public, with no 2FA approval; the workflow does not run
