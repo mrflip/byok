@@ -81,6 +81,12 @@ Branch `20261015-damaged_boxes`, PR [#93](https://github.com/mrflip/safebyok/pul
     `NameableLockbox` should check through `Names.admits`, which would have left those boxes out of
     the listing instead of listing them damaged.
   - `read()` of a box under a refused name refuses `bad_label`, not `corrupt_record`.
+  - Second review (`fixed`): `Ckeys.boxlabelOf` names a label only for the exact text `Ckeys.box`
+    writes (a38ac3d), and the docs say a damaged box's boxlabel is its stored text, which the
+    host's check may refuse (751b1a3). Left for the Coach: refused text now reaches
+    `snapshot.boxes`, and closing that means capping or omitting such labels. Minor: erase reads
+    twice; `checkStandingBoxlabel` calls `Names.check` only for its error; the host check runs up
+    to four times per verb; `read()`'s doc doesn't mention `bad_label`.
 * **For the Coach**:
   - Breaking for hosts (pre-1.0 minor): a host reading `snapshot.boxes[i].note` must check
     `damaged` first; a host's own `VaultDB` maps its listing to `{ boxlabel, lockbox }`.
