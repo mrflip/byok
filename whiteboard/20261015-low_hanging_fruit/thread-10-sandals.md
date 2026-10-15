@@ -1,6 +1,6 @@
 # Thread 10: sandals (2026-10-15)
 
-Branch `20261015-sandals`, PR not yet filed, cut from `origin/main` (b329343). Justify: green --
+Branch `20261015-sandals`, PR not yet filed, rebased onto `origin/main` after #29, cut from `origin/main` (b329343). Justify: green --
 root 3 files / 67 tests; core 11 / 243; convex 6 / 210; react 1 / 7; demo 3 / 24. About 37 s.
 
 * **Built**: TODO.md's *Sand in the sandals*, one commit per item (the changeset is its own, empty).
@@ -23,7 +23,8 @@ root 3 files / 67 tests; core 11 / 243; convex 6 / 210; react 1 / 7; demo 3 / 24
     `include: ['src/**/*.{ts,tsx}']`, the same reporters as the others). Honest numbers: the demo's
     tests cover `src/lib`, not its components (22% overall).
   - `tools:` the root `eslint.config.mjs` ignores `**/dist/**`.
-  - `tools:` the two React eslint configs' header comments wrap at 100 columns.
+  - `tools:` the two React eslint configs' header comments wrap at 100 columns. (Dropped at the
+    rebase: #29 rewrote both headers and they already wrap.)
 
 * **Decisions taken**:
   - File name `test-helpers.ts`, not `TestHelpers.ts`: the lint rule `unicorn/filename-case` is
@@ -63,6 +64,15 @@ root 3 files / 67 tests; core 11 / 243; convex 6 / 210; react 1 / 7; demo 3 / 24
     dependency, needs a Coach's yes. I would do (1) when the next thread touches the scripts.
 
 * **For the Coach**:
+  - **A bug the review found, deliberately not fixed here.** The new root scripts end in
+    `exit $(( root || $? ))`, and pnpm appends extra arguments after the script text. So
+    `pnpm lint --fix` or `pnpm test -- -t name` loses its arguments under dash, and under
+    bash-as-`sh` (macOS) exits 1 with `exit: too many arguments` even when everything passed.
+    Nothing in the repo or CI passes arguments today. The reviewer's suggested fix, for each of
+    `lint`, `typecheck`, `test`, `test:coverage` and `justify`:
+    `both() { pnpm lint:root; root=$?; pnpm -r --no-bail --stream lint "$@"; exit $(( root || $? )); }; both`.
+    The reviewer's edit was refused by a permission check, so it was not applied, and the
+    orchestrator told me not to apply it either: it is the Coach's to rule on.
   - Overlap with `/workspace/byok-strict_configs`, which rewrites the same eslint configs and root
     scripts: expect conflicts in `package.json` (the five script lines), the two React
     `eslint.config.mjs` header comments, and the root `eslint.config.mjs` ignore list. Whichever
