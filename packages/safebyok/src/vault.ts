@@ -120,12 +120,13 @@ export type Vault = {
    * The write lands only if storage still holds what this device last read: the same vault, and
    * the same revision of this lockbox (or still none). When another device got in first, the
    * store catches up with storage and tries again, over what that device wrote -- the last
-   * writer wins -- for three attempts in all. A box that stood when the store began and is gone
-   * on the retry was erased elsewhere, and an erase wins: that throws kind 'stale_write' at once. Only after the third is refused does the call throw
-   * kind 'stale_write', the snapshot showing the box as it now stands. A retry that finds the vault
-   * destroyed or made anew elsewhere, or its passphrase changed, finds this device relocked
-   * instead, and throws kind 'vault_locked' without writing: a stale session never writes into a
-   * vault reborn under new keys.
+   * writer wins -- for three attempts in all, and throws kind 'stale_write' only when the third is
+   * refused too, the snapshot showing the box as it now stands. A box that stood when an attempt
+   * read it and is gone on the retry was erased elsewhere, and an erase wins: nothing is written,
+   * and the call throws kind 'stale_write' at once. A retry that finds the vault destroyed or
+   * made anew elsewhere, or its passphrase changed, finds this device relocked instead, and
+   * throws kind 'vault_locked' without writing: a stale session never writes into a vault reborn
+   * under new keys.
    *
    * `opts.note` is the lockbox's public note, shown while locked: text of at most 256
    * characters, or null for none -- kind 'bad_option' otherwise. Left out, the lockbox keeps the
