@@ -542,4 +542,11 @@ security expert who knows what questions to ask.
   count update and a waiting insert cannot deadlock. Holding the lock also keeps the bundle, so the
   insert no longer meets a foreign-key failure from a vault erased meanwhile. A replacement is never
   refused for the count, nor is a first write whose boxlabel is already taken (it refuses as
-  `stale_write`). The refusal's message names the limit, never a boxlabel or a record.
+  `stale_write`): the insert re-reads only the locked bundle row, its view of the lockboxes being
+  the statement's snapshot, so a full vault is told from a stale writer by one fresh read of that
+  boxlabel before refusing. Under REPEATABLE READ or SERIALIZABLE, any two concurrent writes that
+  add or remove a lockbox in one vault can fail with a serialization error (`storage_unavailable`),
+  each moving the bundle row's count. A host's own SQL deleting lockboxes must lock the bundle row
+  first, or it may deadlock with `eraseVault`; the DDL's comments and the README say so, and give
+  the recount statement for a count gone astray. The refusal's message names the limit, never a
+  boxlabel or a record.

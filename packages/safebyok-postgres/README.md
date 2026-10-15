@@ -30,6 +30,20 @@ await pool.query(VaultTablesSql)    // pg runs several statements in one query w
 await pglite.exec(VaultTablesSql)   // PGlite
 ```
 
+**Each vault's count of lockboxes** sits on its bundle's row (`lockbox_count`), kept by a trigger
+whatever statement adds or removes a lockbox, your own SQL included. Two things it asks of that
+SQL:
+
+* **Lock the bundle's row before deleting lockboxes** (`SELECT ... FROM safebyok_bundles WHERE
+  ... FOR UPDATE`, in the same transaction), as the adapter does: otherwise the trigger may
+  deadlock with an erase of the whole vault.
+* **Never `TRUNCATE` the lockboxes alone**, as a truncate fires no row trigger. If a count goes
+  astray, after that or after a restore with triggers off, this sets every vault's right:
+
+```sql
+UPDATE safebyok_bundles AS bundle SET lockbox_count = (SELECT count(*) FROM safebyok_lockboxes AS box WHERE (box.applabel, box.user_id, box.vaultlabel, box.vault_id) = (bundle.applabel, bundle.user_id, bundle.vaultlabel, bundle.vault_id));
+```
+
 ## Where it runs
 
 Postgres has nowhere to run a vault's verbs, and the vault itself runs in the browser. So
@@ -50,9 +64,13 @@ const vaultDB = postgresVaultDB({ client: pool, userId: session.userId })
 * **`client`** is anything with `query(text, params)` resolving to `{ rows }`: a `pg` Pool,
   Client or PoolClient, or a PGlite, as they stand. postgres.js takes a wrapper:
   `{ query: async (text, params) => ({ rows: await sql.unsafe(text, params) }) }`.
-* **Every verb is one statement**, atomic as Postgres makes every statement, so it asks no
+* **Every write is one statement**, atomic as Postgres makes every statement, so it asks no
   transaction of your driver: a write lands only while what it expects still stands, and refuses
-  with kind `stale_write` otherwise.
+  with kind `stale_write` otherwise. A new lockbox refused for a full vault costs one read more.
+* **Isolation**: every write holds under READ COMMITTED, Postgres's default. Under REPEATABLE
+  READ or SERIALIZABLE, any two writes that add or remove a lockbox in one vault at once may fail
+  with a serialization error, as `storage_unavailable`, since each moves the count on the vault's
+  bundle row, and the call may simply be tried again.
 * **`maxLockboxes`**, 1000 unless you say otherwise, is the most lockboxes one vault holds: see
   *A limit of the server's own*, below.
 * **Trouble** refuses with kind `storage_unavailable`, your driver's own error as its `cause`.
@@ -309,7 +327,9 @@ shape of table, copy it, and keep to what makes it right:
   READ COMMITTED, each statement counts from its own snapshot. Here a trigger keeps the count on
   the bundle's row, and the insert locks that row (`FOR UPDATE`) before reading it, so racing
   writes take turns, and a write that waited reads the count its forerunner left. Lock the
-  bundle first in an erase too, so the trigger and a waiting insert never deadlock.
+  bundle first in an erase too, so the trigger and a waiting insert never deadlock. Only the
+  locked row is re-read: before refusing a full vault, look afresh for the boxlabel, since the
+  write you waited on may have stored it, and that writer is only stale.
 * **Prove it with the shared suite**: `describeVaultDB` from `safebyok/testing` runs every verb,
   expectation and refusal against a fresh adapter. Its two users' vaults go through one adapter,
   so a per-request adapter answers it with one VaultDB per user (`perUser` in

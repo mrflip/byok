@@ -741,7 +741,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     if (othersCount() < lockboxLimit) { return }
     await refresh()
     if (othersCount() < lockboxLimit) { return }
-    throw new VaultError('vault_full', `This vault already holds its limit of ${String(lockboxLimit)} lockboxes: erase one before storing another. If the vault really is meant to hold more, pass a larger maxLockboxes to openVault.`)
+    throw new VaultError('vault_full', `This vault already holds its limit of ${String(lockboxLimit)} lockboxes: erase one before storing another. A vault meant to hold more can be opened with a larger maxLockboxes, up to what its storage adapter allows.`)
   }
 
   const readBoxOrThrow = async (boxlabel: string) => {

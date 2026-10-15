@@ -49,6 +49,22 @@ describe("VaultTablesSql", () => {
     ])
   })
 
+  it("sets a count gone astray right with the recount its comments and the README give", async () => {
+    const recount = "UPDATE safebyok_bundles AS bundle SET lockbox_count = (SELECT count(*) FROM safebyok_lockboxes AS box WHERE (box.applabel, box.user_id, box.vaultlabel, box.vault_id) = (bundle.applabel, bundle.user_id, bundle.vaultlabel, bundle.vault_id));"
+    const readme = readFileSync(path.join(import.meta.dirname, '..', 'README.md'), 'utf8')
+    expect(VaultTablesSql).to.include(recount)
+    expect(readme).to.include(recount)
+    const db = await TH.emptyDatabase()
+    const vaultDB = TH.requestFor(db, 'u1')
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('openai', 'sk-fake'), { vault_id: 'vault-id-u1', revision_id: null })
+    await db.exec('TRUNCATE safebyok_lockboxes')
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-u1', revision_id: null })
+    await db.exec(recount)
+    const { rows } = await db.query('SELECT lockbox_count FROM safebyok_bundles')
+    expect(rows).to.deep.equal([{ lockbox_count: 1 }])
+  })
+
   it("notifies the channel the adapter listens on", () => {
     expect(VaultTablesSql).to.include(`pg_notify('${VaultChangeChannel}'`)
   })

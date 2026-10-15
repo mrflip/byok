@@ -305,6 +305,39 @@ describe("postgresVaultDB, its lockbox limit", () => {
     expect(await vaultDB.readBox(u1, 'openai')).to.deep.equal(standing)
   })
 
+  it("looks afresh before refusing a full vault: a boxlabel the write it waited on stored makes it stale_write, not vault_full", async () => {
+    // As a race leaves it: the insert found the vault full by the count it re-read under the lock,
+    // while its snapshot of the lockboxes predates the one stored under this boxlabel meanwhile.
+    const db = await TH.emptyDatabase()
+    await filledTo(db, 2, ['openai'])
+    const raced = postgresVaultDB({ client: db, userId: 'u1', maxLockboxes: 2 })
+    await raced.updateBox(u1, TH.boxOf('anthropic', 'sk-fake-theirs'), noBoxYet)
+    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, full: true }] }) : undefined))
+    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 2 })
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake-mine'), noBoxYet), 'stale_write')
+    expect(spy.sent).to.have.lengthOf(2)
+    expect(spy.sent[1]?.params).to.deep.equal(['acme', 'u1', 'main', 'anthropic', 'vault-id-u1'])
+  })
+
+  it("refuses vault_full when the fresh look finds no lockbox under that boxlabel", async () => {
+    const db = await TH.emptyDatabase()
+    await filledTo(db, 1, ['openai'])
+    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, full: true }] }) : undefined))
+    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 1 })
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'vault_full')
+    expect(spy.sent).to.have.lengthOf(2)
+  })
+
+  it("asks nothing more of a first write that lands, or of one that is only stale", async () => {
+    const db = await TH.emptyDatabase()
+    await filledTo(db, 2, ['openai'])
+    const spy = TH.spyClient(db)
+    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 2 })
+    await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet)
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('mistral', 'sk-fake'), { vault_id: 'vault-id-gone', revision_id: null }), 'stale_write')
+    expect(spy.sent).to.have.lengthOf(2)
+  })
+
   it("refuses a first write in a full vault of another vault_id as stale_write: the count is the standing vault's", async () => {
     const db = await TH.emptyDatabase()
     const vaultDB = await filledTo(db, 1, ['openai'])

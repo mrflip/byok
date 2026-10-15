@@ -87,7 +87,12 @@ CREATE OR REPLACE TRIGGER safebyok_lockboxes_changed
 
 -- Keeps each bundle's lockbox_count equal to its vault's lockboxes, whatever statement adds or
 -- removes one, in that statement's transaction. A lockbox never moves to another vault, so an
--- update leaves the count as it is. TRUNCATE fires no row trigger: empty both tables together.
+-- update leaves the count as it is. Your own SQL that deletes lockboxes locks their bundle's row
+-- first (SELECT ... FROM safebyok_bundles ... FOR UPDATE, in the same transaction), as the adapter
+-- does, or it may deadlock with an erase of the whole vault. TRUNCATE fires no row trigger: empty
+-- both tables together. A count gone astray (lockboxes truncated alone, or restored with triggers
+-- off) is set right by:
+--   UPDATE safebyok_bundles AS bundle SET lockbox_count = (SELECT count(*) FROM safebyok_lockboxes AS box WHERE (box.applabel, box.user_id, box.vaultlabel, box.vault_id) = (bundle.applabel, bundle.user_id, bundle.vaultlabel, bundle.vault_id));
 CREATE OR REPLACE FUNCTION safebyok_lockboxes_counted() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
   IF TG_OP = 'INSERT' THEN
