@@ -98,11 +98,12 @@ alike: a security key's `hmac-secret` is what PRF runs on).
 import { askPasskey, createPasskey, passkeysAvailable } from 'safebyok-react'
 
 // Adding one asks for a passphrase as proof, even while unlocked: the vault keeps no copy of its
-// vaultKey to wrap anew.
+// vaultKey to wrap anew. The vault checks it first, and only then calls createPasskey, so a
+// mistyped passphrase leaves no passkey on the authenticator.
 const addFingerprint = async (passphrase: string) => {
-  const passkey = await createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName: fullName } })
-  if (passkey === null) { return }  // the user dismissed the prompt
-  await vault.addPasskey(passphrase, passkey, { unlocklabel: 'laptop_fingerprint' })
+  const makePasskey = () => createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName: fullName } })
+  const unlockId = await vault.addPasskey(passphrase, makePasskey, { unlocklabel: 'laptop_fingerprint' })
+  if (unlockId === null) { return }  // the user dismissed the prompt
 }
 
 // Unlocking: the browser offers each of the vault's passkeys, and the one touched answers.
@@ -119,6 +120,11 @@ if (passkey !== null) { await vault.unlock(passkey) }
   touch (on authenticators that answer only when asked again) is dismissed, or whose authenticator
   has no PRF, has still made a passkey: it stays on the authenticator, useless to the vault, until
   the user deletes it.
+* **The passkey prompt comes after the proof.** `vault.addPasskey` checks the passphrase (a key
+  derivation, and a read of storage) before it calls `createPasskey`, so the browser asks for the
+  new passkey a moment after the click. Current browsers allow that; older Safari releases
+  wanted WebAuthn called straight from the click and refused it otherwise, which `createPasskey`
+  reports as a dismissal (null). Try it on the Safari versions you support.
 * **These passkeys are not logins.** Each is a new credential under a random user handle, so it
   never replaces a passkey your sign-in uses; its challenge is random and nothing on your server
   checks it. If you pass `rp.id` to `createPasskey`, pass the same `rpId` to `askPasskey` (and to

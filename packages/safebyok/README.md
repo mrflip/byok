@@ -252,8 +252,9 @@ which `safebyok-react`'s `createPasskey` and `askPasskey` make (they import no R
 framework's host can use them).
 
 ```ts
-const passkey = await createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName } })
-if (passkey !== null) { await vault.addPasskey(passphrase, passkey, { unlocklabel: 'laptop' }) }
+// The vault checks the passphrase first, then calls createPasskey: a wrong one makes no passkey.
+const unlockId = await vault.addPasskey(passphrase, () => createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName } }), { unlocklabel: 'laptop' })
+// unlockId is null if the user dismissed the prompt
 
 vault.getSnapshot().unlocks       // [..., { method: 'passkey', unlock_id, unlocklabel: 'laptop', credential_id, prf_salt_b64 }]
 

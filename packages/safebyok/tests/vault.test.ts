@@ -1629,6 +1629,16 @@ describe("several passphrases", () => {
   })
 })
 
+/** A passkey maker whose authenticator answers `answer`, whatever it is: for a test of what addPasskey refuses. */
+const answering = (answer: unknown) => () => Promise.resolve(answer as PasskeyProof)
+
+/** The unlock_id of the passkey `laptop` that `vault` adds under the passphrase `pw`; fails the test when it adds none. */
+const addLaptopPasskey = async (vault: Vault): Promise<string> => {
+  const unlockId = await vault.addPasskey('pw', () => TH.passkeyOf('laptop'), { unlocklabel: 'laptop' })
+  if (unlockId === null) { throw new Error('addPasskey added no passkey') }
+  return unlockId
+}
+
 /** A vault in a fresh world, unlocked with `pw`, holding one lockbox and a passkey labelled `laptop`. */
 const vaultWithPasskey = async () => {
   const world = makeWorld()
@@ -1636,7 +1646,7 @@ const vaultWithPasskey = async () => {
   await vault.unlock('pw')
   await vault.store('anthropic', 'sk-fake')
   const laptop = await TH.passkeyOf('laptop')
-  const unlockId = await vault.addPasskey('pw', laptop, { unlocklabel: 'laptop' })
+  const unlockId = await addLaptopPasskey(vault)
   return { world, vault, laptop, unlockId }
 }
 
@@ -1707,29 +1717,88 @@ describe("passkeys", () => {
 
   it("addPasskey takes another passkey's answer as proof, and refuses a wrong proof, adding nothing", async () => {
     const { vault, laptop } = await vaultWithPasskey()
-    await vault.addPasskey(laptop, await TH.passkeyOf('phone'), { unlocklabel: 'phone' })
+    await vault.addPasskey(laptop, () => TH.passkeyOf('phone'), { unlocklabel: 'phone' })
     expect(unlocklabelsOf(vault)).to.deep.equal(['passphrase', 'laptop', 'phone'])
-    await TH.expectRefusal(vault.addPasskey('not the passphrase', await TH.passkeyOf('key'), { unlocklabel: 'key' }), 'wrong_passphrase')
-    await TH.expectRefusal(vault.addPasskey({ ...laptop, prfBytes: new Uint8Array(32) }, await TH.passkeyOf('key'), { unlocklabel: 'key' }), 'wrong_passkey')
+    await TH.expectRefusal(vault.addPasskey('not the passphrase', () => TH.passkeyOf('key'), { unlocklabel: 'key' }), 'wrong_passphrase')
+    await TH.expectRefusal(vault.addPasskey({ ...laptop, prfBytes: new Uint8Array(32) }, () => TH.passkeyOf('key'), { unlocklabel: 'key' }), 'wrong_passkey')
     expect(unlocklabelsOf(vault)).to.deep.equal(['passphrase', 'laptop', 'phone'])
+  })
+
+  it("addPasskey makes its passkey only once the proof holds: a refused proof, label or room never asks the authenticator", async () => {
+    const { vault, laptop } = await vaultWithPasskey()
+    const makePasskey = vi.fn(() => TH.passkeyOf('phone'))
+    await TH.expectRefusal(vault.addPasskey('not the passphrase', makePasskey, { unlocklabel: 'phone' }), 'wrong_passphrase')
+    await TH.expectRefusal(vault.addPasskey(' '.repeat(3), makePasskey, { unlocklabel: 'phone' }), 'wrong_passphrase')
+    await TH.expectRefusal(vault.addPasskey({ ...laptop, prfBytes: new Uint8Array(32) }, makePasskey, { unlocklabel: 'phone' }), 'wrong_passkey')
+    await TH.expectRefusal(vault.addPasskey('pw', makePasskey, { unlocklabel: 'laptop' }), 'bad_label')
+    for (let ii = 2; ii < MaxUnlocks; ii += 1) {
+      await vault.addPasskey('pw', () => TH.passkeyOf(`key${String(ii)}`), { unlocklabel: `key${String(ii)}` })
+    }
+    await TH.expectRefusal(vault.addPasskey('pw', makePasskey, { unlocklabel: 'phone' }), 'too_many_unlocks')
+    expect(makePasskey).not.toHaveBeenCalled()
+  })
+
+  it("addPasskey adds nothing, and resolves null, when the passkey's prompt is dismissed", async () => {
+    const { world, vault } = await vaultWithPasskey()
+    const unlocksThen = vault.getSnapshot().unlocks.length
+    const bundleThen = await world.vaultDB.readBundle(TH.scopeOf('u1'))
+    expect(await vault.addPasskey('pw', () => Promise.resolve(null), { unlocklabel: 'phone' })).to.be.null
+    expect(vault.getSnapshot().unlocks).to.have.lengthOf(unlocksThen)
+    expect(await world.vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(bundleThen)
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("addPasskey throws what its passkey maker throws, adding nothing", async () => {
+    const { vault } = await vaultWithPasskey()
+    const unavailable = new VaultError('passkey_unavailable', 'No PRF here.')
+    const err = await TH.expectRefusal(vault.addPasskey('pw', () => Promise.reject(unavailable), { unlocklabel: 'phone' }), 'passkey_unavailable')
+    expect(err).to.equal(unavailable)
+    expect(unlocklabelsOf(vault)).to.deep.equal(['passphrase', 'laptop'])
   })
 
   it("addPasskey refuses a malformed answer, a credential already in the vault, a taken label, and a full vault", async () => {
     const { vault, laptop } = await vaultWithPasskey()
     const phone = await TH.passkeyOf('phone')
     const shortSalt = toB64(new Uint8Array(16))
-    await TH.expectRefusal(vault.addPasskey('pw', { ...phone, prfSaltB64: shortSalt }, { unlocklabel: 'phone' }), 'bad_option')
-    await TH.expectRefusal(vault.addPasskey('pw', { ...phone, prfSaltB64: 'not base64url!' }, { unlocklabel: 'phone' }), 'bad_option')
-    await TH.expectRefusal(vault.addPasskey('pw', { ...phone, prfBytes: new Uint8Array(16) }, { unlocklabel: 'phone' }), 'bad_option')
-    await TH.expectRefusal(vault.addPasskey('pw', { ...phone, credentialId: '' }, { unlocklabel: 'phone' }), 'bad_option')
-    await TH.expectRefusal(vault.addPasskey('pw', null as unknown as PasskeyProof, { unlocklabel: 'phone' }), 'bad_option')
-    await TH.expectRefusal(vault.addPasskey('pw', laptop, { unlocklabel: 'laptop_again' }), 'bad_option')
-    await TH.expectRefusal(vault.addPasskey('pw', phone, { unlocklabel: 'laptop' }), 'bad_label')
-    await TH.expectRefusal(vault.addPasskey('pw', phone, { unlocklabel: 'Phone' }), 'bad_label')
+    await TH.expectRefusal(vault.addPasskey('pw', answering({ ...phone, prfSaltB64: shortSalt }), { unlocklabel: 'phone' }), 'bad_option')
+    await TH.expectRefusal(vault.addPasskey('pw', answering({ ...phone, prfSaltB64: 'not base64url!' }), { unlocklabel: 'phone' }), 'bad_option')
+    const shortAnswer = new Uint8Array(16)
+    await TH.expectRefusal(vault.addPasskey('pw', answering({ ...phone, prfBytes: shortAnswer }), { unlocklabel: 'phone' }), 'bad_option')
+    await TH.expectRefusal(vault.addPasskey('pw', answering({ ...phone, credentialId: '' }), { unlocklabel: 'phone' }), 'bad_option')
+    await TH.expectRefusal(vault.addPasskey('pw', answering(undefined), { unlocklabel: 'phone' }), 'bad_option')
+    await TH.expectRefusal(vault.addPasskey('pw', answering(laptop), { unlocklabel: 'laptop_again' }), 'bad_option')
+    await TH.expectRefusal(vault.addPasskey('pw', answering(phone), { unlocklabel: 'laptop' }), 'bad_label')
+    await TH.expectRefusal(vault.addPasskey('pw', answering(phone), { unlocklabel: 'Phone' }), 'bad_label')
+    expect(unlocklabelsOf(vault)).to.deep.equal(['passphrase', 'laptop'])
     for (let ii = 2; ii < MaxUnlocks; ii += 1) {
-      await vault.addPasskey('pw', await TH.passkeyOf(`key${String(ii)}`), { unlocklabel: `key${String(ii)}` })
+      await vault.addPasskey('pw', () => TH.passkeyOf(`key${String(ii)}`), { unlocklabel: `key${String(ii)}` })
     }
-    await TH.expectRefusal(vault.addPasskey('pw', phone, { unlocklabel: 'phone' }), 'too_many_unlocks')
+    await TH.expectRefusal(vault.addPasskey('pw', answering(phone), { unlocklabel: 'phone' }), 'too_many_unlocks')
+  })
+
+  const NotMakers = [
+    [null,                     'nothing at all'],
+    ['laptop',                 'a string'],
+    [{ credentialId: 'cred' }, "a passkey's answer itself, made before the proof was checked"],
+  ] as const
+
+  for (const [notMaker, blurb] of NotMakers) {
+    it(`addPasskey refuses, as bad_option, ${blurb} in place of a passkey maker`, async () => {
+      const { vault } = await vaultWithPasskey()
+      await TH.expectRefusal(vault.addPasskey('pw', notMaker as unknown as () => Promise<PasskeyProof>, { unlocklabel: 'phone' }), 'bad_option')
+    })
+  }
+
+  it("addPasskey refuses as stale_write when another device changed the ways in while the authenticator was asked", async () => {
+    const { world, vault } = await vaultWithPasskey()
+    const elsewhere = await world.open({ deviceDB: memoryDeviceDB() })
+    await elsewhere.unlock('pw')
+    const makePasskey = async () => {
+      await elsewhere.addPassphrase('pw', 'pw two', { unlocklabel: 'spare' })
+      return await TH.passkeyOf('phone')
+    }
+    await TH.expectRefusal(vault.addPasskey('pw', makePasskey, { unlocklabel: 'phone' }), 'stale_write')
+    expect(unlocklabelsOf(elsewhere)).to.deep.equal(['passphrase', 'laptop', 'spare'])
   })
 
   it("a passkey's answer of the wrong shape is refused as misuse wherever it is a proof, never quoting it", async () => {
@@ -1786,7 +1855,7 @@ describe("passkeys", () => {
     await here.unlock('pw')
     const there = await world.open({ deviceDB: memoryDeviceDB() })
     await there.unlock('pw')
-    const unlockId = await here.addPasskey('pw', await TH.passkeyOf('laptop'), { unlocklabel: 'laptop' })
+    const unlockId = await addLaptopPasskey(here)
     await vi.waitFor(() => { expect(there.getSnapshot().state).to.eq('locked') })
     await there.unlock(await TH.passkeyOf('laptop'))
     await here.removeUnlock('pw', unlockId)

@@ -152,9 +152,8 @@ describe("a passkey unlock, end to end", () => {
     install()
     const { vault, open } = await vaultInMemory()
     await vault.store('anthropic', 'sk-fake')
-    const made = await createPasskey(passkeyOpts)
-    if (made === null) { throw new Error('the fake authenticator made no passkey') }
-    await vault.addPasskey('pw', made, { unlocklabel: 'laptop' })
+    const unlockId = await vault.addPasskey('pw', () => createPasskey(passkeyOpts), { unlocklabel: 'laptop' })
+    if (unlockId === null) { throw new Error('the fake authenticator made no passkey') }
 
     const elsewhere = await open()
     expect(elsewhere.getSnapshot().state).to.eq('locked')

@@ -229,10 +229,13 @@ export type Vault = {
 
   /**
    * Give the vault a passkey as a way in: a fingerprint, a face, or a security key, whose
-   * authenticator answers for the vault through the WebAuthn PRF extension. `passkey` is what the
-   * new passkey answered over a fresh salt ({@link PasskeyProof}), which `safebyok-react`'s
-   * `createPasskey` makes; the core never calls WebAuthn itself. `proof`, a passphrase the vault
-   * opens with or another passkey's answer, proves the user may, as for `addPassphrase()`.
+   * authenticator answers for the vault through the WebAuthn PRF extension. `proof`, a passphrase
+   * the vault opens with or another passkey's answer, proves the user may, as for
+   * `addPassphrase()`. Only once it has, the vault calls `makePasskey`, which asks the
+   * authenticator for the new passkey and resolves with its answer over a fresh salt
+   * ({@link PasskeyProof}), or null when the user dismissed the prompt: `safebyok-react`'s
+   * `createPasskey` is one, and the core never calls WebAuthn itself. So a proof refused, a label
+   * taken, or a vault already full leaves no passkey behind on the authenticator, opening nothing.
    * `opts.unlocklabel` is what the user calls it (`laptop_fingerprint`).
    *
    * The passkey then unlocks the vault on any device where its authenticator can answer: the one
@@ -240,17 +243,23 @@ export type Vault = {
    * Manager), any device signed in to that account; a security key, wherever it is plugged in.
    *
    * Refuses as `addPassphrase()` does for the proof, the label, and a vault already holding
-   * {@link MaxUnlocks}; and with kind 'bad_option' for a `passkey` that is not an answer over a
+   * {@link MaxUnlocks}, all before `makePasskey` is called; and with kind 'bad_option' for a
+   * `makePasskey` that is not a function, or whose answer is not one over a
    * fresh salt of {@link PasskeySaltBytes} bytes, or whose credential is already a way into
    * this vault. Moves the passphraseEpoch, so every other device locks; leaves this one unlocked.
    *
-   * @returns The new way in's `unlock_id`.
+   * Whatever `makePasskey` throws, `addPasskey` throws (`createPasskey`'s 'passkey_unavailable',
+   * say), adding nothing. Should another device change the vault's ways in while the user answers
+   * the authenticator, it throws kind 'stale_write', and the passkey just made stays on the
+   * authenticator, a way into nothing: try again.
+   *
+   * @returns The new way in's `unlock_id`, or null when `makePasskey` resolved null: nothing was added.
    *
    * @example
-   *   const passkey = await createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName } })
-   *   if (passkey !== null) { await vault.addPasskey(passphrase, passkey, { unlocklabel: 'laptop_fingerprint' }) }
+   *   const makePasskey = () => createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName } })
+   *   const unlockId = await vault.addPasskey(passphrase, makePasskey, { unlocklabel: 'laptop_fingerprint' })
    */
-  addPasskey(proof: string | PasskeyProof, passkey: PasskeyProof, opts: { unlocklabel: string }): Promise<string>
+  addPasskey(proof: string | PasskeyProof, makePasskey: () => Promise<PasskeyProof | null>, opts: { unlocklabel: string }): Promise<string | null>
 
   /**
    * Take away one way in, a passphrase or a passkey, named by its `unlock_id` from the snapshot's
@@ -548,8 +557,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     proof: UnlockProof,
     unlockId: string | undefined,
     plan: {
-      check?:  (standing: VaultBundle) => void
-      revise:  (standing: VaultBundle, proven: VaultKeyPair & { unlockId: string }) => UnlockEnvelope[] | Promise<UnlockEnvelope[]>
+      check?:   (standing: VaultBundle) => void
+      // Runs once the proof holds, before revise: resolving false abandons the change, writing nothing.
+      proceed?: (standing: VaultBundle) => Promise<boolean>
+      revise:   (standing: VaultBundle, proven: VaultKeyPair & { unlockId: string }) => UnlockEnvelope[] | Promise<UnlockEnvelope[]>
     },
   ) => {
     const shutsThen = shutsSoFar
@@ -559,6 +570,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const standing = currentBundle()
     plan.check?.(standing)
     const proven = await unwrapWith(standing, proof, unlockId)
+    if (plan.proceed !== undefined && ! await plan.proceed(standing)) { return }
     const next: VaultBundle = {
       ...standing,
       passphrase_epoch: standing.passphrase_epoch + 1,
@@ -575,6 +587,14 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const sealFor = async (standing: VaultBundle, newPassphrase: string, naming: { unlock_id: string, unlocklabel: string }, proven: VaultKeyPair) => {
     const { envelope } = await Envelope.sealPassphrase(keyDeriver, newPassphrase, scope, standing.vault_id, naming, proven.transientKey)
     return envelope
+  }
+
+  /** Refuse a new passkey whose credential is already one of `standing`'s ways in. */
+  const ensureNewCredential = (standing: VaultBundle, passkey: PasskeyProof) => {
+    const taken = standing.unlocks.find((envelope) => envelope.method === 'passkey' && envelope.credential_id === passkey.credentialId)
+    if (taken !== undefined) {
+      throw new VaultError('bad_option', `That passkey is already a way into this vault, labelled '${taken.unlocklabel}': the snapshot's unlocks list each passkey's credential_id.`)
+    }
   }
 
   /** Refuse a new way in labelled `unlocklabel` that `standing` has no room or label for. */
@@ -885,26 +905,29 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       return naming.unlock_id
     },
 
-    addPasskey: async (givenProof, givenPasskey, labelling) => {
+    addPasskey: async (givenProof, makePasskey, labelling) => {
       ensureOpen()
       const proof = parseProof(givenProof)
-      const passkey = parseNewPasskey(givenPasskey)
+      parsePasskeyMaker(makePasskey)
       const unlocklabel = parseUnlocklabel(labelling, 'addPasskey')
       const naming = { unlock_id: randomId(), unlocklabel }
+      const made: { passkey?: PasskeyProof } = {}
       await reviseUnlocks(proof, undefined, {
-        check: (standing) => {
-          const taken = standing.unlocks.find((envelope) => envelope.method === 'passkey' && envelope.credential_id === passkey.credentialId)
-          if (taken !== undefined) {
-            throw new VaultError('bad_option', `That passkey is already a way into this vault, labelled '${taken.unlocklabel}': the snapshot's unlocks list each passkey's credential_id.`)
-          }
-          ensureRoomForUnlock(standing, unlocklabel)
+        check: (standing) => { ensureRoomForUnlock(standing, unlocklabel) },
+        // The authenticator is asked only now, the proof proven: a refusal before leaves no passkey behind.
+        proceed: async (standing) => {
+          const answered = await makePasskey()
+          if (answered === null) { return false }
+          made.passkey = parseNewPasskey(answered)
+          ensureNewCredential(standing, made.passkey)
+          return true
         },
         revise: async (standing, proven) => {
-          const { envelope } = await Envelope.sealPasskey(passkey, scope, standing.vault_id, naming, proven.transientKey)
+          const { envelope } = await Envelope.sealPasskey(made.passkey!, scope, standing.vault_id, naming, proven.transientKey)
           return [...standing.unlocks, envelope]
         },
       })
-      return naming.unlock_id
+      return made.passkey === undefined ? null : naming.unlock_id
     },
 
     removeUnlock: async (givenProof, unlockId) => {
@@ -1113,6 +1136,13 @@ const parsePasskey = (candidate: PasskeyProof): PasskeyProof => {
     throw new VaultError('bad_option', `A passkey's answer is { credentialId, prfSaltB64, prfBytes }: the credential's id and the salt it answered for, as base64url text, and its ${String(PrfAnswerBytes)}-byte PRF answer, as safebyok-react's askPasskey and createPasskey give them.`)
   }
   return checked.data
+}
+
+/** What `addPasskey` calls to make its passkey, checked to be something it can call. */
+const parsePasskeyMaker = (candidate: unknown) => {
+  if (typeof candidate !== 'function') {
+    throw new VaultError('bad_option', "addPasskey takes a function that makes the passkey once the proof holds, () => createPasskey({ ... }), not a passkey's answer.")
+  }
 }
 
 /** A new passkey's answer, checked: its salt must be a fresh one of {@link PasskeySaltBytes}, as its envelope will keep. */

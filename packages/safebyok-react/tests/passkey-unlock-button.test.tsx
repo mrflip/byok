@@ -14,9 +14,8 @@ const lockedVaultWithPasskey = async () => {
   const open = async () => await openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver })
   const maker = await open()
   await maker.unlock('pw')
-  const passkey = await createPasskey({ rp: { name: 'Acme' }, user: { name: 'ada@example.com', displayName: 'Ada' } })
-  if (passkey === null) { throw new Error('the fake authenticator made no passkey') }
-  await maker.addPasskey('pw', passkey, { unlocklabel: 'laptop' })
+  const unlockId = await maker.addPasskey('pw', () => createPasskey({ rp: { name: 'Acme' }, user: { name: 'ada@example.com', displayName: 'Ada' } }), { unlocklabel: 'laptop' })
+  if (unlockId === null) { throw new Error('the fake authenticator made no passkey') }
   return { authenticator, vault: await open() }
 }
 

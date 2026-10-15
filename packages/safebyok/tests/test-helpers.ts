@@ -137,7 +137,7 @@ const digestOf = async (text: string): Promise<Uint8Array> => (
  * passkey asked with the same salt answers the same, and with another salt answers otherwise, as
  * a real PRF does. Worthless as a secret: never hand it to a vault that holds a real one.
  *
- * @example await vault.addPasskey('pw', await passkeyOf('laptop'), { unlocklabel: 'laptop' })
+ * @example await vault.addPasskey('pw', () => passkeyOf('laptop'), { unlocklabel: 'laptop' })
  * @example await vault.unlock(await passkeyOf('laptop'))
  * @example await passkeyOf('laptop', otherSaltB64)  // the same credential, answering another salt
  */
