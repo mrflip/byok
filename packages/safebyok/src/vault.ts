@@ -1093,9 +1093,9 @@ const parseClock = (candidate: Clock | undefined): Clock => {
 }
 
 /**
- * A clock reading the package accepts: epoch milliseconds from {@link FarPast} to {@link
- * FarFuture}, a fraction allowed, as a clock may return one. Floored as it is read, so every time
- * kept is a whole-millisecond {@link EpochMillis}.
+ * A clock reading the package accepts: epoch milliseconds from {@link FarPast} to
+ * {@link FarFuture}, a fraction allowed, as a clock may return one. Floored as it is read, so
+ * every time kept is a whole-millisecond {@link EpochMillis}.
  */
 const clockReading = Z.number().check(Z.gte(FarPast), Z.lte(FarFuture))
 
