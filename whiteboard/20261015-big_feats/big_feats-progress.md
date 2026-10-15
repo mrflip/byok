@@ -11,7 +11,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
 | 2 | unlock_envelopes  | main (#63 merged; was `ea4b93d`)       | filed #71                      |
 | 3 | passkey_unlock    | #71 `983bd0c`                          | underway                       |
 | 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | waiting for a slot             |
-| 5 | postgres_vaultdb  | #63 `ea4b93d`, rebased onto 2 to file  | in review                      |
+| 5 | postgres_vaultdb  | #63 `ea4b93d`, rebased onto 2 to file  | filing                         |
 | 6 | graphql_vaultdb   | thread 5                               | pending                        |
 
 ## What the threads have taught
