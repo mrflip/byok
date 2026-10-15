@@ -7,6 +7,21 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-15: a lockbox row that fails the listing's check (not JSON, a malformed note or time,
+  a record naming another boxlabel than the ckey it sits under, an unknown `format`) is listed as
+  `{ boxlabel, damaged: true }` instead of making `listBoxes` -- so every `refresh()` and
+  `openVault` -- refuse `corrupt_record`. The boxlabel comes from where the row is stored (a
+  `VaultDB`'s `doListBoxes` now hands up `{ boxlabel, lockbox }` pairs; the in-tree adapters read it
+  from the ckey, Convex from its column), never from the damaged record, and nothing else of the
+  record reaches the snapshot. A row under a ckey that is not a valid boxlabel is left out of the
+  listing. `store()` over a lockbox whose record fails validation or verification now erases it
+  (`eraseBox`, expecting only the `vault_id`) and then writes a fresh lockbox expecting no revision,
+  carrying neither its note nor its `registered_at`; two steps, so a failure between them leaves
+  the box erased. What one who can write storage could already do -- erase or replace any row --
+  is unchanged; what is new is that planting junk under a boxlabel shows the user a damaged box
+  where a refused open used to show, and that the user's next `store()` to that boxlabel clears
+  the junk rather than refusing. `read()` and `use()` still refuse a damaged box.
+
 * 2026-10-15: `erase(boxlabel)` removes a lockbox whose stored record fails validation or
   verification (`corrupt_record`), rather than refusing it: it reads the record only to tell an
   absent box (`absent_box`) from a present one, and a damaged record counts as present. It still

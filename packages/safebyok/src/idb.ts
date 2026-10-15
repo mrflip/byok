@@ -2,7 +2,7 @@ import { createStore, del, delMany, entries, get, getMany, keys, set, clear, typ
 import { DeviceUnlock, type Lockbox, type VaultBundle, type VaultScope } from './types'
 import {
   VaultDB, bundleMeetsExpectation, lockboxMeetsExpectation, vaultMeetsExpectation,
-  type BundleExpectation, type EraseExpectation, type LockboxExpectation,
+  type BundleExpectation, type EraseExpectation, type LockboxExpectation, type StoredLockbox,
 } from './vault-db'
 import type { DeviceDB } from './device-db'
 import * as Ckeys from './ckeys'
@@ -120,12 +120,13 @@ class IdbVaultDB extends VaultDB {
     return (await get(Ckeys.box(scope, boxlabel), this.shelf())) ?? null
   }
 
-  protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
+  protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
     const isBox = Ckeys.isBoxIn(scope)
     const rows = await entries(this.shelf())
     return rows
-      .filter(([ckey]) => isBox(ckey))
-      .map(([, row]) => row as unknown)
+      .filter((entry): entry is [string, unknown] => isBox(entry[0]))
+      .map(([ckey, row]) => ({ boxlabel: Ckeys.boxlabelOf(ckey), lockbox: row }))
+      .filter((stored): stored is StoredLockbox => stored.boxlabel !== null)
   }
 
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {

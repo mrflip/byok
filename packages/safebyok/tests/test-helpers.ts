@@ -14,7 +14,7 @@ import type { VaultError, VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import { memoryStore } from '../src/string-store'
-import type { DeviceUnlock, Lockbox, VaultBundle, VaultScope } from '../src/types'
+import type { DamagedLockbox, DeviceUnlock, Lockbox, LockboxSummary, VaultBundle, VaultScope } from '../src/types'
 import type { OpenVaultOpts } from '../src/vault'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { AnyTextValidators } from '../src/validators'
@@ -135,6 +135,18 @@ export const OddLabels = Object.freeze([
   'main', 'main:', 'main"', String.raw`main\\`, 'main,', 'main[', 'main]', 'main","x',
   'מפתח העבודה', 'مفتاح العمل', 'กุญแจงาน', 'Mixed: English, עברית, العربية, ไทย',
 ] as const)
+
+/**
+ * A listed lockbox as the summary it should be: undefined stays undefined, and one listed as
+ * damaged fails the test, naming its boxlabel. For a test reading a summary's fields out of a
+ * listing or a snapshot, where TypeScript would otherwise have it ask after damage first.
+ *
+ * @example expect(TH.summaryOf(vault.getSnapshot().boxes[0])?.note).to.eq('work account')
+ */
+export const summaryOf = (box: LockboxSummary | DamagedLockbox | undefined): LockboxSummary | undefined => {
+  if (box?.damaged === true) { throw new Error(`The lockbox '${box.boxlabel}' is listed as damaged, where a summary was expected.`) }
+  return box
+}
 
 /**
  * What a write into {@link bundleOf}('u1')'s vault expects when its lockbox is not there yet:
@@ -539,6 +551,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
         note:          'a test box',
         registered_at: Date.UTC(2026, 9, 14),
         changed_at:    Date.UTC(2026, 9, 14),
+        damaged:       false,
       })
     })
 
@@ -548,7 +561,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await vaultDB.updateBox(scopeOf('u1'), noteless, noBoxYet)
       expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(noteless)
       const [summary] = await vaultDB.listBoxes(scopeOf('u1'))
-      expect(summary?.note).to.be.null
+      expect(summaryOf(summary)?.note).to.be.null
     })
 
     it("keeps each scope to itself: same boxlabel, two users, no collision", async () => {
@@ -572,7 +585,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       }
       const listEach = () => Promise.all(userIds.map((userId) => vaultDB.listBoxes(scopeOf(userId))))
       const before = await listEach()
-      expect(before.map((listing) => listing.map((box) => box.revision_id))).to.deep.equal(userIds.map((_userId, ii) => [`rev-of-${String(ii)}`]))
+      expect(before.map((listing) => listing.map((box) => summaryOf(box)?.revision_id))).to.deep.equal(userIds.map((_userId, ii) => [`rev-of-${String(ii)}`]))
       await vaultDB.eraseVault(scopeOf('u1'), thisVault)
       const after = await listEach()
       expect(after.map((listing) => listing.length)).to.deep.equal([0, 1, 1, 1, 1, 1, 1, 1])
@@ -587,7 +600,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       }
       const listEach = () => Promise.all(scopes.map((scope) => vaultDB.listBoxes(scope, AnyTextValidators)))
       const before = await listEach()
-      expect(before.map((listing) => listing.map((box) => [box.boxlabel, box.revision_id]))).to.deep.equal(OddLabels.map((label, ii) => [[label, `rev-of-${String(ii)}`]]))
+      expect(before.map((listing) => listing.map((box) => [box.boxlabel, summaryOf(box)?.revision_id]))).to.deep.equal(OddLabels.map((label, ii) => [[label, `rev-of-${String(ii)}`]]))
       await vaultDB.eraseVault(scopes[0] ?? scopeOf('u1'), { vault_id: 'vault-id-0' }, AnyTextValidators)
       const after = await listEach()
       expect(after.map((listing) => listing.length)).to.deep.equal(OddLabels.map((_label, ii) => (ii === 0 ? 0 : 1)))

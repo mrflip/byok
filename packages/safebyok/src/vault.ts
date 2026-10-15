@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { DeviceUnlock, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, MaxLockboxes, MaxWhisperBytes, VaultBundle, type VaultScope, Whisper, wallClock, type Clock } from './types'
+import { DeviceUnlock, LockboxSummary, type DamagedLockbox, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, MaxLockboxes, MaxWhisperBytes, VaultBundle, type VaultScope, Whisper, wallClock, type Clock } from './types'
 import * as Names from './names'
 import type { NameValidator, VaultValidators } from './validators'
 import { VaultError, isVaultError } from './errors'
@@ -31,7 +31,12 @@ export type VaultState = 'opening' | 'absent' | 'locked' | 'unlocked'
 export type VaultSnapshot = {
   state:     VaultState
   scope:     VaultScope
-  boxes:     readonly LockboxSummary[]
+  /**
+   * Every lockbox in the vault, sorted by boxlabel: a {@link LockboxSummary} for each, or a
+   * {@link DamagedLockbox} (`damaged: true`, its boxlabel and nothing else) for one whose stored
+   * record does not read back -- which `erase()` removes and `store()` overwrites.
+   */
+  boxes:     readonly (LockboxSummary | DamagedLockbox)[]
   /**
    * Epoch ms from which the vault asks for the passphrase again, while unlocked; null otherwise.
    * The unlock's time plus `forcePassphraseReentryHours`, never later than {@link FarFuture}
@@ -221,6 +226,11 @@ export type Vault = {
    * `changed_at` only when the whisper differs from the one it replaces: storing the same whisper
    * again writes a new revision, and leaves `changed_at` standing.
    *
+   * A lockbox whose stored record fails verification -- one the snapshot lists as damaged -- is
+   * overwritten as though it were new: erased first, then written with nothing carried from it,
+   * neither its note nor its `registered_at`. Should the write then fail, the damaged record is
+   * gone and the call throws: storing again writes the lockbox afresh.
+   *
    * `opts.note` is the lockbox's public note, shown while locked: text the vault's note check
    * passes (by default `LockboxNote`: at most 256 characters), or null for none -- kind
    * 'bad_option' otherwise. Left out, the lockbox keeps the note it has. Never put secret
@@ -244,11 +254,11 @@ export type Vault = {
   use<ResultT>(boxlabel: string, callback: (whisper: Whisper) => ResultT | Promise<ResultT>): Promise<ResultT>
   /**
    * Remove the lockbox `boxlabel` entirely, whatever revision of it stands -- even one whose
-   * stored record fails verification, and so reads as 'corrupt_record': erasing it needs nothing
-   * from it, and is the remedy for it. Requires unlocked; kind 'absent_box' when absent. The
-   * erase lands only in the vault this device last read: if it was destroyed, or destroyed and
-   * made anew, elsewhere, nothing is erased and the call throws kind 'stale_write', after
-   * catching up with storage -- which relocks this device.
+   * stored record fails verification, which the snapshot lists as damaged and reading refuses as
+   * 'corrupt_record': erasing it needs nothing from it, and is the remedy for it. Requires
+   * unlocked; kind 'absent_box' when absent. The erase lands only in the vault this device last
+   * read: if it was destroyed, or destroyed and made anew, elsewhere, nothing is erased and the
+   * call throws kind 'stale_write', after catching up with storage -- which relocks this device.
    * Unlike `store()`, an erase is never retried: that is its only expectation, and trying again
    * could not meet it.
    */
@@ -335,7 +345,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const vaultByteLimit = ensureLimitsFit(vaultDB, whisperByteLimit, lockboxLimit)
 
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
-  let boxes: readonly LockboxSummary[] = []
+  let boxes: readonly (LockboxSummary | DamagedLockbox)[] = []
   let askPassphraseAt: number | null = null
   let vaultKey: CryptoKey | null = null
   let closed = false
@@ -640,9 +650,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     // A replacement no heavier than what it replaces never makes the vault fuller: it always lands.
     if (prev !== null && weight <= lockboxWeight(prev.boxlabel, prev.note)) { return }
     const crowding = () => {
-      const others = boxes.filter((summary) => summary.boxlabel !== boxlabel)
+      const others = boxes.filter((box) => box.boxlabel !== boxlabel)
       if (prev === null && others.length >= lockboxLimit) { return 'count' }
-      const othersWeight = others.reduce((sum, summary) => sum + lockboxWeight(summary.boxlabel, summary.note), 0)
+      // A damaged box is weighed by its boxlabel alone: nothing else of it is trusted.
+      const othersWeight = others.reduce((sum, box) => sum + lockboxWeight(box.boxlabel, box.damaged ? null : box.note), 0)
       return othersWeight + weight > vaultByteLimit ? 'bytes' : null
     }
     if (crowding() === null) { return }
@@ -661,17 +672,22 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
    * verification still stands: what is stored under the boxlabel is there, whatever it holds.
    */
   const ensureBoxStands = async (boxlabel: string) => {
+    if (await readBoxOrDamaged(boxlabel) === null) { throw absentBox() }
+  }
+
+  /** The lockbox under `boxlabel`; null when there is none, and 'damaged' when its record fails verification. */
+  const readBoxOrDamaged = async (boxlabel: string): Promise<Lockbox | 'damaged' | null> => {
     try {
-      await readBoxOrThrow(boxlabel)
+      return await vaultDB.readBox(scope, boxlabel, rules)
     } catch (err) {
       if (! isVaultError(err, 'corrupt_record')) { throw err }
+      return 'damaged'
     }
   }
 
   const readBoxOrThrow = async (boxlabel: string) => {
     const lockbox = await vaultDB.readBox(scope, Names.check(rules, 'boxlabel', boxlabel), rules)
-    // The refusal never quotes the boxlabel: a host's validators may admit any text, a mistaken paste among it.
-    if (lockbox === null) { throw new VaultError('absent_box', 'No lockbox stands under that boxlabel in this vault: its snapshot lists the ones it holds.') }
+    if (lockbox === null) { throw absentBox() }
     return lockbox
   }
 
@@ -828,10 +844,12 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         // A refusal as stale has just caught this device up with storage, which may have relocked
         // it (a vault reborn, or its passphrase changed, elsewhere): then the retry ends here.
         keyInHand()
-        const prev = await vaultDB.readBox(scope, label, rules)
+        const standing = await readBoxOrDamaged(label)
         // Erase wins: a box this store began over, and now finds gone, was erased elsewhere, and
         // a retry would silently undo that. The erase is already in the snapshot.
-        if (prev === null && boxStood) { return 'erased' }
+        if (standing === null && boxStood) { return 'erased' }
+        // A damaged box is overwritten as a fresh store: nothing in it can be carried forward.
+        const prev = standing === 'damaged' ? null : standing
         boxStood ||= prev !== null
         const note = noteToStore(givenNote, prev)
         await ensureRoomFor(label, note, prev)
@@ -858,6 +876,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
           changed_at:          unchanged ? prev.changed_at : now,
         }
         try {
+          // A damaged box is cleared first, as erase() would, so the write meets no revision: its
+          // record cannot say which one it holds.
+          if (standing === 'damaged') { await refreshOnStale(vaultDB.eraseBox(scope, label, { vault_id: vaultId }, rules)) }
           await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected, rules))
         } catch (err) {
           if (! isVaultError(err, 'stale_write')) { throw err }
@@ -1028,6 +1049,9 @@ const retryStale = async <ResultT>(attempt: () => Promise<ResultT>, attemptsLeft
 const noteToStore = (given: string | null | undefined, prev: Lockbox | null): string | null => (
   given === undefined ? prev?.note ?? null : given
 )
+
+// The refusal never quotes the boxlabel: a host's validators may admit any text, a mistaken paste among it.
+const absentBox = () => new VaultError('absent_box', 'No lockbox stands under that boxlabel in this vault: its snapshot lists the ones it holds.')
 
 /** A schema a host may hand in `validators`: a Zod 4 schema, classic or mini, which carries `_zod`. */
 const nameValidator = Z.optional(Z.custom<NameValidator>((candidate) => isBag(candidate) && '_zod' in candidate))

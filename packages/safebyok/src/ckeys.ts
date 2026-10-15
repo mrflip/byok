@@ -61,6 +61,19 @@ export const isBoxIn = (scope: VaultScope): ((ckey: unknown) => ckey is string) 
 }
 
 /**
+ * The boxlabel a lockbox's ckey files it under: the last element of its tuple. For a ckey
+ * {@link isBoxIn} accepts; null for one whose text is not a lockbox's tuple after all, which no
+ * boxlabel can reach.
+ *
+ * @example boxlabelOf(box(scope, 'anthropic'))  // 'anthropic'
+ */
+export const boxlabelOf = (ckey: string): string | null => {
+  const parts = decode(ckey)
+  const boxlabel = Array.isArray(parts) && parts.length === 5 ? parts[4] as unknown : null
+  return typeof boxlabel === 'string' ? boxlabel : null
+}
+
+/**
  * True for each ckey {@link unlock} gives, for any scope, false for any other ckey safebyok writes
  * or wrote before, and false for anything that is not text. It tests the prefix `["unlock",`
  * alone, not the rest of the tuple. On a device shelf that holds only remembered unlocks, a row
@@ -76,3 +89,11 @@ const UnlockPrefix = '["unlock",'
 const scopeParts = (scope: VaultScope) => [scope.applabel, scope.user_id, scope.vaultlabel]
 
 const encode = (parts: string[]): string => JSON.stringify(parts)
+
+const decode = (ckey: string): unknown => {
+  try {
+    return JSON.parse(ckey)
+  } catch {
+    return null
+  }
+}
