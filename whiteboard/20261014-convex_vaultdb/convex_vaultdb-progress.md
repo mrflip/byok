@@ -1,6 +1,6 @@
 # Sprint convex_vaultdb: progress
 
-**Status**: thread 1 filed (#17); thread 2 (#18) adding the erase expectation; thread 3 underway
+**Status**: thread 1 filed (#17); thread 2 (#18) erase commits in review; thread 3 ready, awaiting restack
 
 The orchestrator's document: newer than the plan wherever they disagree. Each worker's own
 account is in `thread-<N>-<label>.md` on its branch.
@@ -10,8 +10,8 @@ account is in `thread-<N>-<label>.md` on its branch.
 | Thread | Label            | Branch                       | Base               | Status   |
 | ------ | ---------------- | ---------------------------- | ------------------ | -------- |
 | 1      | convex_skills    | `20261014-convex_skills`     | origin/main        | filed [#17](https://github.com/mrflip/safebyok/pull/17) (no review: docs only) |
-| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18); reopened for the erase ruling, underway |
-| 3      | convex_component | `20261014-convex_component`  | #18 at d3c0961     | underway |
+| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18); erase commits (4359130) in second review |
+| 3      | convex_component | `20261014-convex_component`  | #18 at d3c0961     | ready; awaiting restack onto #18's new tip, then review |
 | 4      | convex_client    | `20261014-convex_client`     | thread 3, on filing | pending  |
 
 ## What the threads have taught
@@ -86,3 +86,27 @@ protected `do*` method the adapter writes:
   quietly; no revision expectation. Thread 2 adds it to #18 as new commits on d3c0961 (worktree
   `/workspace/byok-storage_verbs_erase`); thread 3 builds its mutations to it and is restacked onto the new tip
   (`git rebase --onto <tip> d3c0961`) before it files.
+
+## What thread 4 builds on, from thread 3
+
+*Orchestrator:* thread 3's file (`thread-3-convex_component.md` on its branch) names every function's args and
+returns. The decisions that shape the client:
+
+* **A failed expectation resolves `false`**, never throws, matching the `do*` halves one to one. Updates and
+  erases alike; `eraseBox` with no box is quiet.
+* **The only `ConvexError` is `{ kind: 'not_permitted', message }`**, thrown by the host's wrapper (signed out,
+  or not this vault's user), never by the component; the message is fixed and names no user. Anything else
+  (a validator refusing args, a transport failure) is a plain Error, which the base class makes
+  `storage_unavailable`.
+* **Pulled forward for thread 4:** the `SafebyokApi` type (a client's `api.safebyok`), so `convexVaultDB`'s
+  signature needs nothing new. Test helpers in `packages/safebyok-convex/tests/helpers.ts`: `realRecords()`,
+  `componentTest()`. Entry points `./convex.config`, `./_generated/component.js`, `./server`, `./test`; the root `.`
+  is left for thread 4's client.
+* **A real vault-size ceiling.** Listing, watching and erasing read the whole vault in one transaction (an
+  erase twice), against Convex's 16 MiB read limit: about 150 lockboxes at the largest default whisper
+  (~54 KB each), thousands at API-key size. In the README.
+* **Codegen ran offline** from Convex 1.46.0's own templates: no deployment, nothing blocked on the Coach.
+  `ComponentApi` is derived from the functions rather than generated.
+* **Open for the Coach:** should the core export `VaultBundle`/`VaultScope` as Zod values, like `Lockbox`?
+  Thread 3's tests import them from `../../../src/types` meanwhile (thread 4 may make that core change,
+  under the 2026-10-15 ruling). Should the component enforce the label grammar server-side?
