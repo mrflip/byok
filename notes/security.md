@@ -127,8 +127,9 @@ security expert who knows what questions to ask.
   window above about two million hours (some 229 years), which capped the window only at
   `MAX_SAFE_INTEGER` ms and stored `now + window` unclamped: such a user enters the passphrase
   once more. `deadlineAfter` floors its result to whole ms. The host's `Clock` is not checked
-  against the bounds: one returning times outside them writes device records that never read
-  back.
+  against the bounds. One counting in seconds writes device records that, under any usual window,
+  never read back, but keeps an unlock in memory a thousand times its window; one counting in
+  microseconds has every unlock expire the moment it is made.
 * 2026-10-14: the package was renamed `byok` → `safebyok` before any release, and its stored
   format tags with it (`safebyok-vault-v1`, `safebyok-lockbox-v1`, `safebyok-unlock-v1`). The
   tags are also the first element of every encryption's additional data, so a record written
