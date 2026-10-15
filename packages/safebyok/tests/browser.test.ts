@@ -8,7 +8,6 @@ import { inspectIdb } from '../src/idb'
 import { memoryStore } from '../src/string-store'
 import { localVaultDB } from '../src/vault-db'
 import { openVault } from '../src/vault'
-import { scopeOf } from '../src/testing'
 import * as TH from './test-helpers'
 
 const freshDbName = () => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
@@ -29,7 +28,7 @@ describe("browserOpts", () => {
     await browserOpts({ dbName }).deviceDB.writeUnlock(await TH.unlockOf('u1'))
     const rows = await inspectIdb({ dbName, shelf: 'device_db' }).rows()
     expect(rows.map((row) => row.ckey)).to.deep.equal(['unlock:acme:u1:main'])
-    expect(await browserOpts().deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+    expect(await browserOpts().deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
   })
 
   it("answers the same frozen bag for the same dbName, so a render may call it", () => {

@@ -11,7 +11,7 @@ import { defineConfig } from 'tsdown'
 // bundled chunk would hold them together, and a bare `stableJsonify` would carry every validator.
 export default defineConfig({
   // `safebyok/testing` is its own entry, so only a test that asks for it loads vitest.
-  entry:      { index: 'src/index.ts', idb: 'src/idb.ts', browser: 'src/browser.ts', testing: 'src/testing/index.ts', utils: 'src/utils.ts' },
+  entry:      { index: 'src/index.ts', idb: 'src/idb.ts', browser: 'src/browser.ts', testing: 'tests/test-helpers.ts', utils: 'src/utils.ts' },
   format:     ['esm', 'cjs'],
   // Browser first, but nothing here is browser-only: WebCrypto is the same global under Node.
   platform:   'neutral',
