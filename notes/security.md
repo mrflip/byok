@@ -7,6 +7,10 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-15: a scope's `user_id` is text of 1 to 100 characters (`UserId`), checked at
+  `openVault`, by every `VaultDB` verb, and in every stored record that names a scope; a refusal
+  names the bound and never quotes the id. The Convex component's validators and its `getUserId`
+  check do not bound it themselves: the client's `VaultDB` refuses a longer one before a call is made.
 * 2026-10-15: `mask` (`safebyok/utils`) takes a whisper and returns text meant for display: its
   first and last few characters (two and four by default, at the caller's choice) and, up to
   `maxLen` (15 by default), its length. Beyond `maxLen` the result is fixed-width

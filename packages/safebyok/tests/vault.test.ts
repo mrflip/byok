@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ForcePassphraseReentryHours, FarFuture, FarPast, Lockbox, LockboxNote, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, type DeviceUnlock, type PasskeyProof, type VaultScope, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, FarFuture, FarPast, Lockbox, LockboxNote, MaxLockboxes, MaxUnlocks, MaxUserIdChars, MaxWhisperBytes, VaultScope, type DeviceUnlock, type PasskeyProof, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
@@ -91,6 +91,15 @@ describe("openVault", () => {
   it("refuses to open without a signed-in user", async () => {
     const world = makeWorld()
     await TH.expectRefusal(world.open({ userId: '' }), 'bad_label')
+  })
+
+  it("takes a userId of a hundred characters, and refuses a longer one, naming the bound and never the id", async () => {
+    const world = makeWorld()
+    expect(await world.stateOnOpen({ userId: 'u'.repeat(MaxUserIdChars) })).to.eq('absent')
+    const overlong = `alice@example.com${'u'.repeat(MaxUserIdChars)}`
+    const err = await TH.expectRefusal(world.open({ userId: overlong }), 'bad_label')
+    expect(err.message).to.include('1 to 100 characters')
+    expect(TH.thrownText(err)).to.not.include('alice')
   })
 
   it("refuses a userId that is not text, as no signed-in user", async () => {
@@ -930,15 +939,15 @@ const declaringLockboxes = (vaultDB: VaultDB, maxLockboxes: unknown): VaultDB =>
 
 /**
  * A lockbox row as a backend files it, with every field but the whisper at its largest: the
- * longest labels, a note of 256 UTF-16 code units at three UTF-8 bytes each, a user_id of 512
- * bytes, the latest times, and real ciphertext of `whisperBytes` random bytes.
+ * longest labels, a note of 256 UTF-16 code units and a user_id of 100, each at three UTF-8 bytes
+ * apiece, the latest times, and real ciphertext of `whisperBytes` random bytes.
  */
 const heaviestRowOf = async (whisperBytes: number) => {
   const binding = cipherBinding('a test binding')
   const lockboxKey = await makeLockboxKey()
   return {
     applabel:            'a'.repeat(40),
-    user_id:             'u'.repeat(512),
+    user_id:             '\u{4E00}'.repeat(MaxUserIdChars),
     vaultlabel:          'v'.repeat(40),
     format:              'safebyok-lockbox-v1',
     boxlabel:            'b'.repeat(40),
@@ -1062,6 +1071,7 @@ describe("the lockbox limit", () => {
     it(`counts room enough for a lockbox of ${String(whisperBytes)} whisper bytes, its other fields at their largest`, async () => {
       const row = await heaviestRowOf(whisperBytes)
       expect(Lockbox.safeParse(row).success).to.be.true
+      expect(VaultScope.safeParse(row).success).to.be.true
       const rowBytes = new TextEncoder().encode(JSON.stringify(row)).length
       expect(rowBytes).to.be.at.most((whisperBytes * StoredBytesPerWhisperByte) + LockboxFieldsBytes)
     })
