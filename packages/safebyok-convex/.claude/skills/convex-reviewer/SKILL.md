@@ -7,6 +7,12 @@ description: "Convex code reviewer — security, auth, validators, performance, 
 
 # Convex Code Reviewer
 
+> **Changed for safebyok-convex** from get-convex/agent-skills at `191a5c33` (Apache-2.0; the
+> changes are listed in `../README.md`). Inside a component `ctx.auth` does not exist: in this
+> package, read "checks `ctx.auth.getUserIdentity()`" as "resolves the host's `getUserId(ctx)`
+> first, refuses when it is null, and refuses a `user_id` argument that differs from it"
+> (`whiteboard/20261014-convex/design.md`, *Interface map*).
+
 Structured review of Convex code for security, authorization, validators, performance, and schema design. Applies a Convex-specific checklist and flags anti-patterns with severity (Critical / Important / Suggestion).
 
 ## Workflow

@@ -8,6 +8,13 @@ description:
 
 # Convex Create Component
 
+> **Changed for safebyok-convex** from get-convex/agent-skills at `191a5c33` (Apache-2.0; the
+> changes are listed in `../README.md`). Here the shape is settled: `safebyok-convex` is a
+> **packaged** component (`whiteboard/20261014-convex/design.md`), whose host app authenticates
+> through a `getUserId(ctx)` callback rather than `@convex-dev/auth`. Never run `npx convex dev`
+> or push to a deployment; if codegen needs a Convex login or a deployment, stop and ask the
+> Coach for that exact step.
+
 Create reusable Convex components with clear boundaries and a small app-facing
 API.
 
@@ -28,10 +35,9 @@ API.
 
 ## Workflow
 
-1. Ask the user what they are building and what the end goal is. If the repo
-   already makes the answer obvious, say so and confirm before proceeding.
-2. Choose the shape using the decision tree below and read the matching
-   reference file.
+1. Confirm what you are building against `whiteboard/20261014-convex/design.md`
+   and the sprint plan, rather than asking afresh.
+2. Read `references/packaged-components.md`: the shape is settled (below).
 3. Decide whether a component is justified. Prefer normal app code or a regular
    library if the feature does not need isolated tables, backend functions, or
    reusable persistent state.
@@ -50,30 +56,28 @@ API.
    `ctx.runQuery`, `ctx.runMutation`, or `ctx.runAction`.
 9. If React clients, HTTP callers, or public APIs need access, create wrapper
    functions in the app instead of exposing component functions directly.
-10. Run `npx convex dev` and fix codegen, type, or boundary issues before
-    finishing.
+10. Run codegen (see Validation) and `pnpm justify` inside
+    `packages/safebyok-convex/`, and fix codegen, type, or boundary issues
+    before finishing.
 
 ## Choose the Shape
 
-Ask the user, then pick one path:
+| Goal                         | Shape    | Reference                           |
+| ---------------------------- | -------- | ----------------------------------- |
+| Publish or share across apps | Packaged | `references/packaged-components.md` |
 
-| Goal                                              | Shape            | Reference                           |
-| ------------------------------------------------- | ---------------- | ----------------------------------- |
-| Component for this app only                       | Local            | `references/local-components.md`    |
-| Publish or share across apps                      | Packaged         | `references/packaged-components.md` |
-| User explicitly needs local + shared library code | Hybrid           | `references/hybrid-components.md`   |
-| Not sure                                          | Default to local | `references/local-components.md`    |
-
-Read exactly one reference file before proceeding.
+This package is a packaged component. Upstream's local and hybrid references
+were left out of this install.
 
 ## Default Approach
 
-Unless the user explicitly wants an npm package, default to a local component:
+Upstream's default, a local component inside one app, does not apply here. The
+skeleton below uses the local layout (`convex/components/<componentName>/`) only
+to illustrate; the parts carry over to a package unchanged:
 
-- Put it under `convex/components/<componentName>/`
 - Define it with `defineComponent(...)` in its own `convex.config.ts`
-- Install it from the app's `convex/convex.config.ts` with `app.use(...)`
-- Let `npx convex dev` generate the component's own `_generated/` files
+- The host installs it from its `convex/convex.config.ts` with `app.use(...)`
+- Codegen generates the component's own `_generated/` files
 
 ## Component Skeleton
 
@@ -208,7 +212,8 @@ Note the reference path shape: a function in
   `convex/http.ts`, because components cannot register their own HTTP routes.
 - If the component needs pagination, use `paginator` from `convex-helpers`
   instead of built-in `.paginate()`, because `.paginate()` does not work across
-  the component boundary.
+  the component boundary. (`convex-helpers` is not a dependency of this
+  package, and adding it needs the Coach's yes.)
 - Define indexes for queried fields instead of using Convex `.filter()` after a
   database query.
 - Add `args` and `returns` validators to all public component functions, because
@@ -287,9 +292,10 @@ class-based client wrappers, see `references/advanced-patterns.md`.
 
 Try validation in this order:
 
-1. `npx convex codegen --component-dir convex/components/<name>`
+1. `npx convex codegen --component-dir <path to the component>`
 2. `npx convex codegen`
-3. `npx convex dev`
+
+Never `npx convex dev` here: it provisions or pushes to a deployment.
 
 Important:
 
@@ -301,19 +307,18 @@ Important:
 
 ## Reference Files
 
-Read exactly one of these after the user confirms the goal:
-
-- `references/local-components.md`
-- `references/packaged-components.md`
-- `references/hybrid-components.md`
+- `references/packaged-components.md`: the package layout, build order, exports
+  and testing
+- `references/advanced-patterns.md`: function handles, validators derived from
+  the schema, and class-based client wrappers
 
 Official docs:
 [Authoring Components](https://docs.convex.dev/components/authoring)
 
 ## Checklist
 
-- [ ] Asked the user what they want to build and confirmed the shape
-- [ ] Read the matching reference file
+- [ ] Confirmed the plan against the design
+- [ ] Read `references/packaged-components.md`
 - [ ] Confirmed a component is the right abstraction
 - [ ] Planned tables, public API, boundaries, and app wrappers
 - [ ] Component lives under `convex/components/<name>/` (or package layout if
@@ -322,4 +327,4 @@ Official docs:
 - [ ] Auth, env access, and HTTP routes stay in the app
 - [ ] Parent app IDs cross the boundary as `v.string()`
 - [ ] Public functions have `args` and `returns` validators
-- [ ] Ran `npx convex dev` and fixed codegen or type issues
+- [ ] Ran codegen and `pnpm justify`, and fixed codegen or type issues

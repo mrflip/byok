@@ -2,9 +2,6 @@
 
 ## Soonish
 
-Add the convex skill to the appropriate place, **scoped** to only that directory
-(`packages/safebyok-convex/`), and with only the files likely to be relevant.
-
 A pad/unpad helper, so a lockbox's ciphertext length stops telling the backend what kind of
 whisper it holds (an API key from a PEM). Padding goes inside the encryption, by a published
 scheme (PADMÉ, from the PURBs paper, or power-of-two buckets), not one of our own, with a 64-byte
