@@ -82,6 +82,8 @@ Small irritants, each a few lines, picked up by whoever is nearby.
   moved (gitignored, so invisible to `git status`) fails the whole justify with thousands of
   warnings. Ignore `**/dist/` at the root; until then, `rm -rf dist` at the root clears it.
 
+* The ruled screen-lock recipe defeats the seven-day remembered unlock. lock() erases the device's remembered unlock, so a host following the recipe asks for the passphrase every time the tab is hidden and shown. Intended, or should the recipe wait for lockSoon() or a lock that keeps the remembered unlock?unlock() / lock() race in vault.ts: a lock() landing while an unlock() is in flight can leave the vault unlocked afterwards; the recipe makes it likelier. Not fixed here.
+
 ## Roadmapped
 
 In order. A later item that depends on an earlier one says so.
