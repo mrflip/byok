@@ -151,3 +151,8 @@ in `vault-db.ts` and `vault.ts`, resolved by its worker at the restack.
 ## For the Coach
 
 * Answered in chat: `Intl.RelativeTimeFormat` across the target platforms.
+* **Refused text reaches the snapshot** (#93's second review): a box stored under a name the
+  host's validators now refuse lists as damaged *with that name*, so whoever can write storage
+  can put any text (huge, control characters, markup) into `snapshot.boxes`, text a host's check
+  may exist to keep out. Documented; closing it means capping or omitting such labels, or an
+  opaque erase handle. Recommendation: keep, documented.
