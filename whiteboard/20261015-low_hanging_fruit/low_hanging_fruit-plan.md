@@ -7,11 +7,11 @@
 * **Issued by**: the Coach (flip), from the preplan
   `whiteboard/20261014-low_hanging_fruit/20261014-low_hanging_fruit-preplan.md`, which is on
   `20261015-roadmap_fruit` ([#26](https://github.com/mrflip/safebyok/pull/26), unmerged)
-* **Status**: planned
+* **Status**: threads 1, 3, 4 underway
 
 Sprint worktree `/workspace/byok-low_hanging_fruit`, branch `20261015-low_hanging_fruit`. Sprint
 directory: `whiteboard/20261015-low_hanging_fruit/`. Sprint doc (live mirror, a tab per thread):
-see the progress document.
+[Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9).
 
 ## Read first
 
