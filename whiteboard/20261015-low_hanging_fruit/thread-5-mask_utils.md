@@ -1,6 +1,6 @@
 # Thread 5: mask_utils (2026-10-15)
 
-Branch `20261015-mask_utils`, PR not yet filed, cut from `origin/main`. Justify: green (core 286
+Branch `20261015-mask_utils`, PR not yet filed, cut from `origin/main`. Justify: green (core 304
 tests, convex 210, react 7, demo 24, root 67).
 
 * **Built**: `safebyok/utils`, a new entry point (`src/utils.ts`, a `tsdown.config.ts` line, the
