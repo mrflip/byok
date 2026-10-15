@@ -620,8 +620,13 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     await rememberedUnlock()
   } catch (err) {
     // A failed open hands its caller no handle to close, so it closes itself: no storage watch
-    // (with Convex, a live query) may outlive it. The caller gets the original error.
-    vault.close()
+    // (with Convex, a live query) may outlive it. The caller gets the original error, even if
+    // the adapter's unsubscribe throws too: what stopped the open is what the caller must act on.
+    try {
+      vault.close()
+    } catch {
+      // the open's own failure, rethrown below, is the one to report
+    }
     throw err
   }
   bump()

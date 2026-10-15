@@ -1105,6 +1105,15 @@ describe("a failed open", () => {
     expect(vault.getSnapshot().state).to.eq('absent')
     expect(tally.opened - tally.closed).to.eq(1)
   })
+
+  it("rejects with the very error even when ending its storage watch throws too", async () => {
+    const world = makeWorld()
+    const refusal = new VaultError('not_permitted', 'Sign in to reach this vault.')
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(refusal)
+    vi.spyOn(world.vaultDB, 'subscribe').mockReturnValue(() => { throw new Error('the adapter could not unsubscribe') })
+    const caught = await expectRefusal(world.open(), 'not_permitted')
+    expect(caught).to.eq(refusal)
+  })
 })
 
 // The handle a vault keeps between operations must refuse subtle.exportKey; an extractable
