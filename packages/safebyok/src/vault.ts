@@ -68,9 +68,9 @@ export type OpenVaultOpts = {
  */
 export type Vault = {
   /** Current snapshot; same object until something changes (useSyncExternalStore-ready). */
-  getSnapshot(): VaultSnapshot
+  getSnapshot: () => VaultSnapshot
   /** Calls `listener` after every snapshot change; returns the unsubscribe. */
-  subscribe(listener: () => void): () => void
+  subscribe: (listener: () => void) => () => void
 
   /**
    * Open the vault with its passphrase, remembering the unlock on this device for
@@ -455,13 +455,15 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
       // reborn elsewhere, or a box written meanwhile by another device, refuses it.
       const expected = { vault_id: vaultId, revision_id: prev?.revision_id ?? null }
+      const note = storeOpts?.note ?? prev?.note
       const lockbox: Lockbox = {
         format:              'safebyok-lockbox-v1',
         boxlabel:            label,
         revision_id:         revisionId,
         lockbox_key_wrapped: await wrapKeyUnder(unlockedKey, lockboxKey, boxBinding(vaultId, label, revisionId, 'lockbox_key_wrapped')),
         whisper_ciphered:    await cipherBytes(lockboxKey, whisperBytes, boxBinding(vaultId, label, revisionId, 'whisper_ciphered')),
-        note:                storeOpts?.note ?? prev?.note,
+        // A box with no note has no note field: never an undefined one, which IndexedDB would keep.
+        ...(note !== undefined && { note }),
         created_at:          prev?.created_at ?? now,
         updated_at:          now,
       }

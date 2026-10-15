@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { Label, VaultBundle, VaultScope, Whisper } from '../src/types'
-import { bundleOf, scopeOf } from './helpers'
+import { Label, Lockbox, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { boxOf, bundleOf, scopeOf } from './helpers'
 
 const WhisperCases = [
   // every JSON shape a whisper may take:
@@ -89,5 +89,25 @@ const BundleCases = [
 describe("VaultBundle", () => {
   for (const [candidate, expected, blurb] of BundleCases) {
     it(blurb, () => { expect(VaultBundle.safeParse(candidate).success).to.eq(expected) })
+  }
+})
+
+const { note: _note, ...notelessBox } = boxOf('anthropic_api_key', 'a1')
+const LockboxCases = [
+  // regular usage:
+  [boxOf('anthropic_api_key', 'a1'),                       true,   'a whole lockbox, with its note'],
+  [notelessBox,                                            true,   'a lockbox with no note field at all'],
+  // a stored vault is a contract: earlier versions wrote a lockbox with no note as `note:
+  // undefined`, which IndexedDB's structured clone keeps, so it still reads as no note
+  [{ ...notelessBox, note: undefined },                    true,   'a lockbox an earlier version stored with an undefined note'],
+  // refused, as a damaged or foreign record:
+  [{ ...notelessBox, note: null },                         false,  'a null note'],
+  [{ ...notelessBox, note: 'n'.repeat(257) },              false,  'a note over 256 characters'],
+  [{ ...notelessBox, format: 'safebyok-lockbox-v2' },      false,  'a format this version does not know'],
+] as const
+
+describe("Lockbox", () => {
+  for (const [candidate, expected, blurb] of LockboxCases) {
+    it(blurb, () => { expect(Lockbox.safeParse(candidate).success).to.eq(expected) })
   }
 })
