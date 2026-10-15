@@ -1454,7 +1454,6 @@ const parseMaxLockboxes = (candidate: number | undefined, storeLockboxes: number
     throw new VaultError('bad_option', 'maxLockboxes is a whole number of lockboxes, greater than zero.')
   }
   if (checked.data === undefined) { return Math.min(MaxLockboxes, storeLockboxes) }
-  //
   if (checked.data > storeLockboxes) {
     throw new VaultError('bad_option', `maxLockboxes is over the ${String(storeLockboxes)} lockboxes this storage adapter holds in one vault (its own maxLockboxes): pass ${String(storeLockboxes)} or fewer.`)
   }
