@@ -467,8 +467,8 @@ security expert who knows what questions to ask.
 * 2026-10-15: **every field a record writes is bound, unless a reason below says not** (the
   Coach: "make everything verifiable unless there's a good reason not to"). A passkey envelope's
   HKDF `info` is now its wrap's whole additional data -- format, scope, `vault_id`, the bundle's
-  `registered_at`, purpose, and the envelope's public header (`credential_id`, `prf_salt_b64`,
-  `unlock_id`, `unlocklabel`) -- so the passkeyKey itself, not only the wrap, belongs to one vault
+  `registered_at`, purpose, and the envelope's public header (`method`, `unlock_id`,
+  `unlocklabel`, `credential_id`, `prf_salt_b64`) -- so the passkeyKey itself, not only the wrap, belongs to one vault
   and one envelope; HKDF info and AES-GCM additional data are the same bytes, fed to different
   primitives. Every unlock envelope's wrap binds the bundle's `registered_at`. A lockbox's two
   encryptions bind its whole public header (`format`, `boxlabel`, `revision_id`, `note`,
