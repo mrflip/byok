@@ -1,7 +1,6 @@
 # Thread 9: docs_sweep (2026-10-15)
 
 Branch `20261015-docs_sweep`, PR [#33](https://github.com/mrflip/safebyok/pull/33), cut from `origin/main` and rebased onto it at filing. Justify: green (core 248 tests, convex 213, react 9, demo 28, root 72).
-(core 242 tests, convex 210, react 9, demo 28, root 67).
 
 * **Built**: each stale line the canvass found, in four commits by prefix.
   - `docs:` doc blocks. `types.ts` `Label` no longer lists `userlabel` (and says `user_id` is the
