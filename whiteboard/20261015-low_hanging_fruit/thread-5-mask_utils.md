@@ -1,6 +1,6 @@
 # Thread 5: mask_utils (2026-10-15)
 
-Branch `20261015-mask_utils`, PR [#37](https://github.com/mrflip/safebyok/pull/37), cut from `origin/main`. Justify: green (core 397
+Branch `20261015-mask_utils`, PR [#37](https://github.com/mrflip/safebyok/pull/37), cut from `origin/main`. Justify: green after the rework (core 404
 tests, convex 213, react 7, demo 24, root 91).
 
 * **Built**: `safebyok/utils`, a new entry point (`src/utils.ts`, a `tsdown.config.ts` line, the
@@ -24,27 +24,22 @@ tests, convex 213, react 7, demo 24, root 91).
     (controls, format characters, lone surrogates, private-use, unassigned), `\p{Z}` (every space
     and the line and paragraph separators), `\p{Default_Ignorable_Code_Point}`, `\p{Bidi_Control}`,
     U+2800 (blank braille), U+1D159 (musical null notehead, drawn blank), U+FFFC (object replacement,
-    drawn as a box) and the strong right-to-left spans below; then composes and strips a second
+    drawn as a box); then composes and strips a second
     time, so jamo parted by an invisible compose. Strip, never escape. U+FFFD stays (visible).
-  - **It runs twice**: on the whisper before it is counted (so invisible characters and marks do
-    not count as characters, and a cut cannot orphan a mark), and on the whole result before it
-    is returned (the backstop the Coach asked for; today a no-op, because the pieces were already
-    clean and stars and the marker are ASCII).
+  - **Three stages**, named in the doc block: make the whisper safe to butcher (`plainLine` over
+    the whole input, before it is counted, so invisibles and marks do not count and a cut cannot
+    orphan a mark), butcher (`butcher`, by code point, head and tail with stars between), and check
+    it is safe (`plainLine` again over the result). The last stage is the guarantee; it is today
+    nearly always a no-op, because the pieces were clean and stars and the marker are ASCII, and
+    if it ever changed the result the result may be shorter than intended.
   - **Whitespace is removed entirely, not collapsed to one space**: a key has no meaningful
     spaces, and a result with none cannot start or end on a blank or wrap.
-  - **Strong right-to-left letters and numbers are stripped** (*my earlier case for keeping them
-    was wrong; changed by the orchestrator on review under the Coach's directive*): with every bidi
-    control gone, RTL letters still reorder the digits, stars and punctuation beside them, in the
-    mask and in the log line around it (`אבגדהוזחטיכלמנ123` gave `אב***...***נ123`). The pattern
-    `StrongRtl` is the spans DerivedBidiClass.txt (the Unicode Character Database) gives R, AL and AN
-    by default: U+0590-08FF, U+FB1D-FDFF, U+FE70-FEFF, U+10800-10FFF and U+1E800-1EFFF. **Ranges, not
-    script names**, as the orchestrator suggested names: JavaScript regexes have no `Bidi_Class`, and a
-    list of names misses Arabic numbers and any script added later. Checked against the engine
-    (Node 24): every script name asked for is accepted (Garay too), and every letter and number of
-    them lies inside the ranges; the only `Script_Extensions` members outside are shared punctuation,
-    marks and left-to-right numbers (Aegean, Ugaritic). The tests assert each script's letters by the
-    engine's own script data, independent of the ranges. Cost: those scripts vanish from a mask; an
-    all-RTL whisper gives the all-stripped rule's `minStars` stars.
+  - **Strong right-to-left letters and numbers are kept again** (the Coach, 2026-10-15; see
+    *The Coach's rulings*, below): decision 13, which stripped them, is reversed. The `StrongRtl`
+    pattern is gone. Every bidi control and direction mark is still stripped, so a mask may reorder
+    neighbouring neutral characters in a display (stars, punctuation) and nothing worse. The tests
+    assert, for each right-to-left script by the engine's own script data, that its letters and
+    numbers come through.
   - **Cost of stripping `\p{M}`**: scripts whose vowels are combining marks (Devanagari, Thai,
     Arabic with harakat) lose them in the mask. Accepted by the Coach's "fidelity left the
     building"; flagged here so it is a known consequence.
@@ -79,11 +74,24 @@ tests, convex 213, react 7, demo 24, root 91).
   filing (the Coach said not to; the PR was mergeable).
 * **For thread 8**: a size-budget entry for `import { mask } from 'safebyok/utils'` waits on this
   merging; it ships `errors` and `zod` (core's peer), not the vault.
+* **The Coach's rulings (2026-10-15, after #37 was filed)**, verbatim:
+  1. "there was a questin about mask -- export safebyok/utils, with mask in there": confirmed, the
+     branch already exports `mask` from `safebyok/utils`; nothing changed.
+  2. "yes #37: keep Z.object": option validation stays `Z.object`, so `mask` ships zod. Settled.
+  3. "can we strip the text direction markers and then chomp where things land? The right approach
+     is 'make the string safe to butcher, then butcher, then check it is safe'. Add to the
+     documentation for mask is that 'mask is intended for plain text. Calling it with arbitrary
+     blobs may give unusual behavior'". This answered "Keep stripping right-to-left letters?".
+  **The orchestrator's reading of 3, which is what was built** (for the Coach to correct): stop
+  stripping right-to-left letters and numbers (this **reverses sprint decision 13**); keep
+  stripping every bidi control and direction mark and every invisible; restructure `mask` into
+  the three stages; add the sentence to `mask`'s doc block, the core README and VOCABULARY.md;
+  update `notes/security.md` and the changeset.
 * **Commits after the last review** (the reviewer's last were 492ecc4, f9f8406 and 2b76f54): the
   `api:` and `docs:` commits that strip right-to-left letters, U+FFFC, double-compose, cap
-  `head`/`tail`/`minStars`, and widen the property test. They were not reviewed.
-* **For the Coach**: **RTL letters and numbers are stripped (orchestrator, under the Coach's
-  directive); the cost: those scripts vanish from a mask.** Reverse by dropping `StrongRtl` from
-  `composeAndStrip`. Also: the `\p{M}` cost to Indic and Thai text, whitespace removed rather than
-  collapsed, the 1000 cap, and whether `mask` should validate lighter than `Z.object` (it ships
-  zod). The changeset is `minor`.
+  `head`/`tail`/`minStars`, and widen the property test; and the three-stage rework above. They
+  were not reviewed.
+* **For the Coach**: confirm the reading of ruling 3 above. Also: the `\p{M}` cost to Indic and Thai
+  text, whitespace removed rather than collapsed, and the 1000 cap. The changeset is `minor`. #37
+  conflicts with `main` (`notes/security.md`, the core README, `package.json`, `errors.ts`,
+  `tsdown.config.ts`); the rework was added as fast-forward commits, with no rebase.
