@@ -5,8 +5,14 @@ bundle and lockboxes, ciphertext and public fields only, in tables of its own, a
 **`convexVaultDB`**, the client side a vault stores through. Your Convex backend never sees a
 whisper, a passphrase, or any key that opens one.
 
-A workspace package, source-exported (`exports` points at `src/`) while the interface settles;
-not yet built or published. `convex` is a peer dependency.
+## Install
+
+```sh
+pnpm add safebyok safebyok-convex convex
+```
+
+`safebyok` and `convex` are peer dependencies: your app installs them itself, so the adapter and
+your app share one copy of each, and a `VaultError` from one is a `VaultError` to the other.
 
 ## What your app adds to its `convex/` directory
 
@@ -157,8 +163,8 @@ register(t)
 
 ## Developing this package
 
-`pnpm justify` here runs its lint, typecheck and tests: `convex-test` under the edge runtime,
-in memory, with no deployment. The typecheck and lint read `safebyok` from its source, through
+`pnpm justify` here runs its lint, typecheck, tests -- `convex-test` under the edge runtime,
+in memory, with no deployment -- and the build with its publint and arethetypeswrong checks. The typecheck and lint read `safebyok` from its source, through
 the workspace's `@safebyok/source` export condition, so they need no build. The tests resolve it
 through its built `dist/`, as a consumer's would, and make real vaults with the core's own code;
 they build the core first by themselves (`pnpm build:deps`), so a fresh clone needs no prebuild
@@ -169,6 +175,12 @@ The client's tests run the real `ConvexClient` and `ConvexReactClient` against
 messages from `convex-test`. It runs one call at a time, reruns every watched query after each
 mutation, and signs each socket in as one user from the start; its doc block says what that
 cannot prove.
+
+The build follows Convex's component template: ESM only, unbundled, so each of the component's
+modules keeps its own file under `dist/component/`, beside its `convex.config.js` and
+`_generated/`, for a host's Convex CLI to bundle at deploy. `safebyok-convex/test` alone ships as
+source, `src/test.ts`, since its `import.meta.glob` must find the component's `.ts` modules; a
+test runner that resolves as a bundler does (vitest) loads it.
 
 `src/component/_generated/` holds Convex's codegen output for the component, written by the
 templates of the installed `convex` and never edited by hand. Codegen for a component needs a
