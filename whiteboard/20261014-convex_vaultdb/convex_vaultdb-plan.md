@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **Threads at once**: up to 3
 * **Issued by**: the Coach (flip), via `/sprint`
-* **Status**: thread 1 filed (#17); thread 2 (#18) erase commits in review; thread 3 ready, awaiting restack
+* **Status**: threads 1, 2 filed (#17, #18); thread 3 restacking
 
 ## The request, verbatim
 
