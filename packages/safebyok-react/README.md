@@ -44,7 +44,9 @@ whenever a prop changes identity.
 If `openVault` rejects -- a bad label or option, or storage that cannot be reached -- the provider
 throws that error while rendering. Wrap it in an error boundary, keyed on the user's identity, so
 the boundary's fallback shows the failure and a different user (or a sign-out and back in) gets a
-fresh attempt:
+fresh attempt. (Which kinds of `VaultError` that can be, and what each means, is in the
+`safebyok` README's *Errors* section; `bad_label` and `bad_option` are misuse, while
+`storage_unavailable` and `not_permitted` are conditions that reach the boundary here too.)
 
 ```tsx
 <ErrorBoundary key={userId ?? 'signed-out'} fallback={<VaultTroubleNotice />}>

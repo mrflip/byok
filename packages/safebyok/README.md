@@ -86,3 +86,47 @@ for this line (and for sign-out): it lets work already in hand finish before the
 There is no recovery path, on purpose. A forgotten passphrase means an unrecoverable vault: the
 user re-enters their API keys, which is annoying, not catastrophic. Say so in your UI; the React
 binding's passphrase dialog does.
+
+## Errors
+
+Every vault call that refuses throws a `VaultError` (`isVaultError(err, kind?)` tests for one),
+with a calm message and a `kind` to branch on. The kinds are `VaultErrorKindVals`, and the
+whole list: the storage adapters (`safebyok-convex`, your own) throw these same kinds, and no
+package has others. An error never carries a whisper, a passphrase or any other secret, in its
+message or as a property.
+
+The kinds fall into two families, told apart by who must act.
+
+### Misuse: fix the code
+
+A programming error. Do not show it to the user and do not retry; let it reach an error boundary
+or the dev overlay (in React, `VaultProvider` rethrows a failed `openVault` during render for
+that).
+
+| Kind                  | What happened                                                    | What to do                                              |
+| --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
+| `bad_label`           | a label (or the `userId`) that fails the rules                   | Pass labels the app chose; check a user-typed one first with `Label` |
+| `bad_whisper`         | a whisper JSON cannot carry (`undefined`, a function, a class instance) | Store plain JSON; to empty a lockbox, `erase` it |
+| `bad_option`          | an `openVault` option, or a `store()` note, out of its range     | Fix the option; the message names it                    |
+| `vault_closed`        | the vault handle was closed                                      | Open the vault again; do not use a handle after `close()` |
+| `unknown_key_deriver` | the vault names a key deriver this handle was not built with     | Update safebyok, or open the vault with the deriver that made it |
+
+### Conditions: handle them at run time
+
+Part of normal operation. Each can reach the user; the app decides how.
+
+| Kind                  | What happened                                                    | What to do                                              |
+| --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
+| `vault_locked`        | a whisper was asked for before the vault was unlocked            | Ask for the passphrase and `unlock()`, then retry (`safebyok-react`'s `withUnlockedVault` does) |
+| `wrong_passphrase`    | the passphrase did not unlock the vault, or was empty            | Ask again                                               |
+| `absent_box`          | no lockbox under that label                                      | Offer to create it, or refresh the list: it may have been erased elsewhere |
+| `absent_vault`        | the vault has never been created, or was deleted elsewhere, and the call will not create it | Unlock with a new passphrase to create it |
+| `whisper_too_large`   | a whisper over the vault's `maxWhisperBytes`                     | Tell the user it is too large; a host that means to allow more passes a larger `maxWhisperBytes` |
+| `vault_full`          | a new lockbox in a vault already holding its `maxLockboxes`, or a write the storage backend has no room for | Tell the user to erase a lockbox first; the host may raise `maxLockboxes` where the backend allows |
+| `corrupt_record`      | a stored record failed validation or decryption verification     | Nothing was changed. Do not retry; tell the user, and see a developer: the record is damaged, was moved, or came from a newer safebyok |
+| `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
+| `not_permitted`       | the storage backend refused this user: signed out, or not theirs to reach | Have the user sign in again                             |
+| `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause` |
+
+`openVault` itself can refuse with `bad_option`, `bad_label`, and, when storage cannot be read,
+`storage_unavailable` or `not_permitted`: the last two are conditions, though they surface at open.

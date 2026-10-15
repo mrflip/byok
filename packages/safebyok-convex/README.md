@@ -94,10 +94,10 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
   vault locks, expires or closes.
 * **Other devices' writes arrive live.** The vault watches `watchVault` and refreshes whenever
   it changes, so its snapshot (and a React render) follows writes from anywhere.
-* **Refusals** are `VaultError`s: `not_permitted` (signed out, or not this user's vault);
-  `stale_write` (another device changed the vault first: the vault has already caught up, so
-  read again before retrying); `vault_full` (the vault holds all the component lets it: erase a
-  lockbox first); and `storage_unavailable` for anything else Convex reported, with Convex's own
+* **Refusals** are `VaultError`s, of the kinds in the *Errors* tables of the
+  [`safebyok` README](../safebyok/README.md), which say what each means and what a host does.
+  The Convex functions throw two, `not_permitted` and `vault_full`; a write that came too late is
+  a `stale_write`; and `storage_unavailable` is anything else Convex reported, with Convex's own
   error as its `cause`.
 * **Offline, a call waits** for the connection, as every Convex call does, rather than failing.
   Convex resends a mutation when it reconnects, so a write may land after any timeout you set:
