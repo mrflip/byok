@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault, type VaultDB } from 'safebyok'
-import { testDeriver } from 'safebyok/testing'
+import * as TH from 'safebyok/testing'
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
 
@@ -42,7 +42,7 @@ const makeWorld = () => {
   const deviceDB = memoryDeviceDB()
   const tree = (userId: string | null, caught: unknown[] = []) => (
     <CatchingBoundary caught={caught}>
-      <VaultProvider applabel="acme" vaultlabel="main" userId={userId} vaultDB={vaultDB} deviceDB={deviceDB} keyDeriver={testDeriver}>
+      <VaultProvider applabel="acme" vaultlabel="main" userId={userId} vaultDB={vaultDB} deviceDB={deviceDB} keyDeriver={TH.testDeriver}>
         <Probe />
       </VaultProvider>
     </CatchingBoundary>
@@ -193,7 +193,7 @@ describe("VaultProvider", () => {
     }
     render(
       <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())} deviceDB={memoryDeviceDB()}
-        keyDeriver={testDeriver} clock={{ now: () => ClockMs }} forcePassphraseReentryHours={1} maxWhisperBytes={8} maxLockboxes={1}>
+        keyDeriver={TH.testDeriver} clock={{ now: () => ClockMs }} forcePassphraseReentryHours={1} maxWhisperBytes={8} maxLockboxes={1}>
         <Grab />
       </VaultProvider>,
     )
@@ -230,7 +230,7 @@ describe("VaultProvider", () => {
       render(
         <CatchingBoundary caught={caught}>
           <VaultProvider applabel="Not A Label" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())}
-            deviceDB={memoryDeviceDB()} keyDeriver={testDeriver}>
+            deviceDB={memoryDeviceDB()} keyDeriver={TH.testDeriver}>
             <Probe />
           </VaultProvider>
         </CatchingBoundary>,
@@ -246,7 +246,7 @@ describe("VaultProvider", () => {
       render(
         <CatchingBoundary caught={caught}>
           <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())}
-            deviceDB={memoryDeviceDB()} keyDeriver={testDeriver} maxLockboxes={0}>
+            deviceDB={memoryDeviceDB()} keyDeriver={TH.testDeriver} maxLockboxes={0}>
             <Probe />
           </VaultProvider>
         </CatchingBoundary>,
@@ -296,7 +296,7 @@ describe("VaultProvider", () => {
         return null
       }
       render(
-        <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+        <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={TH.testDeriver}>
           <Grab />
         </VaultProvider>,
       )
@@ -349,7 +349,7 @@ describe("VaultProvider", () => {
         return <Probe />
       }
       render(
-        <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+        <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={TH.testDeriver}>
           <Grab />
         </VaultProvider>,
       )
@@ -376,7 +376,7 @@ describe("VaultProvider", () => {
       const world = makeWorld()
       vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(unreachable())
       render(
-        <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+        <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={TH.testDeriver}>
           <OpenErrorExample />
         </VaultProvider>,
       )
@@ -394,7 +394,7 @@ describe("VaultProvider", () => {
       const caught: unknown[] = []
       render(
         <CatchingBoundary caught={caught}>
-          <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+          <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={TH.testDeriver}>
             <Probe />
           </VaultProvider>
         </CatchingBoundary>,
@@ -413,7 +413,7 @@ describe("VaultProvider", () => {
       const caught: unknown[] = []
       const tree = (userId: string | null) => (
         <CatchingBoundary caught={caught}>
-          <VaultProvider applabel="acme" vaultlabel="main" userId={userId} vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+          <VaultProvider applabel="acme" vaultlabel="main" userId={userId} vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={TH.testDeriver}>
             <Probe />
           </VaultProvider>
         </CatchingBoundary>
@@ -435,7 +435,7 @@ describe("VaultProvider", () => {
       render(
         <CatchingBoundary caught={caught}>
           <VaultProvider applabel="Not A Label" vaultlabel="main" userId={null} vaultDB={localVaultDB(memoryStore())}
-            deviceDB={memoryDeviceDB()} keyDeriver={testDeriver}>
+            deviceDB={memoryDeviceDB()} keyDeriver={TH.testDeriver}>
             <Probe />
           </VaultProvider>
         </CatchingBoundary>,

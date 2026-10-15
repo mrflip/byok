@@ -4,7 +4,7 @@ import { makeFunctionReference } from 'convex/server'
 import { Base64, ConvexError, convexToJson, jsonToConvex } from 'convex/values'
 import type { JSONValue, Value } from 'convex/values'
 import type { GetUserId } from '../src/server'
-import { bySubject, hostWith } from './helpers'
+import * as TH from './test-helpers'
 
 /**
  * A Convex deployment in memory that the real Convex clients talk to: `ConvexClient` and
@@ -26,7 +26,7 @@ import { bySubject, hostWith } from './helpers'
  *   await client.query(deployment.api.safebyok.getBundle, { scope })
  *   await deployment.close()
  */
-export const fakeDeployment = (getUserId: GetUserId = bySubject) => new FakeDeployment(getUserId)
+export const fakeDeployment = (getUserId: GetUserId = TH.bySubject) => new FakeDeployment(getUserId)
 
 /** The fake deployment's handle on one connected socket: the user it is signed in as, its watches. */
 type Session = {
@@ -51,15 +51,15 @@ type QueryModification =
 const FakeAddress = 'https://fake-deployment-123.convex.cloud'
 
 class FakeDeployment {
-  readonly api: ReturnType<typeof hostWith>['api']
-  private readonly backend: ReturnType<ReturnType<typeof hostWith>['createTest']>
+  readonly api: ReturnType<typeof TH.hostWith>['api']
+  private readonly backend: ReturnType<ReturnType<typeof TH.hostWith>['createTest']>
   private readonly sessions = new Map<FakeSocket, Session>()
   private readonly clients: { close(): Promise<void> }[] = []
   private ts = 1
   private work: Promise<void> = Promise.resolve()
 
   constructor(getUserId: GetUserId) {
-    const host = hostWith(getUserId)
+    const host = TH.hostWith(getUserId)
     this.api = host.api
     this.backend = host.createTest()
   }

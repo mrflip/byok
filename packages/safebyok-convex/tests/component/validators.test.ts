@@ -11,7 +11,7 @@ import type {
 import {
   BundleExpectation, Ciphered, EraseExpectation, ListedLockbox, Lockbox, LockboxExpectation, VaultBundle, VaultScope,
 } from '../../src/component/validators'
-import { boxOf, bundleOf } from 'safebyok/testing'
+import * as TH from '../test-helpers'
 
 /**
  * A record's shape, as both validator libraries can be read: which fields, which optional, and
@@ -112,40 +112,40 @@ const convexAccepts = async (call: Promise<unknown>): Promise<boolean> => {
   }
 }
 
-const { vault_id: _vaultId, ...bundleWithoutVaultId } = bundleOf('u1')
-const { note: _note, ...boxWithoutNote } = boxOf('anthropic_api_key', 'a1')
+const { vault_id: _vaultId, ...bundleWithoutVaultId } = TH.bundleOf('u1')
+const { note: _note, ...boxWithoutNote } = TH.boxOf('anthropic_api_key', 'a1')
 
 const BundleCases = [
   // both accept:
-  [bundleOf('u1'),                                                        true,   true,   'a whole bundle'],
+  [TH.bundleOf('u1'),                                                        true,   true,   'a whole bundle'],
   // both refuse -- what Convex can see:
-  [{ ...bundleOf('u1'), format: 'safebyok-vault-v2' },                    false,  false,  'a format this package does not know'],
-  [{ ...bundleOf('u1'), format: 'safebyok-lockbox-v1' },                  false,  false,  "another record's format"],
+  [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },                    false,  false,  'a format this package does not know'],
+  [{ ...TH.bundleOf('u1'), format: 'safebyok-lockbox-v1' },                  false,  false,  "another record's format"],
   [bundleWithoutVaultId,                                                  false,  false,  'a bundle missing its vault_id'],
-  [{ ...bundleOf('u1'), passphrase_epoch: '1' },                          false,  false,  'an epoch written as text'],
-  [{ ...bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, false, 'a ciphered envelope missing its ciphertext'],
-  [{ ...bundleOf('u1'), created_at: null },                               false,  false,  'a null timestamp'],
+  [{ ...TH.bundleOf('u1'), passphrase_epoch: '1' },                          false,  false,  'an epoch written as text'],
+  [{ ...TH.bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, false, 'a ciphered envelope missing its ciphertext'],
+  [{ ...TH.bundleOf('u1'), created_at: null },                               false,  false,  'a null timestamp'],
   // Convex refuses, Zod strips: a field neither record has never reaches storage.
-  [{ ...bundleOf('u1'), passphrase: 'not-a-real-passphrase' },            true,   false,  'a field the record does not have'],
+  [{ ...TH.bundleOf('u1'), passphrase: 'not-a-real-passphrase' },            true,   false,  'a field the record does not have'],
   // Zod refuses, Convex accepts -- the finer rules are the client's:
-  [{ ...bundleOf('u1'), applabel: 'ACME' },                               false,  true,   'an applabel outside the label grammar'],
-  [{ ...bundleOf('u1'), vault_id: '' },                                   false,  true,   'an empty vault_id'],
-  [{ ...bundleOf('u1'), passphrase_epoch: 0 },                            false,  true,   'an epoch of zero'],
-  [{ ...bundleOf('u1'), passphrase_epoch: 1.5 },                          false,  true,   'a fractional epoch'],
+  [{ ...TH.bundleOf('u1'), applabel: 'ACME' },                               false,  true,   'an applabel outside the label grammar'],
+  [{ ...TH.bundleOf('u1'), vault_id: '' },                                   false,  true,   'an empty vault_id'],
+  [{ ...TH.bundleOf('u1'), passphrase_epoch: 0 },                            false,  true,   'an epoch of zero'],
+  [{ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 },                          false,  true,   'a fractional epoch'],
 ] as const
 
 const LockboxCases = [
   // both accept:
-  [boxOf('anthropic_api_key', 'a1'),                                      true,   true,   'a whole lockbox'],
+  [TH.boxOf('anthropic_api_key', 'a1'),                                      true,   true,   'a whole lockbox'],
   [boxWithoutNote,                                                        true,   true,   'a lockbox with no note'],
   // both refuse:
-  [{ ...boxOf('anthropic_api_key', 'a1'), note: null },                   false,  false,  'a null note'],
-  [{ ...boxOf('anthropic_api_key', 'a1'), format: 'safebyok-vault-v1' },  false,  false,  "another record's format"],
-  [{ ...boxOf('anthropic_api_key', 'a1'), whisper_ciphered: 'ct-flat' },  false,  false,  'a whisper ciphered as bare text, not an envelope'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), note: null },                   false,  false,  'a null note'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), format: 'safebyok-vault-v1' },  false,  false,  "another record's format"],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), whisper_ciphered: 'ct-flat' },  false,  false,  'a whisper ciphered as bare text, not an envelope'],
   // Zod refuses, Convex accepts:
-  [{ ...boxOf('Anthropic Key', 'a1') },                                   false,  true,   'a boxlabel outside the label grammar'],
-  [{ ...boxOf('anthropic_api_key', 'a1'), note: 'n'.repeat(257) },        false,  true,   'a note over 256 characters'],
-  [{ ...boxOf('anthropic_api_key', 'a1'), revision_id: '' },              false,  true,   'an empty revision_id'],
+  [{ ...TH.boxOf('Anthropic Key', 'a1') },                                   false,  true,   'a boxlabel outside the label grammar'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), note: 'n'.repeat(257) },        false,  true,   'a note over 256 characters'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), revision_id: '' },              false,  true,   'an empty revision_id'],
 ] as const
 
 describe("the Convex validators, against the core's Zod records, record by record", () => {

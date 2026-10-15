@@ -9,6 +9,9 @@ import { SafebyokComponent } from '../src/server'
 import type { GetUserId } from '../src/server'
 import { modules, register, schema } from '../src/test'
 
+// Everything the core's tests use too, so a test here star-imports this one module as TH.
+export * from 'safebyok/testing'
+
 /** The component's functions, called directly as a root app's: no host wrapper, no auth. */
 export const vaults = anyApi['vaults'] as unknown as ComponentApi['vaults']
 
