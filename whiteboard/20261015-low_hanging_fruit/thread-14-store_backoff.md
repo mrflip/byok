@@ -17,8 +17,10 @@ follow-up the Coach asked for directly, in YOLO mode.
     core's eslint config forbids `Math.random` in `src/`. The doc block says the jitter guards no
     secret.
   - Library first: no existing dependency offers a sleep or backoff; `setTimeout` in a promise
-    is three lines. Not added: `p-retry` or `exponential-backoff` (a Coach's yes needed; see
-    the PR's open question).
+    is three lines. Not added: `p-retry` or `exponential-backoff`. **Settled by the Coach:**
+    "our retry, note the library under ragebait in the todo" -- the hand-written backoff stays,
+    and `TODO.md`'s *RAGEBAIT* now says to take `p-retry` (or `exponential-backoff`) if it ever
+    grows (more callers, cancellation, a policy hook).
   - **Erase and relock are told of at once, not after a wait.** With the sleep inside
     `retryStale`, a box erased elsewhere would only have been noticed on the retry's read, after
     1-2 s of waiting for nothing. So in the attempt, a `stale_write` from `updateBox` is now
@@ -39,5 +41,6 @@ follow-up the Coach asked for directly, in YOLO mode.
 * **Deviations**: thread 7's file says "A retry is not given a delay or backoff"; this thread
   reverses that at the Coach's request. The core README does not describe the retry, so it is
   unchanged. No `notes/security.md` line: the jitter is not a security decision.
-* **For the Coach**: the numbers (3 attempts, base 1 s) are a two-way door. The six-second worst
+* **For the Coach**: the numbers (3 attempts, base 1 s) are a two-way door; the Coach saw them and
+  did not object, so they stand. The six-second worst
   case lands in a UI awaiting `store()`: a host showing a spinner will see it.

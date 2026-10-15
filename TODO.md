@@ -356,3 +356,6 @@ implementation.
 
 * If the eslint configs cut from the core's (`packages/safebyok/eslint.config.mjs`) drift enough to
   cause an uncaught bug, write a generator script to keep them in sync.
+* If our retry and backoff in `store()` (`retryStale`, `retryDelayMs` in `vault.ts`) ever grows --
+  more callers, cancellation, a policy hook -- take `p-retry` (or `exponential-backoff`) rather
+  than growing the hand-written one. For now three lines of `setTimeout` stay ([#45](https://github.com/mrflip/safebyok/pull/45)).
