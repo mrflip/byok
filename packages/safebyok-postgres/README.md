@@ -328,8 +328,9 @@ shape of table, copy it, and keep to what makes it right:
   the bundle's row, and the insert locks that row (`FOR UPDATE`) before reading it, so racing
   writes take turns, and a write that waited reads the count its forerunner left. Lock the
   bundle first in an erase too, so the trigger and a waiting insert never deadlock. Only the
-  locked row is re-read: before refusing a full vault, look afresh for the boxlabel, since the
-  write you waited on may have stored it, and that writer is only stale.
+  locked row is re-read: before refusing a full vault, look afresh at the vault and the boxlabel,
+  since the write you waited on may have stored it, or another erased a lockbox since, and either
+  way the writer is only stale.
 * **Prove it with the shared suite**: `describeVaultDB` from `safebyok/testing` runs every verb,
   expectation and refusal against a fresh adapter. Its two users' vaults go through one adapter,
   so a per-request adapter answers it with one VaultDB per user (`perUser` in
