@@ -234,7 +234,7 @@ Caveats:
 
 ### 7. zod/mini and a tree-shaking audit
 
-Depends on low-hanging-fruit thread 7 (the size budget is the before-and-after). Measured
+Depends on low-hanging-fruit thread 8 (the size budget, [#42](https://github.com/mrflip/safebyok/pull/42), merged: it is the before-and-after). Measured
 before: zod classic is about three quarters of every bundle (183 KB raw), and it does not
 tree-shake because the schemas are built at module top level in a shared chunk; even a bare
 `stableJsonify` import drags all schemas. The thread: move the core's schemas to `zod/mini`
@@ -318,14 +318,29 @@ no field. The security note on ciphertext length stays until this lands.
 
 A host chooses its own label grammar. Waits on the low-hanging-fruit report of what depends on
 the current strictness (storage ckeys, the cipher binding, the Convex tables, the React package);
-the seam is likely an `openVault` option with the current `parseLabel` as the default.
+the seam is likely an `openVault` option with the current `parseLabel` as the default. The report
+([#35](https://github.com/mrflip/safebyok/pull/35)) found the colon is the one character the
+storage ckeys cannot take: they join applabel, user id, vaultlabel and boxlabel with `:` as plain
+concatenations, so a label holding a colon collides with another scope or hides a box. **The
+Coach's ruling: a pluggable label validator must also provide a label-tuple stringifier that
+handles the `:` issue** -- the validator and the stringifier come as one pair, so a host that
+widens the grammar also says how the tuple becomes a ckey. The current `:`-join stays the default
+pair's stringifier, so every stored ckey keeps its shape.
+
+### Validating the user id
+
+`VaultScope.user_id` comes from the host's auth and is free-form today: any non-empty string, no
+grammar, deliberately not a Label. **The Coach's ruling: it gets some manner of validation, and
+the validation is replaceable** -- a default check (a length cap, no control characters, and
+whatever the ckey stringifier above needs) that a host can swap for its own auth provider's id
+shape. Same seam family as the label validator; decide them together.
 
 ### A conflict-handler hook
 
 Ruled "with the retry work": a way for a host to hear about an erase-versus-update collision
 after the retry limit, rather than only a `stale_write`. API design: is it an `openVault` option,
 a snapshot field, or an error the provider surfaces? Decide after the retry (low-hanging-fruit
-thread 6) has been used in anger.
+thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in anger.
 
 ### Others
 
