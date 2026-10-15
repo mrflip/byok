@@ -1,0 +1,8 @@
+/**
+ * safebyok-postgres: safebyok's storage in Postgres, run on your server. {@link VaultTablesSql}
+ * makes the tables; {@link postgresVaultDB}, made per request for the signed-in user, is the
+ * VaultDB over them, through whatever driver you already use. It brings no driver of its own.
+ */
+export { postgresVaultDB } from './postgres-vault-db'
+export type { PostgresClient, PostgresListen, PostgresUnlisten, PostgresVaultDB, PostgresVaultDBOpts } from './postgres-vault-db'
+export { VaultChangeChannel, VaultTablesSql } from './vault-tables'
