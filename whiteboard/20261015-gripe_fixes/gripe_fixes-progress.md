@@ -13,7 +13,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 4 | ci_tooling         | #66 tip `5fefc90`     | filed [#72](https://github.com/mrflip/safebyok/pull/72) |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
 | 6 | thin_tests         | #70 tip `d874db3`     | filed [#75](https://github.com/mrflip/safebyok/pull/75) |
-| 7 | test_helpers       | #75 tip `c7e2da9`     | in review |
+| 7 | test_helpers       | #75 tip `c7e2da9`     | filing |
 | 8 | comment_width      | #66 tip `5fefc90`     | underway |
 
 ## What the threads have taught
