@@ -402,5 +402,6 @@ security expert who knows what questions to ask.
   Supabase's Data API roles among them, reaches no row). The NOTIFY payload is the scope, which
   any role able to connect may LISTEN for. The server holds a vault to no size of its own. Past
   scope and boxlabel, a route's bundles, lockboxes and expectations are validated only as the
-  core's VaultDB validates them. A driver's error rides as `cause` and may quote key columns; the
+  core's VaultDB validates them. A driver's error rides as `cause` and may quote key columns, or
+  (a malformed record refused by a NOT NULL) the whole failing row, its ciphertext included; the
   README's route recipe sends the browser only a refusal's kind and message.
