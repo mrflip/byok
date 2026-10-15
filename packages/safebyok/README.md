@@ -70,11 +70,12 @@ their passphrase again afterwards:
 * **`vault.lock()`** locks at once. Use it for a real lock signal: a Lock button, or a locked
   screen.
 * **`vault.lockSoon(graceSeconds = 5)`** locks gently. Use it when the user steps away: a hidden
-  tab, a sign-out. From the instant it is called the snapshot reads `locked`, every operation
-  called afterwards throws kind `vault_locked`, and this device forgets its remembered unlock;
-  but work already under way (a `store()` retrying after another device's write, say) keeps the
-  key to finish, until it is dropped `graceSeconds` later. An `unlock()` within the grace ends
-  it. The grace is at most 60 seconds; `lockSoon(0)` is `lock()`.
+  tab, a sign-out. From the instant it is called the snapshot reads `locked`, every read, use,
+  store or erase called afterwards throws kind `vault_locked`, and this device forgets its
+  remembered unlock; but work already under way (a `store()` retrying after another device's
+  write, say) keeps the key to finish, until it is dropped `graceSeconds` later. An `unlock()`
+  (or a `changePassphrase()`, which proves the passphrase too) within the grace ends it. The
+  grace is at most 60 seconds; `lockSoon(0)` is `lock()`.
 
 Either one wins over an unlock still under way: that `unlock()` throws kind `vault_locked` and
 remembers nothing, so a vault locked while the passphrase was being checked stays locked.

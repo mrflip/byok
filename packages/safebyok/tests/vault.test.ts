@@ -1369,6 +1369,19 @@ describe("lockSoon", () => {
     expect(await world.rememberedUnlock()).to.not.be.null
   })
 
+  it("is ended by a changePassphrase() within the grace, which proves the passphrase as an unlock does", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('old passphrase')
+    await vault.store('anthropic', 'sk-fake')
+    await vault.lockSoon()
+    await vault.changePassphrase('old passphrase', 'new passphrase')
+    expect(vi.getTimerCount()).to.eq(0)
+    vi.advanceTimersByTime(GraceMs * 2)
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(await vault.read('anthropic')).to.eq('sk-fake')
+  })
+
   it("loses to an unlock begun within the grace and still under way when it runs out", async () => {
     const world = makeRacingWorld()
     const vault = await world.open()
