@@ -7,7 +7,7 @@ import { defineConfig } from 'tsdown'
 // for, while `publishConfig.exports`, the dist-only copy, is what publishing ships.
 export default defineConfig({
   // `safebyok/testing` is its own entry, so only a test that asks for it loads vitest.
-  entry:      { index: 'src/index.ts', idb: 'src/idb.ts', browser: 'src/browser.ts', testing: 'src/testing/index.ts' },
+  entry:      { index: 'src/index.ts', idb: 'src/idb.ts', browser: 'src/browser.ts', testing: 'src/testing/index.ts', utils: 'src/utils.ts' },
   format:     ['esm', 'cjs'],
   // Browser first, but nothing here is browser-only: WebCrypto is the same global under Node.
   platform:   'neutral',
