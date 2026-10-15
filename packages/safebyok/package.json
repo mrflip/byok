@@ -79,6 +79,11 @@
       "import": "./dist/idb.js",
       "require": "./dist/idb.cjs"
     },
+    "./testing": {
+      "@safebyok/source": "./src/testing/index.ts",
+      "import": "./dist/testing.js",
+      "require": "./dist/testing.cjs"
+    },
     "./package.json": "./package.json"
   },
   "dependencies": {
@@ -88,12 +93,16 @@
     "safe-stable-stringify": "^2.5.0"
   },
   "peerDependencies": {
-    "zod": "^4.0.0"
+    "zod": "^4.0.0",
+    "vitest": "^5.0.0"
   },
   "typesVersions": {
     "*": {
       "idb": [
         "./dist/idb.d.cts"
+      ],
+      "testing": [
+        "./dist/testing.d.cts"
       ]
     }
   },
@@ -107,7 +116,16 @@
         "import": "./dist/idb.js",
         "require": "./dist/idb.cjs"
       },
+      "./testing": {
+        "import": "./dist/testing.js",
+        "require": "./dist/testing.cjs"
+      },
       "./package.json": "./package.json"
+    }
+  },
+  "peerDependenciesMeta": {
+    "vitest": {
+      "optional": true
     }
   }
 }

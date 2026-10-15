@@ -11,5 +11,7 @@ Bring Your Own Key (BYOK) Browser Vault using E2EE (End-to-end Encryption) and p
 
 It is react-friendly (`safebyok-react`) and database agnostic: storage adapters implement a small
 abstract seam, IndexedDB adapters ship in `safebyok/idb`, and a Convex adapter is planned.
+`safebyok/testing` is for tests only: a cheap key deriver, shape-valid records with fake
+ciphertext, and `describeVaultDB`, the vitest suite every storage adapter owes.
 `whiteboard/20261013-relic/proposed-README.md` drafts the full README for when the surface
 settles.
