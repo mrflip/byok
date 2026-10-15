@@ -5,13 +5,14 @@ name: Release
 #
 # * version -- changesets are waiting on main. `version` turns them into version bumps and
 #   CHANGELOG entries on the branch changeset-release/main, rebuilt from main's tip each time, and
-#   opens or updates the Version PR from it. Merging that PR is the release.
+#   opens or updates the Version PR from it, named for the release it makes. Merging that PR is
+#   the release.
 # * publish -- no changesets wait, and a public package's version is not yet on npm: the Version
 #   PR has just been merged. `pack` checks the lockstep group, lints, typechecks, tests and builds
 #   every package, and packs each package to release with pnpm (which writes real ranges in place
 #   of `workspace:`). `publish` stages each tarball on npm (scripts/release.ts); the changesets
 #   action then tags each package staged (`safebyok@0.2.0`) and writes its GitHub release from its
-#   CHANGELOG.md.
+#   CHANGELOG.md, and the core's release is made the repository's latest.
 # * none -- nothing to do.
 #
 # Two people stand between a changeset and npm: the Coach merges the Version PR, and approves each
@@ -79,6 +80,13 @@ jobs:
         with:
           node-version-file: .tool-versions
       - run: pnpm install --frozen-lockfile
+      # The Version PR and its commit are named for the release they make ("Release 0.2.0:
+      # safebyok, ..."), so the history says which merge released what.
+      - id: names
+        name: Name the Version PR for its release
+        run: |
+          pnpm exec changeset status --output="$RUNNER_TEMP/release-plan.json"
+          node scripts/release.ts names "$RUNNER_TEMP/release-plan.json"
       # Minted after the install, so no install script runs while it exists. GitHub accepts an
       # App's numeric ID wherever it asks for the Client ID.
       - id: app-token
@@ -92,8 +100,8 @@ jobs:
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           script: pnpm release:version
-          commit-message: 'rel: version the packages for release'
-          pr-title: Version the packages for release
+          commit-message: ${{ steps.names.outputs.commit-message }}
+          pr-title: ${{ steps.names.outputs.pr-title }}
 
   pack:
     needs: select-mode
@@ -151,6 +159,19 @@ jobs:
           path: ${{ runner.temp }}/changeset-pack
       # A prerelease version (`0.3.0-beta.1`) is staged under the `next` dist-tag, everything else
       # under `latest`. The action then pushes the tags the script reports, and writes the releases.
-      - uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
+      - id: publish
+        uses: changesets/action/publish@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           script: pnpm release:stage ${{ runner.temp }}/changeset-pack
+      # GitHub makes the release written last the repository's latest, whichever package it is.
+      # The core's is the one a visitor wants, so it is made latest, unless it is a prerelease.
+      - name: Make the core's release the repository's latest
+        if: ${{ !cancelled() && steps.publish.outputs.published == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PUBLISHED: ${{ steps.publish.outputs.published-packages }}
+        run: |
+          version=$(jq -r '.[] | select(.name == "safebyok") | .version' <<< "$PUBLISHED")
+          if [[ -n "$version" && "$version" != *-* ]]; then
+            gh release edit "safebyok@$version" --repo "$GITHUB_REPOSITORY" --latest
+          fi

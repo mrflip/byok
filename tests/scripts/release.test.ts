@@ -79,6 +79,53 @@ describe("gitTag", () => {
   })
 })
 
+const planned = (pkgname: string, type: string, newVersion: string): Release.PlannedRelease => ({ name: pkgname, type, newVersion })
+const DemoUntouched = planned('safebyok-demo-react', 'none', '0.0.0')
+
+const VersionPrNameCases = [
+  // regular usage:
+  [[planned('safebyok', 'minor', '0.2.0'), DemoUntouched, planned('safebyok-convex', 'minor', '0.2.0'), planned('safebyok-react', 'minor', '0.2.0')],
+    { prTitle: 'Release 0.2.0: safebyok, safebyok-convex, safebyok-react', commitMessage: 'rel: release 0.2.0 of safebyok, safebyok-convex, safebyok-react' },
+    'a lockstep release is named by its one version and the packages it releases'],
+  [[planned('safebyok', 'patch', '0.3.0-beta.1')],
+    { prTitle: 'Release 0.3.0-beta.1: safebyok', commitMessage: 'rel: release 0.3.0-beta.1 of safebyok' },
+    'a prerelease is named by its prerelease version'],
+  [[planned('safebyok', 'minor', '0.2.0')],
+    { prTitle: 'Release 0.2.0: safebyok', commitMessage: 'rel: release 0.2.0 of safebyok' },
+    'a release of one package names just it'],
+  // edge cases:
+  [[planned('safebyok', 'minor', '0.2.0'), planned('safebyok-react', 'patch', '0.1.1')],
+    { prTitle: 'Release safebyok@0.2.0, safebyok-react@0.1.1', commitMessage: 'rel: release safebyok@0.2.0, safebyok-react@0.1.1' },
+    'packages out of lockstep are each named with their own version'],
+  [[DemoUntouched],
+    { prTitle: 'Version the packages for release', commitMessage: 'rel: version the packages for release' },
+    'a plan that releases nothing keeps the plain name'],
+] as const
+
+describe("versionPrNames", () => {
+  for (const [releases, expected, blurb] of VersionPrNameCases) {
+    it(blurb, () => { expect(Release.versionPrNames(releases)).to.deep.equal(expected) })
+  }
+})
+
+describe("readReleasePlan", () => {
+  let workdir: string
+  beforeEach(() => { workdir = mkdtempSync(path.join(tmpdir(), 'release-plan-')) })
+  afterEach(() => { rmSync(workdir, { recursive: true, force: true }) })
+
+  it("reads the releases from changeset status's plan", () => {
+    const planPath = path.join(workdir, 'plan.json')
+    writeFileSync(planPath, JSON.stringify({ changesets: [], releases: [{ ...planned('safebyok', 'minor', '0.2.0'), oldVersion: '0.1.0', changesets: ['20261015-thread'] }] }))
+    expect(Release.readReleasePlan(planPath).map((release) => release.newVersion)).to.deep.equal(['0.2.0'])
+  })
+
+  it("refuses a file that is not a release plan", () => {
+    const planPath = path.join(workdir, 'plan.json')
+    writeFileSync(planPath, JSON.stringify({ version: 1, plan: [] }))
+    expect(() => Release.readReleasePlan(planPath)).to.throw(/not a release plan/)
+  })
+})
+
 const WorkspaceRangeCases = [
   [{ peerDependencies: { safebyok: "workspace:^" } },                 ["safebyok: workspace:^"], 'a workspace peer range is caught'],
   [{ dependencies: { safebyok: "workspace:*" }, devDependencies: {} }, ["safebyok: workspace:*"], 'a workspace dependency is caught'],

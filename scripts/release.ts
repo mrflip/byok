@@ -16,8 +16,13 @@
  * push to main never restages it; it attempts every package before it exits non-zero for any that
  * failed. `--dry-run` passes `--dry-run` to npm and reports no tags.
  *
+ * `names` names the Version PR and its commit for the release they make, from the release plan
+ * `changeset status --output` wrote: `pr-title` and `commit-message`, to the file named by
+ * `GITHUB_OUTPUT` (or to stdout without one), for the changesets action to use.
+ *
  *   node scripts/release.ts check
  *   node scripts/release.ts stage <pack-dir> [--dry-run]
+ *   node scripts/release.ts names <release-plan.json>
  */
 import { execFile } from 'node:child_process'
 import { appendFileSync, readFileSync } from 'node:fs'
@@ -187,6 +192,60 @@ export function distTag(version: string): 'next' | 'latest' {
  */
 export function gitTag(release: Pick<Release, 'name' | 'version'>): string {
   return `${release.name}@${release.version}`
+}
+
+/** One package's bump, from the release plan `changeset status --output` writes */
+export interface PlannedRelease {
+  name:       string
+  /** `major`, `minor`, `patch`, or `none` for a package the plan leaves alone */
+  type:       string
+  newVersion: string
+}
+
+/** What the Version PR and its one commit are called */
+export interface VersionPrNames {
+  prTitle:       string
+  commitMessage: string
+}
+
+/**
+ * The Version PR's title and its commit's message, naming the release they make: its version and
+ * the packages that go out at it, so the history says which commit released what. The public
+ * packages release in lockstep, so one version names them all; should they ever disagree, each
+ * is named with its own. A package the plan leaves alone is not named.
+ *
+ * @param releases - The plan's releases, in its order.
+ * @returns The PR title and the commit message.
+ *
+ * @example versionPrNames([{ name: 'safebyok', type: 'minor', newVersion: '0.2.0' }]).prTitle  // => 'Release 0.2.0: safebyok'
+ */
+export function versionPrNames(releases: readonly PlannedRelease[]): VersionPrNames {
+  const bumped = releases.filter((release) => release.type !== 'none')
+  if (bumped.length === 0) {
+    return { prTitle: 'Version the packages for release', commitMessage: 'rel: version the packages for release' }
+  }
+  const versions = [...new Set(bumped.map((release) => release.newVersion))]
+  if (versions.length > 1) {
+    const tags = bumped.map((release) => gitTag({ name: release.name, version: release.newVersion })).join(', ')
+    return { prTitle: `Release ${tags}`, commitMessage: `rel: release ${tags}` }
+  }
+  const version = versions.join('')
+  const pkgnames = bumped.map((release) => release.name).join(', ')
+  return { prTitle: `Release ${version}: ${pkgnames}`, commitMessage: `rel: release ${version} of ${pkgnames}` }
+}
+
+/**
+ * The releases in a release plan `changeset status --output` wrote.
+ *
+ * @param planPath - Path to the plan's JSON.
+ * @returns Its releases, in its order.
+ */
+export function readReleasePlan(planPath: string): PlannedRelease[] {
+  const plan = JSON.parse(readFileSync(planPath, 'utf8')) as { releases?: unknown }
+  if (! Array.isArray(plan.releases)) {
+    throw new TypeError(`${planPath} is not a release plan from changeset status --output: it has no releases`)
+  }
+  return plan.releases as PlannedRelease[]
 }
 
 /**
@@ -393,22 +452,35 @@ async function main(argv: readonly string[]): Promise<number> {
   const [command, ...rest] = argv
   const rootDir = path.resolve(import.meta.dirname, '..')
   const run = processRunner(rootDir)
-  if (command === 'check') {
-    const problems = releaseProblems(await listWorkspace(run), rootDir, readFixedGroups(path.join(rootDir, '.changeset', 'config.json')))
-    for (const problem of problems) { process.stderr.write(`release check: ${problem}\n`) }
-    if (problems.length === 0) { process.stdout.write('release check: the public packages and the fixed group agree.\n') }
-    return problems.length === 0 ? 0 : 1
-  }
-  const packDir = rest.find((arg) => ! arg.startsWith('--'))
-  if (command === 'stage' && packDir) {
-    const dryRun = rest.includes('--dry-run')
-    const outcomes = await stage(readPackDir(path.resolve(packDir)), { run, dryRun, tagfile: process.env['CHANGESETS_OUTPUT'] })
-    for (const outcome of outcomes) { process.stdout.write(`${describeOutcome(outcome, dryRun)}\n`) }
-    if (outcomes.length === 0) { process.stdout.write('Nothing to stage.\n') }
-    return outcomes.some((outcome) => outcome.kind === 'failed') ? 1 : 0
-  }
-  process.stderr.write('Usage: node scripts/release.ts check | stage <pack-dir> [--dry-run]\n')
+  if (command === 'check') { return checkCommand(run, rootDir) }
+  const pathArg = rest.find((arg) => ! arg.startsWith('--'))
+  if (command === 'stage' && pathArg) { return stageCommand(run, pathArg, rest.includes('--dry-run')) }
+  if (command === 'names' && pathArg) { return namesCommand(pathArg) }
+  process.stderr.write('Usage: node scripts/release.ts check | stage <pack-dir> [--dry-run] | names <release-plan.json>\n')
   return 2
+}
+
+async function checkCommand(run: Runner, rootDir: string): Promise<number> {
+  const problems = releaseProblems(await listWorkspace(run), rootDir, readFixedGroups(path.join(rootDir, '.changeset', 'config.json')))
+  for (const problem of problems) { process.stderr.write(`release check: ${problem}\n`) }
+  if (problems.length === 0) { process.stdout.write('release check: the public packages and the fixed group agree.\n') }
+  return problems.length === 0 ? 0 : 1
+}
+
+async function stageCommand(run: Runner, packDir: string, dryRun: boolean): Promise<number> {
+  const outcomes = await stage(readPackDir(path.resolve(packDir)), { run, dryRun, tagfile: process.env['CHANGESETS_OUTPUT'] })
+  for (const outcome of outcomes) { process.stdout.write(`${describeOutcome(outcome, dryRun)}\n`) }
+  if (outcomes.length === 0) { process.stdout.write('Nothing to stage.\n') }
+  return outcomes.some((outcome) => outcome.kind === 'failed') ? 1 : 0
+}
+
+function namesCommand(planPath: string): number {
+  const names = versionPrNames(readReleasePlan(path.resolve(planPath)))
+  const lines = `pr-title=${names.prTitle}\ncommit-message=${names.commitMessage}\n`
+  const outfile = process.env['GITHUB_OUTPUT']
+  if (outfile) { appendFileSync(outfile, lines) }
+  process.stdout.write(lines)
+  return 0
 }
 
 if (import.meta.main) {
