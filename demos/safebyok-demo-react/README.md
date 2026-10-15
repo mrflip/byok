@@ -44,6 +44,7 @@ fake auth's scaffolding rows sit in localStorage.
 | app scaffolding a host replaces | [src/lib/auth.ts](src/lib/auth.ts) (fake sign-in; a real app brings its own auth and passes `userId` to the provider), [src/lib/stores.ts](src/lib/stores.ts) (this browser's IndexedDB standing in for a backend) |
 | the app itself | [src/components/](src/components/), [src/lib/anthropic.ts](src/lib/anthropic.ts) |
 
-Tests live in `tests/`, mirroring `src/`, and cover the demo's machinery (auth scaffold, whisper
-text handling, the outage switch, the Anthropic request shape via an injected fetch) -- not the React furniture. The
-vault and provider are tested in their own packages.
+Tests live in `tests/`, mirroring `src/`. The machinery's (auth scaffold, whisper text handling,
+the outage switch, the Anthropic request shape via an injected fetch) run under node; each
+component's renders it under jsdom, inside a VaultProvider over stores in memory, and works it as
+a user would (`tests/test-helpers.tsx`). The vault and provider are tested in their own packages.
