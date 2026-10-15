@@ -12,7 +12,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
 | 4 | ci_tooling         | #66 tip `5fefc90`     | filed [#72](https://github.com/mrflip/safebyok/pull/72) |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
-| 6 | thin_tests         | #70 tip `d874db3`     | underway |
+| 6 | thin_tests         | #70 tip `d874db3`     | in review |
 | 7 | test_helpers       | thread 6's tip        | pending (after 6 files) |
 | 8 | comment_width      | #66 tip, after 1-7    | pending |
 
@@ -110,3 +110,13 @@ script errors; every test path builds first. Not run: GitHub Actions itself. Lef
 questions: a build failure skips every package's tests (deliberate); the Dependabot gate keys on the
 PR's author; removed/made-private packages, `peerDependenciesMeta`, `bundledDependencies` not
 compared; `justify:root` unused; convex's `./test` entry imports a devDependency (predates).
+
+*Orchestrator:* thread 6, thin_tests, is `ready` (tip `83b0a9a`). **For thread 7, which stacks on
+it:** `safebyok/testing` now has one `expectRefusal` (by `name` and `kind`, returns the error),
+`thrownText`, `leafTexts` and `omitting`; all four old refusal helpers are gone (Convex's
+`server.test.ts` and `component/vaults.test.ts` keep their own `refusalOf`, which reads
+`ConvexError` data -- a different contract). The demo has `tests/test-helpers.tsx` (`makeWorld`,
+`answerPassphraseDialog`, `Passphrase`). Thread 6's leads for thread 7: `fakeAnthropic` vs
+`makeFakeAnthropic`; the test "worlds" across core and React; the probe components. For the Coach:
+should `convexVaultDB` keep Convex's validator error as a refusal's `cause` (on a dev deployment
+it quotes the refused arguments; `notes/security.md` accepts it today)?
