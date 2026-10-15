@@ -235,4 +235,9 @@ security expert who knows what questions to ask.
   unlock is dropped. The counter is per handle: a lock in one tab does not reach an unlock under
   way in another, beyond both writing the one device record. The undoing erase is
   unconditional, so it can also erase a record written by a second unlock begun after the lock
-  on the same handle; that device then asks for the passphrase at its next open.
+  on the same handle; that device then asks for the passphrase at its next open. An unlock (or
+  the unlock after a passphrase change) also takes up nothing, and throws `vault_locked`, when the
+  bundle standing at its end is not the one its passphrase was proven against, by `vault_id` and
+  `passphrase_epoch`: a vault destroyed, remade, or re-keyed elsewhere while the passphrase was
+  being checked. Without that, the old vault's vaultKey was taken up against the new bundle, and a
+  `store()` sealed boxes into the new vault that its owner could never open.

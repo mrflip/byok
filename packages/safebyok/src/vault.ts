@@ -100,7 +100,9 @@ export type Vault = {
    *
    * A `lock()` or `destroy()` called while the unlock is still under way wins: the vault stays
    * locked, this device remembers nothing, and the call throws kind 'vault_locked'. A vault the
-   * unlock was creating stays created, locked, under this passphrase.
+   * unlock was creating stays created, locked, under this passphrase. So does a vault destroyed,
+   * made anew, or given a new passphrase on another device meanwhile: the passphrase was proven
+   * against a vault that no longer stands as it was.
    */
   unlock(passphrase: string): Promise<void>
   /**
@@ -373,18 +375,29 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const shutSince = (shutsThen: number) => shutsSoFar !== shutsThen
 
   /**
+   * True when the vault has shut since `shutsThen`, or the bundle standing now is no longer the
+   * one `standing` proved a passphrase against: destroyed, made anew, or its passphrase changed,
+   * here or elsewhere.
+   */
+  const outrun = (standing: VaultBundle, shutsThen: number) => (
+    shutSince(shutsThen) || bundle === null || bundle === UnreadBundle
+    || bundle.vault_id !== standing.vault_id || bundle.passphrase_epoch !== standing.passphrase_epoch
+  )
+
+  /**
    * Remember an unlock on this device and take up its vaultKey, deadline from now -- unless the
-   * vault has shut since `shutsThen`, which wins: then nothing is taken up, and a device record
-   * already written is erased again.
+   * vault has shut since `shutsThen`, or the bundle the key was proven against no longer stands,
+   * either of which wins: then nothing is taken up, and a device record already written is erased
+   * again.
    *
    * @returns True when the vault is now unlocked.
    */
   const takeUpUnlock = async (unlocked: VaultKeyPair, standing: VaultBundle, shutsThen: number): Promise<boolean> => {
-    if (shutSince(shutsThen)) { return false }
+    if (outrun(standing, shutsThen)) { return false }
     const until = deadlineAfter(clock.now(), reentryMs)
     // The transient's last act: wrapped into this device's remembered unlock, then dropped.
     await rememberDevice(unlocked.transientKey, standing, until)
-    if (shutSince(shutsThen)) {
+    if (outrun(standing, shutsThen)) {
       // The shut's own erase may have run before this record landed.
       await deviceDB.eraseUnlock(scope)
       return false
@@ -507,7 +520,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       const tookUp = unlocked !== null && await takeUpUnlock(unlocked, unlocked.standing, shutsThen)
       bump()
       if (! tookUp) {
-        throw new VaultError('vault_locked', 'The vault was locked (or destroyed) while this unlock was under way, and that wins: nothing was unlocked, and this device remembers nothing. Unlock again if that was not meant.')
+        throw new VaultError('vault_locked', 'The vault was locked, destroyed, or given a new passphrase while this unlock was under way, and that wins: nothing was unlocked, and this device remembers nothing. Unlock again to carry on.')
       }
     },
 
