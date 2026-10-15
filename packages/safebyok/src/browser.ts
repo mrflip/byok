@@ -1,5 +1,6 @@
 import { argon2idWebV1Deriver } from './key-deriver'
 import { idbDeviceDB, type IdbOpts } from './idb'
+import { parseDbName } from './idb-opts'
 import type { OpenVaultOpts } from './vault'
 
 /**
@@ -23,7 +24,8 @@ const bagsByDbName = new Map<string, BrowserOpts>()
  * you pass after the spread wins. The same `dbName` always answers the same bag.
  *
  * @param opts - Where the device store keeps its records: `dbName`, default 'safebyok'.
- * @returns A frozen bag of `keyDeriver` and `deviceDB`.
+ * @returns A frozen bag of `keyDeriver` and `deviceDB`. Kind 'bad_option' for a `dbName` that is
+ *   not non-empty text.
  *
  * @example
  *   const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB, ...browserOpts() })
@@ -32,8 +34,8 @@ const bagsByDbName = new Map<string, BrowserOpts>()
  * @example
  *   browserOpts({ dbName: 'acme' }) === browserOpts({ dbName: 'acme' })  // true
  */
-export const browserOpts = (opts: IdbOpts = {}): BrowserOpts => {
-  const dbName = opts.dbName ?? 'safebyok'
+export const browserOpts = (opts?: IdbOpts): BrowserOpts => {
+  const dbName = parseDbName(opts, 'browserOpts')
   const kept = bagsByDbName.get(dbName)
   if (kept !== undefined) { return kept }
   const bag: BrowserOpts = Object.freeze({ keyDeriver: argon2idWebV1Deriver, deviceDB: idbDeviceDB({ dbName }) })

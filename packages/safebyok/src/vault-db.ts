@@ -10,10 +10,11 @@ import type { StringStore } from './string-store'
  *
  * @example { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }
  */
-export type BundleExpectation = {
-  vault_id:         string
-  passphrase_epoch: number
-}
+export type BundleExpectation = Z.infer<typeof BundleExpectation>
+const BundleExpectation = Z.object({
+  vault_id:         VaultBundle.shape.vault_id,
+  passphrase_epoch: VaultBundle.shape.passphrase_epoch,
+})
 
 /**
  * What a lockbox update was written for and read: the vault whose vaultKey sealed it, and the
@@ -24,10 +25,11 @@ export type BundleExpectation = {
  *
  * @example { vault_id: bundle.vault_id, revision_id: prev?.revision_id ?? null }
  */
-export type LockboxExpectation = {
-  vault_id:    string
-  revision_id: string | null
-}
+export type LockboxExpectation = Z.infer<typeof LockboxExpectation>
+const LockboxExpectation = Z.object({
+  vault_id:    VaultBundle.shape.vault_id,
+  revision_id: Z.nullable(Lockbox.shape.revision_id),
+})
 
 /**
  * What an erase was aimed at: the vault whose lockbox, or whole self, the eraser means to remove.
@@ -37,9 +39,10 @@ export type LockboxExpectation = {
  *
  * @example { vault_id: bundle.vault_id }
  */
-export type EraseExpectation = {
-  vault_id: string
-}
+export type EraseExpectation = Z.infer<typeof EraseExpectation>
+const EraseExpectation = Z.object({
+  vault_id: VaultBundle.shape.vault_id,
+})
 
 /**
  * Remote storage for vault records, as the host application plugs it in: extend this class and
@@ -63,10 +66,10 @@ export type EraseExpectation = {
  *    fix or quietly drop.
  *
  * The public verbs -- `readBundle`, `updateBox` and the rest -- wrap your `do*` methods with the
- * checks every adapter owes: labels and scope on the way in, the shape of every record on the way
- * out, `stale_write` for a failed expectation, and `storage_unavailable` (your own error as its
- * `cause`) for anything you throw that is not already a VaultError. Implement the `do*` methods;
- * never override the public verbs.
+ * checks every adapter owes: labels, scope, records and expectations on the way in, the shape of
+ * every record on the way out, `stale_write` for a failed expectation, and `storage_unavailable`
+ * (your own error as its `cause`) for anything you throw that is not already a VaultError.
+ * Implement the `do*` methods; never override the public verbs.
  */
 export abstract class VaultDB {
   /**
@@ -106,18 +109,25 @@ export abstract class VaultDB {
    */
   async createBundle(bundle: VaultBundle): Promise<VaultBundle> {
     const asked = checkScope(bundle)
-    const raw = await fromStorage(() => this.doCreateBundle(bundle))
+    const outgoing = checkOutgoing(VaultBundle, bundle, 'vault bundle')
+    const raw = await fromStorage(() => this.doCreateBundle(outgoing))
     return checkBundle(raw, asked)
   }
 
   /**
    * Replace the bundle with `bundle`, only while the standing one still has the `vault_id` and
    * `passphrase_epoch` in `expected`. Refuses with kind `stale_write` otherwise -- including when
-   * no bundle stands at all -- and writes nothing.
+   * no bundle stands at all -- and writes nothing. A vault's `vault_id` never changes, so `bundle`
+   * must carry the one in `expected`: kind 'bad_option' otherwise.
    */
   async updateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<void> {
     checkScope(bundle)
-    const landed = await fromStorage(() => this.doUpdateBundle(bundle, expected))
+    const outgoing = checkOutgoing(VaultBundle, bundle, 'vault bundle')
+    const expectation = checkOutgoing(BundleExpectation, expected, 'bundle expectation')
+    if (outgoing.vault_id !== expectation.vault_id) {
+      throw new VaultError('bad_option', "updateBundle replaces a vault's bundle within that vault: the bundle's vault_id must be the expected one, as a vault_id never changes.")
+    }
+    const landed = await fromStorage(() => this.doUpdateBundle(outgoing, expectation))
     if (! landed) {
       throw new VaultError('stale_write', 'The vault changed in storage since this device read it -- its passphrase was changed, or it was deleted or made anew, elsewhere -- so this change was refused and nothing was written. Read the vault again before retrying.')
     }
@@ -158,8 +168,10 @@ export abstract class VaultDB {
    */
   async updateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<void> {
     const asked = checkScope(scope)
-    checkBoxlabel(lockbox.boxlabel)
-    const landed = await fromStorage(() => this.doUpdateBox(asked, lockbox, expected))
+    checkBoxlabelOf(lockbox)
+    const outgoing = checkOutgoing(Lockbox, lockbox, 'lockbox')
+    const expectation = checkOutgoing(LockboxExpectation, expected, 'lockbox expectation')
+    const landed = await fromStorage(() => this.doUpdateBox(asked, outgoing, expectation))
     if (! landed) {
       throw new VaultError('stale_write', 'That lockbox changed in storage since this device read it -- another device or tab wrote or erased it, or the vault was made anew -- so this write was refused and nothing was written. Read it again before retrying.')
     }
@@ -174,7 +186,8 @@ export abstract class VaultDB {
   async eraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<void> {
     const asked = checkScope(scope)
     const label = checkBoxlabel(boxlabel)
-    const landed = await fromStorage(() => this.doEraseBox(asked, label, expected))
+    const expectation = checkOutgoing(EraseExpectation, expected, 'erase expectation')
+    const landed = await fromStorage(() => this.doEraseBox(asked, label, expectation))
     if (! landed) { throw staleErase() }
   }
 
@@ -185,7 +198,8 @@ export abstract class VaultDB {
    */
   async eraseVault(scope: VaultScope, expected: EraseExpectation): Promise<void> {
     const asked = checkScope(scope)
-    const landed = await fromStorage(() => this.doEraseVault(asked, expected))
+    const expectation = checkOutgoing(EraseExpectation, expected, 'erase expectation')
+    const landed = await fromStorage(() => this.doEraseVault(asked, expectation))
     if (! landed) { throw staleErase() }
   }
 
@@ -196,6 +210,7 @@ export abstract class VaultDB {
    */
   subscribe(scope: VaultScope, onChange: () => void): () => void {
     const asked = checkScope(scope)
+    checkListener(onChange)
     try {
       return this.doSubscribe(asked, onChange)
     } catch (err) {
@@ -294,8 +309,33 @@ const checkScope = (scope: VaultScope): VaultScope => {
 
 const checkBoxlabel = (boxlabel: string): string => {
   const checked = Label.safeParse(boxlabel)
+  if (! checked.success) { throw badBoxlabel() }
+  return checked.data
+}
+
+const badBoxlabel = () => new VaultError('bad_label', 'A boxlabel is 2-40 lowercase letters and digits, words joined by single underscores, starting with a letter.')
+
+// The label a lockbox is written under, checked as a label before the rest of the record is.
+const LabelledBox = Z.object({ boxlabel: Label })
+const checkBoxlabelOf = (lockbox: unknown) => {
+  if (! LabelledBox.safeParse(lockbox).success) { throw badBoxlabel() }
+}
+
+const checkListener = (onChange: unknown) => {
+  if (typeof onChange !== 'function') {
+    throw new VaultError('bad_option', 'subscribe needs an onChange function to call after each write.')
+  }
+}
+
+/**
+ * A record or expectation a write verb was handed, as this package writes one. One that is not
+ * is refused before storage sees it, as misuse, so that nothing is ever written that a read would
+ * refuse as corrupt. The refusal names what was refused but never quotes it.
+ */
+const checkOutgoing = <RecordT>(recordSchema: Z.ZodMiniType<RecordT>, candidate: unknown, said: string): RecordT => {
+  const checked = recordSchema.safeParse(candidate)
   if (! checked.success) {
-    throw new VaultError('bad_label', 'A boxlabel is 2-40 lowercase letters and digits, words joined by single underscores, starting with a letter.')
+    throw new VaultError('bad_option', `That ${said} is not one this package writes, so nothing was written: a VaultDB writes only the records and expectations a vault builds.`)
   }
   return checked.data
 }
