@@ -13,7 +13,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 4 | ci_tooling         | #66 tip `5fefc90`     | filed [#72](https://github.com/mrflip/safebyok/pull/72) |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
 | 6 | thin_tests         | #70 tip `d874db3`     | filed [#75](https://github.com/mrflip/safebyok/pull/75) |
-| 7 | test_helpers       | #75 tip `c7e2da9`     | filing |
+| 7 | test_helpers       | #75 tip `c7e2da9`     | filed [#80](https://github.com/mrflip/safebyok/pull/80) |
 | 8 | comment_width      | #66 tip `5fefc90`     | in review |
 
 ## What the threads have taught
@@ -153,3 +153,13 @@ configs; 116 comment lines rewrapped across 40 files, the 7 eslint-directive lin
 wrap silently unused each directive). The rule does not catch a comment trailing code (that would
 need a code-length limit). The reflow (`140f0f4`) and the rule (`323334a`) are separate commits,
 and `comment_width-reflow-recipe.md` holds the scripts to redo the reflow after the rest merge.
+
+*Orchestrator:* thread 7 filed as [#80](https://github.com/mrflip/safebyok/pull/80) (tip `98c67d1`,
+stacked on #75). *Review:* `fixed` -- the Convex "hears nothing once unsubscribed" test counts
+after `unsubscribe()` again; the changeset names `AsyncVerbOf`. The worker then froze `noBoxYet`
+and `thisVault`. Left, as open questions: `tallyWatches` can let a double close hide a leaked watch
+(now public surface); `beforeNextCall` on an existing spy records a call twice; `convexRefusalOf`
+and a `tallyWatches` example lack tests; `stateOnOpen` leaves its vault open; the `expect*` lint
+convention; the runtime imports in `safebyok/testing`; the `as unknown as` cast. **Leftover:**
+`/workspace/byok-test_helpers` (~21 MB, unregistered, everything pushed) remains on disk; the
+worker's `rm -rf` was refused by the permission check, so it waits for the Coach.
