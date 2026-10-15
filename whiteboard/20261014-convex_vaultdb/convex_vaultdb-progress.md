@@ -1,6 +1,6 @@
 # Sprint convex_vaultdb: progress
 
-**Status**: thread 1 filed (#17); thread 2 underway
+**Status**: thread 1 filed (#17); thread 2 in review
 
 The orchestrator's document: newer than the plan wherever they disagree. Each worker's own
 account is in `thread-<N>-<label>.md` on its branch.
@@ -10,7 +10,7 @@ account is in `thread-<N>-<label>.md` on its branch.
 | Thread | Label            | Branch                       | Base               | Status   |
 | ------ | ---------------- | ---------------------------- | ------------------ | -------- |
 | 1      | convex_skills    | `20261014-convex_skills`     | origin/main        | filed [#17](https://github.com/mrflip/safebyok/pull/17) (no review: docs only) |
-| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | underway |
+| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | in review |
 | 3      | convex_component | `20261014-convex_component`  | thread 2, on filing | pending  |
 | 4      | convex_client    | `20261014-convex_client`     | thread 3, on filing | pending  |
 
@@ -44,3 +44,35 @@ with the Coach's uncommitted rewrite, and whether to install Convex's own Claude
 and the wrong key alike" overwrites the first base64url character with `A`. When that character already is
 `A` (1 run in 64), the test fails. The defect is in the test, not the crypto. The fix is to flip a byte
 instead. No thread of this sprint owns it; thread 2 may fix it if it touches that file anyway, declared.
+
+## The storage contract threads 3 and 4 build to
+
+*Orchestrator:* settled by thread 2 (`thread-2-storage_verbs.md` on its branch has the detail). Each
+public verb on `VaultDB` validates input (`bad_label`) and output (`corrupt_record`), and calls a
+protected `do*` method the adapter writes:
+
+| Public verb                          | Adapter writes                               | Convex function    |
+| ------------------------------------ | -------------------------------------------- | ------------------ |
+| `readBundle(scope)`                  | `doReadBundle`                               | `getBundle`        |
+| `createBundle(bundle)`               | `doCreateBundle` (returns the bundle standing) | `createBundle`   |
+| `updateBundle(bundle, expected)`     | `doUpdateBundle` (resolves true/false)       | `updateBundle`     |
+| `readBox(scope, boxlabel)`           | `doReadBox`                                  | `getBox`           |
+| `listBoxes(scope)`                   | `doListBoxes` (records, or projections keeping `format`) | `listBoxSummaries` |
+| `updateBox(scope, lockbox, expected)`| `doUpdateBox` (resolves true/false)          | `updateBox`        |
+| `eraseBox(scope, boxlabel)`          | `doEraseBox`                                 | `eraseBox`         |
+| `eraseVault(scope)`                  | `doEraseVault`                               | `eraseVault`       |
+| `subscribe(scope, onChange)`         | `doSubscribe` (silent by default)            | `watchVault`       |
+
+* `BundleExpectation { vault_id, passphrase_epoch }`; `LockboxExpectation { vault_id, revision_id: string | null }`
+  (null: no box was there). A scope with no bundle refuses; so does updating a box erased since it was read.
+* Error kinds: `stale_write` (the base throws it when `doUpdate*` resolves false), `not_permitted` (the
+  adapter throws it when the backend refuses this user), `storage_unavailable` (the base wraps any
+  non-VaultError an adapter throws, original as `cause`). A `VaultError` an adapter throws passes through
+  untouched, so thread 4 may map a `ConvexError` kind straight to a `VaultError`.
+* The behaviour suite: `tests/vault-db-suite.ts` exports `describeVaultDB(adapterTitle, makeVaultDB)`
+  (21 tests) over `VaultDBVerbs`, a structural type of the public verbs, so an adapter built against
+  `dist/` qualifies. From `packages/safebyok-convex/tests/` it is `../../../tests/vault-db-suite`
+  (`../../safebyok/tests/vault-db-suite` once #16 lands). `safebyok` must be built first.
+* **`eraseBox` carries no expectation**, as ruled ("erase wins"). Thread 2 asks whether it should carry a
+  `vault_id`-only one, which would close the reborn-vault window for erase too. That is the Coach's call.
+  Until they make it, thread 3 builds `eraseBox` without one. Adding an optional argument later is additive.
