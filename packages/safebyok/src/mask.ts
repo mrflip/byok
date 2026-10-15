@@ -108,8 +108,11 @@ export const mask = (whisper: string, opts?: MaskOpts): string => {
 
   const headChars = chars.slice(0, headShown).join('')
   const tailChars = tailShown > 0 ? chars.slice(-tailShown).join('') : ''
-  const whole = headChars + '*'.repeat(stars) + tailChars
-  const collapsed = headChars + Collapsed + tailChars
-  const fitting = [whole, collapsed].find((candidate) => codePointsOf(candidate).length <= maxLen)
-  return plainLine(fitting ?? '*'.repeat(maxLen))
+  // Lengths are compared before anything is built, so a vast minStars costs nothing it would discard.
+  const fitting = (): string => {
+    if (headShown + stars + tailShown <= maxLen) { return headChars + '*'.repeat(stars) + tailChars }
+    if (headShown + Collapsed.length + tailShown <= maxLen) { return headChars + Collapsed + tailChars }
+    return '*'.repeat(maxLen)
+  }
+  return plainLine(fitting())
 }

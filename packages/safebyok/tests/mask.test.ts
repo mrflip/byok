@@ -79,6 +79,7 @@ describe("mask", () => {
     [Alphabet,                                  { minStars: 24 },      "***...***yz",      'a collapse with two showable characters keeps them as tail'],
     [Alphabet,                                  { minStars: 26 },      "***...***",        'a collapse with nothing showable shows nothing'],
     [Alphabet,                                  { minStars: 40 },      "***...***",        'minStars beyond the whisper collapses to bare stars'],
+    ["abc",                                     { minStars: 2 ** 40 }, "***...***",        'a vast minStars collapses without building the stars it would discard'],
 
     // nothing at all, and nothing but removed characters:
     ["",                                        undefined,             "",                 'an empty whisper has nothing to show'],
