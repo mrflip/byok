@@ -118,9 +118,11 @@ Three tables, inside the component, beside nothing of your app's:
 | `safebyok_vault_tallies` | vault       | `bundle_id` (its bundle's row), `lockbox_count`, `lockbox_bytes` | `by_bundle`: `bundle_id`                             |
 
 * **Encrypted**, as `{ cipher_iv_b64, ciphertext_b64 }`: each whisper (`whisper_ciphered`), each
-  lockbox's lockboxKey (`lockbox_key_wrapped`), and the vaultKey (`vault_key_passphrase_wrapped`).
+  lockbox's lockboxKey (`lockbox_key_wrapped`), and the vaultKey once for each of the vault's
+  ways in (each envelope's `vault_key_wrapped`, in the bundle's `unlocks`).
 * **In the open**: the scope (`applabel`, `user_id`, `vaultlabel`), each `boxlabel` and `note`,
-  the `vault_id`, `passphrase_epoch`, `revision_id`s, the passphraseSalt and key deriver's label,
+  the `vault_id`, `passphrase_epoch`, `revision_id`s, each way in's `method`, `unlock_id`,
+  `unlocklabel`, passphraseSalt (`salt_b64`) and key deriver's label, how many ways in there are,
   when each vault and lockbox was first stored and each whisper last changed (`registered_at`,
   `changed_at`, epoch milliseconds), and the length of every ciphertext.
 * **Never**: a whisper, a passphrase, any key in usable form, or the device-local remembered
