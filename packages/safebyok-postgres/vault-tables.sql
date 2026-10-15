@@ -91,7 +91,7 @@ CREATE OR REPLACE TRIGGER safebyok_lockboxes_changed
 -- first (SELECT ... FROM safebyok_bundles ... FOR UPDATE, in the same transaction), as the adapter
 -- does, or it may deadlock with an erase of the whole vault. TRUNCATE fires no row trigger: empty
 -- both tables together. A count gone astray (lockboxes truncated alone, or restored with triggers
--- off) is set right by:
+-- off) is set right, while nothing writes to these tables, by:
 --   UPDATE safebyok_bundles AS bundle SET lockbox_count = (SELECT count(*) FROM safebyok_lockboxes AS box WHERE (box.applabel, box.user_id, box.vaultlabel, box.vault_id) = (bundle.applabel, bundle.user_id, bundle.vaultlabel, bundle.vault_id));
 CREATE OR REPLACE FUNCTION safebyok_lockboxes_counted() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
