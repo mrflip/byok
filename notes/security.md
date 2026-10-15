@@ -12,13 +12,16 @@ security expert who knows what questions to ask.
   `maxLen` (15 by default), its length. Beyond `maxLen` the result is fixed-width
   (`head***...***tail`), or `maxLen` stars when even that does not fit, so the length stops
   showing; a `head` and `tail` large enough to cover a short whisper show it nearly whole, and
-  `minStars: 0` shows a short one entirely. Every result, even the stars, goes through a final
-  normalization that strips combining marks, control, format, surrogate, private-use and
-  unassigned code points, spaces, ignorable code points, bidirectional controls, the symbols
-  drawn blank or as a box (U+2800, U+1D159, U+FFFC) and every strong right-to-left letter and
-  number (the spans DerivedBidiClass.txt gives R, AL and AN by default), so it is one plain
-  line that runs left to right and cannot overwrite or reorder what displays beside it. Those
-  scripts vanish from a mask. `head`, `tail` and `minStars` are capped at 1000, so no option
+  `minStars: 0` shows a short one entirely. It makes the whisper safe to butcher
+  (normalize and strip the whole input), butchers it, and then checks the result is safe by
+  passing it through the same stripping, so every result, even the stars, is free of combining
+  marks, control, format, surrogate, private-use and unassigned code points, spaces, ignorable
+  code points, bidirectional controls and direction marks, and the symbols drawn blank or as a
+  box (U+2800, U+1D159, U+FFFC); it is one plain line that cannot hide or overwrite anything.
+  Right-to-left letters and numbers are kept (the Coach's ruling: strip the direction markers,
+  not the scripts), so a mask may reorder neighbouring neutral characters, such as stars and
+  punctuation, in a display; with no controls in it, it cannot do worse. `mask` is meant for
+  plain text, and arbitrary blobs may give unusual behavior. `head`, `tail` and `minStars` are capped at 1000, so no option
   makes it build an unbounded string. It throws `bad_option` or `bad_whisper` without quoting
   its input.
 * 2026-10-14 (revised 2026-10-15 for the push-to-main workflow): the package is staged on npm by `.github/workflows/release.yml`, run on every push
