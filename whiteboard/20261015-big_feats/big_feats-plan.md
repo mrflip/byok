@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach)
-* **Status**: threads 1, 2, 5 underway; 4 waits on gripe_fixes
+* **Status**: threads 1, 2, 5 underway (2 in review); 4 has its base (#70) and waits for a slot
 
 ## Read first
 
