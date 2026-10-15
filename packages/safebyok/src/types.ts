@@ -207,7 +207,7 @@ export const VaultBundle = Z.object({
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
   vault_id:            Z.string().check(Z.minLength(1)),
   passphrase_epoch:    Z.int().check(Z.positive()),
-  /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, as stored vaults self-describe. */
+  /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, or a host's own label. */
   key_deriver_label:   Z.string().check(Z.minLength(1)),
   passphrase_salt_b64: Z.string().check(Z.minLength(1)),
   /** The vaultKey, wrapped under the passphraseKey: decrypting this IS the passphrase check. */

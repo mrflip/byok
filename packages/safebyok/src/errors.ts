@@ -29,7 +29,7 @@ export const VaultErrorKindVals = [
   'bad_whisper',         // a whisper JSON cannot carry (undefined, a function, a class), or a non-string
   'whisper_too_large',   // a whisper over the vault's maxWhisperBytes
   'vault_full',          // a new lockbox in a vault already holding its maxLockboxes, or a write storage has no room for
-  'bad_option',          // an option or argument out of its range: openVault's, mask's, a store()'s note, a VaultDB write's record
+  'bad_option',          // an option or argument out of its range: openVault's, mask's, argon2idDeriver's, a store()'s note, a VaultDB write's record
   'vault_closed',        // the vault handle was closed and cannot be used again
   'corrupt_record',      // a stored record failed validation or decryption verification
   'unknown_key_deriver', // the vault names a key deriver this handle was not built with
