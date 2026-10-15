@@ -79,6 +79,10 @@
       "import": "./dist/idb.js",
       "require": "./dist/idb.cjs"
     },
+    "./utils": {
+      "import": "./dist/utils.js",
+      "require": "./dist/utils.cjs"
+    },
     "./package.json": "./package.json"
   },
   "dependencies": {
@@ -94,6 +98,9 @@
     "*": {
       "idb": [
         "./dist/idb.d.cts"
+      ],
+      "utils": [
+        "./dist/utils.d.cts"
       ]
     }
   },

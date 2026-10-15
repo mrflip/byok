@@ -6,7 +6,7 @@ import { defineConfig } from 'tsdown'
 // gains a `@safebyok/source` condition pointing at its src/, which the workspace's tsconfigs ask
 // for, while `publishConfig.exports`, the dist-only copy, is what publishing ships.
 export default defineConfig({
-  entry:      ['src/index.ts', 'src/idb.ts'],
+  entry:      ['src/index.ts', 'src/idb.ts', 'src/utils.ts'],
   format:     ['esm', 'cjs'],
   // Browser first, but nothing here is browser-only: WebCrypto is the same global under Node.
   platform:   'neutral',

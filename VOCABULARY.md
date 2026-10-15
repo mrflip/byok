@@ -12,7 +12,7 @@ use safebyok; if you do, the last column of each table gives the usual term.
 | **lockbox**    | Holds one whisper, encrypted, together with its `boxlabel` and a public note your UI may show while the vault is locked.                                                                       |
 | **vault**      | One user's set of lockboxes, named by your app's `applabel`, the signed-in user, and its own `vaultlabel`.                                                                                     |
 | **passphrase** | What the user types to unlock their vault. It is not their login password, and safebyok never stores it or sends it anywhere.                                                                      |
-| **mask**       | A function from `safebyok/utils` that hides all but a few characters of a string, so your UI can show which API key a lockbox holds without revealing it. Its result is public: show it, never trust it to hide more than it does. safebyok offers a careful one and a stars-only one, or you can plug in your own. |
+| **mask**       | A function from `safebyok/utils` that hides all but a few characters of a whisper, so your UI can show which API key a lockbox holds without revealing it. Its result is public: show it, never trust it to hide more than it does. `mask(whisper, { head: 0, tail: 0 })` hides everything but the length. |
 
 ## Keys
 
