@@ -1,6 +1,6 @@
 # Sprint convex_vaultdb: progress
 
-**Status**: threads 1, 2 filed (#17, #18); thread 3 restacking
+**Status**: threads 1, 2 filed (#17, #18); thread 3 in review
 
 The orchestrator's document: newer than the plan wherever they disagree. Each worker's own
 account is in `thread-<N>-<label>.md` on its branch.
@@ -11,7 +11,7 @@ account is in `thread-<N>-<label>.md` on its branch.
 | ------ | ---------------- | ---------------------------- | ------------------ | -------- |
 | 1      | convex_skills    | `20261014-convex_skills`     | origin/main        | filed [#17](https://github.com/mrflip/safebyok/pull/17) (no review: docs only) |
 | 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18), tip 0e67d7a (erase ruling in, two reviews) |
-| 3      | convex_component | `20261014-convex_component`  | #18 at 0e67d7a     | restacking onto #18's tip |
+| 3      | convex_component | `20261014-convex_component`  | #18 at 0e67d7a     | in review (tip 336af77) |
 | 4      | convex_client    | `20261014-convex_client`     | thread 3, on filing | pending  |
 
 ## What the threads have taught
@@ -114,6 +114,10 @@ returns. The decisions that shape the client:
   (~54 KB each), thousands at API-key size. In the README.
 * **Codegen ran offline** from Convex 1.46.0's own templates: no deployment, nothing blocked on the Coach.
   `ComponentApi` is derived from the functions rather than generated.
-* **Open for the Coach:** should the core export `VaultBundle`/`VaultScope` as Zod values, like `Lockbox`?
-  Thread 3's tests import them from `../../../src/types` meanwhile (thread 4 may make that core change,
-  under the 2026-10-15 ruling). Should the component enforce the label grammar server-side?
+* **Core change, under the 2026-10-15 ruling** (`c7ea3e5`, `api:`): `safebyok` now exports `VaultBundle` and
+  `VaultScope` as Zod validators too, like `Lockbox`. Thread 3's tests import from `safebyok`; only the core's
+  test-only `testDeriver` is still a relative import (it moves when #16 lands).
+* Restacked cleanly onto #18's tip 0e67d7a; the erase validator is the core's `EraseExpectation`, checked by a
+  type-equality test. design.md carries the refusal conventions, the size bound, and packaging as settled for
+  the workspace (a publishable `dist/` is the release threads').
+* **Open for the Coach:** should the component enforce the label grammar server-side (structural only today)?
