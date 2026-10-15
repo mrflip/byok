@@ -370,9 +370,10 @@ export default defineConfig([
       // A type-level test asserts with `expectTypeOf` and has no runtime to check. Without
       // this the only way to satisfy the rule is to pad it with a token runtime assertion,
       // which tells the reader nothing about what the test is for. `expectRefusal` is the
-      // tests' own helper (tests/vault.test.ts): it asserts on the rejection it is handed.
+      // tests' own helper (safebyok/testing, called as `TH.expectRefusal` outside its own
+      // module): it asserts on the rejection it is handed.
       'vitest/expect-expect': ['error', {
-        assertFunctionNames: ['expect', 'expectTypeOf', 'expectRefusal'],
+        assertFunctionNames: ['expect', 'expectTypeOf', 'expectRefusal', 'TH.expectRefusal'],
       }],
       // A bulk example list indexes a namespace by a name from its table, which this rule cannot
       // follow. tsc checks the same thing properly, and does.

@@ -2,12 +2,13 @@
  * safebyok's test helpers, everything in one module: star-import it as `TH` in this package's
  * tests (`import * as TH from './test-helpers'`), and from `safebyok/testing` in another package's.
  * A cheap key deriver, shape-valid records whose ciphertext is fake, a live device unlock, small
- * timing and tampering aids, a logger that keeps what it hears, and the suite every VaultDB
- * adapter owes. For tests only, and under
- * vitest: the deriver is worthless against a brute-forcer.
+ * timing and tampering aids, a logger that keeps what it hears, checks that a call refuses and
+ * that what it threw quotes nothing it shouldn't, and the suite every VaultDB adapter owes. For
+ * tests only, and under vitest: the deriver is worthless against a brute-forcer.
  */
 import { describe, expect, it } from 'vitest'
 import type { Ciphered } from '../src/crypto'
+import type { VaultError, VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import type { DeviceUnlock, Lockbox, VaultBundle, VaultScope } from '../src/types'
@@ -104,17 +105,19 @@ export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
 
 /**
  * Base64url text, bent a little: its first character swapped for another valid one, so it is
- * always different, keeps its length, and a tamper test reaches the check it means to exercise.
- * Blank text has no character to swap, so it comes back as `'a'`.
+ * always different, keeps its length, decodes whenever `b64` does, and a tamper test reaches the
+ * check it means to exercise. Blank text has no character to bend, and nothing put in its place
+ * decodes, so it throws: a tamper test aimed at an empty field is aimed at the wrong field.
  *
- * @param b64 - Base64url text.
+ * @param b64 - Base64url text, not blank.
  * @returns Text that differs from `b64` in its first character only.
  *
  * @example tweakB64('Zm9v') // 'am9v'
  * @example tweakB64('am9v') // 'bm9v'
- * @example tweakB64('') // 'a'
+ * @example tweakB64('')     // throws a TypeError
  */
 export const tweakB64 = (b64: string): string => {
+  if (b64 === '') { throw new TypeError('tweakB64 needs base64url text to bend, and was handed blank text.') }
   const replacer = b64.startsWith('a') ? 'b' : 'a'
   return replacer + b64.slice(1)
 }
@@ -206,8 +209,40 @@ export const spyLogger = () => {
  * @example expect(TH.loggedText(spy.calls)).to.not.include(passphrase)
  */
 export const loggedText = (calls: readonly LoggedCall[]): string => (
-  calls.map((call) => [call.level, call.message ?? '', jsonOrPlaceholder(call.story ?? {}), errorText(call.err, new Set())].join(' ')).join('\n')
+  calls.map((call) => [call.level, call.message ?? '', jsonOrPlaceholder(call.story ?? {}), thrownText(call.err)].join(' ')).join('\n')
 )
+
+/**
+ * Everything a thrown value carries, as one text to search for what must never be there: an
+ * error's message, stack and own properties, and the same of each cause beneath it; anything else
+ * thrown, as JSON. Like {@link loggedText}, it never throws: a cause seen before is written
+ * `[cause seen above]`, and own properties JSON cannot write are written `[not JSON]`.
+ *
+ * @param thrown - What an operation threw or rejected with.
+ * @returns The text, blank for `undefined` or `null`.
+ *
+ * @example expect(TH.thrownText(err)).to.not.include(passphrase)
+ */
+export const thrownText = (thrown: unknown): string => errorText(thrown, new Set())
+
+/**
+ * Every string and number in `val`, at any depth, as text: the values of a record, to search an
+ * error or a log for. Field names are not among them. Give the record values distinctive
+ * enough that finding one means it was quoted: an epoch of `2` turns up in any stack's line numbers.
+ *
+ * @param val - A record, or any JSON value.
+ * @returns Its leaves, in JSON's order.
+ *
+ * @example TH.leafTexts({ vault_id: 'vault-id-u1', wrapped: { ciphertext_b64: 'ct-a1' }, epoch: 7 })  // => ['vault-id-u1', 'ct-a1', '7']
+ */
+export const leafTexts = (val: unknown): string[] => {
+  const leaves: string[] = []
+  JSON.stringify(val, (_ckey, nested: unknown) => {
+    if (typeof nested === 'string' || typeof nested === 'number') { leaves.push(String(nested)) }
+    return nested
+  })
+  return leaves
+}
 
 /**
  * An error and every cause under it as text: message, stack and own properties each. Anything
@@ -499,17 +534,50 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
 
 const unheard = (): void => undefined
 
+/** What {@link expectRefusal} sees in place of an error when the operation resolved. */
+const NotRefused = Symbol('not refused')
+
 /**
- * Expect `operation` to reject with an error of `kind`. By `kind`, not class: an adapter built on
- * the published package throws that package's VaultError, a different class from `src/`'s.
+ * The VaultError `operation` rejected with, once the test has checked it is one, of `kind`; the
+ * test fails if `operation` resolves. Checked by name and `kind`, not by class: an adapter built
+ * on the published package throws that package's VaultError, a different class from `src/`'s. A
+ * test that means to prove the class adds its own `instanceOf`.
+ *
+ * @param operation - The call that should refuse.
+ * @param kind - The refusal's expected `kind`.
+ * @returns The refusal, for a closer look at its message or cause.
+ *
+ * @example await TH.expectRefusal(vault.read('anthropic_api_key'), 'vault_locked')
+ * @example
+ *   const err = await TH.expectRefusal(openVault(TH.omitting(opts, 'keyDeriver')), 'bad_option')
+ *   expect(err.message).to.include('safebyok/browser')
  */
-const expectRefusal = async (operation: Promise<unknown>, kind: string) => {
-  let refusal: unknown = null
+export const expectRefusal = async (operation: Promise<unknown>, kind: VaultErrorKind): Promise<VaultError> => {
+  let refusal: unknown = NotRefused
   try {
     await operation
   } catch (err) {
     refusal = err
   }
+  expect(refusal, `expected a refusal of kind '${kind}', but the operation resolved`).to.not.eq(NotRefused)
   expect(refusal).to.be.instanceOf(Error)
-  expect((refusal as { kind?: unknown }).kind).to.eq(kind)
+  expect(refusal).to.have.property('name', 'VaultError')
+  expect(refusal).to.have.property('kind', kind)
+  return refusal as VaultError
+}
+
+/**
+ * `bag` with its `ckey` field left out, still typed as the whole bag: for a test that an
+ * entrypoint refuses a caller who forgot a required option, which `exactOptionalPropertyTypes`
+ * otherwise lets a test write only with a cast.
+ *
+ * @param bag - A complete bag of options.
+ * @param ckey - The field to leave out.
+ * @returns A copy of `bag` without that field.
+ *
+ * @example openVault(TH.omitting(opts, 'keyDeriver'))  // refuses: no keyDeriver
+ */
+export const omitting = <Bag extends object>(bag: Bag, ckey: keyof Bag): Bag => {
+  const { [ckey]: _omitted, ...rest } = bag
+  return rest as Bag
 }

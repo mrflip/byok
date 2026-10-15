@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { localVaultDB, memoryDeviceDB, memoryStore, openVault } from '../src/index'
-import { Ciphered } from '../src/crypto'
+import { Ciphered, fromB64, toB64 } from '../src/crypto'
+import { VaultError } from '../src/errors'
 import { Lockbox, VaultBundle, VaultScope } from '../src/types'
 import * as TH from './test-helpers'
 
@@ -8,9 +9,8 @@ const TweakCases = [
   // regular usage:
   ["Zm9v",  "am9v",  'swaps the first character for an a'],
   ["am9v",  "bm9v",  'swaps an a for a b, so the text still differs'],
-  ["A",     "a",     'works on a single character'],
   // edge cases:
-  ["",      "a",     'blank text comes back as an a'],
+  ["QQ",    "aQ",    'bends the shortest text that decodes, one byte'],
 ] as const
 
 describe("tweakB64", () => {
@@ -24,6 +24,16 @@ describe("tweakB64", () => {
     for (const first of 'AaBbZz09-_') {
       expect(TH.tweakB64(`${first}m9v`)).to.not.eq(`${first}m9v`)
     }
+  })
+
+  it("keeps the text decodable, to bytes of the same length", () => {
+    for (const b64 of ['Zm9v', 'am9v', 'QQ', toB64(new Uint8Array(32).fill(255))]) {
+      expect(fromB64(TH.tweakB64(b64))).to.have.lengthOf(fromB64(b64).length)
+    }
+  })
+
+  it("throws on blank text, which has nothing to bend", () => {
+    expect(() => TH.tweakB64('')).to.throw(TypeError, /blank text/)
   })
 })
 
@@ -174,5 +184,88 @@ describe("loggedText", () => {
     spy.logger.log('one')
     spy.logger.log('two')
     expect(TH.loggedText(spy.calls).split('\n')).to.have.lengthOf(2)
+  })
+})
+
+describe("thrownText", () => {
+  it("holds an error's message, own properties and causes, the way loggedText does", () => {
+    const deepest = Object.assign(new Error('deepest cause'), { detail: 'an own property' })
+    const text = TH.thrownText(new Error('the error', { cause: deepest }))
+    for (const piece of ['the error', 'deepest cause', 'an own property']) {
+      expect(text).to.include(piece)
+    }
+  })
+
+  it("writes something thrown that is no Error as JSON, and nothing for nothing", () => {
+    expect(TH.thrownText({ kind: 'odd' })).to.eq('{"kind":"odd"}')
+    expect(TH.thrownText(undefined)).to.eq('')
+  })
+})
+
+describe("leafTexts", () => {
+  it("lists every string and number at any depth, as text, and no field name", () => {
+    const leaves = TH.leafTexts({ vault_id: 'vault-id-u1', wrapped: { ciphertext_b64: 'ct-a1' }, epoch: 7 })
+    expect(leaves).to.deep.equal(['vault-id-u1', 'ct-a1', '7'])
+  })
+
+  it("reaches into arrays, and skips what is neither string nor number", () => {
+    expect(TH.leafTexts({ tags: ['one', 2], gone: null, kept: true })).to.deep.equal(['one', '2'])
+  })
+
+  it("lists every value of a stored record", () => {
+    const leaves = TH.leafTexts(TH.bundleOf('u1'))
+    expect(leaves).to.include.members(['vault-id-u1', 'ct-bundle-u1', 'iv-bundle-u1', String(Date.UTC(2026, 9, 14))])
+  })
+})
+
+describe("expectRefusal", () => {
+  it("hands back the VaultError of the kind expected", async () => {
+    const refusal = new VaultError('vault_locked', 'Unlock the vault first.')
+    expect(await TH.expectRefusal(Promise.reject(refusal), 'vault_locked')).to.eq(refusal)
+  })
+
+  it("takes a VaultError from another copy of the package, by name and kind", async () => {
+    // As another copy's VaultError is: a subclass of Error that names itself, with a kind.
+    class LookalikeError extends Error {
+      override readonly name = 'VaultError'
+      readonly kind = 'vault_locked'
+    }
+    const lookalike = new LookalikeError('Unlock the vault first.')
+    expect(await TH.expectRefusal(Promise.reject(lookalike), 'vault_locked')).to.eq(lookalike)
+  })
+
+  it("fails the test when the operation resolves, or refuses otherwise", async () => {
+    const NotQuite = [
+      [Promise.resolve('fine'),                                    /operation resolved/],
+      [Promise.reject(new VaultError('bad_label', 'Not a label.')), /kind/],
+      [Promise.reject(new Error('plain trouble')),                 /name/],
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a host's adapter may reject with anything, and the helper must say so
+      [Promise.reject('a bare string'),                            /instance of Error/],
+    ] as const
+    for (const [operation, complaint] of NotQuite) {
+      await expect(TH.expectRefusal(operation, 'vault_locked')).rejects.toThrow(complaint)
+    }
+  })
+
+  it("lets a test look closer at what refused", async () => {
+    const vault = await openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: localVaultDB(memoryStore()), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver })
+    const err = await TH.expectRefusal(vault.read('anthropic_api_key'), 'vault_locked')
+    expect(err.message).to.be.a('string').and.not.be.empty
+  })
+})
+
+describe("omitting", () => {
+  const opts = { applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: localVaultDB(memoryStore()), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver }
+
+  it("leaves out the one field named, and keeps the rest", () => {
+    const without = TH.omitting(opts, 'keyDeriver')
+    expect(without).to.not.have.property('keyDeriver')
+    expect(Object.keys(without)).to.have.members(['applabel', 'userId', 'vaultlabel', 'vaultDB', 'deviceDB'])
+    expect(opts.keyDeriver).to.eq(TH.testDeriver)
+  })
+
+  it("hands an entrypoint a bag short of a required option, with no cast", async () => {
+    const err = await TH.expectRefusal(openVault(TH.omitting(opts, 'keyDeriver')), 'bad_option')
+    expect(err.message).to.include('safebyok/browser')
   })
 })
