@@ -1,6 +1,6 @@
 # Thread 2: vaultdb_validation (2026-10-15)
 
-Branch `20261015-vaultdb_validation`, PR not yet filed, stacked on #66 (rebased onto its tip
+Branch `20261015-vaultdb_validation`, PR #70, stacked on #66 (rebased onto its tip
 `5fefc90`). Justify: green (root 105,
 safebyok 768, safebyok-convex 267, safebyok-react 28, demo 62; publint, attw and `pnpm size`
 clean).
