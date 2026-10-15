@@ -436,3 +436,30 @@ security expert who knows what questions to ask.
   backend cannot make one unlock derive more. Which envelope opened shows in how long the unlock
   took, on the device only. Envelopes made by a key deriver the vault was not opened with are
   passed over, and refused as `unknown_key_deriver` only when no envelope is left to try.
+* 2026-10-15: a way in may be a passkey (WebAuthn PRF extension; a security key's `hmac-secret`).
+  Its envelope holds `credential_id` and `prf_salt_b64` (32 random bytes, minted by the React
+  binding's `createPasskey` with `crypto.getRandomValues`, checked for length by the core). The
+  passkeyKey is HKDF-SHA256 over the 32-byte PRF answer, with an empty salt and `info` =
+  `["safebyok-vault-v1", "vault_key_passkey_wrapped", credential_id]` as JSON; the wrap's additional
+  data is the format, scope, `vault_id`, purpose `vault_key_passkey_wrapped` and the envelope's
+  public header, as for a passphrase envelope. A stored salt that is not base64url of 32 bytes
+  refuses as `corrupt_record`, checked at unlock rather than in the schema (the size budget, as for
+  passphrase salts). The core never calls WebAuthn and never stores the answer; the answer passes
+  through host JavaScript as a `Uint8Array` the vault does not wipe.
+* 2026-10-15: what a passkey way in rests on. The PRF answer is a long-term secret as strong as a
+  passphrase for that vault, and needs no key derivation to try, so a captured answer opens the
+  vault (and every copy of its bundle) for good. The authenticator gives it only after user
+  verification (`userVerification: 'required'` on every call, which also keeps the answer stable:
+  hmac-secret answers differently with and without UV). A platform passkey synced by iCloud
+  Keychain or Google Password Manager answers on any device signed in to that account, so the vault
+  then rests on that account's security too. Any script running on a page under the passkey's RP
+  ID can ask the authenticator for the answer (with the user's touch), as it could read a typed
+  passphrase. The credential's challenge is random and never verified, and no attestation is
+  checked: the authenticator is the user's to trust.
+* 2026-10-15: any way in proves any change. A passkey's answer is accepted as proof by
+  `addPassphrase`, `addPasskey` and `removeUnlock`, so whoever holds one passkey can set a new
+  passphrase and remove the user's others: the vault is as strong as its weakest way in. A vault
+  always keeps one passphrase envelope (`last_unlock` refuses removing the last), and is created
+  with one. `createPasskey` registers each passkey under a random user handle, so it cannot replace
+  a sign-in passkey on the same RP; removing a passkey from the vault does not delete it from the
+  authenticator, and (as for passphrases) is not revocation.
