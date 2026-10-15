@@ -107,12 +107,16 @@ races a `close()`. Chromium's Idle Detection API, behind a permission the user g
 only true screen-lock signal, and a locked screen is the user meaning it, so it calls `lock()`:
 
 ```ts
+const aborter = new AbortController()   // aborter.abort() when you close the vault
 if (await IdleDetector.requestPermission() === 'granted') {   // from a click: it needs a user gesture
   const idle = new IdleDetector()
   idle.addEventListener('change', () => { if (idle.screenState === 'locked') { vault.lock().catch(() => {}) } })
-  await idle.start({ threshold: 60_000, signal: aborter.signal })   // aborter.abort() when you close the vault
+  await idle.start({ threshold: 60_000, signal: aborter.signal })
 }
 ```
+
+TypeScript's DOM types do not carry `IdleDetector` yet; declare it, or take it from a types
+package, before this compiles.
 
 For a sign-out, call `lockSoon()` first, then close the handle (in React, unmount the provider)
 once what was under way has settled: closing ends the grace at once.
