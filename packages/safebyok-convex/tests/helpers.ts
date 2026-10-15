@@ -1,9 +1,11 @@
-import { anyApi } from 'convex/server'
-import { convexTest } from 'convex-test'
+import { anyApi, defineSchema } from 'convex/server'
+import { convexTest, defineTestApp } from 'convex-test'
 import { Lockbox, VaultBundle, localVaultDB, memoryDeviceDB, memoryStore, openVault } from 'safebyok'
 import type { StringStore, VaultScope, Whisper } from 'safebyok'
 import type { ComponentApi } from '../src/component-api'
-import { modules, schema } from '../src/test'
+import { SafebyokComponent } from '../src/server'
+import type { GetUserId } from '../src/server'
+import { modules, register, schema } from '../src/test'
 // The core's cheap test deriver, by relative path (it is test-only, not public): one SHA-256 in
 // place of Argon2id.
 import { testDeriver } from '../../../tests/helpers'
@@ -16,6 +18,18 @@ export const vaults = anyApi.vaults as unknown as ComponentApi['vaults']
  * `transactionLimits`, it enforces Convex's own per-transaction limits.
  */
 export const componentTest = (transactionLimits = false) => convexTest({ schema, modules, transactionLimits })
+
+/**
+ * A host app as the README has it: no tables of its own, the component installed as `safebyok`,
+ * and its functions re-exported from `convex/safebyok.ts`, authenticating through `getUserId`.
+ */
+export const hostWith = (getUserId: GetUserId) => {
+  const app = defineTestApp({ schema: defineSchema({}), components: { safebyok: { register } } })
+  return app.defineModules({ safebyok: new SafebyokComponent(app.components.safebyok).api({ getUserId }) })
+}
+
+/** The README's getUserId: the signed-in identity's subject, or null when no one is. */
+export const bySubject: GetUserId = async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null
 
 export const scopeOf = (userId: string, vaultlabel = 'main'): VaultScope => ({ applabel: 'acme', user_id: userId, vaultlabel })
 

@@ -137,3 +137,15 @@ security expert who knows what questions to ask.
   `user_id`, scope, notes, ciphertext, never plaintext or keys -- into the host's Convex logs,
   and on a dev deployment back to the calling client as well. safebyok's own refusals
   (`not_permitted`) quote nothing.
+* 2026-10-15: `convexVaultDB`, the Convex client adapter, turns a `ConvexError` whose data has a
+  safebyok `kind` and a string `message` into a `VaultError` of that kind carrying that message as
+  sent by the server (the component's own are fixed text). Any other error becomes
+  `storage_unavailable` with Convex's error as `cause`; on a dev deployment that error's message
+  may quote the arguments Convex refused (scope, notes, ciphertext; never plaintext or keys).
+* 2026-10-15: `convexVaultDB` sets no timeout. Offline, a Convex query or mutation waits for the
+  socket, and Convex resends an unacknowledged mutation on reconnect, so a write can land after
+  its caller stopped waiting; a vault call waits as long as the connection is down.
+* 2026-10-15: signing out of Convex does not lock a vault opened over `convexVaultDB`: its calls
+  are refused `not_permitted` from then on, and its failing `watchVault` subscription is ignored,
+  but the unlocked vaultKey stays in memory until the vault locks, expires or is closed. The
+  README tells apps to close the vault on sign-out; nothing enforces it.

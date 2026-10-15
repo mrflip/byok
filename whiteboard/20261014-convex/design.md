@@ -57,7 +57,7 @@ The rulings' `versionedUpdate` is `updateBundle` and `updateBox`; the erases car
 | `updateBox`                  | mutation `updateBox`             | only if the scope's bundle has the expected `vault_id`, and the standing `revision_id` is the expected one (or, for null, there is none); refuses when the scope holds no bundle |
 | `eraseBox`                   | mutation `eraseBox`              | only if the scope's bundle has the expected `vault_id`; no revision expected, so erase wins; quiet (true) on an absent box |
 | `eraseVault`                 | mutation `eraseVault`            | only if the bundle has the expected `vault_id`; boxes and bundle in one transaction |
-| `subscribe`                  | `onUpdate` on query `watchVault` | `{ vault_id, passphrase_epoch, boxes: [[boxlabel, revision_id]] }`, ids null while no bundle stands; first emit skipped |
+| `subscribe`                  | `onUpdate` on query `watchVault` | `{ vault_id, passphrase_epoch, boxes: [[boxlabel, revision_id]] }`, ids null while no bundle stands; every result calls `onChange`, the first included |
 | `maxRecordBytes`             | (a constant)                     | 1 MiB                                                       |
 
 Every function first resolves `getUserId(ctx)`, the host's callback: inside a component
@@ -69,7 +69,12 @@ expectation fails is not refused: it writes nothing and resolves `false`, which 
 turns into `stale_write` (built 2026-10-15, thread `20261014-convex_component`; the functions'
 args and returns are in its thread file).
 
-The client accepts a `ConvexReactClient` or a `ConvexClient`, so a React app reuses its socket.
+The client accepts a `ConvexReactClient` or a `ConvexClient`, so a React app reuses its socket
+(built 2026-10-15, thread `20261014-convex_client`): `convexVaultDB(client, api.safebyok)` takes
+either through a structural type, watching with `onUpdate` or `watchQuery(...).onUpdate`. The first
+`watchVault` result is not skipped, as first planned: the vault subscribes before its first read,
+so that result may carry a write the read missed, and a `ConvexReactClient` already watching the
+vault sends no first result at all, only changes. A redundant refresh costs two queries.
 
 ## Sizes
 
