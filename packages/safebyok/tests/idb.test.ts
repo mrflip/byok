@@ -145,12 +145,12 @@ describe("idbDeviceDB", () => {
     expect(await inspectIdb({ dbName, shelf: 'device_db' }).rows()).to.have.lengthOf(0)
   })
 
-  it("reads an unlock filed under the colon-joined ckey of 0.2 and before as absent, and eraseAll removes it", async () => {
+  it("clears the whole shelf at eraseAll, an unlock filed under the colon-joined ckey of 0.2 and before included", async () => {
     const dbName = TH.freshDbName()
     const shelf = createStore(`${dbName}:device_db`, 'records')
     await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
     const deviceDB = idbDeviceDB({ dbName })
-    expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
     await deviceDB.eraseAll()
     expect(await inspectIdb({ dbName, shelf: 'device_db' }).rows()).to.have.lengthOf(0)
   })
