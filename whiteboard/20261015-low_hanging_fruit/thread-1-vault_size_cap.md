@@ -1,7 +1,7 @@
 # Thread 1: vault_size_cap (2026-10-15)
 
-Branch `20261015-vault_size_cap`, PR not yet filed, cut from `origin/main` (b4f8fa4). Justify:
-green (safebyok 260, safebyok-convex 214, safebyok-react 7, demo 24, root 67).
+Branch `20261015-vault_size_cap`, PR [#34](https://github.com/mrflip/safebyok/pull/34), rebased onto `origin/main` after #27, #28 and
+#29. Justify: green (safebyok 267, safebyok-convex 217, safebyok-react 7, demo 24, root 72).
 
 * **Built**:
   - `VaultDB.maxVaultBytes` (abstract, documented for adapter authors in `vault-db.ts`):
@@ -11,7 +11,8 @@ green (safebyok 260, safebyok-convex 214, safebyok-react 7, demo 24, root 67).
   - `OpenVaultOpts.maxLockboxes`, default `MaxLockboxes = 100` (exported from `types.ts` beside
     `MaxWhisperBytes`). `openVault` refuses as `bad_option` a pair that might not fit, naming
     `maxLockboxes`, `maxWhisperBytes`, the adapter's `maxVaultBytes` and how many lockboxes
-    *would* fit; and an adapter that declares no `maxVaultBytes` (a JS adapter from before).
+    *would* fit (or that not one does); and an adapter that declares no `maxVaultBytes` or no
+    `maxRecordBytes` (a JS adapter from before).
   - `store()` of a new boxlabel in a full vault refuses as `vault_full` (new kind, a condition);
     the message quotes no label. Replacing a standing box is never refused.
   - `VaultProvider` passes `maxLockboxes` through.
@@ -47,6 +48,12 @@ green (safebyok 260, safebyok-convex 214, safebyok-react 7, demo 24, root 67).
     Convex: 101 at the default whisper, 1365 at 2 KiB, 4092 at 1 byte -- all three erase
     within budget (probes; the first two are now tests).
 
+* **Review and rebase**: the reviewer's 095b116 widened the security note (stores running at
+  once on one handle overshoot too). Of its findings I took the two cheap ones: an undeclared
+  `maxRecordBytes` is now refused like an undeclared `maxVaultBytes` (NaN compared false), and
+  "at most 0 lockboxes fit" became "not even one lockbox fits". The rebase over #29 (strict
+  configs) took `| undefined` on both options and lifted the Convex test helpers to module scope.
+
 * **Discoveries**:
   - convex-test enforces Convex's 16 MiB per-function read limit, so the component tests are a
     real measurement, not arithmetic.
@@ -60,6 +67,8 @@ green (safebyok 260, safebyok-convex 214, safebyok-react 7, demo 24, root 67).
   - YOLO calls to confirm or overturn: the adapter declares `maxVaultBytes` in bytes; the kind is
     `vault_full`; the fit check's share and 1 KiB allowance (above) in place of the plan's bare
     product.
-  - `maxVaultBytes` is abstract, so any third-party `VaultDB` must add it (the changeset says
-    how). A non-abstract default of `Infinity` would be gentler, but would let an adapter with a
-    real limit forget to say so.
+  - Open questions (also in the PR): `maxVaultBytes` abstract (any third-party `VaultDB` must
+    add it; the changeset says how) or defaulting to `Infinity` (gentler, but an adapter with a
+    real limit could forget to say so); `vault_full` for TODO.md's *Error families*, as a
+    condition; a server-side cap in the Convex component's `updateBox`, since the client cap is
+    all that stands between a vault and one too large to erase.
