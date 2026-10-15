@@ -86,7 +86,7 @@ describe("openVault", () => {
     it(`refuses a missing ${ckey} with kind 'bad_option'`, async () => {
       const opts = TH.omitting(makeWorld().optsWith(), ckey)
       const err = await TH.expectRefusal(openVault(opts), 'bad_option')
-      expect(err.message).to.match(/vaultDB is not a VaultDB|deviceDB is not a DeviceDB/)
+      expect(err.message).to.include(`${ckey} is not a`)
     })
   }
 
