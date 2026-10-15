@@ -7,11 +7,11 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 | # | Thread             | Base                  | Status  |
 | - | ------------------ | --------------------- | ------- |
-| 1 | kdf_configs        | #66 tip `dfdbbec`     | filing |
+| 1 | kdf_configs        | #66 tip `5fefc90`     | filed [#68](https://github.com/mrflip/safebyok/pull/68) |
 | 2 | vaultdb_validation | #66 tip `dfdbbec`     | underway |
 | 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
 | 4 | ci_tooling         | #66 tip `5fefc90`     | underway |
-| 5 | docs_refresh       | #66 tip `dfdbbec`     | pending |
+| 5 | docs_refresh       | #66 tip `5fefc90`     | underway |
 | 6 | thin_tests         | #66 tip `dfdbbec`     | pending |
 | 7 | test_helpers       | thread 6's tip        | pending |
 | 8 | comment_width      | #66 tip, after 1-7    | pending |
@@ -32,10 +32,21 @@ window reads "1 minute"; the dialog's 168 default and recomputed `ForeverMs` can
 core, which a core accessor for the window would end; the modal test's local helpers are thread
 7's to consider.
 
-*Orchestrator:* thread 1, kdf_configs, is `ready`. What later threads should know: `Argon2idWebV1`
-moved to `src/key-deriver-spec.ts` (no Argon2 code, no Zod), `argon2idDeriver(spec)` is exported,
-and a `KeyDeriver` now carries its spec's fields beside `deriveKeyBytes`. `openVault` refuses a
-deriver labelled `argon2id_web_v1` without exactly that spec's parameters, and `unlock()` and
-`changePassphrase()` refuse key bytes that are not 32 long. `keyDeriverShape` bounds `salt_bytes` to
-1..65536 (`testDeriver` still passes). VOCABULARY and `notes/security.md` (appended at the end)
-carry its lines; thread 5 should leave them be.
+*Orchestrator:* thread 1, kdf_configs, filed as [#68](https://github.com/mrflip/safebyok/pull/68).
+`Argon2idWebV1` moved to `src/key-deriver-spec.ts` (no Argon2 code, no Zod); `argon2idDeriver(spec)`
+is exported; a `KeyDeriver` carries its spec's fields beside `deriveKeyBytes`. `openVault` refuses a
+deriver labelled `argon2id_web_v1` without exactly that spec's parameters (breaking, minor bump);
+`unlock()`/`changePassphrase()` refuse key bytes not 32 long; `keyDeriverShape` bounds `salt_bytes`
+to 1..65536. It owns VOCABULARY's key-deriver rows and the last `notes/security.md` entry.
+*Review:* `fixed` -- the `iterations` refusal now names the 2^32 ceiling; the worker then added
+"test your bytes against ours" to the supplied-label refusal. Left, as open questions on the PR: a
+hand-built deriver under a host label declaring `algorithm: 'argon2id'` gets only the generic salt
+check at open, so an unrunnable spec fails at `unlock()` with no `kind` (candidate follow-up: run
+the Argon2id schema whenever `algorithm === 'argon2id'`); `KeyDeriver` carries Argon2id's optional
+fields for every deriver (public surface, before 1.0); key bytes not zeroed (predates); bounds
+repeated as literals; the 32-byte check accepts any `ArrayBufferView`; one supplied spec; no
+reserved label namespace.
+
+*Orchestrator:* other sessions now have worktrees stacked on this sprint's branches (for example
+`byok-argon2_wasm` on #68's tip, `byok-big_feats`, `byok-unlock_envelopes`). They are not this
+sprint's; nothing here touches them.
