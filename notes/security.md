@@ -164,6 +164,14 @@ security expert who knows what questions to ask.
   Convex, where `destroy()` erases the vault in one transaction under a 16 MiB read budget, a
   vault grown past what the cap admits (by a modified client, or many overshoots) may become
   impossible to erase whole: the vault half of deleting an account.
+* 2026-10-15: records crossing into the core are checked where they cross, and trusted past it.
+  A host's `store()` note is checked against the stored lockbox's own schema before anything is
+  written (an unchecked over-long note once made every later `openVault` refuse the vault as
+  `corrupt_record`). Whatever a `DeviceDB` hands back -- the host may supply its own -- is checked
+  against `DeviceUnlock` by the vault, and one that does not pass is erased and reads as no
+  remembered unlock. `VaultDB`'s write verbs check labels and scope only, not the records the
+  vault builds. A remembered unlock's `expires_at` is not bound into its encryption, so whoever
+  can write this device's IndexedDB can extend it (to any finite number of milliseconds).
 * 2026-10-14: releases run from `.github/workflows/release.yml` on every push to main, in jobs
   that each hold only what they need. Only `publish` (in the `npm` environment) may mint an npm
   OIDC token, and it runs no package's scripts (`pnpm install --ignore-scripts`): it stages the
