@@ -1,7 +1,9 @@
 # Thread 12: convex_server_cap (2026-10-15)
 
-Branch `20261015-convex_server_cap`, PR not yet filed, stacked on #44 (thread 7). Justify: green
-(core 318, convex 256, react 8, demo 24, root 91).
+Branch `20261015-convex_server_cap`, [PR #46](https://github.com/mrflip/safebyok/pull/46), on
+main (#44 and #41 merged before filing; rebased onto 7510af7). Justify: green (core 318, convex
+256, react 15, demo 28, root 91). Review: 0 significant, 9 minor (left); the reviewer's commit
+reworks `store()`'s "never refused for room" sentence (below).
 
 * **Built**:
   - `packages/safebyok-convex/src/component/tallies.ts`: the limits (`MaxVaultLockboxes` = 8,000;
@@ -58,9 +60,8 @@ Branch `20261015-convex_server_cap`, PR not yet filed, stacked on #44 (thread 7)
   - **Kind**: `vault_full` reused, a **condition** (the user erases a lockbox), as thread 1 made
     it; no new kind. For thread 13: it now also means "storage has no room", not only "past
     `maxLockboxes`".
-  - **Changeset**: `safebyok-convex` is private on this base, so it is not versioned; the
-    changeset is a `safebyok` patch, for the `VaultDB` doc change and the widened meaning of
-    `vault_full`.
+  - **Changeset**: a patch for `safebyok` and `safebyok-convex`. Built while the convex package
+    was private; #41 made it public and lockstep just before filing, so it was added at the rebase.
 
 * **Deviations**: none from the plan. To keep clear of thread 14 (`store_backoff`), I did not
   touch `store()`'s doc block in `packages/safebyok/src/vault.ts` (see *For the Coach*).
@@ -85,11 +86,11 @@ Branch `20261015-convex_server_cap`, PR not yet filed, stacked on #44 (thread 7)
     `notes/security.md`.
 
 * **For the Coach**:
-  - `store()`'s doc block (`vault.ts`) says "Replacing a lockbox is never refused for room". On
-    Convex, a heavier replacement in a vault at the component's byte limit now is refused. I left
-    that line alone because thread 14 edits the same doc block. Whichever of 12 and 14 lands
-    second should add "by maxLockboxes; storage may still refuse a heavier one as `vault_full`".
-    The `maxLockboxes` option's own doc ("replacing one already there is always allowed") is
-    true as written.
+  - `store()`'s doc block (`vault.ts`) said "Replacing a lockbox is never refused for room". The
+    reviewer's `api:` commit now says replacing is never refused by `maxLockboxes`, though storage
+    may refuse a heavier one as `vault_full`. Thread 14 edits the same doc block, so expect a
+    small doc conflict for whichever lands second.
+  - Not checked (review): production Convex's read accounting against `getDocumentSize`, and a
+    rollback deploy beside the leftover tally table.
   - Should a host be able to set a *lower* server-side limit (a trusted `api({ maxLockboxes })`)?
     Not built; easy to add without touching stored data.
