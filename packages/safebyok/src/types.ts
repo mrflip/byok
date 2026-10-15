@@ -171,8 +171,11 @@ export const DeviceUnlock = Z.object({
 })
 export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 
-/** How long an entered passphrase is remembered on the device, unless the caller says otherwise. */
-export const SevenDaysMs = 7 * 24 * 60 * 60 * 1000
+/**
+ * How many hours an entered passphrase lasts on the device before the vault asks for it again,
+ * unless the caller says otherwise: seven days.
+ */
+export const ForcePassphraseReentryHours = 168 // seven days
 
 /**
  * The largest whisper a vault stores unless the caller says otherwise, in bytes of its JSON:

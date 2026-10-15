@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { MaxLockboxes, MaxWhisperBytes, SevenDaysMs, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
@@ -25,6 +25,9 @@ const makeWorld = () => {
   )
   return { dbStore, vaultDB, deviceDB, clock, advance, open }
 }
+
+const HourMs = 60 * 60 * 1000
+const SevenDaysMs = 7 * 24 * HourMs
 
 /** Expect `operation` to reject with a VaultError of `kind`; hands the error back for a closer look. */
 const expectRefusal = async (operation: Promise<unknown>, kind: VaultError['kind']): Promise<VaultError> => {
@@ -65,7 +68,7 @@ describe("unlock and lock", () => {
     await vault.unlock('correct horse battery staple')
     const snapshot = vault.getSnapshot()
     expect(snapshot.state).to.eq('unlocked')
-    expect(snapshot.expiresAt).to.eq(world.clock.now() + SevenDaysMs)
+    expect(snapshot.askPassphraseAt).to.eq(world.clock.now() + SevenDaysMs)
   })
 
   it("a wrong passphrase is refused calmly, changing nothing, and quoting nothing", async () => {
@@ -127,6 +130,44 @@ describe("the remembered unlock", () => {
     await vault.store('anthropic', 'sk-fake')
     world.advance(SevenDaysMs + 1)
     await expectRefusal(vault.read('anthropic'), 'vault_locked')
+  })
+
+  it("lasts ForcePassphraseReentryHours, 168 (seven days), unless told otherwise", () => {
+    expect(ForcePassphraseReentryHours * HourMs).to.eq(SevenDaysMs)
+  })
+
+  it("lasts the forcePassphraseReentryHours the host chose, and asks again from then", async () => {
+    const world = makeWorld()
+    const twelveHoursMs = 12 * HourMs
+    const vault = await world.open({ forcePassphraseReentryHours: 12 })
+    await vault.unlock('pw one')
+    expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + twelveHoursMs)
+    world.advance(twelveHoursMs - 1)
+    const justBefore = await world.open({ forcePassphraseReentryHours: 12 })
+    expect(justBefore.getSnapshot().state).to.eq('unlocked')
+    world.advance(1)
+    const onTheHour = await world.open({ forcePassphraseReentryHours: 12 })
+    expect(onTheHour.getSnapshot().state).to.eq('locked')
+    await expectRefusal(vault.read('anthropic'), 'vault_locked')
+  })
+
+  it("takes fractions of an hour, kept as whole milliseconds", async () => {
+    const world = makeWorld()
+    const quarterHour = await world.open({ forcePassphraseReentryHours: 0.25 })
+    await quarterHour.unlock('pw one')
+    const fifteenMinutesMs = 15 * 60 * 1000
+    expect(quarterHour.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + fifteenMinutesMs)
+    const oneThird = await world.open({ deviceDB: memoryDeviceDB(), forcePassphraseReentryHours: 1 / 3 })
+    await oneThird.unlock('pw one')
+    const twentyMinutesMs = 20 * 60 * 1000
+    expect(oneThird.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + twentyMinutesMs)
+  })
+
+  it("refuses a forcePassphraseReentryHours that is not a span of time above zero", async () => {
+    const world = makeWorld()
+    for (const nonsense of [0, -1, NaN, Infinity, 1e-12]) {
+      await expectRefusal(world.open({ forcePassphraseReentryHours: nonsense }), 'bad_option')
+    }
   })
 })
 
