@@ -1,10 +1,10 @@
 # Thread 7: test_helpers (2026-10-15)
 
-Branch `20261015-test_helpers`, PR not yet filed, stacked on #75 (thread 6), which stands on #70,
+Branch `20261015-test_helpers`, PR [#80](https://github.com/mrflip/safebyok/pull/80), stacked on #75 (thread 6), which stands on #70,
 then #66. Justify: green (root 109, safebyok 793, safebyok-convex 268, safebyok-react 28,
 demo 124; `pnpm size` within every budget).
 
-**Line counts** (every tracked test file and test-helper module): 9,976 before, 9,995 after.
+**Line counts** (every tracked test file and test-helper module): 9,976 before, 9,999 after (at filing; the figures below are from the ready report).
 The call sites went from 8,893 to 8,429 lines (-464). The helper modules, their tests and the two
 setup files went from 1,083 to 1,566 (+483). Of that growth, about 210 lines are the helpers' own
 tests and doc blocks, which STYLE.md requires. Largest single drop: `vault.test.ts`, 3,015 to 2,770.
