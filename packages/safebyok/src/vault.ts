@@ -557,12 +557,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     proof: UnlockProof,
     unlockId: string | undefined,
     plan: {
-      check?:   (standing: VaultBundle) => void
-      // Runs once the proof holds, before revise: resolving false abandons the change, writing nothing.
-      proceed?: (standing: VaultBundle) => Promise<boolean>
-      revise:   (standing: VaultBundle, proven: VaultKeyPair & { unlockId: string }) => UnlockEnvelope[] | Promise<UnlockEnvelope[]>
+      check?:  (standing: VaultBundle) => void
+      // Runs once the proof holds; resolving null abandons the change, writing nothing.
+      revise:  (standing: VaultBundle, proven: VaultKeyPair & { unlockId: string }) => UnlockEnvelope[] | Promise<UnlockEnvelope[] | null>
     },
-  ) => {
+  ): Promise<boolean> => {
     const shutsThen = shutsSoFar
     // The proof is made against the bundle as the backend holds it now: a cached bundle could
     // bury one written elsewhere under a different vault_id entirely.
@@ -570,17 +569,19 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const standing = currentBundle()
     plan.check?.(standing)
     const proven = await unwrapWith(standing, proof, unlockId)
-    if (plan.proceed !== undefined && ! await plan.proceed(standing)) { return }
+    const unlocks = await plan.revise(standing, proven)
+    if (unlocks === null) { return false }
     const next: VaultBundle = {
       ...standing,
       passphrase_epoch: standing.passphrase_epoch + 1,
-      unlocks:          await plan.revise(standing, proven),
+      unlocks,
     }
     await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }))
     bundle = next
     // The change has landed, whatever happens now: a shut meanwhile leaves only its unlock untaken.
     await takeUpUnlock(proven, next, shutsThen)
     bump()
+    return true
   }
 
   /** A passphrase envelope in `standing` for `newPassphrase`, around the vaultKey `proven` holds. */
@@ -911,23 +912,19 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       parsePasskeyMaker(makePasskey)
       const unlocklabel = parseUnlocklabel(labelling, 'addPasskey')
       const naming = { unlock_id: randomId(), unlocklabel }
-      const made: { passkey?: PasskeyProof } = {}
-      await reviseUnlocks(proof, undefined, {
-        check: (standing) => { ensureRoomForUnlock(standing, unlocklabel) },
+      const added = await reviseUnlocks(proof, undefined, {
+        check:  (standing) => { ensureRoomForUnlock(standing, unlocklabel) },
         // The authenticator is asked only now, the proof proven: a refusal before leaves no passkey behind.
-        proceed: async (standing) => {
-          const answered = await makePasskey()
-          if (answered === null) { return false }
-          made.passkey = parseNewPasskey(answered)
-          ensureNewCredential(standing, made.passkey)
-          return true
-        },
         revise: async (standing, proven) => {
-          const { envelope } = await Envelope.sealPasskey(made.passkey!, scope, standing.vault_id, naming, proven.transientKey)
+          const answered = await makePasskey()
+          if (answered === null) { return null }
+          const passkey = parseNewPasskey(answered)
+          ensureNewCredential(standing, passkey)
+          const { envelope } = await Envelope.sealPasskey(passkey, scope, standing.vault_id, naming, proven.transientKey)
           return [...standing.unlocks, envelope]
         },
       })
-      return made.passkey === undefined ? null : naming.unlock_id
+      return added ? naming.unlock_id : null
     },
 
     removeUnlock: async (givenProof, unlockId) => {
