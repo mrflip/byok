@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 6 rebasing onto #40's restacked tip, then filing; 1, 2, 3, 4, 5, 8, 9, 10, 11 filed; 7 starts from 6 once it files. Newer than the plan wherever the two disagree.
+**Status**: 7 building (from #43 at ac8eb27); 5 reworking `mask` to the Coach's new contract on #37; 1, 2, 3, 4, 6, 8, 9, 10, 11 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -12,9 +12,9 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | filed [#40](https://github.com/mrflip/safebyok/pull/40), stacked on #34 |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37) |
-| 6  | `boundary_audit` | thread 2 (#40, restacked to 868ce73) | rebasing, then filing |
-| 7  | `stale_write_retry` | thread 6 | pending |
+| 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37); reworking to the Coach's contract |
+| 6  | `boundary_audit` | thread 2 (#40, 868ce73) | filed [#43](https://github.com/mrflip/safebyok/pull/43), stacked on #40 |
+| 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | underway |
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
@@ -104,11 +104,13 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 * **Thread 5** (`mask_utils`, [#37](https://github.com/mrflip/safebyok/pull/37)): `safebyok/utils` with `mask`. **For any new entry**: tsdown's
   `exports: true` does not write `typesVersions`; attw's node10 check fails until it is added by
   hand. **For thread 8**: `mask`'s budget waits on thread 5 merging (4.1 kB built). Graphemes via
-  `Intl.Segmenter`, code points without it; `maskAll` struck. *Review:* flagged; orchestrator
+  `Intl.Segmenter`, code points without it; `maskAll` struck. **Superseded by the Coach
+  (~05:30 UTC; plan decision 11)**: a best-effort, always-normalized, one-line whiff of each end;
+  no segmenter; a too-small `maxLen` gives that many stars. Being rebuilt on #37. *Review:* flagged; orchestrator
   decided (YOLO): a `maxLen` below `head + tail + 9` is refused, so the result never exceeds
   `maxLen` (omitted `maxLen` defaults to `max(15, head + tail + 9)`); bidi controls, U+200B,
   U+2060 and U+FEFF are stripped. Second review: fixed (grapheme-counted ceiling test; the changeset names the floor and strip).
-* **Thread 6** (`boundary_audit`) -- **for thread 7**: the note is checked once on entry to
+* **Thread 6** (`boundary_audit`, [#43](https://github.com/mrflip/safebyok/pull/43), stacked on #40 after a clean move onto its restacked tip) -- **for thread 7**: the note is checked once on entry to
   `store()` (new shared `LockboxNote`, refused as `bad_option`); `noteToStore(givenNote, prev)`
   sits right after `readBox`, so a retry re-derives it. Found and fixed: `store()` never checked
   the note, so a note over 256 characters was written and then read back as `corrupt_record`,

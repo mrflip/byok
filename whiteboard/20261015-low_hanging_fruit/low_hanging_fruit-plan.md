@@ -95,12 +95,20 @@ Start: 1, 3, 4. Then the lowest-numbered thread whose base exists, as slots free
    defaults fit.
 8. **The cap of three counts building workers, not reviews**, so the queue does not idle while
    reviews run.
-9. **`mask`'s `maxLen` floor** (thread 5's review): a `maxLen` below `head + tail + 9` is
+9. ~~**`mask`'s `maxLen` floor**~~ *superseded by the Coach, 2026-10-15 ~05:30 UTC (see 11)*: (thread 5's review): a `maxLen` below `head + tail + 9` is
    refused as `bad_option`, rather than collapsing into a longer result or letting the length
    show past `maxLen`. The reviewer leaned to "collapse only when shorter"; refusing keeps
    `maxLen` honest and the security note true.
-10. **`mask` strips bidi controls and zero-width invisibles** (U+200B, U+2060, U+FEFF) as well
+10. ~~**`mask` strips bidi controls~~ *superseded by the Coach (see 11)*: and zero-width invisibles** (U+200B, U+2060, U+FEFF) as well
     as control characters, keeping ZWJ, ZWNJ, variation selectors and tags.
+
+11. **The Coach's contract for `mask`** (in chat, ~05:30 UTC), replacing 9 and 10: not a
+    faithful copy of head and tail but "a whiff of interesting text from each end, best effort,
+    safely viewable in a log or reminder." No `Intl.Segmenter`; butcher simply, then always pass
+    the whole output through a normalization stage that guarantees safe output (strip every
+    invisible, and whatever would display oddly, such as bidi controls; one compact line). A
+    `maxLen` too small for head + `***...***` + tail does not throw: it gives `maxLen` stars, no
+    ellipsis, no head, no tail.
 
 ## The threads
 
