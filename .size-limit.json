@@ -4,5 +4,6 @@
   { "name": "stableJsonify", "path": "packages/safebyok/dist/index.js", "import": "{ stableJsonify }", "limit": "27 kB" },
   { "name": "argon2idWebV1Deriver", "path": "packages/safebyok/dist/index.js", "import": "{ argon2idWebV1Deriver }", "limit": "5.5 kB" },
   { "name": "idbDeviceDB", "path": "packages/safebyok/dist/idb.js", "import": "{ idbDeviceDB }", "limit": "27.5 kB" },
-  { "name": "browserOpts", "path": "packages/safebyok/dist/browser.js", "import": "{ browserOpts }", "limit": "33 kB" }
+  { "name": "browserOpts", "path": "packages/safebyok/dist/browser.js", "import": "{ browserOpts }", "limit": "33 kB" },
+  { "name": "mask", "path": "packages/safebyok/dist/utils.js", "import": "{ mask }", "limit": "19.5 kB" }
 ]
