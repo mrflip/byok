@@ -414,16 +414,20 @@ describe("the remembered unlock", () => {
     })
   })
 
-  it("reads a remembered deadline of exactly FarFuture as unlocked, under Infinity hours", async () => {
-    const world = makeWorld()
-    await world.openUnlocked('pw one')
-    const written = await world.rememberedUnlock()
-    if (written === null) { throw new Error('expected a remembered unlock on the device') }
-    await world.deviceDB.writeUnlock({ ...written, ask_passphrase_at: FarFuture })
-    const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
-    expect(reopened.getSnapshot().state).to.eq('unlocked')
-    expect(reopened.getSnapshot().askPassphraseAt).to.eq(FarFuture)
-  })
+  for (const [shiftMs, blurb] of [[HourMs, 'later'], [-HourMs, 'earlier']] as const) {
+    it(`reads a remembered deadline moved an hour ${blurb} on the device as no remembered unlock, erases it, and says so: the deadline is bound into its wrap`, async () => {
+      const world = makeWorld()
+      await world.openUnlocked('pw one')
+      const written = await world.rememberedUnlock()
+      if (written === null) { throw new Error('expected a remembered unlock on the device') }
+      await world.deviceDB.writeUnlock({ ...written, ask_passphrase_at: written.ask_passphrase_at + shiftMs })
+      // Under Infinity no window check refuses it, and an hour either way stays in bounds: only the binding can.
+      const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
+      expect(reopened.getSnapshot().state).to.eq('locked')
+      expect(await world.rememberedUnlock()).to.be.null
+      expect(world.logged.map((call) => call.level)).to.deep.eq(['warn'])
+    })
+  }
 
   for (const [askPassphraseAt, blurb] of OutOfBoundsDeadlines) {
     it(`reads a remembered deadline of ${blurb} as no remembered unlock, and erases it`, async () => {
@@ -1327,6 +1331,15 @@ describe("what the backend sees", () => {
   })
 })
 
+/** A lockbox row's public fields altered in storage, each a field its encryptions bind. */
+const SpoiledShells = [
+  [(row: Record<string, unknown>) => ({ ...row, note: 'personal account' }),                             'its note changed'],
+  [({ note: _gone, ...row }: Record<string, unknown>) => row,                                             'its note removed'],
+  [({ registered_at: kept, ...row }: Record<string, unknown>) => ({ ...row, registered_at: (kept as number) - 1 }), 'its registered_at moved'],
+  [({ changed_at: kept, ...row }: Record<string, unknown>) => ({ ...row, changed_at: (kept as number) + 1 }),       'its changed_at moved'],
+  [(row: Record<string, unknown>) => ({ ...row, revision_id: 'rev-elsewhere' }),                          'its revision_id swapped'],
+] as const
+
 describe("tampering", () => {
   it("a lockbox with altered ciphertext refuses to open, and is left as it is", async () => {
     const world = makeWorld()
@@ -1348,6 +1361,29 @@ describe("tampering", () => {
     const fromCkey = world.dbStore.ckeys().find((candidate) => candidate.includes('victim_box'))
     world.dbStore.write('box:acme:u1:main:other_box', world.dbStore.read(fromCkey ?? '') ?? '')
     await TH.expectRefusal(vault.read('other_box'), 'corrupt_record')
+  })
+
+  for (const [spoil, blurb] of SpoiledShells) {
+    it(`a lockbox with ${blurb} refuses to open, and is left as it is: its whole public header is bound`, async () => {
+      const world = makeWorld()
+      const vault = await world.openUnlocked('pw')
+      await vault.store('anthropic', 'sk-fake', { note: 'work account' })
+      const ckey = world.dbStore.ckeys().find((candidate) => candidate.startsWith('box:')) ?? ''
+      const row = JSON.parse(world.dbStore.read(ckey) ?? '{}') as Record<string, unknown>
+      const spoiled = JSON.stringify(spoil(row))
+      world.dbStore.write(ckey, spoiled)
+      await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
+      expect(world.dbStore.read(ckey)).to.eq(spoiled)
+    })
+  }
+
+  it("a bundle whose registered_at was altered opens to no passphrase: it is bound into every way in", async () => {
+    const world = makeWorld()
+    await world.openUnlocked('pw')
+    const bundle = JSON.parse(world.dbStore.read('vault:acme:u1:main') ?? '{}') as { registered_at: number }
+    world.dbStore.write('vault:acme:u1:main', JSON.stringify({ ...bundle, registered_at: bundle.registered_at - 1 }))
+    const vault = await world.open({ deviceDB: memoryDeviceDB() })
+    await TH.expectRefusal(vault.unlock('pw'), 'wrong_passphrase')
   })
 
   it("a bundle that does not parse makes the open itself refuse, deleting nothing", async () => {

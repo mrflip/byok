@@ -262,7 +262,8 @@ Two tables, each record **a column to a field**, exactly as safebyok wrote it: t
 time or a count as a `bigint`, and each structured value as one opaque `jsonb` -- an encrypted
 value (a cipherIv and its ciphertext, `{ cipher_iv_b64, ciphertext_b64 }`), or the bundle's
 `unlocks`, its list of unlock envelopes. Nothing is normalized: a note or a
-user id reads back byte for byte.
+user id reads back byte for byte, as it must, since every field a record holds is bound into its
+encryption.
 
 | Table                | One row per | Primary key                                     | Columns                                                                                                |
 | -------------------- | ----------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
