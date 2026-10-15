@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: threads 1, 3, 5 underway; 4 filed. Newer than the plan wherever the two disagree.
+**Status**: threads 1, 5, 9 underway; 3 and 4 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -10,13 +10,13 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | -- | ------ | ---- | ------ |
 | 1  | `vault_size_cap` | `origin/main` | underway |
 | 2  | `explicit_options` | thread 1 | pending |
-| 3  | `provider_open_rejection` | `origin/main` | filing |
+| 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
 | 5  | `mask_utils` | `origin/main` | underway |
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
-| 9  | `docs_sweep` | `origin/main` | pending |
+| 9  | `docs_sweep` | `origin/main` | underway |
 | 10 | `sandals` | `origin/main` | pending |
 | 11 | `label_grammar_report` | `origin/main` | pending |
 
@@ -39,8 +39,8 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   still on pre-move paths (`src/vault.ts`) and needs repathing before it can land.
   *Review:* fixed -- two tests added (a `null` rejection reaches the boundary; one after sign-out
   is ignored). Left: once the provider throws, its boundary unmounts it, so recovery needs the
-  host to reset the boundary (`key={userId}`): the README line says so (sent back to the worker
-  at filing, with the thread file's correction). `storage_unavailable` now reaches the boundary
+  host to reset the boundary (`key={userId}`): the React README's new "When opening fails"
+  section says so (pulled in from thread 9 at filing). `storage_unavailable` now reaches the boundary
   although its message says "try again shortly" (Coach, below). A failed open still leaks
   openVault's watch until `open_vault_unsubscribe` lands.
 * *Orchestrator:* **The main checkout moves under reviewers.** Another agent's uncommitted work
