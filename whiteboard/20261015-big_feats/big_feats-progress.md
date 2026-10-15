@@ -8,8 +8,8 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
 | # | Thread            | Base                                   | Status                         |
 | - | ----------------- | -------------------------------------- | ------------------------------ |
 | 1 | argon2_wasm       | #68 (kdf_configs) `80ac694`            | in review                      |
-| 2 | unlock_envelopes  | #63 `ea4b93d`                          | filing                         |
-| 3 | passkey_unlock    | thread 2                               | pending                        |
+| 2 | unlock_envelopes  | main (#63 merged; was `ea4b93d`)       | filed #71                      |
+| 3 | passkey_unlock    | #71 `983bd0c`                          | underway                       |
 | 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | waiting for a slot             |
 | 5 | postgres_vaultdb  | #63 `ea4b93d`, rebased onto 2 to file  | in review                      |
 | 6 | graphql_vaultdb   | thread 5                               | pending                        |
@@ -64,3 +64,14 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
   public-surface addition awaiting the Coach's yes), so any Argon2id stand-in refuses exactly what
   `argon2idDeriver` refuses. hash-wasm runs synchronously (it holds the thread for its ~130 ms)
   and needs a Content-Security-Policy allowing `'wasm-unsafe-eval'`.
+* *Orchestrator:* **The second_harvest stack has merged** (main is #63's merge, `0152367`, whose
+  tree is byte-identical to `ea4b93d`, though the stack's commits were rebased, so `ea4b93d` is
+  not on main). Hence:
+  - Thread 2 rebased onto main cleanly before filing (#71).
+  - **Thread 5 rebases onto #71's tip** before filing, as planned; its `ea4b93d` commits then sit
+    on main through #71.
+  - **Threads 1 and 4 stand on gripe_fixes PRs** (#68, #70) that are still on the old stack.
+    When gripe_fixes rebases them onto main, each of our threads rebases onto the new tip of its
+    base before filing (unpushed, so allowed). If its base has not moved by then, it files
+    stacked on the base as it is.
+  - The sprint branch itself was cut from `ea4b93d`, and is rebased onto main at wrap-up.
