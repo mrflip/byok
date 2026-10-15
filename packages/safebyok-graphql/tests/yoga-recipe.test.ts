@@ -122,4 +122,38 @@ describe("the README Yoga recipe", () => {
     unsubscribe()
     expect(heard.count).to.eq(1)
   })
+
+  it("stops listening to Postgres when a subscriber goes before any write, over server-sent events", async () => {
+    const db = await TH.emptyDatabase()
+    const listening = { count: 0 }
+    const listen: PostgresListen = async (channel, onNotify) => {
+      const unlisten = await db.listen(channel, onNotify)
+      listening.count += 1
+      return async () => {
+        listening.count -= 1
+        await unlisten()
+      }
+    }
+    const route = vaultRoute(db, listen, byHeader)
+    // As a network does, a fetch the browser aborts cancels the response body the server is sending.
+    const browser = browserVaultDB(async (url, init) => {
+      const request = new Request(url, init)
+      request.headers.set('x-test-user', 'u1')
+      const response = await route(request)
+      const sending = response.body!.getReader()
+      request.signal.addEventListener('abort', () => { void sending.cancel() })
+      const received = new ReadableStream<Uint8Array>({
+        pull: async (controller) => {
+          const chunk = await sending.read()
+          if (chunk.done) { controller.close() } else { controller.enqueue(chunk.value) }
+        },
+      })
+      return new Response(received, response)
+    })
+    const unsubscribe = browser.subscribe(TH.scopeOf('u1'), () => undefined)
+    await TH.eventually(() => listening.count === 1)
+    unsubscribe()
+    await TH.eventually(() => listening.count === 0)
+    expect(listening.count).to.eq(0)
+  })
 })
