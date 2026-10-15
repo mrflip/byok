@@ -1,6 +1,9 @@
-import { createStore, del, entries, get, keys, set, clear, type UseStore } from 'idb-keyval'
-import { DeviceUnlock, Lockbox, VaultBundle, type VaultScope } from './types'
-import { VaultDB } from './vault-db'
+import { createStore, del, delMany, entries, get, getMany, keys, set, clear, type UseStore } from 'idb-keyval'
+import { DeviceUnlock, type Lockbox, type VaultBundle, type VaultScope } from './types'
+import {
+  VaultDB, boxCkey, bundleCkey, bundleMeetsExpectation, isBoxCkeyOf, lockboxMeetsExpectation, scopePath, vaultMeetsExpectation,
+  type BundleExpectation, type EraseExpectation, type LockboxExpectation,
+} from './vault-db'
 import type { DeviceDB } from './device-db'
 
 /**
@@ -66,10 +69,6 @@ const onBell = (dbName: string, shelf: IdbShelf, listener: () => void): (() => v
   return () => { ringers.delete(listener) }
 }
 
-const scopePath = (scope: VaultScope) => `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}`
-const bundleCkey = (scope: VaultScope) => `vault:${scopePath(scope)}`
-const boxCkey = (scope: VaultScope, boxlabel: string) => `box:${scopePath(scope)}:${boxlabel}`
-const boxPrefix = (scope: VaultScope) => `box:${scopePath(scope)}:`
 const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
 
 /**
@@ -91,44 +90,70 @@ class IdbVaultDB extends VaultDB {
   private shelf() { return shelfStore(this.dbName, 'vault_db') }
   private ring() { ringBell(this.dbName, 'vault_db') }
 
-  protected async fetchBundle(scope: VaultScope): Promise<unknown> {
+  protected async doReadBundle(scope: VaultScope): Promise<unknown> {
     return (await get(bundleCkey(scope), this.shelf())) ?? null
   }
 
-  protected async saveBundle(bundle: VaultBundle): Promise<void> {
+  // The creates and updates below check, then save, in two IndexedDB transactions: another tab
+  // can write in between, a window notes/security.md records.
+  protected async doCreateBundle(bundle: VaultBundle): Promise<unknown> {
+    const standing: unknown = await get(bundleCkey(bundle), this.shelf())
+    if (standing !== undefined) { return standing }
     await set(bundleCkey(bundle), bundle, this.shelf())
     this.ring()
+    return bundle
   }
 
-  protected async trashBundle(scope: VaultScope): Promise<void> {
-    await del(bundleCkey(scope), this.shelf())
+  protected async doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean> {
+    const standing: unknown = await get(bundleCkey(bundle), this.shelf())
+    if (! bundleMeetsExpectation(standing, expected)) { return false }
+    await set(bundleCkey(bundle), bundle, this.shelf())
     this.ring()
+    return true
   }
 
-  protected async fetchBox(scope: VaultScope, boxlabel: string): Promise<unknown> {
+  protected async doReadBox(scope: VaultScope, boxlabel: string): Promise<unknown> {
     return (await get(boxCkey(scope, boxlabel), this.shelf())) ?? null
   }
 
-  protected async saveBox(scope: VaultScope, lockbox: Lockbox): Promise<void> {
-    await set(boxCkey(scope, lockbox.boxlabel), lockbox, this.shelf())
-    this.ring()
-  }
-
-  protected async trashBox(scope: VaultScope, boxlabel: string): Promise<void> {
-    await del(boxCkey(scope, boxlabel), this.shelf())
-    this.ring()
-  }
-
-  protected async fetchBoxes(scope: VaultScope): Promise<unknown[]> {
+  protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
     const rows = await entries(this.shelf())
     return rows
-      .filter(([ckey]) => typeof ckey === 'string' && ckey.startsWith(boxPrefix(scope)))
+      .filter(([ckey]) => isBoxCkeyOf(scope, ckey))
       .map(([, row]) => row as unknown)
+  }
+
+  protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
+    const [standingBundle, standingBox] = await getMany<unknown>([bundleCkey(scope), boxCkey(scope, lockbox.boxlabel)], this.shelf())
+    if (! lockboxMeetsExpectation(standingBundle, standingBox, expected)) { return false }
+    await set(boxCkey(scope, lockbox.boxlabel), lockbox, this.shelf())
+    this.ring()
+    return true
+  }
+
+  protected async doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
+    if (! vaultMeetsExpectation(await get(bundleCkey(scope), this.shelf()), expected)) { return false }
+    await del(boxCkey(scope, boxlabel), this.shelf())
+    this.ring()
+    return true
+  }
+
+  // The look at the bundle, the listing and the deletion are separate IndexedDB transactions: a
+  // box another tab writes in between survives, orphaned, and a vault another tab destroys and
+  // makes anew in between can be erased (notes/security.md). The delMany itself is one
+  // transaction, so the rows listed go together, or none of them do.
+  protected async doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
+    if (! vaultMeetsExpectation(await get(bundleCkey(scope), this.shelf()), expected)) { return false }
+    const ckeys = await keys(this.shelf())
+    const doomed = ckeys.filter((ckey) => isBoxCkeyOf(scope, ckey))
+    await delMany([...doomed, bundleCkey(scope)], this.shelf())
+    this.ring()
+    return true
   }
 
   // Rings on every write to the shelf, not only ones in scope: a spurious refresh is harmless,
   // and cross-tab news arrives over the BroadcastChannel for free.
-  override subscribe(_scope: VaultScope, onChange: () => void): () => void {
+  protected override doSubscribe(_scope: VaultScope, onChange: () => void): () => void {
     return onBell(this.dbName, 'vault_db', onChange)
   }
 }

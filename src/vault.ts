@@ -1,6 +1,6 @@
 import * as Z from 'zod'
-import { Label, LockboxSummary, MaxWhisperBytes, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
-import { VaultError } from './errors'
+import { Label, LockboxSummary, type Lockbox, MaxWhisperBytes, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { VaultError, isVaultError } from './errors'
 import { argon2idWebV1Deriver, type KeyDeriver } from './key-deriver'
 import {
   cipherBinding, cipherBytes, decipherBytes, fromB64, importWrappingKeyBytes,
@@ -89,16 +89,22 @@ export type Vault = {
    * moves, and they fall back to `locked` on their next look.
    *
    * Works locked or unlocked, since the old passphrase is proof enough. A wrong `oldPassphrase`
-   * throws kind 'wrong_passphrase' and changes nothing.
+   * throws kind 'wrong_passphrase' and changes nothing. If another device changes the passphrase
+   * (or destroys the vault) between this device's look and its write, nothing is written and
+   * the call throws kind 'stale_write', after catching up with storage.
    */
   changePassphrase(oldPassphrase: string, newPassphrase: string): Promise<void>
 
   /**
    * Write a whisper into the lockbox `boxlabel`, creating or replacing it. Requires unlocked;
-   * kind 'whisper_too_large' when its JSON is over the vault's `maxWhisperBytes`. Looks at the
-   * backend before writing: if the vault was destroyed, recreated or re-passphrased elsewhere,
-   * nothing is written, this device relocks, and the call throws kind 'vault_locked' -- a stale
-   * session never writes into a vault reborn under new keys.
+   * kind 'whisper_too_large' when its JSON is over the vault's `maxWhisperBytes`.
+   *
+   * The write lands only if storage still holds what this device last read: the same vault, and
+   * the same revision of this lockbox (or still none). Otherwise nothing is written and the call
+   * throws kind 'stale_write', after catching up with storage: another device's write to the box
+   * now shows in the snapshot, and a vault destroyed or made anew elsewhere relocks this device
+   * -- a stale session never writes into a vault reborn under new keys. Retrying a stale write
+   * replaces what the other device wrote.
    */
   store(boxlabel: string, whisper: Whisper, opts?: { note?: string }): Promise<void>
   /** The whisper in `boxlabel`. Requires unlocked; kind 'absent_box' when there is none. */
@@ -111,9 +117,10 @@ export type Vault = {
    */
   use<ResultT>(boxlabel: string, callback: (whisper: Whisper) => ResultT | Promise<ResultT>): Promise<ResultT>
   /**
-   * Remove the lockbox `boxlabel` entirely. Requires unlocked; kind 'absent_box' when absent.
-   * Looks at the backend first, exactly as store() does: a stale session relocks rather than
-   * erasing from a vault reborn elsewhere.
+   * Remove the lockbox `boxlabel` entirely, whatever revision of it stands. Requires unlocked;
+   * kind 'absent_box' when absent. The erase lands only in the vault this device last read: if
+   * it was destroyed, or destroyed and made anew, elsewhere, nothing is erased and the call
+   * throws kind 'stale_write', after catching up with storage -- which relocks this device.
    */
   erase(boxlabel: string): Promise<void>
 
@@ -121,6 +128,11 @@ export type Vault = {
    * Delete the vault's every stored record, remote and device-local: the vault half of deleting
    * an account. Deliberately does NOT require unlock -- an authenticated owner can always delete
    * their own rows server-side, and pretending otherwise would be false comfort.
+   *
+   * Deletes the vault this handle last read, and only that one: if it was destroyed, or
+   * destroyed and made anew, elsewhere since, storage keeps what stands there now and the call
+   * throws kind 'stale_write', after catching up -- a second destroy() then deletes the vault
+   * that stands. On a vault this handle has never seen created, only the device-local record goes.
    */
   destroy(): Promise<void>
   /** Release subscriptions and refuse further calls. Forgets nothing stored. */
@@ -413,7 +425,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         vault_key_passphrase_wrapped: await wrapKeyUnder(passphraseKey, proven.transientKey, bundleBinding(standing.vault_id, epoch, 'vault_key_passphrase_wrapped')),
         updated_at:          new Date(clock.now()).toISOString(),
       }
-      await vaultDB.writeBundle(next)
+      await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }))
       bundle = next
       expiresAt = clock.now() + rememberForMs
       await rememberDevice(proven.transientKey, next, expiresAt)
@@ -433,16 +445,17 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       if (whisperBytes.length > whisperByteLimit) {
         throw new VaultError('whisper_too_large', `That whisper is over this vault's limit of ${String(whisperByteLimit)} bytes of JSON: check that the right value is being stored. If it really is meant to be this large, pass a larger maxWhisperBytes to openVault.`)
       }
-      // A vault destroyed, recreated or re-passphrased elsewhere must not receive this write:
-      // look at the backend first, which relocks this device if the bundle has moved.
-      await refresh()
+      const prev = await vaultDB.readBox(scope, label)
+      // The key and the vault it belongs to, taken together after the last look at storage.
       const unlockedKey = ensureUnlocked()
       const vaultId = currentBundle().vault_id
       const revisionId = randomId()
       const lockboxKey = await makeLockboxKey()
       const now = new Date(clock.now()).toISOString()
-      const prev = await vaultDB.readBox(scope, label)
-      await vaultDB.writeBox(scope, {
+      // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
+      // reborn elsewhere, or a box written meanwhile by another device, refuses it.
+      const expected = { vault_id: vaultId, revision_id: prev?.revision_id ?? null }
+      const lockbox: Lockbox = {
         format:              'safebyok-lockbox-v1',
         boxlabel:            label,
         revision_id:         revisionId,
@@ -451,7 +464,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         note:                storeOpts?.note ?? prev?.note,
         created_at:          prev?.created_at ?? now,
         updated_at:          now,
-      })
+      }
+      await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected))
       await refresh()
     },
 
@@ -464,20 +478,26 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
     erase: async (boxlabel) => {
       ensureUnlocked()
-      // The same look-first as store(): an erase must not reach into a vault reborn elsewhere.
-      await refresh()
+      const label = parseLabel(boxlabel)
+      await readBoxOrThrow(label)
       ensureUnlocked()
-      await readBoxOrThrow(boxlabel)
-      await vaultDB.eraseBox(scope, parseLabel(boxlabel))
+      // Lands only in the vault this device holds keys for, whatever revision of the box stands:
+      // a vault destroyed and made anew elsewhere refuses it.
+      await refreshOnStale(vaultDB.eraseBox(scope, label, { vault_id: currentBundle().vault_id }))
       await refresh()
     },
 
     destroy: async () => {
       ensureOpen()
+      // Only the vault this handle had read when called: one destroyed and made anew since
+      // refuses, even if a background refresh brings it in while this awaits.
+      const doomed = bundle
       vaultKey = null
       expiresAt = null
       await deviceDB.eraseUnlock(scope)
-      await vaultDB.eraseVault(scope)
+      if (doomed !== null && doomed !== UnreadBundle) {
+        await refreshOnStale(vaultDB.eraseVault(scope, { vault_id: doomed.vault_id }))
+      }
       await refresh()
     },
 
@@ -486,6 +506,19 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       unsubscribeDB()
       listeners.clear()
     },
+  }
+
+  /**
+   * `write`, with a refusal as stale catching this device up with storage before it is thrown:
+   * the snapshot then shows what beat the write, and a reborn vault relocks this device.
+   */
+  const refreshOnStale = async (write: Promise<void>): Promise<void> => {
+    try {
+      await write
+    } catch (err) {
+      if (isVaultError(err, 'stale_write')) { await quietRefresh() }
+      throw err
+    }
   }
 
   // Watch the backend so lockboxes written elsewhere (another tab, the inspector's reset button)

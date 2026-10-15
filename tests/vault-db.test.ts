@@ -1,66 +1,101 @@
+import { omit } from 'es-toolkit'
 import { describe, expect, it } from 'vitest'
 import { memoryStore } from '../src/string-store'
-import { VaultDB, localVaultDB } from '../src/vault-db'
+import { VaultDB, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation } from '../src/vault-db'
 import { VaultError } from '../src/errors'
 import type { Lockbox, VaultBundle, VaultScope } from '../src/types'
 import { boxOf, bundleOf, scopeOf } from './helpers'
+import { describeVaultDB } from './vault-db-suite'
+
+/**
+ * The smallest honest adapter: a Map of records, each check-and-write in one synchronous step.
+ * What an adapter author writes; the validation around it comes from the base class.
+ */
+class MapVaultDB extends VaultDB {
+  readonly maxRecordBytes = Infinity
+  readonly rows = new Map<string, unknown>()
+  private bundleCkey(scope: VaultScope) { return `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}` }
+  private boxCkey(scope: VaultScope, boxlabel: string) { return `${this.bundleCkey(scope)}/${boxlabel}` }
+  private standingBundle(scope: VaultScope) { return this.rows.get(this.bundleCkey(scope)) as VaultBundle | undefined }
+
+  protected doReadBundle(scope: VaultScope): Promise<unknown> { return Promise.resolve(this.rows.get(this.bundleCkey(scope)) ?? null) }
+
+  protected doCreateBundle(bundle: VaultBundle) {
+    if (! this.rows.has(this.bundleCkey(bundle))) { this.rows.set(this.bundleCkey(bundle), bundle) }
+    return Promise.resolve(this.rows.get(this.bundleCkey(bundle)))
+  }
+
+  protected doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation) {
+    const standing = this.standingBundle(bundle)
+    if (standing?.vault_id !== expected.vault_id || standing.passphrase_epoch !== expected.passphrase_epoch) { return Promise.resolve(false) }
+    this.rows.set(this.bundleCkey(bundle), bundle)
+    return Promise.resolve(true)
+  }
+
+  protected doReadBox(scope: VaultScope, boxlabel: string) { return Promise.resolve(this.rows.get(this.boxCkey(scope, boxlabel)) ?? null) }
+
+  protected doListBoxes(scope: VaultScope) {
+    return Promise.resolve([...this.rows].filter(([ckey]) => ckey.startsWith(`${this.bundleCkey(scope)}/`)).map(([, row]) => row))
+  }
+
+  protected doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation) {
+    const standingBox = this.rows.get(this.boxCkey(scope, lockbox.boxlabel)) as Lockbox | undefined
+    if (this.standingBundle(scope)?.vault_id !== expected.vault_id || (standingBox?.revision_id ?? null) !== expected.revision_id) {
+      return Promise.resolve(false)
+    }
+    this.rows.set(this.boxCkey(scope, lockbox.boxlabel), lockbox)
+    return Promise.resolve(true)
+  }
+
+  protected doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation) {
+    if (this.standingBundle(scope)?.vault_id !== expected.vault_id) { return Promise.resolve(false) }
+    this.rows.delete(this.boxCkey(scope, boxlabel))
+    return Promise.resolve(true)
+  }
+
+  protected doEraseVault(scope: VaultScope, expected: EraseExpectation) {
+    if (this.standingBundle(scope)?.vault_id !== expected.vault_id) { return Promise.resolve(false) }
+    const doomed = [...this.rows].map(([ckey]) => ckey).filter((ckey) => ckey === this.bundleCkey(scope) || ckey.startsWith(`${this.bundleCkey(scope)}/`))
+    for (const ckey of doomed) { this.rows.delete(ckey) }
+    return Promise.resolve(true)
+  }
+}
+
+/**
+ * A MapVaultDB in trouble: reading the bundle and subscribing fail as `failure` does; updating a
+ * box rejects.
+ */
+class TroubledVaultDB extends MapVaultDB {
+  constructor(private readonly failure: () => never) { super() }
+  protected override doReadBundle(): Promise<unknown> { this.failure() }
+  protected override doSubscribe(): () => void { this.failure() }
+  protected override doUpdateBox(): Promise<boolean> { return Promise.reject(new Error('the backend dropped the connection')) }
+}
+
+const unheard = (): void => undefined
+
+describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
+describeVaultDB('the smallest honest adapter', () => new MapVaultDB())
 
 describe("localVaultDB", () => {
-  it("has no bundle until one is written, then reads it back whole", async () => {
-    const vaultDB = localVaultDB(memoryStore())
-    expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
-    await vaultDB.writeBundle(bundleOf('u1'))
+  it("reads a vault stored before the storage verbs: the same rows, at the same ckeys", async () => {
+    const store = memoryStore()
+    store.write('vault:acme:u1:main', JSON.stringify(bundleOf('u1')))
+    store.write('box:acme:u1:main:anthropic', JSON.stringify(boxOf('anthropic', 'one')))
+    const vaultDB = localVaultDB(store)
     expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
-  })
-
-  it("round-trips a lockbox, and reads null where none exists", async () => {
-    const vaultDB = localVaultDB(memoryStore())
-    expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
     expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(boxOf('anthropic', 'one'))
+    expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(1)
   })
 
-  it("lists summaries sorted by label, with both ciphered fields stripped", async () => {
-    const vaultDB = localVaultDB(memoryStore())
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('openai', 'two'))
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
-    const summaries = await vaultDB.listBoxes(scopeOf('u1'))
-    expect(summaries.map((box) => box.boxlabel)).to.deep.equal(['anthropic', 'openai'])
-    expect(summaries[0]).to.not.have.property('whisper_ciphered')
-    expect(summaries[0]).to.not.have.property('lockbox_key_wrapped')
-  })
-
-  it("keeps each scope to itself: same boxlabel, two users, no collision", async () => {
-    const vaultDB = localVaultDB(memoryStore())
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
-    await vaultDB.writeBox(scopeOf('u2'), boxOf('anthropic', 'two'))
-    const oneBox = await vaultDB.readBox(scopeOf('u1'), 'anthropic')
-    const twoBox = await vaultDB.readBox(scopeOf('u2'), 'anthropic')
-    expect(oneBox?.revision_id).to.eq('rev-one')
-    expect(twoBox?.revision_id).to.eq('rev-two')
-    expect(await vaultDB.listBoxes(scopeOf('u2'))).to.have.lengthOf(1)
-  })
-
-  it("erases one box without touching its neighbours", async () => {
-    const vaultDB = localVaultDB(memoryStore())
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('openai', 'two'))
-    await vaultDB.eraseBox(scopeOf('u1'), 'anthropic')
-    expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
-    expect(await vaultDB.readBox(scopeOf('u1'), 'openai')).to.not.be.null
-  })
-
-  it("eraseVault removes the bundle and every box of that scope, and nothing else", async () => {
-    const vaultDB = localVaultDB(memoryStore())
-    await vaultDB.writeBundle(bundleOf('u1'))
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
-    await vaultDB.writeBundle(bundleOf('u2'))
-    await vaultDB.writeBox(scopeOf('u2'), boxOf('anthropic', 'two'))
-    await vaultDB.eraseVault(scopeOf('u1'))
-    expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
-    expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
-    expect(await vaultDB.readBundle(scopeOf('u2'))).to.not.be.null
-    expect(await vaultDB.readBox(scopeOf('u2'), 'anthropic')).to.not.be.null
+  it("stores each record as its JSON, at the ckey it always had", async () => {
+    const store = memoryStore()
+    const vaultDB = localVaultDB(store)
+    await vaultDB.createBundle(bundleOf('u1'))
+    await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    expect(store.read('vault:acme:u1:main')).to.eq(JSON.stringify(bundleOf('u1')))
+    expect(store.read('box:acme:u1:main:anthropic')).to.eq(JSON.stringify(boxOf('anthropic', 'one')))
+    expect(store.ckeys()).to.have.members(['vault:acme:u1:main', 'box:acme:u1:main:anthropic'])
   })
 
   it("refuses a mangled row with kind 'corrupt_record', quoting none of it", async () => {
@@ -74,6 +109,13 @@ describe("localVaultDB", () => {
     expect((refusal as VaultError).message).to.not.include('SUPERSECRET')
   })
 
+  it("refuses a row that is not JSON at all, quoting none of it", async () => {
+    const store = memoryStore()
+    const vaultDB = localVaultDB(store)
+    store.write('box:acme:u1:main:anthropic', 'SUPERSECRET{')
+    await expect(vaultDB.readBox(scopeOf('u1'), 'anthropic')).rejects.toThrow(/did not read back as JSON/)
+  })
+
   it("refuses a record that names a scope or label other than the one asked for", async () => {
     const store = memoryStore()
     const vaultDB = localVaultDB(store)
@@ -83,67 +125,84 @@ describe("localVaultDB", () => {
     store.write('box:acme:u1:main:other_box', JSON.stringify(boxOf('anthropic', 'one')))
     await expect(vaultDB.readBox(scopeOf('u1'), 'other_box')).rejects.toThrow(/different boxlabel/)
   })
+
+  it("keeps a user whose user_id holds a colon out of another user's listing and erasure", async () => {
+    const vaultDB = localVaultDB(memoryStore())
+    // User 'u1:main' with vault 'other' stores its rows under the prefix of user 'u1', vault 'main'.
+    const colonScope = { applabel: 'acme', user_id: 'u1:main', vaultlabel: 'other' }
+    await vaultDB.createBundle({ ...bundleOf('u1'), ...colonScope, vault_id: 'vault-id-colon' })
+    await vaultDB.updateBox(colonScope, boxOf('anthropic', 'colon'), { vault_id: 'vault-id-colon', revision_id: null })
+    await vaultDB.createBundle(bundleOf('u1'))
+    expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
+    await vaultDB.eraseVault(scopeOf('u1'), { vault_id: 'vault-id-u1' })
+    const theirs = await vaultDB.readBox(colonScope, 'anthropic')
+    expect(theirs?.revision_id).to.eq('rev-colon')
+  })
 })
 
-/**
- * The smallest honest adapter: a Map of records and nothing else. What an adapter author writes;
- * the compound verbs below come from the base class.
- */
-class MapVaultDB extends VaultDB {
-  readonly maxRecordBytes = Infinity
-  readonly bundles = new Map<string, VaultBundle>()
-  readonly lockboxes = new Map<string, Lockbox>()
-  private path(scope: VaultScope) { return `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}` }
-
-  protected fetchBundle(scope: VaultScope) { return Promise.resolve(this.bundles.get(this.path(scope)) ?? null) }
-  protected saveBundle(bundle: VaultBundle) { this.bundles.set(this.path(bundle), bundle); return Promise.resolve() }
-  protected trashBundle(scope: VaultScope) { this.bundles.delete(this.path(scope)); return Promise.resolve() }
-  protected fetchBox(scope: VaultScope, boxlabel: string) { return Promise.resolve(this.lockboxes.get(`${this.path(scope)}:${boxlabel}`) ?? null) }
-  protected saveBox(scope: VaultScope, lockbox: Lockbox) { this.lockboxes.set(`${this.path(scope)}:${lockbox.boxlabel}`, lockbox); return Promise.resolve() }
-  protected trashBox(scope: VaultScope, boxlabel: string) { this.lockboxes.delete(`${this.path(scope)}:${boxlabel}`); return Promise.resolve() }
-  protected fetchBoxes(scope: VaultScope) {
-    return Promise.resolve([...this.lockboxes].filter(([ckey]) => ckey.startsWith(`${this.path(scope)}:`)).map(([, lockbox]) => lockbox))
-  }
-}
-
-describe("the abstract VaultDB, over seven primitives", () => {
-  it("composes listBoxes and eraseVault from the primitives alone", async () => {
+describe("the abstract VaultDB, around an adapter's half", () => {
+  it("validates what the adapter returns: a wrong-shaped record is refused, not repaired", async () => {
     const vaultDB = new MapVaultDB()
-    await vaultDB.writeBundle(bundleOf('u1'))
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('openai', 'two'))
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
-    const summaries = await vaultDB.listBoxes(scopeOf('u1'))
-    expect(summaries.map((box) => box.boxlabel)).to.deep.equal(['anthropic', 'openai'])
-    await vaultDB.eraseVault(scopeOf('u1'))
-    expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
-    expect(vaultDB.lockboxes.size).to.eq(0)
-  })
-
-  it("createBundle creates against emptiness, and yields to a bundle already standing", async () => {
-    const vaultDB = new MapVaultDB()
-    const first = bundleOf('u1')
-    const second = { ...bundleOf('u1'), vault_id: 'the-second-arrival' }
-    expect(await vaultDB.createBundle(first)).to.deep.equal(first)
-    // A second creation (another device racing) gets the standing bundle back, not its own.
-    expect(await vaultDB.createBundle(second)).to.deep.equal(first)
-    expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(first)
-  })
-
-  it("subscribe defaults to silence: a usable unsubscribe, and no notifications", () => {
-    const vaultDB = new MapVaultDB()
-    const unsubscribe = vaultDB.subscribe(scopeOf('u1'), () => { throw new Error('never rings') })
-    expect(unsubscribe).to.be.a('function')
-    unsubscribe()
-  })
-
-  it("validates what the primitives return: a wrong-shaped record is refused, not repaired", async () => {
-    const vaultDB = new MapVaultDB()
-    vaultDB.bundles.set('acme:u1:main', { format: 'not-a-vault' } as unknown as VaultBundle)
+    vaultDB.rows.set('acme:u1:main', { format: 'not-a-vault' })
     let refusal: unknown = null
     try { await vaultDB.readBundle(scopeOf('u1')) } catch (err) { refusal = err }
     expect(refusal).to.be.instanceOf(VaultError)
     expect((refusal as VaultError).kind).to.eq('corrupt_record')
     // Refused, never repaired or deleted: the record is still there for forensics.
-    expect(vaultDB.bundles.size).to.eq(1)
+    expect(vaultDB.rows.size).to.eq(1)
+  })
+
+  it("accepts a listing projected server-side, without ciphered fields, so long as it keeps format", async () => {
+    const vaultDB = new MapVaultDB()
+    const projected = omit(boxOf('anthropic', 'one'), ['lockbox_key_wrapped', 'whisper_ciphered'])
+    vaultDB.rows.set('acme:u1:main/anthropic', projected)
+    const summaries = await vaultDB.listBoxes(scopeOf('u1'))
+    expect(summaries[0]?.revision_id).to.eq('rev-one')
+    vaultDB.rows.set('acme:u1:main/anthropic', omit(projected, ['format']))
+    await expect(vaultDB.listBoxes(scopeOf('u1'))).rejects.toThrow(/did not read back in a shape/)
+  })
+
+  it("turns an adapter's own failure into kind 'storage_unavailable', keeping it as the cause", async () => {
+    const outage = new Error('the backend is down')
+    const vaultDB = new TroubledVaultDB(() => { throw outage })
+    let refusal: unknown = null
+    try { await vaultDB.readBundle(scopeOf('u1')) } catch (err) { refusal = err }
+    expect(refusal).to.be.instanceOf(VaultError)
+    expect((refusal as VaultError).kind).to.eq('storage_unavailable')
+    expect((refusal as VaultError).cause).to.eq(outage)
+    await expect(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null }))
+      .rejects.toThrow(/could not be reached/)
+  })
+
+  it("passes an adapter's own VaultError through untouched: not_permitted stays not_permitted", async () => {
+    const forbidden = new VaultError('not_permitted', 'This backend does not let the signed-in user reach that vault.')
+    const vaultDB = new TroubledVaultDB(() => { throw forbidden })
+    let refusal: unknown = null
+    try { await vaultDB.readBundle(scopeOf('u1')) } catch (err) { refusal = err }
+    expect(refusal).to.eq(forbidden)
+  })
+
+  it("subscribe defaults to silence: a usable unsubscribe, and no notifications", async () => {
+    const vaultDB = new MapVaultDB()
+    let heardCount = 0
+    const unsubscribe = vaultDB.subscribe(scopeOf('u1'), () => { heardCount += 1 })
+    await vaultDB.createBundle(bundleOf('u1'))
+    expect(heardCount).to.eq(0)
+    unsubscribe()
+  })
+
+  it("turns an adapter's failure to subscribe into kind 'storage_unavailable' as well, keeping it as the cause", () => {
+    const outage = new Error('the backend is not connected')
+    const vaultDB = new TroubledVaultDB(() => { throw outage })
+    let refusal: unknown = null
+    try { vaultDB.subscribe(scopeOf('u1'), unheard) } catch (err) { refusal = err }
+    expect(refusal).to.be.instanceOf(VaultError)
+    expect((refusal as VaultError).kind).to.eq('storage_unavailable')
+    expect((refusal as VaultError).cause).to.eq(outage)
+  })
+
+  it("refuses to subscribe to a malformed scope", () => {
+    const vaultDB = new MapVaultDB()
+    expect(() => vaultDB.subscribe({ ...scopeOf('u1'), applabel: 'Acme' }, unheard)).to.throw(/vault scope/)
   })
 })

@@ -52,11 +52,26 @@ security expert who knows what questions to ask.
   (`src/stable-jsonify.ts`) is a thin alias of it, backing snapshot change detection.
 * 2026-10-14: `zod` moved from a regular dependency to a peer dependency (`^4.0.0`): the host app
   supplies it, so safebyok validates with whatever zod instance that app ships.
-* 2026-10-14: storage writes are last-writer-wins: a concurrent write to the same lockbox or
-  bundle silently buries the earlier one. A `versionedUpdate` (save only if the standing
-  `revision_id` / `passphrase_epoch` is the one the writer read) is planned; until the IndexedDB
-  adapter performs it inside a single IndexedDB transaction, its check-then-save has a small
-  window in which the race survives.
+* 2026-10-15: storage writes are versioned updates (`VaultDB.updateBundle`, `updateBox`). A
+  bundle update carries the `vault_id` and `passphrase_epoch` it was proven against, and lands
+  only while the standing bundle has both. A lockbox update carries the `vault_id` its whisper
+  was sealed for and the `revision_id` it read (or null for none), and lands only while the
+  scope's standing bundle has that `vault_id` and the standing lockbox that `revision_id` (or
+  there is none); a scope with no bundle refuses. A failed expectation refuses with kind
+  `stale_write`, writes nothing, and `store()` / `changePassphrase()` / `erase()` / `destroy()`
+  surface it on the first failure, with no retry. Erases (`eraseBox`, `eraseVault`) carry a
+  `vault_id`-only expectation (the Coach's ruling): they land only while the scope's standing
+  bundle has that `vault_id`, refuse where no bundle stands, and expect no revision, so within
+  its vault an erase wins over a concurrent update; erasing an absent lockbox is quiet. The
+  atomicity of check-and-write is each adapter's: `localVaultDB` checks and saves in one
+  synchronous step; the Convex adapter is planned to check inside its mutation's transaction.
+* 2026-10-15: `idbVaultDB` performs its versioned updates, its erases and `createBundle` as a
+  read, then a separate write, in separate IndexedDB transactions: another tab writing in
+  between can still be buried, two tabs can each create a bundle, and a vault another tab
+  destroys and makes anew in between can still lose a lockbox (`eraseBox`) or be erased whole
+  (`eraseVault`). Its `eraseVault` also lists the vault's rows in one transaction and deletes
+  them in another: a lockbox another tab writes in between survives the erase, orphaned without
+  a bundle. Doing these inside one IndexedDB transaction is a ruled TODO, not yet built.
 * 2026-10-14: a lockbox's ciphertext length reveals its whisper's length to the backend: there is
   no padding yet (TODO). `store()` refuses a whisper over `maxWhisperBytes` of JSON, an
   `openVault` option defaulting to `MaxWhisperBytes` (40444), checked on write only.
@@ -67,11 +82,17 @@ security expert who knows what questions to ask.
   kept.
 * 2026-10-14: `pnpm-workspace.yaml` denies `esbuild`'s install script (`esbuild: false`); esbuild
   arrives with `convex` and vite, and runs from its platform binary package without it.
-* 2026-10-14: every mutating path (`store`, `erase`, `changePassphrase`, `unlock`) re-reads the
-  bundle from the backend before acting: a session holding keys for a vault since destroyed,
-  recreated or re-passphrased elsewhere relocks instead of writing into the successor. This is
-  check-then-write, not atomic, until `versionedUpdate` carries the `vault_id` expectation to
-  the backend.
+* 2026-10-15: a session holding keys for a vault since destroyed or recreated elsewhere cannot
+  write a lockbox into the successor, erase one of its lockboxes, or destroy it: `store()`,
+  `erase()` and `destroy()` no longer look at the bundle first, and rely on the `vault_id`
+  expectation, checked by the backend, to refuse. A refused `destroy()` has already forgotten
+  this device's remembered unlock; a second `destroy()`, now holding the successor's `vault_id`,
+  erases the successor. On a vault the handle has never seen created, `destroy()` erases only
+  the device-local record: lockboxes orphaned without a bundle are not reached.
+  `changePassphrase()` and `unlock()` re-read the bundle first, as they must to prove the
+  passphrase against it. A passphrase changed elsewhere does not stop a stale session's
+  `store()` or `erase()` (their expectations carry no epoch); the session relocks on its next
+  look at the bundle.
 * 2026-10-14: the unlock window (today `rememberForMs`, becoming `forcePassphraseReentryHours`)
   is chosen by the app at each `openVault`, so two devices on one vault may hold different
   windows. It is client-side politeness, not a vault-wide synced policy: nothing stored enforces
@@ -82,3 +103,37 @@ security expert who knows what questions to ask.
   tags are also the first element of every encryption's additional data, so a record written
   under a `byok-*-v1` tag would neither validate nor decrypt. No reader for the old tags is
   kept: they existed only in development and demo storage, never in a published version.
+* 2026-10-15: `VaultDB`'s public verbs turn any failure from an adapter that is not already a
+  `VaultError` into kind `storage_unavailable`, with the adapter's own error attached as the
+  standard `cause`. Adapters see only ciphertext and public record fields, but that cause is
+  whatever the backend's client threw, unfiltered.
+* 2026-10-15: `localVaultDB` and `idbVaultDB` key rows by `applabel:user_id:vaultlabel`, and
+  `user_id` may hold a colon, so one user's rows can share another scope's ckey prefix. Listing
+  and erasing a vault now take only ckeys whose remainder after the prefix is a bare boxlabel
+  (no colon); before, a prefix match alone listed a colon-holding user's lockboxes in another
+  user's vault. Exact ckeys cannot collide.
+* 2026-10-15: the Convex component (`packages/safebyok-convex`) authenticates in the host app,
+  not inside the component (where `ctx.auth` does not exist): `SafebyokComponent.api({ getUserId })`
+  builds the nine public functions the host re-exports, and each refuses unless the host's
+  `getUserId(ctx)` returns a non-empty id equal to the scope's or bundle's `user_id`. The
+  component's own functions check no caller and trust their `user_id` argument; Convex lets only
+  the host app call them, so a host that wraps them itself, without this check, exposes every
+  user's rows.
+* 2026-10-15: the Convex component validates records structurally only (fields, types,
+  optionality, the `format` literal); the label grammar, non-empty ids, a positive whole
+  `passphrase_epoch` and a note's length are checked by the client's Zod records, not on the
+  server. A signed-in user can therefore store malformed rows in their own vaults, which their
+  own clients then refuse as `corrupt_record`.
+* 2026-10-15: the Convex component checks each update's and erase's expectation by reading the
+  standing rows inside the same mutation that writes, relying on Convex's serializable
+  transactions; a failed expectation resolves `false` rather than throwing. `createBundle` is a
+  find-or-insert in one mutation; the indexes are not unique, and a second bundle row for one
+  scope would make every later call on that vault fail (`.unique()` throws) rather than pick one.
+* 2026-10-15: the Convex component's refusals carry `ConvexError` data of a fixed `kind`
+  (`not_permitted`) and a fixed message; neither names the user or quotes a record. Its functions
+  log nothing.
+* 2026-10-15: Convex's own argument and return validation errors quote the value they refused.
+  A malformed call to one of the Convex component's functions therefore writes its arguments --
+  `user_id`, scope, notes, ciphertext, never plaintext or keys -- into the host's Convex logs,
+  and on a dev deployment back to the calling client as well. safebyok's own refusals
+  (`not_permitted`) quote nothing.

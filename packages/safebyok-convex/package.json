@@ -2,8 +2,15 @@
   "name": "safebyok-convex",
   "private": true,
   "version": "0.0.0",
-  "description": "Convex storage for safebyok: a Convex component holding vault bundles and lockboxes as ciphertext, and the VaultDB adapter that speaks to it. Workspace package in design; not yet published.",
+  "description": "Convex storage for safebyok: a Convex component holding vault bundles and lockboxes as ciphertext, and the VaultDB adapter that speaks to it. Source-exported workspace package while the interface settles; not yet built or published.",
   "type": "module",
+  "exports": {
+    "./convex.config": "./src/component/convex.config.ts",
+    "./convex.config.js": "./src/component/convex.config.ts",
+    "./_generated/component.js": "./src/component-api.ts",
+    "./server": "./src/server.ts",
+    "./test": "./src/test.ts"
+  },
   "scripts": {
     "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
     "typecheck": "tsc --noEmit",
@@ -23,6 +30,7 @@
     "eslint-plugin-chai-friendly": "^1.2.1",
     "typescript": "6.0.3",
     "typescript-eslint": "^8.71.2",
+    "vite": "^8.3.4",
     "vitest": "^5.0.4"
   },
   "peerDependencies": {
