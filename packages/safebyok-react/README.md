@@ -8,7 +8,9 @@ otherwise write itself.
   `withUnlockedVault` finds the vault locked.
 * `useVault()` -- the vault handle and `withUnlockedVault()`, which wraps any action that touches
   a whisper: on `vault_locked` it asks for the passphrase and retries, and resolves `null` if
-  dismissed (unambiguous for reads: a whisper is never null). Beside them, `openError` and
+  dismissed (unambiguous for reads: a whisper is never null). Every call settles: calls that
+  overlap wait on one dialog, and each resolves `null` if the vault goes while it is open (a
+  sign-out, another user, the provider unmounting). Beside them, `openError` and
   `retryOpen()` for an open that failed (below).
 * `useVaultSnapshot()` -- the live snapshot via `useSyncExternalStore`.
 * `PassphraseModal` -- the default dialog: unstyled markup under `modal-scrim` / `modal` class
@@ -99,9 +101,10 @@ does not fit the page, a vault made with a key deriver this build lacks (as in a
 across a deployment) -- or a failure that is no `VaultError` is not the user's to mend, and its
 message is written for you, not them. The dialog shows "Something went wrong", that their secrets
 are safe, and to reload and try again, with a Close button that resolves `withUnlockedVault` to
-null, as Cancel does; the typed passphrase goes with the form. A `PasskeyUnlockButton` that meets
-one takes itself away and tells `onGripe` to use the passphrase instead. Your error boundary
-never sees it.
+null, as Cancel does (Escape too); the typed passphrase goes with the form. A
+`PasskeyUnlockButton` that meets one takes itself away and tells `onGripe` to use the passphrase
+instead; `PassphraseModal` announces that, keeps it on screen until the next submit, and moves
+focus to the passphrase field. Your error boundary never sees it.
 
 **React reports it to you.** Each component catches such a failure in an error boundary of its
 own, so React hands the very error to the root's `onCaughtError`: by default the console, with the
