@@ -64,7 +64,9 @@ and the security reviewer reading the code.
 * **What is exported is a contract.** Each published package's `src/index.ts` (and each entry
   point beside it) is its public surface, versioned by semver. **A stored vault is a contract
   too**: a change to the shape of what is written to storage must still read every vault already
-  written, and says how.
+  written, and says how. **Until 1.0.0, neither binds backward**: no compatibility shims, no
+  migrations, no reading of older stored shapes. An old record that fails today's validation
+  fails safe (it reads as absent or corrupt), and the changeset says what a host will see.
 
 ## Non-Negotiables
 

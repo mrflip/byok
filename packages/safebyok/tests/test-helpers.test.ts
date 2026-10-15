@@ -34,3 +34,33 @@ describe("wakeupAtNextTick", () => {
     expect(heard).to.deep.equal(['microtask', 'timer', 'woke'])
   })
 })
+
+describe("makeGate", () => {
+  it("holds a pass until released, and says when something reached it", async () => {
+    const gate = TH.makeGate()
+    const heard: string[] = []
+    const passing = (async () => {
+      await gate.pass()
+      heard.push('passed')
+    })()
+    await gate.reached
+    heard.push('reached')
+    await TH.wakeupAtNextTick()
+    expect(heard).to.deep.equal(['reached'])
+    gate.release()
+    await passing
+    expect(heard).to.deep.equal(['reached', 'passed'])
+  })
+
+  it("stays open once released: a later pass goes straight through", async () => {
+    const gate = TH.makeGate()
+    gate.release()
+    let passes = 0
+    await gate.pass()
+    passes += 1
+    await gate.pass()
+    passes += 1
+    await gate.reached
+    expect(passes).to.eq(2)
+  })
+})

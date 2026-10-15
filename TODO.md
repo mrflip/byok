@@ -85,7 +85,6 @@ stored and how big a vault can be. CI covers the package (`pnpm -r`). What is le
   bundle resolving without erasing, and a retry after a refused `destroy()` taking the reborn
   vault; whether the label grammar is enforced server-side; the tests' `react` dev dependency
   (keep, recommended); the first-emit deviation of `watchVault` (accept; design.md records it).
-  A failed `openVault` leaking its subscription is in flight as `20261015-open_vault_unsubscribe`.
 
 ### 3. Reservations before the first release: the stored format and the public surface
 
@@ -193,7 +192,7 @@ three change what the documents say:
   adapter, the Convex tables).
 * **VOCABULARY.md** checked line by line against the exports.
 
-### 5. Expiry and the unlock window (ruled, not yet built)
+### 5. Expiry and the unlock window (ruled; `lockSoon` built, natural expiry's timer not)
 
 Not on the Coach's lists, but ruled in `whiteboard/20261014-crypto/rulings.md` (*The unlock
 window*, *Expiry*) and placed here because fingerprint unlock (8) reworks the same unlock path
@@ -206,6 +205,17 @@ grace, or `lockSoon(graceSeconds = 5.0)`'s now plus grace; when it passes the ke
 device-remember record erased, the snapshot flips). In-flight work is never clawed back.
 The names ship with 3; this thread builds the timer, `lockSoon`, and the shut-forgets-both rule.
 Public surface change; a `notes/security.md` entry.
+
+Built (second_harvest thread 5): `vault.lockSoon(graceSeconds = 5)`, at most 60 seconds, with
+the core README's screen-lock recipe. It closes the entry gate and erases the device record at
+once, and leaves a timer only the vaultKey; inside an operation already started, `store()` and
+`erase()` look for the key in hand, not at `askPassphraseAt`. Every lock (`lock`, `lockSoon`,
+`destroy`) erases the device record. Left: **natural expiry's timer**, `shutVaultAt` =
+`askPassphraseAt` + 60 s. `shutAfter()` in `vault.ts` is the mechanism, armed from
+`takeUpUnlock` and `rememberedUnlock`; two things to settle first: `setTimeout` holds at most
+2^31-1 ms (24.8 days), so a longer window re-arms (or arms only once within reach), and
+`ensureUnlocked()` drops an expired key itself today, which the timer would take over. Not yet
+public: `shutVaultAt` in the snapshot.
 
 ### 6. hash-wasm as a pluggable KDF
 
@@ -224,7 +234,7 @@ Caveats:
 
 ### 7. zod/mini and a tree-shaking audit
 
-Depends on low-hanging-fruit thread 7 (the size budget is the before-and-after). Measured
+Depends on low-hanging-fruit thread 8 (the size budget, [#42](https://github.com/mrflip/safebyok/pull/42), merged: it is the before-and-after). Measured
 before: zod classic is about three quarters of every bundle (183 KB raw), and it does not
 tree-shake because the schemas are built at module top level in a shared chunk; even a bare
 `stableJsonify` import drags all schemas. The thread: move the core's schemas to `zod/mini`
@@ -272,7 +282,9 @@ Straightforward, likely to be done, not needed yet. Each is a thread cut from `m
 * **`safebyok-vue`**: a `shallowRef` plus `onScopeDispose` binding, about ten lines, so Nuxt
   apps have what React apps have. After the react package is published (its shape is the model).
 * **`lockWhenHidden`** opt-in prop on `safebyok-react` (ruled, not yet): the binding may touch
-  the DOM; calls `lockSoon()` on `visibilitychange`. After 4.
+  the DOM; calls `lockSoon()` on `visibilitychange`. `lockSoon()` exists now, and the core
+  README's *A screen-lock recipe* is the handful of lines the prop would wrap; the prop removes
+  its listener when the provider closes the vault.
 * **IndexedDB `versionedUpdate` truly atomic**, inside one IndexedDB transaction (idb-keyval's
   `update()`, throw-to-abort mapped to `stale_write`), closing the window `notes/security.md`
   records. After storage_verbs.
@@ -302,25 +314,33 @@ and 8192 bits); the cap and half of each adapter's `maxRecordBytes` are bucket w
 know not to `JSON.parse`: that is `whisper_codec`, reserved in roadmap 3, so this thread adds
 no field. The security note on ciphertext length stays until this lands.
 
-### Error families: misuse versus conditions
-
-Done in low-hanging-fruit thread 13 (`error_kinds`): every kind has one family, in `errors.ts`'s
-doc block and the core README's *Errors* tables. Still open: `VaultProvider` throws any
-`openVault` rejection to the error boundary, conditions (`storage_unavailable`, `not_permitted`)
-included; whether it should hand those to the context instead is undecided.
-
 ### Pluggable label validator
 
 A host chooses its own label grammar. Waits on the low-hanging-fruit report of what depends on
 the current strictness (storage ckeys, the cipher binding, the Convex tables, the React package);
-the seam is likely an `openVault` option with the current `parseLabel` as the default.
+the seam is likely an `openVault` option with the current `parseLabel` as the default. The report
+([#35](https://github.com/mrflip/safebyok/pull/35)) found the colon is the one character the
+storage ckeys cannot take: they join applabel, user id, vaultlabel and boxlabel with `:` as plain
+concatenations, so a label holding a colon collides with another scope or hides a box. **The
+Coach's ruling: a pluggable label validator must also provide a label-tuple stringifier that
+handles the `:` issue** -- the validator and the stringifier come as one pair, so a host that
+widens the grammar also says how the tuple becomes a ckey. The current `:`-join stays the default
+pair's stringifier, so every stored ckey keeps its shape.
+
+### Validating the user id
+
+`VaultScope.user_id` comes from the host's auth and is free-form today: any non-empty string, no
+grammar, deliberately not a Label. **The Coach's ruling: it gets some manner of validation, and
+the validation is replaceable** -- a default check (a length cap, no control characters, and
+whatever the ckey stringifier above needs) that a host can swap for its own auth provider's id
+shape. Same seam family as the label validator; decide them together.
 
 ### A conflict-handler hook
 
 Ruled "with the retry work": a way for a host to hear about an erase-versus-update collision
 after the retry limit, rather than only a `stale_write`. API design: is it an `openVault` option,
 a snapshot field, or an error the provider surfaces? Decide after the retry (low-hanging-fruit
-thread 6) has been used in anger.
+thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in anger.
 
 ### Others
 
@@ -348,11 +368,26 @@ implementation.
   field as a tiebreaker for ordering writes within one millisecond. No reservation needed: a
   tiebreaker an attacker strips gains nothing, so it may be bound only where present (and with
   whole-header binding, roadmap 3, it is bound automatically the day it appears).
+* **`maskCarefully`.** A variant of `mask` for whispers in scripts that write vowels and syllable
+  parts as combining marks (Devanagari, Thai, Tamil, Bengali, Khmer), which `mask` strips whole
+  ([#37](https://github.com/mrflip/safebyok/pull/37)). It would keep marks, but at most one or
+  two per base character, which keeps the vowels while still blocking stacked "Zalgo" marks. Its
+  final scan would also have to drop a mark left orphaned at a cut edge. API keys are ASCII, so
+  nothing asks for it yet.
 * **A PBKDF2 key deriver.** Native in WebCrypto and fast, but not memory-hard; shipping it is not
   a favor. A host that needs it can write one against the `KeyDeriver` seam. If it is ever
   packaged, it is its own package with the iteration count in the label.
+
+* **A finer unlock race analyser.** A `lock()` that lands while an `unlock()` is still under way
+  wins, whatever the circumstances. A more sophisticated unlock race analyser might tell "goons
+  are here, lock the vault" from "typed my passphrase at 6d23h59m": a lock the user meant from
+  one that merely fell due (the seven-day deadline, say) while the user was typing the
+  passphrase that would have renewed it.
 
 ## RAGEBAIT
 
 * If the eslint configs cut from the core's (`packages/safebyok/eslint.config.mjs`) drift enough to
   cause an uncaught bug, write a generator script to keep them in sync.
+* If our retry and backoff in `store()` (`retryStale`, `retryDelayMs` in `vault.ts`) ever grows --
+  more callers, cancellation, a policy hook -- take `p-retry` (or `exponential-backoff`) rather
+  than growing the hand-written one. For now three lines of `setTimeout` stay ([#45](https://github.com/mrflip/safebyok/pull/45)).

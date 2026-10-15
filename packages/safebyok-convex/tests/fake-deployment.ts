@@ -83,6 +83,11 @@ class FakeDeployment {
     return subject === null ? this.backend : this.backend.withIdentity({ subject })
   }
 
+  /** The functions every connected socket watches right now, by path: the live queries a client holds open here. */
+  watching(): string[] {
+    return Array.from(this.sessions.values(), (session) => Array.from(session.watched.values(), (watch) => watch.udfPath)).flat()
+  }
+
   /** Closes every client made here, so none keeps a timer running past its test. */
   async close(): Promise<void> {
     await Promise.all(this.clients.map((client) => client.close()))

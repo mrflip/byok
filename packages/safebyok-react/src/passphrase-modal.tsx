@@ -4,10 +4,11 @@ import { isVaultError, type Vault } from 'safebyok'
 /**
  * The dialog withUnlockedVault summons when the vault turns out to be locked. Unstyled markup
  * under the `modal-scrim` / `modal` / `quiet` / `gripe` class names, for the host's stylesheet
- * to dress. Its two behaviors are the contract: a first-ever unlock reads as "choose a
- * passphrase" (it creates the vault), and a wrong passphrase stays in the dialog with a calm
- * message rather than failing the action. Either way it says plainly that a forgotten passphrase
- * cannot be recovered.
+ * to dress. Its behaviors are the contract: a first-ever unlock reads as "choose a passphrase"
+ * (it creates the vault); a wrong passphrase stays in the dialog with a calm message rather than
+ * failing the action; and an unlock that loses to a `lock()` called while it ran closes the
+ * dialog as if dismissed. Whichever the case, it says plainly that a forgotten passphrase cannot
+ * be recovered.
  */
 export const PassphraseModal = ({ vault, onDone }: { vault: Vault, onDone: (unlocked: boolean) => void }) => {
   const [passphrase, setPassphrase] = useState('')
@@ -21,6 +22,8 @@ export const PassphraseModal = ({ vault, onDone }: { vault: Vault, onDone: (unlo
       onDone(true)
     } catch (err) {
       if (isVaultError(err, 'wrong_passphrase')) { setGripe(err.message); return }
+      // The vault was locked while this unlock was under way, and the lock wins: as if dismissed.
+      if (isVaultError(err, 'vault_locked')) { onDone(false); return }
       throw err
     }
   }

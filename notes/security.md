@@ -7,6 +7,23 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-15: `mask` (`safebyok/utils`) takes a whisper and returns text meant for display: its
+  first and last few characters (two and four by default, at the caller's choice) and, up to
+  `maxLen` (15 by default), its length. Beyond `maxLen` the result is fixed-width
+  (`head***...***tail`), or `maxLen` stars when even that does not fit, so the length stops
+  showing; a `head` and `tail` large enough to cover a short whisper show it nearly whole, and
+  `minStars: 0` shows a short one entirely. It makes the whisper safe to butcher
+  (normalize and strip the whole input), butchers it, and then checks the result is safe by
+  passing it through the same stripping, so every result, even the stars, is free of combining
+  marks, control, format, surrogate, private-use and unassigned code points, spaces, ignorable
+  code points, bidirectional controls and direction marks, and the symbols drawn blank or as a
+  box (U+2800, U+1D159, U+FFFC); it is one plain line that cannot hide or overwrite anything.
+  Right-to-left letters and numbers are kept (the Coach's ruling: strip the direction markers,
+  not the scripts), so a mask may reorder neighbouring neutral characters, such as stars and
+  punctuation, in a display; with no controls in it, it cannot do worse. `mask` is meant for
+  plain text, and arbitrary blobs may give unusual behavior. `head`, `tail` and `minStars` are capped at 1000, so no option
+  makes it build an unbounded string. It throws `bad_option` or `bad_whisper` without quoting
+  its input.
 * 2026-10-14 (revised 2026-10-15 for the push-to-main workflow): the package is staged on npm by `.github/workflows/release.yml`, run on every push
   to main (when the Coach has merged the Version PR, and a version npm lacks is waiting),
   authenticating by npm's trusted publishing (OIDC, no stored token) from the `npm`
@@ -109,15 +126,41 @@ security expert who knows what questions to ask.
   stay the passphrase and the device-bound localUnlockKey.
 * 2026-10-15: a host may let a device stay unlocked indefinitely, by passing
   `forcePassphraseReentryHours: Infinity` (or any huge number); that is the host's choice, with no
-  upper cap. The stored deadline is then clamped to 8.64e15 ms, the last instant a `Date` holds,
-  so `expires_at` stays a finite number and the stored shape is unchanged. What still ends such an
+  upper cap. The stored deadline is then clamped to `FarFuture` (see the next entry), so
+  `expires_at` stays a finite number and the stored shape is unchanged. What still ends such an
   unlock: `lock()` (memory and device record), a passphrase change on another device (the next
   look at the bundle sees a new epoch), and the vault being destroyed or made anew (a new
   `vault_id`). Nothing else does: no timer, and no idle detection. Two consequences: an open
   handle sees that new epoch only when it next reads the bundle (an unlock, a write, or a change
   the vaultDB pushes), so a handle that only reads whispers, on storage that pushes nothing, keeps
-  its vaultKey in memory until then; and lowering the option later does not shorten an unlock a
-  device already remembers, since the remembered path reads the stored `expires_at` as written.
+  its vaultKey in memory until then; and lowering the option later ends an unlock a device
+  already remembers only at its next open (see the entry below).
+* 2026-10-15: the device record's `expires_at` is an `EpochMillis`: a whole number of epoch ms
+  from `FarPast` (1981-01-01T00:00:00Z) to `FarFuture`, the microsecond epochalypse
+  (`Math.floor(Number.MAX_SAFE_INTEGER / 1000)`, 2255-06-05T23:47:34.740Z). It is the only epoch-ms
+  field (other stored times are ISO strings; the Convex package stores no epoch ms). A device
+  record out of bounds or fractional fails the schema, reads as "no remembered unlock", and is
+  erased; it is not clamped on read. That includes records written by 0.1.0 and 0.2.0 under a
+  window above about two million hours (some 229 years), which capped the window only at
+  `MAX_SAFE_INTEGER` ms and stored `now + window` unclamped: such a user enters the passphrase
+  once more. `deadlineAfter` floors its result to whole ms. The host's `Clock` is not checked
+  against the bounds. One counting in seconds writes device records that, under any usual window,
+  never read back, but keeps an unlock in memory a thousand times its window; one counting in
+  microseconds has every unlock expire the moment it is made.
+* 2026-10-15: lowering `forcePassphraseReentryHours` reaches devices already remembered. At each
+  open, a remembered unlock whose deadline lies past now plus that open's setting was remembered
+  under a longer one, and is treated as a record that does not fit: erased, and the vault opens
+  locked. Raising the option lengthens no remembered unlock; an unchanged setting never trips it
+  (the deadline set at unlock is always within now plus the setting), so it fires only when the
+  host lowered the setting, or the clock went backward. There is deliberately no write-back of a
+  shortened deadline: a blind write of the record read at the start of the open would bring back
+  a remembered unlock that another tab's `lock()` erased in between, and later opens would come
+  up unlocked against the user's last act. Doing it safely would need an atomic "shorten if still
+  present" on `DeviceDB`, an interface hosts implement. An erase cannot resurrect anything and
+  cannot slide; racing another tab's fresh unlock, it only makes that device ask again. A stored
+  deadline past `FarFuture` never reaches this check: it fails the record's `EpochMillis` bounds
+  and is erased first (the entry above). A handle already open keeps the deadline it opened
+  with: the option is read at `openVault`.
 * 2026-10-14: the package was renamed `byok` → `safebyok` before any release, and its stored
   format tags with it (`safebyok-vault-v1`, `safebyok-lockbox-v1`, `safebyok-unlock-v1`). The
   tags are also the first element of every encryption's additional data, so a record written
@@ -239,3 +282,38 @@ security expert who knows what questions to ask.
   `src/`, for the workspace's own tooling; `pnpm pack` ships `publishConfig.exports` (dist only)
   instead. `scripts/release.ts` refuses a tarball that still carries the condition, and each
   public package's `prepublishOnly` refuses a publish not run by pnpm.
+* 2026-10-15: a `lock()` (or `destroy()`) called while an `unlock()` or `changePassphrase()` is
+  still under way wins. Each lock moves a per-handle counter; the unlock reads it at its start
+  and again after each wait (the bundle read, the key derivation, the device record's write),
+  and on finding it moved takes up no vaultKey, erases a device record it had already written,
+  and throws `vault_locked`. A vault that unlock was creating stays created, locked. A passphrase
+  change still lands in storage (its proof is the old passphrase, not the unlock), and only its
+  unlock is dropped. The counter is per handle: a lock in one tab does not reach an unlock under
+  way in another, beyond both writing the one device record. The undoing erase is
+  unconditional, so it can also erase a record written by a second unlock begun after the lock
+  on the same handle; that device then asks for the passphrase at its next open. An unlock (or
+  the unlock after a passphrase change) also takes up nothing, and throws `vault_locked`, when the
+  bundle standing at its end is not the one its passphrase was proven against, by `vault_id` and
+  `passphrase_epoch`: a vault destroyed, remade, or re-keyed elsewhere while the passphrase was
+  being checked. Without that, the old vault's vaultKey was taken up against the new bundle, and a
+  `store()` sealed boxes into the new vault that its owner could never open.
+* 2026-10-15: `lockSoon(graceSeconds = 5)`, at most 60 seconds, closes the entry gate at once
+  (`askPassphraseAt` cleared, so the snapshot reads `locked` and every operation started
+  afterwards throws `vault_locked`; cleared rather than set to now, which a wall clock stepped
+  back would reopen), erases the device record at once, and moves the shut counter
+  (an unlock under way loses); a `setTimeout` drops the in-memory vaultKey after the grace. In the
+  grace, `store()`'s retries and `erase()`'s second look check only that the key is still held,
+  not `askPassphraseAt`, so an operation begun before the gate closed finishes; under natural
+  expiry too, an operation begun before `askPassphraseAt` now finishes past it. An `unlock()`
+  that lands in the grace cancels the timer, including one begun in the grace and still deriving
+  when it would have fired: the timer does not move the counter. A second `lockSoon()` never
+  lengthens a grace, only shortens it. `close()` now moves the counter and drops the key from
+  memory (clearing the timer) but leaves the device record: an unlock under way on a closed
+  handle writes no record (erasing one it already wrote) and throws `vault_closed`. The timer is
+  per handle and per tab, like the counter.
+* 2026-10-15: `VaultProvider` hands a stored record that fails verification at open
+  (`corrupt_record`) to the app in place, as `openError`, rather than throwing it to the error
+  boundary: it is a condition, as are `storage_unavailable` and `not_permitted`. A tampered or
+  damaged bundle therefore reaches the app's own UI, beside a `retryOpen` that cannot mend it; the
+  React README tells hosts to branch on `openError.kind`, and the error's message carries no
+  secret material. Misuse still goes to the boundary.
