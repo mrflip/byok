@@ -186,3 +186,10 @@ security expert who knows what questions to ask.
   The token is narrowed to contents and pull requests (write) on this repository; the job's own
   GITHUB_TOKEN reads only. Its commits go through the GitHub API, signed by GitHub and attributed
   to the App.
+* 2026-10-15: `store()` retries a write storage refused as stale, up to three attempts in all.
+  Every attempt reads the box afresh and seals the whisper anew, under its own lockboxKey and
+  `revision_id`: a refused attempt's ciphertext is never reused, so no two ciphertexts share a
+  binding. The retry's first act is to require unlocked, so a refusal that caught the device up
+  with a vault reborn elsewhere (or a changed passphrase) relocks it and ends the retry as
+  `vault_locked` before any whisper is sealed for the new vault. A retry overwrites what the
+  other device wrote (last writer wins), as a host's own retry did; `erase()` is never retried.

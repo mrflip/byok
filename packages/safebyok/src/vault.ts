@@ -118,11 +118,13 @@ export type Vault = {
    * one first. Replacing a lockbox is never refused for room.
    *
    * The write lands only if storage still holds what this device last read: the same vault, and
-   * the same revision of this lockbox (or still none). Otherwise nothing is written and the call
-   * throws kind 'stale_write', after catching up with storage: another device's write to the box
-   * now shows in the snapshot, and a vault destroyed or made anew elsewhere relocks this device
-   * -- a stale session never writes into a vault reborn under new keys. Retrying a stale write
-   * replaces what the other device wrote.
+   * the same revision of this lockbox (or still none). When another device got in first, the
+   * store catches up with storage and tries again, over what that device wrote -- the last
+   * writer wins -- for three attempts in all. Only after the third is refused does the call throw
+   * kind 'stale_write', the snapshot showing the box as it now stands. A retry that finds the vault
+   * destroyed or made anew elsewhere, or its passphrase changed, finds this device relocked
+   * instead, and throws kind 'vault_locked' without writing: a stale session never writes into a
+   * vault reborn under new keys.
    *
    * `opts.note` is the lockbox's public note, shown while locked: text of at most 256
    * characters, or null for none -- kind 'bad_option' otherwise. Left out, the lockbox keeps the
@@ -146,6 +148,8 @@ export type Vault = {
    * kind 'absent_box' when absent. The erase lands only in the vault this device last read: if
    * it was destroyed, or destroyed and made anew, elsewhere, nothing is erased and the call
    * throws kind 'stale_write', after catching up with storage -- which relocks this device.
+   * Unlike `store()`, an erase is never retried: that is its only expectation, and trying again
+   * could not meet it.
    */
   erase(boxlabel: string): Promise<void>
 
@@ -492,30 +496,37 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       if (whisperBytes.length > whisperByteLimit) {
         throw new VaultError('whisper_too_large', `That whisper is over this vault's limit of ${String(whisperByteLimit)} bytes of JSON: check that the right value is being stored. If it really is meant to be this large, pass a larger maxWhisperBytes to openVault.`)
       }
-      const prev = await vaultDB.readBox(scope, label)
-      if (prev === null) { await ensureRoomFor(label) }
-      // The key and the vault it belongs to, taken together after the last look at storage.
-      const unlockedKey = ensureUnlocked()
-      const vaultId = currentBundle().vault_id
-      const revisionId = randomId()
-      const lockboxKey = await makeLockboxKey()
-      const now = new Date(clock.now()).toISOString()
-      // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
-      // reborn elsewhere, or a box written meanwhile by another device, refuses it.
-      const expected = { vault_id: vaultId, revision_id: prev?.revision_id ?? null }
-      const note = noteToStore(givenNote, prev)
-      const lockbox: Lockbox = {
-        format:              'safebyok-lockbox-v1',
-        boxlabel:            label,
-        revision_id:         revisionId,
-        lockbox_key_wrapped: await wrapKeyUnder(unlockedKey, lockboxKey, boxBinding(vaultId, label, revisionId, 'lockbox_key_wrapped')),
-        whisper_ciphered:    await cipherBytes(lockboxKey, whisperBytes, boxBinding(vaultId, label, revisionId, 'whisper_ciphered')),
-        // A box with no note is stored with no note field: never a null or undefined one.
-        ...(note !== null && { note }),
-        created_at:          prev?.created_at ?? now,
-        updated_at:          now,
-      }
-      await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected))
+      // Each attempt reads the box afresh and seals the whisper anew, under a lockboxKey and a
+      // revision of its own; only the write that follows is ever repeated.
+      await retryStale(async () => {
+        // A refusal as stale has just caught this device up with storage, which may have relocked
+        // it (a vault reborn, or its passphrase changed, elsewhere): then the retry ends here.
+        ensureUnlocked()
+        const prev = await vaultDB.readBox(scope, label)
+        if (prev === null) { await ensureRoomFor(label) }
+        // The key and the vault it belongs to, taken together after the last look at storage.
+        const unlockedKey = ensureUnlocked()
+        const vaultId = currentBundle().vault_id
+        const revisionId = randomId()
+        const lockboxKey = await makeLockboxKey()
+        const now = new Date(clock.now()).toISOString()
+        // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
+        // reborn elsewhere, or a box written meanwhile by another device, refuses it.
+        const expected = { vault_id: vaultId, revision_id: prev?.revision_id ?? null }
+        const note = noteToStore(givenNote, prev)
+        const lockbox: Lockbox = {
+          format:              'safebyok-lockbox-v1',
+          boxlabel:            label,
+          revision_id:         revisionId,
+          lockbox_key_wrapped: await wrapKeyUnder(unlockedKey, lockboxKey, boxBinding(vaultId, label, revisionId, 'lockbox_key_wrapped')),
+          whisper_ciphered:    await cipherBytes(lockboxKey, whisperBytes, boxBinding(vaultId, label, revisionId, 'whisper_ciphered')),
+          // A box with no note is stored with no note field: never a null or undefined one.
+          ...(note !== null && { note }),
+          created_at:          prev?.created_at ?? now,
+          updated_at:          now,
+        }
+        await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected))
+      })
       await refresh()
     },
 
@@ -532,7 +543,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       await readBoxOrThrow(label)
       ensureUnlocked()
       // Lands only in the vault this device holds keys for, whatever revision of the box stands:
-      // a vault destroyed and made anew elsewhere refuses it.
+      // a vault destroyed and made anew elsewhere refuses it. That is its only expectation, and
+      // trying again could not change it: a stale erase is thrown at once, never retried.
       await refreshOnStale(vaultDB.eraseBox(scope, label, { vault_id: currentBundle().vault_id }))
       await refresh()
     },
@@ -587,6 +599,28 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   await rememberedUnlock()
   bump()
   return vault
+}
+
+/**
+ * How many times `store()` tries its versioned write before it lets a `stale_write` through: this
+ * many attempts in all, the first one included, so three means one try and two retries. Small,
+ * because a box that three reads in a row find changed again is being written in earnest by
+ * someone else, and the caller should hear of it.
+ */
+const MaxWriteAttempts = 3
+
+/**
+ * Run `attempt`, and run it again when storage refuses it as stale, up to `attemptsLeft` attempts
+ * in all; any other refusal, and the last stale one, is thrown as it came. The attempt must do its
+ * own reading, for each try to be made from what storage holds now.
+ */
+const retryStale = async (attempt: () => Promise<void>, attemptsLeft = MaxWriteAttempts): Promise<void> => {
+  try {
+    await attempt()
+  } catch (err) {
+    if (attemptsLeft <= 1 || ! isVaultError(err, 'stale_write')) { throw err }
+    await retryStale(attempt, attemptsLeft - 1)
+  }
 }
 
 /** A note as `store()` is handed one: some text, null for none, or undefined to keep the note standing. */
