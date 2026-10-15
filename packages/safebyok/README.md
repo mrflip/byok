@@ -81,7 +81,7 @@ import { Ckeys } from 'safebyok'
 Ckeys.bundle(scope)            // '["vault","acme","u1","main"]'
 Ckeys.box(scope, 'anthropic')  // '["box","acme","u1","main","anthropic"]'
 Ckeys.boxPrefix(scope)         // '["box","acme","u1","main",' -- every lockbox of the vault, by prefix scan
-ckeys.filter(Ckeys.isBoxIn(scope))
+store.ckeys().filter(Ckeys.isBoxIn(scope))  // every lockbox of the vault, from a list of every ckey
 ```
 
 Each ckey is the JSON text of its kind and names, so a name may hold any text at all -- a colon, a
