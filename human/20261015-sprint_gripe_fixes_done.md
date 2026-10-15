@@ -1,4 +1,4 @@
-# 2026-10-15: Sprint gripe_fixes done -- eight PRs over your FIX marks, merge #81 last
+# 2026-10-15: Sprint gripe_fixes done -- eight PRs over your FIX marks, restacked into one merge line
 
 The sprint worked through every gripe you marked FIX in `whiteboard/20261015-gripes/20261015-gripes.md`:
 
@@ -14,17 +14,19 @@ Everything is stacked on the second_harvest merge stack ([#66](https://github.co
 
 ## The PRs, in the order to merge them
 
-1. **The second_harvest stack first**: merge [#66](https://github.com/mrflip/safebyok/pull/66), and #62, #52, #64 and #65 go with it.
-2. [#67](https://github.com/mrflip/safebyok/pull/67): the React dialog. It states the real unlock window and shows an unlock's conditions in place. Stacked on #66.
-3. [#68](https://github.com/mrflip/safebyok/pull/68): `argon2idDeriver(spec)`. A deriver wearing the supplied label must carry its parameters, and settings that cannot run are refused. Stacked on #66. **Breaking**: a host deriver labelled `argon2id_web_v1` without the spec's parameters is refused at open.
-4. [#69](https://github.com/mrflip/safebyok/pull/69): the security notes and VOCABULARY, checked against the code. Stacked on #66.
-5. [#70](https://github.com/mrflip/safebyok/pull/70): validation at every entrypoint, plus the survey. Stacked on #66. **Size budget clash with #68**, see below.
-6. [#72](https://github.com/mrflip/safebyok/pull/72): CI and tooling. Stacked on #66.
-7. [#75](https://github.com/mrflip/safebyok/pull/75): thin tests. Stacked on #70.
-8. [#80](https://github.com/mrflip/safebyok/pull/80): shared test helpers. Stacked on #75.
-9. [#81](https://github.com/mrflip/safebyok/pull/81): the comment width rule. Stacked on #66. **Merge last**: it conflicts in comment hunks with every PR above. Its thread file's recipe redoes the reflow in minutes, which is faster than resolving the conflicts.
+*Restacked after the sprint, at the Coach's word*: one linear merge line, each PR's base still `main`, so merging the top, [#82](https://github.com/mrflip/safebyok/pull/82), merges them all. Peers went biggest first.
 
-Merge #67 through #72 in any order, but expect mechanical conflicts between #68 and #70 in `vault.ts` and `notes/security.md`, and between #68/#70 and #69 in VOCABULARY.md and `notes/security.md`. All of them are additive hunks.
+1. **The second_harvest stack first**: [#66](https://github.com/mrflip/safebyok/pull/66), and #62, #52, #64 and #65 go with it.
+2. [#70](https://github.com/mrflip/safebyok/pull/70): validation at every entrypoint, plus the survey. Stacked on #66.
+3. [#75](https://github.com/mrflip/safebyok/pull/75): thin tests. Stacked on #70.
+4. [#80](https://github.com/mrflip/safebyok/pull/80): shared test helpers. Stacked on #75.
+5. [#68](https://github.com/mrflip/safebyok/pull/68): `argon2idDeriver(spec)`. A deriver wearing the supplied label must carry its parameters, and settings that cannot run are refused. Stacked on #80. **Breaking**: a host deriver labelled `argon2id_web_v1` without the spec's parameters is refused at open. Its restack resolved additive conflicts with #70, moved its tests onto `TH.expectRefusal`, bumped the size budget (approved) and added the KDF TODO.
+6. [#72](https://github.com/mrflip/safebyok/pull/72): CI and tooling. Stacked on #68.
+7. [#67](https://github.com/mrflip/safebyok/pull/67): the React dialog. It states the real unlock window and shows an unlock's conditions in place. Stacked on #72.
+8. [#69](https://github.com/mrflip/safebyok/pull/69): the security notes and VOCABULARY, checked against the code. Stacked on #67.
+9. [#82](https://github.com/mrflip/safebyok/pull/82): these documents. Stacked on #69; the top.
+
+[#81](https://github.com/mrflip/safebyok/pull/81), the comment width rule, stays out of the line: the Coach redoes it, from its recipe, after this line and big_feats' merge.
 
 ## YOLO decisions
 
@@ -39,13 +41,13 @@ Merge #67 through #72 in any order, but expect mechanical conflicts between #68 
 
 **Needs your word before or at merge**
 
-- **`openVault` size budget**: #68 takes it to 16.19 kB and #70 to 16.27 kB, from 15.9 kB, against a 16.5 kB budget. Together they will very likely exceed it, so whichever merges second fails `pnpm size`. Raise the budget, or have a thread trim it.
+- **`openVault` size budget**: settled. The Coach approved a bump; #68's restack raised `openVault` to 17 kB (16.61 kB used) and everything to 24.5 kB (24.24 kB used).
 - **Leftover directories**: `/workspace/byok-test_helpers` and `/workspace/byok-comment_width` are unregistered and fully pushed, but still on disk. The permission check refused deleting them, and the orchestrator didn't work round it.
 
 **Design calls (none block a merge)**
 
 - **KDF (#68)**:
-  - Add RFC 9106's second option as a second supplied configuration?
+  - ~~Add RFC 9106's second option as a second supplied configuration?~~ Now a TODO.md entry, at the Coach's word: provide built-as-a-whole recommended KDFs, and functions to roll your own.
   - Reserve a label namespace?
   - A hand-built deriver under a host label that declares Argon2id gets only the generic salt check at open, so an unrunnable spec fails at `unlock()` with no `kind`. A follow-up could run the Argon2id schema whenever `algorithm === 'argon2id'`.
   - `KeyDeriver` gives every deriver Argon2id's optional fields; look at that before 1.0.

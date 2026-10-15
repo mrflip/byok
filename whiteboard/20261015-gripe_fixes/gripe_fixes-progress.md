@@ -7,16 +7,24 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 | # | Thread             | Base                  | Status  |
 | - | ------------------ | --------------------- | ------- |
-| 1 | kdf_configs        | #66 tip `5fefc90`     | filed [#68](https://github.com/mrflip/safebyok/pull/68) |
+| 1 | kdf_configs        | #80 (restacked)       | filed [#68](https://github.com/mrflip/safebyok/pull/68) |
 | 2 | vaultdb_validation | #66 tip `5fefc90`     | filed [#70](https://github.com/mrflip/safebyok/pull/70) |
-| 3 | react_dialog       | #66 tip `5fefc90`     | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
-| 4 | ci_tooling         | #66 tip `5fefc90`     | filed [#72](https://github.com/mrflip/safebyok/pull/72) |
-| 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
+| 3 | react_dialog       | #72 (restacked)       | filed [#67](https://github.com/mrflip/safebyok/pull/67) |
+| 4 | ci_tooling         | #68 (restacked)       | filed [#72](https://github.com/mrflip/safebyok/pull/72) |
+| 5 | docs_refresh       | #67 (restacked)       | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
 | 6 | thin_tests         | #70 tip `d874db3`     | filed [#75](https://github.com/mrflip/safebyok/pull/75) |
 | 7 | test_helpers       | #75 tip `c7e2da9`     | filed [#80](https://github.com/mrflip/safebyok/pull/80) |
-| 8 | comment_width      | #66 tip `5fefc90`     | filed [#81](https://github.com/mrflip/safebyok/pull/81) |
+| 8 | comment_width      | #66 (held out)        | filed [#81](https://github.com/mrflip/safebyok/pull/81) |
 
 ## What the threads have taught
+
+*Orchestrator:* **Restacked into one merge line** at the Coach's word, after the sprint:
+#66 → #70 → #75 → #80 → #68 → #72 → #67 → #69 → #82, so merging #82 merges them all. Peers went
+biggest first. #68's worker rebased it onto #80 (additive conflicts with #70; its tests moved
+onto `TH.expectRefusal`), bumped the size budget (`openVault` 17 kB, everything 24.5 kB; the
+Coach approved) and added the KDF TODO. #72, #67, #69 and #82 then rebased without a conflict,
+and `pnpm justify` and `pnpm size` ran green once, at the top; CI checks the middle. #81 is held
+out: the Coach redoes it after this line and big_feats' merge.
 
 *Orchestrator:* **#66's tip moved** from `dfdbbec` to `5fefc90` during the sprint: three docs-only
 commits (CLAUDE.md's console line, TODO.md's second_harvest questions, a changeset, the core's

@@ -7,7 +7,7 @@
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach), over the dispositions marked in
   `whiteboard/20261015-gripes/20261015-gripes.md`
-* **Status**: done -- all eight threads filed: #67, #68, #69, #70, #72, #75, #80, #81; see `human/20261015-sprint_gripe_fixes_done.md`
+* **Status**: done and restacked -- one merge line #66 → #70 → #75 → #80 → #68 → #72 → #67 → #69 → #82; #81 held out for the Coach; see `human/20261015-sprint_gripe_fixes_done.md`
 
 ## Read first
 
