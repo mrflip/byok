@@ -56,6 +56,8 @@ const ChaiTerminators = [
 export default defineConfig([
   globalIgnores([
     'coverage/**',
+    // Built output, at any depth: a stale root dist/ from before the core moved is still on disk.
+    '**/dist/**',
     // Agents' worktrees: another checkout's code, linted there if anywhere.
     '.claude/worktrees/**',
     // Workspace packages: each lints itself, with its own config.
