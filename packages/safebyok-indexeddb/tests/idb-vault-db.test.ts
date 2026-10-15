@@ -229,7 +229,8 @@ describe("idbVaultDB's subscribe", () => {
   it("lands a write whose subscriber throws, and calls the others, letting nothing escape uncaught", async () => {
     const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
     let heardCount = 0
-    vaultDB.subscribe(TH.scopeOf('u1'), throwing)
+    const thrower = vi.fn(throwing)
+    vaultDB.subscribe(TH.scopeOf('u1'), thrower)
     vaultDB.subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
     // Whatever would escape the bell's microtasks, as the platform's uncaught error, lands here.
     const escaped: unknown[] = []
@@ -251,6 +252,7 @@ describe("idbVaultDB's subscribe", () => {
       catching.mockRestore()
     }
     expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
+    expect(thrower).toHaveBeenCalledOnce()
     expect(escaped).to.be.empty
   })
 })

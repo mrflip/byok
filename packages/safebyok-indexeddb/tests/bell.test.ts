@@ -85,11 +85,14 @@ describe("the change bell", () => {
     const dbName = TH.freshDbName()
     const heard: string[] = []
     const stops = [
-      onBell(dbName, () => { throw new Error('a listener that throws') }),
+      onBell(dbName, () => {
+        heard.push('one')
+        throw new Error('a listener that throws')
+      }),
       onBell(dbName, () => { heard.push('two') }),
     ]
     ringBell(dbName)
-    await vi.waitFor(() => { expect(heard).to.deep.equal(['two']) })
+    await vi.waitFor(() => { expect(heard).to.deep.equal(['one', 'two']) })
     await TH.wakeupAtNextTick()
     for (const stop of stops) { stop() }
   })
