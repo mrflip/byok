@@ -5,7 +5,7 @@ sprint's other threads' work is not on this base). Justify: green; root 105 test
 Convex 265, React 28, demo 61.
 
 * **Built**: `@stylistic/max-len` is on in the five lint configs (root, core, React, Convex, demo)
-  and on this base 123 comment lines past 100 columns were found: 116 in 36 files are rewrapped, and
+  and on this base 123 comment lines past 100 columns were found: 116 (in 40 files, the configs among them) are rewrapped, and
   seven `eslint-disable` directive lines are left (the rule ignores them). STYLE.md has one bullet saying so. Empty changeset.
 * **Two commits to read apart**: `140f0f4` is the reflow alone (rule still off, justify green);
   `323334a` is the rule, STYLE.md and the changeset. Redoing the reflow later means redoing the first.
