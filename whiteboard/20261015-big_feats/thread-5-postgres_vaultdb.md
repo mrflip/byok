@@ -1,8 +1,7 @@
 # Thread 5: postgres_vaultdb (2026-10-15)
 
-Branch `20261015-postgres_vaultdb`, PR not yet filed; to be stacked on thread 2's PR (cut from
-#63's tip `ea4b93d`, rebased onto thread 2 before filing). Justify: green -- root 105, core 705,
-convex 265, postgres 131, react 28, demo 61; postgres coverage 100% lines, 98.8% branches.
+Branch `20261015-postgres_vaultdb`, PR not yet filed, stacked on #71 (thread 2, tip `983bd0c`;
+cut from #63's `ea4b93d`, rebased onto #71 before filing). Justify: see the PR's **Tests:** line.
 
 * **Built**: `packages/safebyok-postgres/`, packaged like the core and React binding (ESM+CJS,
   tsdown-written `exports`, `safebyok` a peer, its own eslint cut from the core's, a README, a
@@ -64,10 +63,22 @@ convex 265, postgres 131, react 28, demo 61; postgres coverage 100% lines, 98.8%
     truncate. NOTIFY is delivered to the same PGlite, deduplicated per transaction.
   - For thread 6: `vaultDB.subscribe(scope, onChange)` is the change hook a subscription
     resolver wraps; one `listen` (the README's pg fan-out) is shared by every per-request VaultDB.
-* **For the Coach**:
-  - Before filing: rebase onto thread 2's tip and move the bundle's columns to its `unlocks`
-    shape: `vault-tables.sql` (with `src/vault-tables.ts`, a copy a test checks) and
-    `BundleColumns` in `src/columns.ts`. `unlocks` is one `jsonb` column.
+* **After review** (the thread-reviewer's two doc commits: a PGlite's `listen` must be called on
+  its PGlite; a driver's `cause` can quote a whole failing row), at filing: rebased onto #71 and
+  moved the bundle's columns to its shape -- `key_deriver_label`, `passphrase_salt_b64` and
+  `vault_key_passphrase_wrapped` gone, `unlocks` one `jsonb` column (the envelope list, order
+  kept). A YOLO call of the orchestrator's: the README's route recipe reads the body inside a
+  guard (`postedCall`), so a malformed body answers 400, not 500.
+* **For the Coach** (open questions, also in the PR):
   - The server holds no vault limit (Convex's component does). Worth a follow-up: a lockbox count
     cap inside the insert statement, refusing `vault_full`.
+  - A `listen` that rejects is dropped silently: the subscriber never hears, and nothing says so
+    (LISTEN has a connection of its own, so the vault's next call does not meet the trouble).
+  - Server-side record validation: past the scope and boxlabel, a route's bundles, lockboxes and
+    expectations are only what the core's VaultDB validates (gripe_fixes' `vaultdb_validation`).
+  - The NOTIFY payload's scope is visible to any role that can connect and LISTEN.
+  - `listBoxRecords` copies the core's `bad_label` and `storage_unavailable` messages, since the
+    core's `checkScope` and `asStorageTrouble` are not exported; and `listBoxRecords` itself
+    versus a core change letting `doListBoxes` return summaries.
+  - `placeholderOf` throws a plain Error, at module load only, for a column-list mistake of ours.
   - The Supabase section is from Supabase's docs, untested against Supabase.
