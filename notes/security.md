@@ -7,6 +7,13 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-15: `erase(boxlabel)` removes a lockbox whose stored record fails validation or
+  verification (`corrupt_record`), rather than refusing it: it reads the record only to tell an
+  absent box (`absent_box`) from a present one, and a damaged record counts as present. It still
+  needs the vault unlocked, still names the boxlabel the caller gave, and still lands only in the
+  vault this device holds keys for (its `vault_id` expectation). `read()`, `use()` and the
+  background refresh still leave a damaged record in place; only an explicit erase of that
+  boxlabel deletes it.
 * 2026-10-15: a scope's `user_id` is text of 1 to 100 characters (`UserId`), checked at
   `openVault`, by every `VaultDB` verb, and in every stored record that names a scope; a refusal
   names the bound and never quotes the id. The Convex component's validators and its `getUserId`
