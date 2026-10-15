@@ -232,7 +232,7 @@ Caveats:
 - Hermes has no WebAssembly, so this package does not serve React Native; that needs a native
   Argon2 binding behind the same label.
 
-### 7. zod/mini and a tree-shaking audit
+### 7. zod/mini and a tree-shaking audit -- built
 
 Depends on low-hanging-fruit thread 8 (the size budget, [#42](https://github.com/mrflip/safebyok/pull/42), merged: it is the before-and-after). Measured
 before: zod classic is about three quarters of every bundle (183 KB raw), and it does not
@@ -242,6 +242,11 @@ tree-shake because the schemas are built at module top level in a shared chunk; 
 and error strings become per-check params), then audit: `sideEffects: false` is true, nothing
 runs at module top level, each entry pulls only what it uses, and the budget limits drop to match.
 Report what zod/mini cost in authoring clarity; if it is more than the bytes are worth, say so.
+
+Built (second_harvest thread 1, `whiteboard/20261015-second_harvest/thread-1-zod_mini.md`):
+every entry fell by about 14 kB brotlied, and a bare `stableJsonify` from 25 kB to 2.3 kB, no zod
+in it. A host's label policy (*Pluggable label validator*, below) should be typed as
+`Z.core.$ZodType`, so a classic or a mini schema both fit.
 
 ### 8. Fingerprint unlock (passkeys, hardware keys)
 
