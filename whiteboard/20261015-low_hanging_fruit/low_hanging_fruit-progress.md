@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 7 building (from #43 at ac8eb27); 5 reworking `mask` to the Coach's new contract on #37; 1, 2, 3, 4, 6, 8, 9, 10, 11 filed. Newer than the plan wherever the two disagree.
+**Status**: 5 (rework) and 7 in review; 1, 2, 3, 4, 6, 8, 9, 10, 11 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -12,9 +12,9 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | filed [#40](https://github.com/mrflip/safebyok/pull/40), stacked on #34 |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37); reworking to the Coach's contract |
+| 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37); rework to the Coach's contract in review |
 | 6  | `boundary_audit` | thread 2 (#40, 868ce73) | filed [#43](https://github.com/mrflip/safebyok/pull/43), stacked on #40 |
-| 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | underway (erase-wins fix before review) |
+| 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | in review |
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
@@ -33,10 +33,8 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   fix in chat at about 04:55 UTC*; applied on #36 as 9140e2f (fast-forward), proved with real
   pnpm and a stub under dash and bash `--posix`. The root step itself still takes no arguments.
 
-* **[#31](https://github.com/mrflip/safebyok/pull/31) conflicts with main** since #29 merged
-  (`demos/safebyok-demo-react/src/lib/auth.ts`, a small textual overlap). Rebasing a filed
-  branch needs a force-push, which thread workers may not do: yours to rebase, or to tell the
-  orchestrator to have it done with `--force-with-lease`.
+* ~~#31 conflicts with main~~ -- the Coach rebased it (05:24 UTC); it merges cleanly now. The
+  Coach also restacked #32-#37 and #40 onto main between 05:03 and 05:28.
 * **Merge order and thread 10's `TH` rename.** Thread 10 rewrites the import line and helper
   uses of nearly every core test; the chain (1, 2, 6, 7) adds tests on the old names. Merging
   the chain first and thread 10 last keeps the stacked PRs rebase-free and puts all the `TH.x`
@@ -106,7 +104,10 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   hand. **For thread 8**: `mask`'s budget waits on thread 5 merging (4.1 kB built). Graphemes via
   `Intl.Segmenter`, code points without it; `maskAll` struck. **Superseded by the Coach
   (~05:30 UTC; plan decision 11)**: a best-effort, always-normalized, one-line whiff of each end;
-  no segmenter; a too-small `maxLen` gives that many stars. Being rebuilt on #37. *Review:* flagged; orchestrator
+  no segmenter; a too-small `maxLen` gives that many stars. Rebuilt on #37 (a08a811): private
+  `plainLine` (NFC, then strip `\p{M}`, `\p{C}`, `\p{Z}`, default-ignorables, bidi controls,
+  U+2800) runs before counting and again on the whole result; whitespace removed; RTL letters
+  kept; default `maxLen` 15; an all-stripped whisper gives `minStars` stars. *Review:* flagged; orchestrator
   decided (YOLO): a `maxLen` below `head + tail + 9` is refused, so the result never exceeds
   `maxLen` (omitted `maxLen` defaults to `max(15, head + tail + 9)`); bidi controls, U+200B,
   U+2060 and U+FEFF are stripped. Second review: fixed (grapheme-counted ceiling test; the changeset names the floor and strip).
@@ -127,7 +128,9 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   `noteToStore` each time); a retry that finds the device relocked throws `vault_locked`; `erase()`
   is never retried. *Orchestrator:* first build re-created a box another device had erased
   mid-retry, against the ruled **"Erase wins"** (`rulings.md` line 23): sent back to surface
-  `stale_write` instead, before review.
+  `stale_write` instead, before review. Rebuilt (7f36804): erase wins across a retry; a box
+  created meanwhile is retried over; under erase-wins a retry is never a new box, so
+  `ensureRoomFor` never runs twice.
 * **Thread 8** (`size_budget`, [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40): `.size-limit.json` at the **root**, not the core -- size-limit
   excludes a package's peers, and zod (the core's peer) is most of the bundle, so a core-level
   config would measure `openVault` at 7 kB and never show the zod-mini thread's gain. Brotli
