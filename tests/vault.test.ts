@@ -717,6 +717,19 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
     expect(vaultOne.getSnapshot().state).to.eq('absent')
     expect(world.dbStore.ckeys()).to.have.lengthOf(0)
   })
+
+  it("destroy() of a vault destroyed elsewhere, and not remade, is refused as stale; a second destroy() is quiet", async () => {
+    const world = makeWorld()
+    const deafStore: StringStore = { ...world.dbStore, subscribe: neverRings }
+    const vaultOne = await world.open({ vaultDB: localVaultDB(deafStore) })
+    await vaultOne.unlock('pw one')
+    const vaultTwo = await world.open()
+    await vaultTwo.destroy()
+    await expectRefusal(vaultOne.destroy(), 'stale_write')
+    expect(vaultOne.getSnapshot().state).to.eq('absent')
+    await vaultOne.destroy()
+    expect(vaultOne.getSnapshot().state).to.eq('absent')
+  })
 })
 
 /**
