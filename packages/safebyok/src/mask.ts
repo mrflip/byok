@@ -72,13 +72,15 @@ const Unprintable = /[\p{Cc}\p{Zl}\p{Zp}\p{Bidi_Control}\u{200B}\u{2060}\u{FEFF}
  * ends, and (below `maxLen`) its length.
  *
  * Control characters, bidirectional controls and invisible spaces are removed first. A character
- * is a user-perceived one, so an emoji or an accented letter is never split. At least `minStars` stars always stand in the whisper's place:
- * a whisper too short to keep `head` and `tail` and still hide `minStars` characters gives up
- * `head` characters first, then `tail`, and one shorter than `minStars` shows only stars. A
- * result that would pass `maxLen` characters is instead the `head` kept, `***...***`, then the
- * `tail` kept, which is never longer than `maxLen` (a `maxLen` too small for that is refused), and
- * wins over `minStars` if they disagree. A whisper with nothing left to show gives the empty
- * string.
+ * is a user-perceived one, so an emoji or an accented letter is not split -- where the runtime
+ * has `Intl.Segmenter`. Without it, `mask` counts code points, and may split a ZWJ sequence, a
+ * flag or a skin-toned emoji, or part a letter from its combining accent. At least `minStars`
+ * stars always stand in the whisper's place: a whisper too short to keep `head` and `tail` and
+ * still hide `minStars` characters gives up `head` characters first, then `tail`, and one shorter
+ * than `minStars` shows only stars. A result that would pass `maxLen` characters is instead the
+ * `head` kept, `***...***`, then the `tail` kept, which is never longer than `maxLen` (a `maxLen`
+ * too small for that is refused), and wins over `minStars` if they disagree. A whisper with
+ * nothing left to show gives the empty string.
  *
  * Pass `{ head: 0, tail: 0 }` to show nothing of the whisper but how long it is. Lower `minStars`
  * with care: at 0 a short whisper may be shown whole.

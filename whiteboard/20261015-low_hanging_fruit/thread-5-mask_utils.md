@@ -21,10 +21,10 @@ tests, convex 210, react 7, demo 24, root 67).
     whisper (tested with large `minStars`), and `maxLen` wins over `minStars`. Tested: the result
     never exceeds `maxLen`.
   - **"Characters" are graphemes** (`Intl.Segmenter`, granularity `grapheme`): a whisper with an
-    emoji, a ZWJ sequence or a combining accent is never cut in half. `Intl.Segmenter` is in
+    emoji, a ZWJ sequence or a combining accent is not cut in half (with `Intl.Segmenter`). `Intl.Segmenter` is in
     Node 16+, every current browser and Bun; Hermes (React Native) has lacked it, so where it is
-    absent `mask` counts code points (`/./gsu`), which keeps emoji whole and only splits a
-    combining mark from its base. The segmenter is built per call, not at module scope, to keep
+    absent `mask` counts code points (`/./gsu`), which keeps a plain emoji whole but may split a ZWJ
+    sequence, a flag or a skin-toned emoji, and part a combining mark from its base (the doc block says so). The segmenter is built per call, not at module scope, to keep
     the module free of load-time effects (`sideEffects: false`).
   - **Stripped first** (*widened on review, decided by the orchestrator*): `\p{Cc}` (newline,
     return, tab, NUL, DEL, C1), `\p{Zl}`/`\p{Zp}` (U+2028/2029), `\p{Bidi_Control}` (an override
