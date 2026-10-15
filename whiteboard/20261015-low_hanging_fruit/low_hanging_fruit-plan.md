@@ -116,6 +116,12 @@ Start: 1, 3, 4. Then the lowest-numbered thread whose base exists, as slots free
     component's `updateBox` enforces a cap server-side (thread 12). Both are new threads stacked
     at the end of the chain, so #34's stack stays valid.
 
+13. **`mask` strips strong right-to-left letters** (#37's third review): with every bidi control
+    gone, Hebrew and Arabic letters still reorder the digits and punctuation beside them, in the
+    mask and the log line around it. Under the Coach's directive ("if you can safely strip things
+    that would cause weird display (like the wrong end of a bidi), do so"), they are stripped too.
+    The cost: those scripts vanish from a mask. On #37's open questions for the Coach to reverse.
+
 ## The threads
 
 ### 1. `vault_size_cap`

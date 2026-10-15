@@ -12,7 +12,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | filed [#40](https://github.com/mrflip/safebyok/pull/40), stacked on #34 |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37); rework to the Coach's contract in review |
+| 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37); rework reviewed (flagged: RTL letters, decided); finishing |
 | 6  | `boundary_audit` | thread 2 (#40, 868ce73) | filed [#43](https://github.com/mrflip/safebyok/pull/43), stacked on #40 |
 | 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | filed [#44](https://github.com/mrflip/safebyok/pull/44), stacked on #43 |
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
@@ -107,7 +107,10 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   no segmenter; a too-small `maxLen` gives that many stars. Rebuilt on #37 (a08a811): private
   `plainLine` (NFC, then strip `\p{M}`, `\p{C}`, `\p{Z}`, default-ignorables, bidi controls,
   U+2800) runs before counting and again on the whole result; whitespace removed; RTL letters
-  kept; default `maxLen` 15; an all-stripped whisper gives `minStars` stars. *Review:* flagged; orchestrator
+  kept; default `maxLen` 15; an all-stripped whisper gives `minStars` stars. *Third review:* the
+  guarantee holds; fixed a vast-`minStars` `RangeError` and U+1D159; flagged that kept RTL letters
+  still reorder neighbours -- now stripped (plan decision 13), with U+FFFC, a second NFC pass, and
+  an independent never-in-output list in the property test. No further review round. *Review:* flagged; orchestrator
   decided (YOLO): a `maxLen` below `head + tail + 9` is refused, so the result never exceeds
   `maxLen` (omitted `maxLen` defaults to `max(15, head + tail + 9)`); bidi controls, U+200B,
   U+2060 and U+FEFF are stripped. Second review: fixed (grapheme-counted ceiling test; the changeset names the floor and strip).
