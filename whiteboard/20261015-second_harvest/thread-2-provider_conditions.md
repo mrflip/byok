@@ -1,6 +1,6 @@
 # Thread 2: provider_conditions (2026-10-15)
 
-Branch `20261015-provider_conditions`, PR not yet filed, rebased onto `origin/main` (`5214468`).
+Branch `20261015-provider_conditions`, PR [#61](https://github.com/mrflip/safebyok/pull/61), rebased onto `origin/main` (`5214468`).
 Justify: green (root 105; core 378, convex 259, react 26, demo 61 tests; `pnpm size` within
 every limit).
 
