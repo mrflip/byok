@@ -1,9 +1,10 @@
 import type { VaultScope } from './types'
 
 /**
- * The ckeys safebyok's string-keyed adapters file rows under: `localVaultDB`, `idbVaultDB` and
- * `idbDeviceDB`, and any adapter of your own over a key-value store. Each ckey is the JSON text
- * of a tuple -- the row's kind, then the scope, then (for a lockbox) its boxlabel:
+ * The ckeys safebyok's string-keyed adapters file rows under: `localVaultDB`, `idbVaultDB`,
+ * `idbDeviceDB` and `memoryDeviceDB`, and any adapter of your own over a key-value store. Each
+ * ckey is the JSON text of a tuple -- the row's kind, then the scope, then (for a lockbox) its
+ * boxlabel:
  *
  *     ["vault","acme","u1","main"]
  *     ["box","acme","u1","main","anthropic"]
