@@ -5,8 +5,9 @@ name: Release
 #
 # * version -- changesets are waiting on main. `version` turns them into version bumps and
 #   CHANGELOG entries on the branch changeset-release/main, rebuilt from main's tip each time, and
-#   opens or updates the Version PR from it, named for the release it makes. Merging that PR is
-#   the release.
+#   opens or updates the Version PR from it, named for the release it makes, as a draft. The Coach
+#   marks it ready to release it; any later push to main puts it back in draft, so what is
+#   marked ready is what was read. Merging that PR is the release.
 # * publish -- no changesets wait, and a public package's version is not yet on npm: the Version
 #   PR has just been merged. `pack` checks the lockstep group, lints, typechecks, tests and builds
 #   every package, and packs each package to release with pnpm (which writes real ranges in place
@@ -102,6 +103,7 @@ jobs:
           script: pnpm release:version
           commit-message: ${{ steps.names.outputs.commit-message }}
           pr-title: ${{ steps.names.outputs.pr-title }}
+          pr-draft: always
 
   pack:
     needs: select-mode
