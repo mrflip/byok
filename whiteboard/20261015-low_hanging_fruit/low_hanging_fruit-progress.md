@@ -19,11 +19,19 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 9  | `docs_sweep` | `origin/main` | merged [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
 | 12 | `convex_server_cap` | thread 7 (#44, a9b91f1), moved onto main (7510af7) | filed [#46](https://github.com/mrflip/safebyok/pull/46), reviewed (medium; 1 fix, 9 minor left) |
-| 13 | `error_kinds` | thread 12 (#46, c519073) | underway |
+| 13 | `error_kinds` | thread 12 (#46, c519073) | reviewed (medium; 1 fix), pushed as `20261015-error_kinds`; unfiled until #46's branch is reset |
 | 14 | `store_backoff` | thread 7 (#44, a9b91f1), moved onto main | filed [#45](https://github.com/mrflip/safebyok/pull/45) (no separate review: the Coach's direct follow-up) |
 | 11 | `label_grammar_report` | `origin/main` | merged [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
 ## For the Coach
+
+* **[#46](https://github.com/mrflip/safebyok/pull/46)'s branch carries thread 13's six commits: do not merge it as it
+  stands.** Thread 13's branch was cut from `origin/20261015-convex_server_cap`, so git set that branch as its upstream,
+  and its worker's push fast-forwarded #46 from `c519073` (thread 12, as reviewed) to `ebba509`. The orchestrator's
+  mistake: its own note says to unset the upstream after cutting a worktree. Undoing it takes a force-push, yours or
+  on your word: `git push --force-with-lease=20261015-convex_server_cap:ebba509 origin
+  c519073:20261015-convex_server_cap`. Thread 13 then files on its own branch (`20261015-error_kinds`, already
+  pushed), stacked on #46. A warning is on #46.
 
 * **[#42](https://github.com/mrflip/safebyok/pull/42) (thread 8) stands on #40's pre-restack tip
   `ea3dc98`.** #34 and #40 were force-pushed (05:03, 05:10 UTC) onto main after #26 and #30;
