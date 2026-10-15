@@ -48,10 +48,15 @@ Beyond CLAUDE.md, and STYLE.md and VOCABULARY.md before naming anything or writi
   urql's `@urql/core` as a peer (thread 6). Anything else at runtime is proposed in your report,
   not added. Development dependencies that are plainly the boring answer (PGlite, `graphql`,
   `fake-indexeddb`) may simply be installed: say so.
-* **Storage adapters store records whole.** Threads 4, 5 and 6 build while thread 2 reshapes the
-  bundle. An adapter holds each record exactly as handed (JSON text, no unicode normalization,
-  no `jsonb` reordering), and looks at nothing in it but the scope, `boxlabel`, `vault_id`,
-  `passphrase_epoch` and `revision_id`. Then the bundle can change shape under it freely.
+* **Storage adapters store records field by field, as the Convex component does** (the Coach,
+  correcting the orchestrator's first rule). Every public field is its own typed column (the
+  scope, ids, `passphrase_epoch`, `boxlabel`, `revision_id`, the times); each ciphered value
+  (`Ciphered`) and any structured public payload (the envelope list `unlocks`, after thread 2) is
+  its own opaque column (`jsonb`, or the backend's equivalent). Never one blob per record. The
+  cipher binding is rebuilt from field values, not from stored bytes, so `jsonb`'s key reordering
+  is harmless; strings are stored as-is, no unicode normalization. An adapter compares only the
+  scope, `boxlabel`, `vault_id`, `passphrase_epoch` and `revision_id`. Because the columns follow
+  the bundle's shape, **thread 5 rebases onto thread 2 before filing** (see *Order*).
 * **`passphrase_epoch` keeps its name in this sprint** (YOLO decision 2). Do not rename it.
 
 ## Threads
@@ -173,8 +178,8 @@ README is where "how to write an adapter" starts, so write it for an adapter aut
   wrapper; the README shows it). Tests run against a real Postgres in-process with PGlite
   (`@electric-sql/pglite`, a development dependency).
 * **The SQL ships with the package**: the table DDL as an exported string (and/or a `.sql` file),
-  records stored whole as `text` beside the columns the verbs compare, with a trigger that
-  `NOTIFY`s on change.
+  a column per public field and a `jsonb` column per ciphered value (*Ground rules*), with a
+  trigger that `NOTIFY`s on change.
 * **Every verb is one statement**, so each is atomic without a transaction API: `versionedUpdate`
   is an `UPDATE ... WHERE vault_id = $ AND passphrase_epoch = $`, a lockbox write a single
   statement checking the standing bundle, an erase a `DELETE` guarded the same way.
@@ -187,8 +192,10 @@ README is where "how to write an adapter" starts, so write it for an adapter aut
   PGlite's `listen`); without it, the VaultDB does not push.
 
 *Touches*: a new `packages/safebyok-postgres/`, `.changeset/config.json`, the lockfile,
-`notes/security.md` (the server-side authorization rule). *Depends on*: nothing; cut from #63.
-*Look-ahead*: **thread 6 runs this VaultDB behind GraphQL resolvers**, per request, and pushes
+`notes/security.md` (the server-side authorization rule). *Depends on*: thread 2, for the
+bundle's columns. Built from #63; **before filing, it waits for thread 2 to file, rebases onto
+thread 2's tip** (allowed: this branch is unpushed), moves its bundle columns to thread 2's shape,
+and files "Stacked on #<thread 2>". *Look-ahead*: **thread 6 runs this VaultDB behind GraphQL resolvers**, per request, and pushes
 its change notifications out as GraphQL subscriptions: export the per-request factory and the
 change hook in a shape a resolver can call, and keep its errors VaultErrors with kinds a wire can
 carry.
@@ -221,7 +228,8 @@ two halves:
 * **Now**: threads 2 and 5, from #63.
 * **When gripe_fixes files `kdf_configs`**: thread 1, from it. **When it files
   `vaultdb_validation`**: thread 4, from it. (Fallback: from #63, once nothing else can start.)
-* **When thread 2 files**: thread 3. **When thread 5 files**: thread 6.
+* **When thread 2 files**: thread 3 starts, and thread 5 (if ready) rebases onto it and files.
+  **When thread 5 files**: thread 6.
 
 ## Decisions taken in YOLO
 
@@ -239,6 +247,10 @@ two halves:
 3. **Threads 1 and 4 wait on the gripe_fixes sprint's `kdf_configs` and `vaultdb_validation`**,
    which rework exactly what they build on. Each falls back to #63 rather than stalling the
    sprint.
+4. **Thread 5 builds beside thread 2 and rebases onto it before filing**, rather than waiting to
+   start. Its columns follow the bundle's shape (the Coach's field-by-field rule), so it cannot
+   file on #63 alone; building in parallel and rebasing an unpushed branch costs one column
+   change.
 
 ## For the Coach
 
