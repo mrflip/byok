@@ -39,53 +39,66 @@ const parseMaskOpts = (candidate: MaskOpts | undefined): Record<keyof MaskOpts, 
 }
 
 /**
- * The code points whose default bidirectional class is strong right-to-left (R or AL) or Arabic
- * number (AN): the Hebrew, Arabic, Syriac, Thaana, N'Ko, Samaritan, Mandaic and extended Arabic
- * blocks, the Hebrew and Arabic presentation forms, and the right-to-left scripts of the
- * supplementary planes (Phoenician, Kharoshthi, Old Hungarian, Old Turkic, Hatran, Nabataean,
- * Palmyrene, Manichaean, the Pahlavis, Sogdian, Chorasmian, Elymaic, Yezidi, Hanifi Rohingya,
- * Garay, Mende Kikakui, Adlam, the Siyaq numerals, the Arabic mathematical alphabet and the rest).
- * They are the spans DerivedBidiClass.txt, in the Unicode Character Database, gives those classes
- * by default. JavaScript regexes have no Bidi_Class property, and a list of script names would
- * miss the Arabic numbers and any script added later.
- */
-const StrongRtl = /[\u{590}-\u{8FF}\u{FB1D}-\u{FDFF}\u{FE70}-\u{FEFF}\u{10800}-\u{10FFF}\u{1E800}-\u{1EFFF}]/gu
-
-/**
- * Everything else `plainLine` removes: combining marks, every control, format, surrogate,
- * private-use and unassigned code point, every space and line or paragraph separator, anything a
- * renderer is told to ignore, the bidirectional controls, the symbols drawn blank (the blank
+ * What `plainLine` removes: combining marks, every control, format, surrogate, private-use and
+ * unassigned code point, every space and line or paragraph separator, anything a renderer is told
+ * to ignore, the bidirectional controls and direction marks, the symbols drawn blank (the blank
  * braille pattern and the musical null notehead), and the object replacement character, which is
- * drawn as a boxed "OBJ".
+ * drawn as a boxed "OBJ". Right-to-left letters and numbers are not here: they are kept.
  */
 const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}\u{1D159}\u{FFFC}]/gu
 
-const composeAndStrip = (text: string): string => text.normalize('NFC').replaceAll(Unsafe, '').replaceAll(StrongRtl, '')
+const composeAndStrip = (text: string): string => text.normalize('NFC').replaceAll(Unsafe, '')
 
 /**
  * `text` reduced to one compact, safe line: composed (so a letter and its accent are one letter),
  * then stripped, never escaped, of every combining mark (stacked "Zalgo" marks among them),
- * invisible or control character, lone surrogate, bidirectional control, strong right-to-left
- * letter and space of any kind. Whatever is left is visible, stays on one line, runs left to
- * right and cannot overwrite its neighbours, though a wide character (an ideograph, an emoji)
- * takes two columns. Composed and stripped twice, since removing an invisible from between two
- * Hangul jamo leaves them to compose.
+ * invisible or control character, lone surrogate, bidirectional control and direction mark, and
+ * space of any kind. Whatever is left is visible and stays on one line, though a wide character
+ * (an ideograph, an emoji) takes two columns, and right-to-left letters, which are kept, may
+ * reorder the neutral characters beside them in a display. Composed and stripped twice, since
+ * removing an invisible from between two Hangul jamo leaves them to compose.
  */
 const plainLine = (text: string): string => composeAndStrip(composeAndStrip(text))
 
 /** `text` as a list of its code points, so that a surrogate pair is never parted. */
 const codePointsOf = (text: string): string[] => text.match(/./gsu) ?? []
 
+/** The cut itself: `chars`, already safe, reduced to head, stars and tail by the give-up rules. */
+const butcher = (chars: readonly string[], { head, tail, minStars, maxLen }: Record<keyof MaskOpts, number>): string => {
+  // What may be shown at all is what is left once minStars are hidden: tail has first call on it.
+  const showable = Math.max(0, chars.length - minStars)
+  const tailShown = Math.min(tail, showable)
+  const headShown = Math.min(head, showable - tailShown)
+  const stars = Math.max(minStars, chars.length - headShown - tailShown)
+
+  const headChars = chars.slice(0, headShown).join('')
+  const tailChars = tailShown > 0 ? chars.slice(-tailShown).join('') : ''
+  // Lengths are compared before anything is built, so a vast minStars costs nothing it would discard.
+  if (headShown + stars + tailShown <= maxLen) { return headChars + '*'.repeat(stars) + tailChars }
+  if (headShown + Collapsed.length + tailShown <= maxLen) { return headChars + Collapsed + tailChars }
+  return '*'.repeat(maxLen)
+}
+
 /**
  * A whisper's outline, to show in a log or a reminder: a whiff of interesting text from each end
  * with stars between, so a user can tell which API key a lockbox holds without the key being
  * revealed. It is best effort, not a copy: the result is always one plain line, and fidelity
- * gives way to that. Combining marks (so, the accents of scripts that rely on them), invisible
- * characters, every kind of space and the letters and numbers of right-to-left scripts (Hebrew,
- * Arabic and the rest, which would reorder what stands beside them) are dropped from the whisper
- * first, and the result is cleaned the same way once more before it is returned. The result is public: show it, but
- * never count on it to hide more than it does -- it gives away the whisper's ends, and (up to
- * `maxLen`) its length.
+ * gives way to that. The result is public: show it, but never count on it to hide more than it
+ * does -- it gives away the whisper's ends, and (up to `maxLen`) its length.
+ *
+ * `mask` is intended for plain text. Calling it with arbitrary blobs may give unusual behavior.
+ *
+ * It works in three stages. First it makes the whisper safe to butcher: the whole input is
+ * composed and stripped of combining marks (so, the accents of scripts that rely on them),
+ * invisible and control characters, every bidirectional control and direction mark, and every
+ * kind of space. Then it butchers, cutting head and tail by code point with stars between. Last
+ * it checks the result is safe, passing it through the same stripping again; that last stage is
+ * what guarantees no result contains a stripped code point, whatever the cut left behind. If it
+ * ever changes the result, the result may be shorter than intended.
+ *
+ * Right-to-left letters and numbers (Hebrew, Arabic and the rest) are kept, and fall where they
+ * fall; a display may therefore reorder the neutral characters, such as stars and punctuation,
+ * beside them.
  *
  * What is cut is cut by code point, so a cut can part an emoji sequence or a flag; whatever that
  * leaves is visible text. At least `minStars` stars always stand in the whisper's place: a
@@ -120,21 +133,7 @@ export const mask = (whisper: string, opts?: MaskOpts): string => {
   }
   const { head, tail, minStars, maxLen } = parseMaskOpts(opts)
   if (whisper === '') { return '' }
-  const chars = codePointsOf(plainLine(whisper))
-
-  // What may be shown at all is what is left once minStars are hidden: tail has first call on it.
-  const showable = Math.max(0, chars.length - minStars)
-  const tailShown = Math.min(tail, showable)
-  const headShown = Math.min(head, showable - tailShown)
-  const stars = Math.max(minStars, chars.length - headShown - tailShown)
-
-  const headChars = chars.slice(0, headShown).join('')
-  const tailChars = tailShown > 0 ? chars.slice(-tailShown).join('') : ''
-  // Lengths are compared before anything is built, so a vast minStars costs nothing it would discard.
-  const fitting = (): string => {
-    if (headShown + stars + tailShown <= maxLen) { return headChars + '*'.repeat(stars) + tailChars }
-    if (headShown + Collapsed.length + tailShown <= maxLen) { return headChars + Collapsed + tailChars }
-    return '*'.repeat(maxLen)
-  }
-  return plainLine(fitting())
+  const safeToButcher = plainLine(whisper)
+  const butchered = butcher(codePointsOf(safeToButcher), { head, tail, minStars, maxLen })
+  return plainLine(butchered)
 }

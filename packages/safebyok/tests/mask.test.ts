@@ -22,7 +22,7 @@ const KnownBlanks = [
 /** What no result may contain: marks, controls, spaces of any kind, ignorables, bidi controls, blank symbols. */
 const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}\u{1D159}]/u
 
-/** Every letter and digit of the scripts written right to left, by the engine's own script data. */
+/** The scripts written right to left, whose letters and digits `mask` keeps. */
 const RtlScripts = [
   'Hebrew', 'Arabic', 'Syriac', 'Thaana', 'Nko', 'Samaritan', 'Mandaic', 'Adlam', 'Hanifi_Rohingya',
   'Mende_Kikakui', 'Old_South_Arabian', 'Old_North_Arabian', 'Avestan', 'Imperial_Aramaic', 'Phoenician',
@@ -30,8 +30,6 @@ const RtlScripts = [
   'Psalter_Pahlavi', 'Inscriptional_Pahlavi', 'Inscriptional_Parthian', 'Elymaic', 'Sogdian', 'Old_Sogdian',
   'Chorasmian', 'Yezidi', 'Garay', 'Lydian', 'Cypriot', 'Meroitic_Cursive', 'Meroitic_Hieroglyphs', 'Old_Uyghur',
 ]
-const RtlClass = RtlScripts.map((script) => String.raw`\p{Script=${script}}`).join('')
-const AnyRtlLetter = new RegExp(`[${RtlClass}]`, 'u')
 
 const rtlLettersOf = (script: string): string => {
   const inScript = new RegExp(String.raw`^\p{Script=${script}}$`, 'u')
@@ -142,12 +140,14 @@ describe("mask", () => {
     [`${KeyEmoji}${KeyEmoji}abcdefghij${Rocket}${Rocket}`, undefined,  `${KeyEmoji}${KeyEmoji}********ij${Rocket}${Rocket}`, 'an emoji is one character, and never loses half its surrogate pair'],
     [`${Family}${Family}abcdefghij${Family}${Family}`,     undefined,  `${Man}${Woman}***...***${Girl}${Man}${Woman}${Girl}`, 'a joined emoji sequence comes apart into its emoji, which are cut whole'],
 
-    // letters and numbers of right-to-left scripts are removed, whatever the controls around them:
-    ["\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}\u{5D5}\u{5D6}\u{5D7}\u{5D8}\u{5D9}\u{5DA}\u{5DB}\u{5DC}\u{5DE}\u{5E0}123", undefined, "******", 'a Hebrew key with digits is only the digits, so stars'],
-    ["\u{627}\u{644}\u{645}\u{641}\u{62A}\u{627}\u{62D}\u{661}\u{662}\u{663}", undefined, "******", 'an Arabic key, Arabic-Indic digits and all, is stars'],
-    ["sk-ant-\u{5D0}\u{5D1}abcd\u{627}\u{661}1234", undefined,      "sk*********1234",  'a mixed key keeps its Latin ends'],
-    ["sk-ant-abcd\u{1E900}\u{10C80}\u{10800}\u{1EE00}1234", undefined, "sk*********1234", 'right-to-left scripts of the supplementary planes are removed'],
-    ["sk-ant-abcd\u{FB1D}\u{FB50}\u{FE70}1234", undefined,          "sk*********1234",  'Hebrew and Arabic presentation forms are removed'],
+    // letters and numbers of right-to-left scripts are kept, and the direction marks around them are not:
+    ["\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}\u{5D5}\u{5D6}\u{5D7}\u{5D8}\u{5D9}\u{5DA}\u{5DB}\u{5DC}\u{5DE}\u{5E0}123", undefined, "\u{5D0}\u{5D1}***...***\u{5E0}123", 'a Hebrew key with digits keeps its Hebrew ends'],
+    ["\u{627}\u{644}\u{645}\u{641}\u{62A}\u{627}\u{62D}\u{661}\u{662}\u{663}", undefined, "******\u{62D}\u{661}\u{662}\u{663}", 'an Arabic key, Arabic-Indic digits and all, is its tail behind stars'],
+    ["sk-ant-\u{5D0}\u{5D1}abcd\u{627}\u{661}1234", undefined,      "sk***...***1234", 'a mixed key keeps its Latin ends'],
+    ["\u{200F}\u{5D0}\u{5D1}\u{200F}\u{5D2}\u{5D3}\u{5D4}\u{5D5}\u{5D6}\u{5D7}\u{202E}\u{5D8}\u{200E}\u{5D9}\u{5DB}\u{5DC}\u{5DE}\u{5E0}", undefined, "\u{5D0}\u{5D1}********\u{5DB}\u{5DC}\u{5DE}\u{5E0}", 'direction marks and overrides among Hebrew letters are removed'],
+    ["\u{200F}\u{61C}\u{5D0}\u{200E}\u{2067}", { minStars: 0 },      "\u{5D0}",         'a lone Hebrew letter in a sea of direction marks is itself'],
+    ["sk-ant-abcd1234\u{1E900}\u{10C80}\u{10800}\u{1EE00}", undefined, "sk***...***\u{1E900}\u{10C80}\u{10800}\u{1EE00}", 'right-to-left scripts of the supplementary planes are kept'],
+    ["sk-ant-abcd1234\u{FB1D}\u{FB50}\u{FE70}", undefined,          "sk***...***4\u{5D9}\u{FB50}\u{FE70}", 'Hebrew and Arabic presentation forms are kept, composed and with their marks removed'],
 
     // marks that only compose once an invisible character is gone:
     ["\u{1100}\u{200B}\u{1161}bcdefghijkl",   undefined,             "\u{AC00}b******ijkl", 'Hangul jamo parted by an invisible character compose once it is gone'],
@@ -174,13 +174,61 @@ describe("mask", () => {
 
   describe("right-to-left scripts", () => {
     for (const script of RtlScripts) {
-      it(`removes every letter and number of ${script}`, () => {
+      it(`keeps the letters and numbers of ${script}`, () => {
         const letters = rtlLettersOf(script)
-        expect(letters.length).to.be.greaterThan(0)
-        expect(mask(letters, { head: 5, tail: 5, minStars: 0, maxLen: Infinity })).to.eq("")
-        expect(mask(`sk-${letters}abcd1234`, { head: 3, tail: 4, minStars: 0, maxLen: Infinity })).to.eq("sk-****1234")
+        const keptChars = (letters.match(/./gsu) ?? []).filter((chr) => chr.normalize('NFC') === chr && ! Unsafe.test(chr))
+        const kept = keptChars.join('')
+        expect(keptChars.length).to.be.greaterThan(0)
+        expect(mask(kept, { head: 1000, tail: 1000, minStars: 0, maxLen: Infinity })).to.eq(kept)
+        expect(mask(`sk-${kept}abcd1234`, { head: 3, tail: 4, minStars: 0, maxLen: Infinity })).to.eq(`sk-${'*'.repeat(keptChars.length + 4)}1234`)
       })
     }
+  })
+
+  describe("direction controls", () => {
+    const Controls = ['\u{200E}', '\u{200F}', '\u{61C}', '\u{202A}', '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}', '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}']
+    const Plain = 'sk-ant-abcd\u{5D0}\u{5D1}1234'
+
+    it("are removed wherever they sit, at the cut or inside what is kept", () => {
+      const expected = mask(Plain)
+      const chars = Plain.match(/./gsu) ?? []
+      for (const control of Controls) {
+        for (let idx = 0; idx <= chars.length; idx += 1) {
+          const salted = chars.slice(0, idx).join('') + control + chars.slice(idx).join('')
+          expect(mask(salted)).to.eq(expected)
+        }
+        expect(mask(control + Plain + control)).to.eq(expected)
+      }
+    })
+
+    it("are removed from a whisper made only of them", () => {
+      expect(mask(Controls.join(''))).to.eq('******')
+    })
+  })
+
+  describe("a cut that lands mid-sequence", () => {
+    it("comes out clean when the cut falls between a letter and the marks it carried", () => {
+      const marked = Array.from('abcdefghijklmnop', (letter) => `${letter}\u{335}\u{20D7}\u{1AB0}`).join('')
+      const masked = mask(marked, { head: 3, tail: 3, maxLen: Infinity })
+      expect(masked).to.eq('abc**********nop')
+      expect(masked).not.to.match(Unsafe)
+    })
+
+    it("comes out clean when the cut parts the pieces of a Hangul syllable", () => {
+      const jamo = '\u{1112}\u{1161}\u{11AB}\u{1100}\u{1173}\u{11AF}'.repeat(6)
+      for (const opts of [{ head: 1, tail: 1 }, { head: 2, tail: 3 }, { head: 4, tail: 5, minStars: 1 }]) {
+        const masked = mask(jamo, opts)
+        expect(masked).not.to.match(Unsafe)
+        expect(masked.normalize('NFC')).to.eq(masked)
+        expect(masked.replaceAll('*', '')).to.match(/^[\u{AC00}-\u{D7A3}]*$/u)
+      }
+    })
+
+    it("comes out clean when the cut parts a joined emoji", () => {
+      const masked = mask(Family.repeat(5), { head: 2, tail: 2 })
+      expect(masked).not.to.match(Unsafe)
+      expect(masked).to.eq(`${Man}${Woman}${'*'.repeat(11)}${Woman}${Girl}`)
+    })
   })
 
   describe("whatever it is given", () => {
@@ -195,7 +243,7 @@ describe("mask", () => {
       '\u{D800}\u{DC00}\u{D800}x\u{DC00}y\u{DBFF}',
       '\u{E0001}\u{E0020}tag\u{E007F}\u{FE0F}\u{180B}\u{180E}\u{34F}\u{115F}\u{1160}\u{1D159}',
       '\u{A0}\u{1680}\u{2000}\u{200A}\u{202F}\u{205F}\u{3000}key\u{FEFF}',
-      '\u{627}\u{644}\u{645}\u{641}\u{62A}\u{627}\u{62D}sk-12345\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}',
+      '\u{627}\u{644}\u{645}\u{641}\u{62A}\u{627}\u{62D}sk-12345\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}\u{200F}\u{202E}',
       '\u{5D0}\u{5D1}\u{5D2}\u{5D3}\u{5D4}\u{5D5}\u{5D6}\u{5D7}\u{5D8}\u{5D9}\u{5DB}\u{5DC}\u{5DE}\u{5E0}123',
       `sk-${KnownBlanks.join('')}abcd1234${KnownBlanks.join('')}`,
       '\u{1100}\u{200B}\u{1161}\u{1100}\u{200D}\u{1161}\u{11A8}',
@@ -219,7 +267,6 @@ describe("mask", () => {
         for (const opts of Variants) {
           const masked = mask(adversary, opts)
           expect(masked).not.to.match(Unsafe)
-          expect(masked).not.to.match(AnyRtlLetter)
           for (const blank of KnownBlanks) { expect(masked).not.to.contain(blank) }
           expect(masked).not.to.match(/[\n\r]/)
           expect(masked.normalize('NFC')).to.eq(masked)
