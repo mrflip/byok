@@ -32,6 +32,11 @@ describe("vaultMeetsExpectation", () => {
     expect(vaultMeetsExpectation(undefined, { vault_id: 'vault-id-u1' })).to.be.false
     expect(vaultMeetsExpectation(null, { vault_id: 'vault-id-u1' })).to.be.false
   })
+
+  it("fails a bundle too damaged to show an epoch, though it shows the vault_id", () => {
+    expect(vaultMeetsExpectation({ vault_id: 'vault-id-u1' }, { vault_id: 'vault-id-u1' })).to.be.false
+    expect(vaultMeetsExpectation({ vault_id: 'vault-id-u1', passphrase_epoch: '1' }, { vault_id: 'vault-id-u1' })).to.be.false
+  })
 })
 
 const LockboxCases = [
@@ -45,6 +50,7 @@ const LockboxCases = [
   [undefined,  undefined,                     null,       false,  'a write into a scope with no bundle'],
   [TH.bundleOf('u1', { vault_id: 'reborn' }), Box,  "rev-one",  false,  'a write sealed for a vault since made anew'],
   // nothing, or damage, standing:
+  [{ vault_id: "vault-id-u1" },  undefined,   null,       false,  'a bundle row that shows no epoch'],
   [Bundle,     null,                          null,       true,   'a null row reads as no lockbox, as a read does'],
   [Bundle,     { boxlabel: "anthropic" },     "rev-one",  false,  'a lockbox row that shows no revision'],
 ] as const
