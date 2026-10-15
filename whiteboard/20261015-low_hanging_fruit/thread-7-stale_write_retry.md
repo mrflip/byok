@@ -1,7 +1,7 @@
 # Thread 7: stale_write_retry (2026-10-15)
 
-Branch `20261015-stale_write_retry`, PR not yet filed, stacked on
-[#43](https://github.com/mrflip/safebyok/pull/43) (thread 6). Justify: green (safebyok 317,
+Branch `20261015-stale_write_retry`, PR [#44](https://github.com/mrflip/safebyok/pull/44), stacked on
+[#43](https://github.com/mrflip/safebyok/pull/43) (thread 6). Justify: green (safebyok 318,
 safebyok-convex 219, safebyok-react 8, demo 24, root 91). No sprint-doc tab (Docs tools
 disconnected). Tip updated after the coordinator's erase-wins ruling.
 
