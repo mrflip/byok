@@ -404,4 +404,8 @@ security expert who knows what questions to ask.
   WebAssembly call (about 130 ms at `argon2id_web_v1` in Node, against the core's 580 ms), so it
   holds the thread rather than yielding as the core's does. It needs `'wasm-unsafe-eval'` in a
   page's Content-Security-Policy, and refuses (`bad_option`) where WebAssembly will not compile
-  or is missing (Hermes): it never falls back to another deriver on its own.
+  or is missing (Hermes): it never falls back to another deriver on its own. Unlike
+  `@noble/hashes`, which zeroes its Argon2 blocks and H0 when a derivation ends, hash-wasm leaves
+  its working memory (the spec's whole memory_kib, in a fresh WebAssembly instance, and in Node
+  the passphrase's UTF-8 bytes in a pooled Buffer) as it is, for the garbage collector: material
+  from which the passphraseKey follows stays in the heap until then.
