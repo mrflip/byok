@@ -12,7 +12,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | underway |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | in second review (re-run) |
+| 5  | `mask_utils` | `origin/main` | filing |
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
@@ -84,7 +84,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   `Intl.Segmenter`, code points without it; `maskAll` struck. *Review:* flagged; orchestrator
   decided (YOLO): a `maxLen` below `head + tail + 9` is refused, so the result never exceeds
   `maxLen` (omitted `maxLen` defaults to `max(15, head + tail + 9)`); bidi controls, U+200B,
-  U+2060 and U+FEFF are stripped. Built; second review running.
+  U+2060 and U+FEFF are stripped. Second review: fixed (grapheme-counted ceiling test; the changeset names the floor and strip).
 * **Thread 9** (`docs_sweep`, [#33](https://github.com/mrflip/safebyok/pull/33)): appended
   *Locking* and *No recovery* to the core README; the recipe is a `lockWhenHidden(vault)`
   function returning an unsubscribe -- the same name as the planned core API, so the expiry
