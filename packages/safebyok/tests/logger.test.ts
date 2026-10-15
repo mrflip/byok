@@ -1,3 +1,4 @@
+import { runInNewContext } from 'node:vm'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { VaultError } from '../src/errors'
 import { parseLogger, type VaultLogger } from '../src/logger'
@@ -80,6 +81,20 @@ describe("parseLogger", () => {
       logger.log('one')
       logger.warn('two')
       logger.error('three')
+      await TH.wakeupAtNextTick()
+      expect(unhandled).not.toHaveBeenCalled()
+    } finally {
+      process.off('unhandledRejection', unhandled)
+    }
+  })
+
+  it("drops what a promise from another realm rejects with, which is no instance of this realm's Promise", async () => {
+    const unhandled = vi.fn()
+    process.on('unhandledRejection', unhandled)
+    try {
+      const foreign = () => runInNewContext('Promise.reject(new Error("log drain is down"))') as unknown
+      const logger = parseLogger({ log: foreign, warn: foreign, error: foreign })
+      logger.warn('one')
       await TH.wakeupAtNextTick()
       expect(unhandled).not.toHaveBeenCalled()
     } finally {

@@ -73,15 +73,18 @@ const guarded = (hostLogger: AnyReturningLogger): VaultLogger => ({
 const tell = (hostLogger: AnyReturningLogger, level: VaultLoggerLevel, message?: string, story?: Record<string, unknown>, err?: Error | null) => {
   try {
     // Called as a method, so a logger built as a class keeps its `this`.
-    const outcome = hostLogger[level](message, story, err)
-    if (outcome instanceof Promise) { void dropRejection(outcome) }
+    void dropRejection(hostLogger[level](message, story, err))
   } catch {
     // A logger that throws must not break the lock, open or store that called it.
   }
 }
 
-/** Settle an async logger's promise, dropping its rejection rather than leaving it unhandled. */
-const dropRejection = async (pending: Promise<unknown>) => {
+/**
+ * Settle what a logger returned, dropping a rejection rather than leaving it unhandled: a native
+ * promise, one of another make or from another realm (which `instanceof Promise` misses), or
+ * anything else, which settles at once.
+ */
+const dropRejection = async (pending: unknown) => {
   try {
     await pending
   } catch {
