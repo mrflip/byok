@@ -149,6 +149,12 @@ security expert who knows what questions to ask.
   are refused `not_permitted` from then on, and its failing `watchVault` subscription is ignored,
   but the unlocked vaultKey stays in memory until the vault locks, expires or is closed. The
   README tells apps to close the vault on sign-out; nothing enforces it.
+* 2026-10-15: a vault's lockbox count is capped on the client only (`maxLockboxes`, `store()`
+  refusing `vault_full`), counted from the handle's last look at storage, so devices storing at
+  once can overshoot it. Neither in-tree backend enforces a count or a size per vault. On
+  Convex, where `destroy()` erases the vault in one transaction under a 16 MiB read budget, a
+  vault grown past what the cap admits (by a modified client, or many overshoots) may become
+  impossible to erase whole: the vault half of deleting an account.
 * 2026-10-14: releases run from `.github/workflows/release.yml` on every push to main, in jobs
   that each hold only what they need. Only `publish` (in the `npm` environment) may mint an npm
   OIDC token, and it runs no package's scripts (`pnpm install --ignore-scripts`): it stages the

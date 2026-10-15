@@ -91,7 +91,8 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
   Convex resends a mutation when it reconnects, so a write may land after any timeout you set:
   show progress, but don't report it failed.
 * A record holds at most 1 MiB, Convex's document limit; `openVault` keeps `maxWhisperBytes`
-  under half of it.
+  under half of it. A vault holds at most 8 MiB in all (`maxVaultBytes`; see *How big a vault
+  can be*).
 
 ## What is stored
 
@@ -113,10 +114,14 @@ Two tables, inside the component, beside nothing of your app's:
 * `user_id` leads both indexes, so one user's rows are one range of each.
 
 **How big a vault can be.** Listing a vault, watching it and erasing it each read the whole vault
-in one Convex transaction, which may read 16 MiB; erasing reads it twice. A lockbox at the
-largest whisper a vault stores by default is about 54 KB, so about 150 of those; a lockbox
-holding an API key is about 1 KB, so thousands. Each record must also fit Convex's 1 MiB document
-limit, which the core's `maxWhisperBytes` keeps well inside.
+in one Convex transaction, which may read 16 MiB; erasing reads it twice, so `convexVaultDB`
+declares a `maxVaultBytes` of 8 MiB. A vault holds 100 lockboxes by default, raised with
+`maxLockboxes` as far as `maxVaultBytes` allows: `openVault` refuses, with kind `bad_option`, a
+`maxLockboxes` whose lockboxes at `maxWhisperBytes` each might not fit, and its message says how
+many would. At the default `maxWhisperBytes` (40444) that is at most 101; at a `maxWhisperBytes`
+of 2048, ample for API keys, it is 1365. A store past the limit is refused with kind
+`vault_full`, until a lockbox is erased. Each record must also fit Convex's 1 MiB document limit,
+which the core's `maxWhisperBytes` keeps well inside.
 
 ## The functions
 

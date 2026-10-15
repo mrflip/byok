@@ -149,7 +149,7 @@ describe("VaultProvider", () => {
     }
     render(
       <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())} deviceDB={memoryDeviceDB()}
-        keyDeriver={testDeriver} clock={{ now: () => 1000 }} rememberForMs={60_000} maxWhisperBytes={8}>
+        keyDeriver={testDeriver} clock={{ now: () => 1000 }} rememberForMs={60_000} maxWhisperBytes={8} maxLockboxes={1}>
         <Grab />
       </VaultProvider>,
     )
@@ -167,5 +167,9 @@ describe("VaultProvider", () => {
       refusal = err
     }
     expect(isVaultError(refusal, 'whisper_too_large')).to.be.true
+    // One lockbox fills the vault: a second is refused for room.
+    await vault.store('openai_api_key', 'sk')
+    const full = await vault.store('mistral_api_key', 'sk').catch((err: unknown) => err)
+    expect(isVaultError(full, 'vault_full')).to.be.true
   })
 })
