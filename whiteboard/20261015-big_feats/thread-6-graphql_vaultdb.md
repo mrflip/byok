@@ -1,6 +1,6 @@
 # Thread 6: graphql_vaultdb (2026-10-15)
 
-Branch `20261015-graphql_vaultdb`, PR not yet filed, stacked on [#73](https://github.com/mrflip/safebyok/pull/73) (thread 5, tip `d55eb9c`). Justify green: core 759,
+Branch `20261015-graphql_vaultdb`, PR [#78](https://github.com/mrflip/safebyok/pull/78), stacked on [#73](https://github.com/mrflip/safebyok/pull/73) (thread 5, tip `d55eb9c`). Justify green: core 759,
 convex 269, postgres 132, react 28, graphql 140, demo 61, root 105.
 
 * **Built**: `packages/safebyok-graphql/`, packaged like `safebyok-postgres` (ESM+CJS, tsdown-written
