@@ -44,6 +44,20 @@ security expert who knows what questions to ask.
   `openVault`, by every `VaultDB` verb, and in every stored record that names a scope; a refusal
   names the bound and never quotes the id. The Convex component's validators and its `getUserId`
   check do not bound it themselves: the client's `VaultDB` refuses a longer one before a call is made.
+* 2026-10-15: `pnpm-workspace.yaml` sets `minimumReleaseAge: 10080` (seven days, in minutes) and
+  `minimumReleaseAgeStrict: true`: pnpm resolves and installs nothing, transitive dependencies
+  included, younger than that, and fails rather than fall back; the frozen-lockfile install in CI
+  verifies the lockfile against it too. Its exceptions are `minimumReleaseAgeExclude` entries,
+  each by name and exact version, each listed here until removed (PROCESS.md, *Dependencies*).
+  Adding the rule re-resolved the whole lockfile (the old one held 51 entries under seven days
+  old) and lowered the floor of nine direct dependencies' ranges to releases that had aged (the two hand
+  pins on `graphql-yoga` and `@graphql-tools/schema` became ranges again: the rule now does what
+  they did). Dependabot's `cooldown` is 7 days to match.
+* 2026-10-15, **exception, remove on 2026-10-16**: `minimumReleaseAgeExclude: convex-test@0.0.61`
+  (`safebyok-convex`'s test dependency, pinned exactly; published 2026-10-09T23:01Z, so it ages past
+  seven days at 2026-10-16T23:01Z). Not a security fix: 0.0.61 is the first release with
+  `defineTestApp`, which the Convex tests already use, and 0.0.60 fails them. Development-only,
+  never shipped. Revisit: once it has aged, delete the exclusion and make the pin a `^` range again.
 * 2026-10-15: `mask` (`safebyok/utils`) takes a whisper and returns text meant for display: its
   first and last few characters (two and four by default, at the caller's choice) and, up to
   `maxLen` (15 by default), its length. Beyond `maxLen` the result is fixed-width
