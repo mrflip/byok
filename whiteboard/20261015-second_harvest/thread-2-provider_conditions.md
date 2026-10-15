@@ -1,7 +1,7 @@
 # Thread 2: provider_conditions (2026-10-15)
 
 Branch `20261015-provider_conditions`, PR not yet filed, cut from `origin/main` (`23e38a2`).
-Justify: green (root 105; core 363, convex 219, react 26, demo 61 tests; `pnpm size` within
+Justify: green (root 105; core 363, convex 221, react 26, demo 61 tests; `pnpm size` within
 every limit).
 
 * **Built**:
@@ -46,12 +46,13 @@ every limit).
     bug (`VaultDB`'s public verbs already wrap a raw throw as `storage_unavailable`).
   - `corrupt_record` lands in `openError` too, though a retry will not mend it: #54 makes it a
     condition, and the README tells the host to branch on `openError.kind`.
-* **Pulled forward**: the core fix for the leaked watch, from the never-filed
-  `open_vault_unsubscribe` worktree (`/workspace/byok-open_vault_unsubscribe`, uncommitted, on
-  pre-move paths). I ported its `vault.ts` hunk and adapted its tests to the current helpers; I
-  wrote nothing to that worktree. The plan asked to "check the leaked watch is really closed on
-  retry", and without this fix it was not: each failed open, retried or reset, left one watch.
-  Its Convex-side test and README line were not carried over.
+* **Pulled forward**: all of the never-filed `open_vault_unsubscribe` worktree
+  (`/workspace/byok-open_vault_unsubscribe`, uncommitted, old paths; nothing written there), so
+  it can be removed. The core fix and its tests went in first, adapted to the current helpers; at
+  the Coach's word, its Convex half followed (`storage:` commit): the fake deployment's
+  `watching()`, a test over both clients that an open refused before sign-in (`not_permitted`)
+  leaves no live query (it fails with the core fix disabled), and a README line under *Sign in
+  first*. The changeset gains a `safebyok-convex` patch line.
 * **Deviations**: the plan's *Touches* list did not name `vault.ts`; the fix above needed it. The
   hunk is the last lines of `openVault` and a paragraph in its doc block, away from the unlock
   lines threads 3-5 change.
@@ -68,6 +69,7 @@ every limit).
   - `tallyWatches` is written twice (core `vault.test.ts`, react `vault-provider.test.tsx`); it
     could move into `safebyok/testing`.
 * **Discoveries** (#54 is unmerged, stacked on #46; this branch rebases onto main once both land):
+  - #46/#54 also touch the Convex tests and README: expect a mechanical conflict there.
   - Both add `packages/safebyok/tests/errors.test.ts`, so the rebase meets an add/add conflict:
     keep both files' `describe`s and merge the imports. Worth adding then: a test that
     `VaultErrorFamilyForKind` agrees with #54's README tables.
