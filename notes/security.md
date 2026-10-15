@@ -151,8 +151,9 @@ security expert who knows what questions to ask.
   but the unlocked vaultKey stays in memory until the vault locks, expires or is closed. The
   README tells apps to close the vault on sign-out; nothing enforces it.
 * 2026-10-15: a vault's lockbox count is capped on the client only (`maxLockboxes`, `store()`
-  refusing `vault_full`), counted from the handle's last look at storage, so devices storing at
-  once can overshoot it. Neither in-tree backend enforces a count or a size per vault. On
+  refusing `vault_full`), counted from the handle's last look at storage, so stores of new
+  lockboxes running at once -- on several devices, or on one handle, since nothing serializes
+  them -- can overshoot it. Neither in-tree backend enforces a count or a size per vault. On
   Convex, where `destroy()` erases the vault in one transaction under a 16 MiB read budget, a
   vault grown past what the cap admits (by a modified client, or many overshoots) may become
   impossible to erase whole: the vault half of deleting an account.
