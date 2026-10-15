@@ -1,16 +1,19 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
+import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault, type VaultDB } from 'safebyok'
 import { testDeriver } from 'safebyok/testing'
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
 
 /** A probe component exercising the binding the way a host app would. */
 const Probe = () => {
-  const { vault, withUnlockedVault } = useVault()
+  const { vault, openError, retryOpen, withUnlockedVault } = useVault()
   const snapshot = useVaultSnapshot()
   const [outcome, setOutcome] = useState('')
 
+  if (openError !== null) {
+    return <p><span data-testid="state">{`open error: ${openError.kind}`}</span> <button onClick={retryOpen}>Retry</button></p>
+  }
   if (vault === null) { return <span data-testid="state">no vault</span> }
 
   const put = () => {
@@ -37,13 +40,36 @@ const Probe = () => {
 const makeWorld = () => {
   const vaultDB = localVaultDB(memoryStore())
   const deviceDB = memoryDeviceDB()
-  const mount = (userId: string | null) => render(
-    <VaultProvider applabel="acme" vaultlabel="main" userId={userId} vaultDB={vaultDB} deviceDB={deviceDB} keyDeriver={testDeriver}>
-      <Probe />
-    </VaultProvider>,
+  const tree = (userId: string | null, caught: unknown[] = []) => (
+    <CatchingBoundary caught={caught}>
+      <VaultProvider applabel="acme" vaultlabel="main" userId={userId} vaultDB={vaultDB} deviceDB={deviceDB} keyDeriver={testDeriver}>
+        <Probe />
+      </VaultProvider>
+    </CatchingBoundary>
   )
-  return { vaultDB, deviceDB, mount }
+  const mount = (userId: string | null, caught: unknown[] = []) => render(tree(userId, caught))
+  return { vaultDB, deviceDB, tree, mount }
 }
+
+/**
+ * Counts the storage watches `vaultDB` opens and closes again, so a test can see that a failed
+ * open left none running behind it.
+ */
+const tallyWatches = (vaultDB: VaultDB) => {
+  const tally = { opened: 0, closed: 0 }
+  const subscribe = vaultDB.subscribe.bind(vaultDB)
+  vi.spyOn(vaultDB, 'subscribe').mockImplementation((scope, onChange) => {
+    tally.opened += 1
+    const unsubscribe = subscribe(scope, onChange)
+    return () => {
+      tally.closed += 1
+      unsubscribe()
+    }
+  })
+  return tally
+}
+
+const unreachable = () => new VaultError('storage_unavailable', 'The vault storage could not be reached: try again shortly.')
 
 /** Catches what its children throw while rendering, keeping the very thrown value for the test. */
 class CatchingBoundary extends Component<{ caught: unknown[], children: ReactNode }, { failed: boolean }> {
@@ -57,6 +83,13 @@ afterEach(() => {
   cleanup()
   vi.restoreAllMocks()
 })
+
+/** openError's @example, as a host would write it. */
+const OpenErrorExample = () => {
+  const { openError, retryOpen } = useVault()
+  if (openError !== null) { return <p>{"Can't reach your vault."} <button onClick={retryOpen}>Retry</button></p> }
+  return <span>opened</span>
+}
 
 /** React reports a boundary-caught render error on the console; the suite stays quiet about it. */
 const hushConsole = () => vi.spyOn(console, 'error').mockImplementation(() => { /* expected */ })
@@ -205,21 +238,150 @@ describe("VaultProvider", () => {
       expect(isVaultError(caught[0], 'bad_label')).to.be.true
     })
 
-    it("throws storage trouble to the error boundary too", async () => {
+    it("throws a bad option to the error boundary, as the very VaultError", async () => {
       hushConsole()
-      const world = makeWorld()
-      const trouble = new VaultError('storage_unavailable', 'The vault storage could not be reached.')
-      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(trouble)
       const caught: unknown[] = []
       render(
         <CatchingBoundary caught={caught}>
-          <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+          <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())}
+            deviceDB={memoryDeviceDB()} keyDeriver={testDeriver} maxLockboxes={0}>
             <Probe />
           </VaultProvider>
         </CatchingBoundary>,
       )
       await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('boundary') })
-      expect(caught[0]).to.eq(trouble)
+      expect(isVaultError(caught[0], 'bad_option')).to.be.true
+    })
+
+    it("throws an error that is no VaultError to the boundary: an adapter's bug, not a condition", async () => {
+      hushConsole()
+      const world = makeWorld()
+      const bug = new TypeError('adapter.readBundle is not a function')
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(bug)
+      const caught: unknown[] = []
+      world.mount('u1', caught)
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('boundary') })
+      expect(caught[0]).to.eq(bug)
+    })
+
+    const ConditionCases = [
+      ["storage_unavailable", 'storage that cannot be reached'],
+      ["not_permitted",       'a user storage will not serve, as when signed out of the backend'],
+      ["corrupt_record",      'a stored record that fails verification'],
+    ] as const
+
+    for (const [kind, blurb] of ConditionCases) {
+      it(`hands down ${blurb} as openError, in place, leaving the boundary alone`, async () => {
+        const world = makeWorld()
+        const condition = new VaultError(kind, 'Something the app can tell the user about.')
+        vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(condition)
+        const caught: unknown[] = []
+        world.mount('u1', caught)
+        await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq(`open error: ${kind}`) })
+        expect(caught).to.have.length(0)
+      })
+    }
+
+    it("hands down the very VaultError, and no vault beside it", async () => {
+      const world = makeWorld()
+      const trouble = unreachable()
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(trouble)
+      const seen: { openError: VaultError | null, vault: Vault | null } = { openError: null, vault: null }
+      const Grab = () => {
+        const { openError, vault } = useVault()
+        useEffect(() => { seen.openError = openError; seen.vault = vault }, [openError, vault])
+        return null
+      }
+      render(
+        <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+          <Grab />
+        </VaultProvider>,
+      )
+      await waitFor(() => { expect(seen.openError).to.eq(trouble) })
+      expect(seen.vault).to.be.null
+    })
+
+    it("retryOpen opens again: once storage relents, the vault opens and openError clears", async () => {
+      const world = makeWorld()
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(unreachable())
+      world.mount('u1')
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('open error: storage_unavailable') })
+      fireEvent.click(screen.getByText('Retry'))
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
+    })
+
+    it("a retry that fails again hands down the fresh error", async () => {
+      const world = makeWorld()
+      const first = unreachable()
+      const second = new VaultError('not_permitted', 'Sign in to reach this vault.')
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(first).mockRejectedValueOnce(second)
+      world.mount('u1')
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('open error: storage_unavailable') })
+      fireEvent.click(screen.getByText('Retry'))
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('open error: not_permitted') })
+    })
+
+    it("leaves no storage watch behind a failed open: after a retry, exactly one is live", async () => {
+      const world = makeWorld()
+      const tally = tallyWatches(world.vaultDB)
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(unreachable()).mockRejectedValueOnce(unreachable())
+      world.mount('u1')
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('open error: storage_unavailable') })
+      expect(tally).to.deep.equal({ opened: 1, closed: 1 })
+      fireEvent.click(screen.getByText('Retry'))
+      await waitFor(() => { expect(tally.opened).to.eq(2) })
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('open error: storage_unavailable') })
+      fireEvent.click(screen.getByText('Retry'))
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
+      expect(tally.opened - tally.closed).to.eq(1)
+    })
+
+    it("retryOpen does nothing while there is no openError", async () => {
+      const world = makeWorld()
+      const reads = vi.spyOn(world.vaultDB, 'readBundle')
+      const seen: { retryOpen: () => void } = { retryOpen: noop }
+      const Grab = () => {
+        const { retryOpen } = useVault()
+        useEffect(() => { seen.retryOpen = retryOpen }, [retryOpen])
+        return <Probe />
+      }
+      render(
+        <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+          <Grab />
+        </VaultProvider>,
+      )
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
+      const readsBefore = reads.mock.calls.length
+      await act(async () => {
+        seen.retryOpen()
+        await new Promise((resolve) => { setTimeout(resolve, 0) })
+      })
+      expect(reads.mock.calls.length).to.eq(readsBefore)
+      expect(screen.getByTestId('state').textContent).to.eq('absent')
+    })
+
+    it("clears openError when the user signs out", async () => {
+      const world = makeWorld()
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(unreachable())
+      const { rerender } = world.mount('u1')
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('open error: storage_unavailable') })
+      rerender(world.tree(null))
+      expect(screen.getByTestId('state').textContent).to.eq('no vault')
+    })
+
+    it("matches openError's @example: the message and its Retry button, in place", async () => {
+      const world = makeWorld()
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(unreachable())
+      render(
+        <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+          <OpenErrorExample />
+        </VaultProvider>,
+      )
+      const notice = await screen.findByText("Can't reach your vault.")
+      expect(notice.tagName).to.eq('P')
+      fireEvent.click(screen.getByText('Retry'))
+      const opened = await screen.findByText('opened')
+      expect(opened.tagName).to.eq('SPAN')
     })
 
     it("throws a rejection of null too: the failure is held, not the value", async () => {

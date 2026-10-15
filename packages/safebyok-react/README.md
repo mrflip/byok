@@ -8,7 +8,8 @@ otherwise write itself.
   `withUnlockedVault` finds the vault locked.
 * `useVault()` -- the vault handle and `withUnlockedVault()`, which wraps any action that touches
   a whisper: on `vault_locked` it asks for the passphrase and retries, and resolves `null` if
-  dismissed (unambiguous for reads: a whisper is never null).
+  dismissed (unambiguous for reads: a whisper is never null). Beside them, `openError` and
+  `retryOpen()` for an open that failed (below).
 * `useVaultSnapshot()` -- the live snapshot via `useSyncExternalStore`.
 * `PassphraseModal` -- the default dialog: unstyled markup under `modal-scrim` / `modal` class
   names for the host's stylesheet to dress.
@@ -41,10 +42,31 @@ whenever a prop changes identity.
 
 ## When opening fails
 
-If `openVault` rejects -- a bad label or option, or storage that cannot be reached -- the provider
-throws that error while rendering. Wrap it in an error boundary, keyed on the user's identity, so
-the boundary's fallback shows the failure and a different user (or a sign-out and back in) gets a
-fresh attempt:
+What happens when `openVault` rejects depends on the error's family (safebyok's
+`VaultErrorFamilyForKind`): who has to act.
+
+**A condition stays in place.** Storage that cannot be reached (`storage_unavailable`), a user
+storage will not serve (`not_permitted`, as when signed out of the backend) or a stored record
+that fails verification (`corrupt_record`) arrives as `openError`, a `VaultError`, with `vault`
+still null. Show it where the vault's UI would be, and offer `retryOpen()`, which clears it and
+opens again; a failed open leaves no storage watch behind, so retrying costs nothing:
+
+```tsx
+const VaultPanel = () => {
+  const { vault, openError, retryOpen } = useVault()
+  if (openError !== null) { return <p>{"Can't reach your vault."} <button onClick={retryOpen}>Retry</button></p> }
+  if (vault === null) { return <p>Opening your vault…</p> }
+  return <Lockboxes vault={vault} />
+}
+```
+
+Branch on `openError.kind` for a better message: a `not_permitted` user should sign in again,
+and a `corrupt_record` will not mend on retry. Its `message` is calm and safe to show.
+
+**Misuse goes to your error boundary.** A bad label or option -- a bug in the app's code -- is
+thrown while rendering, as is anything rejected that is not a `VaultError`. Wrap the provider in
+an error boundary, keyed on the user's identity, so the dev overlay or the boundary's fallback
+shows it and a different user (or a sign-out and back in) gets a fresh attempt:
 
 ```tsx
 <ErrorBoundary key={userId ?? 'signed-out'} fallback={<VaultTroubleNotice />}>
