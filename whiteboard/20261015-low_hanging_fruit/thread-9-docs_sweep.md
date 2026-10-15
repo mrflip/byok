@@ -39,7 +39,7 @@ Branch `20261015-docs_sweep`, PR not yet filed, cut from `origin/main` (eb75330)
   - `.devcontainer/devcontainer.json` volumes are still `byok-${devcontainerId}-claude` and
     `-node_modules`: not edited (the Coach's rebuild). Renaming them orphans the existing
     volumes, which is the cost the Coach should weigh at rebuild.
-  - The dialog's unlock copy is not covered by the demo or other tests; only the new modal test.
+  - The dialog's unlock copy is covered only by the new modal test.
 
 * **For the Coach**: the `.devcontainer` volume names above. The *Locking* recipe is the host
   line the rulings asked for; the React `lockWhenHidden` prop stays ruled-but-not-yet.
