@@ -1,6 +1,6 @@
 # Thread 3: react_dialog (2026-10-15)
 
-Branch `20261015-react_dialog`, PR not yet filed, stacked on [#66](https://github.com/mrflip/safebyok/pull/66).
+Branch `20261015-react_dialog`, PR [#67](https://github.com/mrflip/safebyok/pull/67), stacked on [#66](https://github.com/mrflip/safebyok/pull/66).
 Justify: green (core 705, convex 265, react 52, demo 61, root 105).
 
 * **Built**: `PassphraseModal` (`packages/safebyok-react/src/passphrase-modal.tsx`) takes an
@@ -37,3 +37,13 @@ Justify: green (core 705, convex 265, react 52, demo 61, root 105).
   `forcePassphraseReentryHours`", but the vault does not expose that number anywhere; a host
   rendering the dialog by hand must repeat it. A core `reentryHours` on the snapshot or `Vault`
   would end that, at the cost of surface in `vault.ts`, which threads 1 and 2 are editing.
+* **After review** (clean, 7 minor): unit words now come from `Intl.NumberFormat` (grouping off, so
+  output is unchanged); the window cases quote with `"`. Rebased onto #66's tip `5fefc90` (three
+  docs-only commits since `dfdbbec`).
+* **For the Coach** (also the PR's open questions):
+  - A misuse or non-VaultError unlock failure never settles the `withUnlockedVault` promise: the
+    dialog throws and unmounts. Settling it changes `onDone`'s contract; a follow-up.
+  - Sub-minute windows read "1 minute"; 25.5 hours reads "1530 minutes".
+  - The 168 default and the recomputed `ForeverMs` can drift from the core; the core accessor
+    above would end it.
+  - The modal test's local helpers (`vaultUnlockingWith`, `Catcher`, ...) are thread 7's ground.
