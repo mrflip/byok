@@ -45,9 +45,9 @@ describe("VaultError", () => {
   it("carries its kind, and isVaultError tells it apart", () => {
     const err = new VaultError('vault_full', 'This vault is full.')
     expect(err.kind).to.eq('vault_full')
-    expect(isVaultError(err)).to.eq(true)
-    expect(isVaultError(err, 'vault_full')).to.eq(true)
-    expect(isVaultError(err, 'stale_write')).to.eq(false)
-    expect(isVaultError(new Error('vault_full'))).to.eq(false)
+    expect(isVaultError(err)).to.be.true
+    expect(isVaultError(err, 'vault_full')).to.be.true
+    expect(isVaultError(err, 'stale_write')).to.be.false
+    expect(isVaultError(new Error('vault_full'))).to.be.false
   })
 })
