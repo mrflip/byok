@@ -4,10 +4,10 @@
 
 | # | Thread            | Status                     |
 | - | ----------------- | -------------------------- |
-| 1 | hkdf_info         | underway                   |
+| 1 | hkdf_info         | in review (#97)            |
 | 2 | release_age       | filed #96                  |
-| 3 | passkey_button_ux | underway                   |
-| 4 | small_sweep       | underway                   |
+| 3 | passkey_button_ux | in review (#98)            |
+| 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | waiting on the gripes line |
 | 6 | race_helper       | waiting on thread 5        |
 | 7 | indexeddb_fixes   | waiting on the gripes line |
@@ -22,6 +22,17 @@
   the caret-on-0.0.x cosmetic, Dependabot security updates bypassing the cooldown (by design,
   PROCESS.md), the days-vs-minutes skew, and dist byte-identity after tsdown 0.23.1 -> 0.23.0
   (unchecked).
+* **Thread 4 (#99), small_sweep.** Budgets now measured + 3 kB (openVault 23, everything 30):
+  wave 2 inherits the room. Most of TODO's sand was already fixed on main. *Review:* clean; left
+  the empty changeset for a README-only change as the Coach's call, and noted that +3 kB loosens
+  the small budgets (stableJsonify 2.3 of 6 kB).
+* **Thread 3 (#98).** The plan's gloss was wrong: on main the passkey button already threw misuse
+  to the host's boundary, like the dialog. Its hand-written 10-line boundary class is a matter for
+  the Coach (library-first), as is the dialog swapping its form for a notice.
+* **Thread 1 (#97).** Bound every written field it could find: the passkey's HKDF info is its
+  wrap's whole binding; envelopes bind `registered_at`; lockboxes their whole public header; a
+  remembered unlock its deadline. Pulled roadmap 3's "every field in the binding" forward for
+  lockboxes (thread 4 noted it in TODO).
 
 *Orchestrator:* for `/turbochat`, learned while running it: a new table row goes in as blocks
 (`insert`, `"as":"blocks"`, a `row` of `cell`s, at `side: "end"` of the table), with placeholder
