@@ -6,7 +6,7 @@ import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts, type Vault } from '../src/vault'
 import type { KeyDeriver } from '../src/key-deriver'
-import { testDeriver } from './helpers'
+import { scopeOf, testDeriver } from './helpers'
 
 /**
  * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, and an
@@ -989,17 +989,17 @@ const rebornWorld = async () => {
 }
 
 describe("a stale session cannot reach into a vault reborn elsewhere", () => {
-  it("store() is refused by storage as stale, and relocks, instead of landing in the reborn vault", async () => {
+  it("store() is refused by storage as stale, and its retry finds the device relocked, instead of landing in the reborn vault", async () => {
     const { vaultOne, vaultTwo } = await rebornWorld()
     expect(vaultOne.getSnapshot().state).to.eq('unlocked')
-    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'stale_write')
+    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'vault_locked')
     expect(vaultOne.getSnapshot().state).to.eq('locked')
     expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
   })
 
   it("store() of a box the reborn vault has never held is refused all the same", async () => {
     const { vaultOne, vaultTwo } = await rebornWorld()
-    await expectRefusal(vaultOne.store('openai', 'sk-fake-stale'), 'stale_write')
+    await expectRefusal(vaultOne.store('openai', 'sk-fake-stale'), 'vault_locked')
     expect(vaultTwo.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
   })
 
@@ -1057,7 +1057,7 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
 
   it("unlock() syncs first: the reborn vault's own passphrase opens it from the stale handle", async () => {
     const { vaultOne } = await rebornWorld()
-    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'stale_write')
+    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'vault_locked')
     await vaultOne.unlock('pw two')
     expect(await vaultOne.read('anthropic')).to.eq('sk-ant-fake-new')
   })
@@ -1069,7 +1069,7 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
     await vaultOne.unlock('pw one')
     const vaultTwo = await world.open()
     await vaultTwo.destroy()
-    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'stale_write')
+    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'vault_locked')
     expect(vaultOne.getSnapshot().state).to.eq('absent')
     expect(world.dbStore.ckeys()).to.have.lengthOf(0)
   })
@@ -1091,58 +1091,140 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
 /**
  * Two devices on one vault, and a way to slip `there`'s doings between `here`'s look at storage
  * and its write: `beforeNextWrite` runs once, inside the next call to the verb it names, before
- * the write itself reaches storage.
+ * the write itself reaches storage. `here` has a vaultDB of its own over the shared store, so
+ * `hereDB` sees only its writes, whatever `there` does.
  */
-const twoDeviceWorld = async () => {
+const twoDeviceWorld = async (hereOpts?: Partial<OpenVaultOpts>) => {
   const world = makeWorld()
-  const here = await world.open()
+  const hereDB = localVaultDB(world.dbStore)
+  const here = await world.open({ vaultDB: hereDB, ...hereOpts })
   await here.unlock('shared pw')
   const there = await world.open({ deviceDB: memoryDeviceDB() })
   await there.unlock('shared pw')
   const beforeNextWrite = (verb: 'updateBox' | 'updateBundle', meanwhile: () => Promise<void>) => {
     if (verb === 'updateBox') {
-      const original = world.vaultDB.updateBox.bind(world.vaultDB)
-      vi.spyOn(world.vaultDB, 'updateBox').mockImplementationOnce(async (...args) => {
+      const original = hereDB.updateBox.bind(hereDB)
+      vi.spyOn(hereDB, 'updateBox').mockImplementationOnce(async (...args) => {
         await meanwhile()
         await original(...args)
       })
     } else {
-      const original = world.vaultDB.updateBundle.bind(world.vaultDB)
-      vi.spyOn(world.vaultDB, 'updateBundle').mockImplementationOnce(async (...args) => {
+      const original = hereDB.updateBundle.bind(hereDB)
+      vi.spyOn(hereDB, 'updateBundle').mockImplementationOnce(async (...args) => {
         await meanwhile()
         await original(...args)
       })
     }
   }
-  return { world, here, there, beforeNextWrite }
+  return { world, hereDB, here, there, beforeNextWrite }
 }
 
 describe("versioned updates: two devices writing at once", () => {
   afterEach(() => { vi.restoreAllMocks() })
 
-  it("a store over a box written meanwhile elsewhere is refused as stale, and shows theirs", async () => {
-    const { here, there, beforeNextWrite } = await twoDeviceWorld()
+  it("a store over a box written meanwhile elsewhere is tried again, and lands over theirs", async () => {
+    const { hereDB, here, there, beforeNextWrite } = await twoDeviceWorld()
     await here.store('anthropic', 'sk-ant-fake-one')
     beforeNextWrite('updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
-    await expectRefusal(here.store('anthropic', 'sk-ant-fake-mine'), 'stale_write')
-    expect(await here.read('anthropic')).to.eq('sk-ant-fake-theirs')
+    const updateBox = vi.spyOn(hereDB, 'updateBox')
+    await here.store('anthropic', 'sk-ant-fake-mine')
+    expect(updateBox).toHaveBeenCalledTimes(2)  // the one that raced, and the retry
+    expect(await here.read('anthropic')).to.eq('sk-ant-fake-mine')
+    expect(await there.read('anthropic')).to.eq('sk-ant-fake-mine')
     expect(here.getSnapshot().state).to.eq('unlocked')
+    expect(here.getSnapshot().boxes).to.have.lengthOf(1)
   })
 
-  it("a stale store, tried again, lands over what beat it: the retry is the caller's choice", async () => {
-    const { here, there, beforeNextWrite } = await twoDeviceWorld()
+  it("each attempt is sealed afresh: the retry carries its own revision and lockboxKey, and the first's is not stored", async () => {
+    const { hereDB, here, there, beforeNextWrite } = await twoDeviceWorld()
+    await here.store('anthropic', 'sk-ant-fake-one')
     beforeNextWrite('updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
+    const updateBox = vi.spyOn(hereDB, 'updateBox')
+    await here.store('anthropic', 'sk-ant-fake-mine')
+    const [raced, landed] = updateBox.mock.calls.map(([, lockbox]) => lockbox)
+    expect(landed?.revision_id).to.not.eq(raced?.revision_id)
+    expect(landed?.lockbox_key_wrapped).to.not.deep.eq(raced?.lockbox_key_wrapped)
+    const standing = await hereDB.readBox(scopeOf('u1'), 'anthropic')
+    expect(standing?.revision_id).to.eq(landed?.revision_id)
+  })
+
+  it("a retry takes the note the box now stands with, as the winner left it", async () => {
+    const { here, there, beforeNextWrite } = await twoDeviceWorld()
+    await here.store('anthropic', 'sk-ant-fake-one', { note: 'first' })
+    beforeNextWrite('updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs', { note: 'theirs' }))
+    await here.store('anthropic', 'sk-ant-fake-mine')
+    expect(here.getSnapshot().boxes[0]?.note).to.eq('theirs')
+    expect(await there.read('anthropic')).to.eq('sk-ant-fake-mine')
+  })
+
+  it("a store that loses every attempt is refused as stale after exactly three, showing the box as it stands", async () => {
+    const { hereDB, here, there } = await twoDeviceWorld()
+    await here.store('anthropic', 'sk-ant-fake-one')
+    const original = hereDB.updateBox.bind(hereDB)
+    // A rival gets in ahead of each of this device's writes.
+    const updateBox = vi.spyOn(hereDB, 'updateBox').mockImplementation(async (...args) => {
+      await there.store('anthropic', `sk-ant-fake-theirs-${String(updateBox.mock.calls.length)}`)
+      await original(...args)
+    })
     await expectRefusal(here.store('anthropic', 'sk-ant-fake-mine'), 'stale_write')
+    expect(updateBox).toHaveBeenCalledTimes(3)
+    expect(here.getSnapshot().state).to.eq('unlocked')
+    expect(await here.read('anthropic')).to.eq('sk-ant-fake-theirs-3')
+  })
+
+  it("a store over a box erased meanwhile elsewhere is tried again, and makes the box anew", async () => {
+    const { here, there, beforeNextWrite } = await twoDeviceWorld()
+    await here.store('anthropic', 'sk-ant-fake-one')
+    beforeNextWrite('updateBox', () => there.erase('anthropic'))
     await here.store('anthropic', 'sk-ant-fake-mine')
     expect(await there.read('anthropic')).to.eq('sk-ant-fake-mine')
   })
 
-  it("a store over a box erased meanwhile elsewhere is refused: erase wins", async () => {
-    const { here, there, beforeNextWrite } = await twoDeviceWorld()
+  it("a retry counts the lockboxes again: a box erased and the room taken meanwhile is refused as full", async () => {
+    const { hereDB, here, there, beforeNextWrite } = await twoDeviceWorld({ maxLockboxes: 2 })
     await here.store('anthropic', 'sk-ant-fake-one')
-    beforeNextWrite('updateBox', () => there.erase('anthropic'))
-    await expectRefusal(here.store('anthropic', 'sk-ant-fake-mine'), 'stale_write')
-    expect(here.getSnapshot().boxes).to.have.lengthOf(0)
+    await here.store('gemini', 'sk-fake-one')
+    beforeNextWrite('updateBox', async () => {
+      await there.erase('gemini')
+      await there.store('openai', 'sk-fake-theirs')
+    })
+    const updateBox = vi.spyOn(hereDB, 'updateBox')
+    await expectRefusal(here.store('gemini', 'sk-fake-mine'), 'vault_full')
+    expect(updateBox).toHaveBeenCalledTimes(1)
+    expect(here.getSnapshot().boxes.map((box) => box.boxlabel)).to.have.members(['anthropic', 'openai'])
+  })
+
+  it("a retry that finds the passphrase changed elsewhere finds the device relocked, and writes nothing", async () => {
+    const { hereDB, here, there, beforeNextWrite } = await twoDeviceWorld()
+    await here.store('anthropic', 'sk-ant-fake-one')
+    beforeNextWrite('updateBox', async () => {
+      await there.store('anthropic', 'sk-ant-fake-theirs')
+      await there.changePassphrase('shared pw', 'their pw')
+    })
+    const updateBox = vi.spyOn(hereDB, 'updateBox')
+    await expectRefusal(here.store('anthropic', 'sk-ant-fake-mine'), 'vault_locked')
+    expect(updateBox).toHaveBeenCalledTimes(1)
+    expect(here.getSnapshot().state).to.eq('locked')
+    await there.lock()
+    await there.unlock('their pw')
+    expect(await there.read('anthropic')).to.eq('sk-ant-fake-theirs')
+  })
+
+  it("an erase refused as stale is thrown at once, never tried again", async () => {
+    const world = makeWorld()
+    const deafStore: StringStore = { ...world.dbStore, subscribe: neverRings }
+    const hereDB = localVaultDB(deafStore)
+    const here = await world.open({ vaultDB: hereDB })
+    await here.unlock('pw one')
+    await here.store('anthropic', 'sk-ant-fake-old')
+    const there = await world.open({ deviceDB: memoryDeviceDB() })
+    await there.destroy()
+    await there.unlock('pw two')
+    await there.store('anthropic', 'sk-ant-fake-new')
+    const eraseBox = vi.spyOn(hereDB, 'eraseBox')
+    await expectRefusal(here.erase('anthropic'), 'stale_write')
+    expect(eraseBox).toHaveBeenCalledTimes(1)
+    expect(await there.read('anthropic')).to.eq('sk-ant-fake-new')
   })
 
   it("a passphrase change racing another device's is refused as stale; theirs stands", async () => {
