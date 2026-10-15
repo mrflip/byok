@@ -1,8 +1,9 @@
 # safebyok
 
-Bring Your Own Key (BYOK) Browser Vault using E2EE (End-to-end Encryption) and pluggable remote
-storage: secrets are encrypted on the user's device, under keys that never leave it, and the
-backend only ever holds ciphertext.
+Store user data encrypted at rest, only accessible on the user's device. Bring Your Own Key (BYOK)
+Browser Vault uses E2EE (End-to-end Encryption) and pluggable remote storage to ensure secrets are
+decrypted where the app runs, using keys that never leave the device. The backend only ever holds
+ciphertext: unrecoverable even with a copy of the database, the application, and its environments.
 
 This repository is a pnpm workspace. Its packages:
 
