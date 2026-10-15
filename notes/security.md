@@ -667,3 +667,9 @@ security expert who knows what questions to ask.
   `maxWhisperBytes`, 512 bytes for its fixed-size fields and its measured names and note, would
   pass `maxVaultBytes` (`vault_full`). The vault's total is reckoned from the snapshot's listing,
   so a vault another device filled meanwhile is caught by the backend's own limit, as before.
+* 2026-10-15: `PassphraseModal` and `PasskeyUnlockButton` (`safebyok-react`) catch, in an error
+  boundary of their own, every failure that is not a condition (misuse, or anything that is no
+  `VaultError`, whatever its value), and show the user fixed copy, never the error's message. React
+  hands the very thrown value to the host root's `onCaughtError` (the console by default), as it
+  would any error a boundary catches; before, it went to the host's boundary instead. The dialog's
+  form, and the passphrase typed into its state, unmount with the failure.
