@@ -7,6 +7,10 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-15: `mask` (`safebyok/utils`) takes a whisper and returns text meant for display: its
+  first and last few characters (two and four by default, at the caller's choice) and its length
+  up to `maxLen`. A short whisper is shown mostly or, with `minStars: 0`, entirely. It throws
+  `bad_option` or `bad_whisper` without quoting its input.
 * 2026-10-14 (revised 2026-10-15 for the push-to-main workflow): the package is staged on npm by `.github/workflows/release.yml`, run on every push
   to main (when the Coach has merged the Version PR, and a version npm lacks is waiting),
   authenticating by npm's trusted publishing (OIDC, no stored token) from the `npm`

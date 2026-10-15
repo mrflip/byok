@@ -7,7 +7,7 @@ ciphertext: unrecoverable even with a copy of the database, the application, and
 
 This repository is a pnpm workspace. Its packages:
 
-* [`safebyok`](packages/safebyok) -- the vault itself, with IndexedDB adapters in `safebyok/idb`.
+* [`safebyok`](packages/safebyok) -- the vault itself, with IndexedDB adapters in `safebyok/idb` and display helpers (`mask`) in `safebyok/utils`.
 * [`safebyok-react`](packages/safebyok-react) -- the React binding: a provider, snapshot hooks,
   and a guard that asks for the passphrase on demand.
 * [`safebyok-convex`](packages/safebyok-convex) -- Convex storage: a Convex component, and the

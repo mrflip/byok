@@ -13,6 +13,8 @@ It is react-friendly (`safebyok-react`) and database agnostic: storage adapters 
 abstract seam, IndexedDB adapters ship in `safebyok/idb`, and a Convex adapter is planned.
 `safebyok/testing` is for tests only: a cheap key deriver, shape-valid records with fake
 ciphertext, and `describeVaultDB`, the vitest suite every storage adapter owes.
+`safebyok/utils` holds small helpers for the app around the vault, such as `mask`, which shows
+which API key a lockbox holds (`sk***...***wxyz`) without showing the key.
 `whiteboard/20261013-relic/proposed-README.md` drafts the full README for when the surface
 settles.
 
