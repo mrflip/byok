@@ -109,8 +109,8 @@ security expert who knows what questions to ask.
   stay the passphrase and the device-bound localUnlockKey.
 * 2026-10-15: a host may let a device stay unlocked indefinitely, by passing
   `forcePassphraseReentryHours: Infinity` (or any huge number); that is the host's choice, with no
-  upper cap. The stored deadline is then clamped to 8.64e15 ms, the last instant a `Date` holds,
-  so `expires_at` stays a finite number and the stored shape is unchanged. What still ends such an
+  upper cap. The stored deadline is then clamped to `FarFuture` (see the next entry), so
+  `expires_at` stays a finite number and the stored shape is unchanged. What still ends such an
   unlock: `lock()` (memory and device record), a passphrase change on another device (the next
   look at the bundle sees a new epoch), and the vault being destroyed or made anew (a new
   `vault_id`). Nothing else does: no timer, and no idle detection. Two consequences: an open
@@ -118,6 +118,15 @@ security expert who knows what questions to ask.
   the vaultDB pushes), so a handle that only reads whispers, on storage that pushes nothing, keeps
   its vaultKey in memory until then; and lowering the option later does not shorten an unlock a
   device already remembers, since the remembered path reads the stored `expires_at` as written.
+* 2026-10-15: every epoch-millisecond time the package validates is an `EpochMillis`: a whole
+  number from `FarPast` (1981-01-01T00:00:00Z) to `FarFuture`, the microsecond epochalypse
+  (`Math.floor(Number.MAX_SAFE_INTEGER / 1000)`, 2255-06-05T23:47:34.740Z). Today that is only the
+  device record's `expires_at` (other stored times are ISO strings; the Convex package stores no
+  epoch ms). A device record out of bounds or fractional fails the schema, reads as "no
+  remembered unlock", and is erased. No migration is kept: the only writer of a deadline past
+  2255 was the unlimited-reentry change before it merged (its ceiling was then 8.64e15). The host's
+  `Clock` is not validated: one returning times outside the bounds, or fractions, writes device
+  records that never read back.
 * 2026-10-14: the package was renamed `byok` → `safebyok` before any release, and its stored
   format tags with it (`safebyok-vault-v1`, `safebyok-lockbox-v1`, `safebyok-unlock-v1`). The
   tags are also the first element of every encryption's additional data, so a record written
