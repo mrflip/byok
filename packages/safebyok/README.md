@@ -69,6 +69,10 @@ means never on this device, until a lock: `askPassphraseAt` then equals the expo
 the latest instant the package accepts (in 2255), so a host can show "until locked" by comparing
 against it.
 
+Lowering the option later takes hold on each device at its next open: an unlock remembered under
+the longer setting, whose deadline lies past the new number of hours from then, is forgotten, and
+the user types their passphrase again. Raising it lengthens no unlock already remembered.
+
 Two calls lock, and each forgets the unlock in memory and on this device alike, so the user types
 their passphrase again afterwards:
 

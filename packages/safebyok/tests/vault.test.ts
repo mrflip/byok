@@ -115,6 +115,12 @@ describe("unlock and lock", () => {
   })
 })
 
+/** The deadline this world's device remembers, or null when it remembers no unlock. */
+const rememberedDeadlineOf = async (world: ReturnType<typeof makeWorld>): Promise<number | null> => {
+  const remembered = await world.deviceDB.readUnlock(scopeOf('u1'))
+  return remembered?.expires_at ?? null
+}
+
 describe("the remembered unlock", () => {
   it("spares the passphrase on a later open, within seven days", async () => {
     const world = makeWorld()
@@ -241,14 +247,14 @@ describe("the remembered unlock", () => {
     })
   })
 
-  it("reads a remembered deadline of exactly FarFuture as unlocked", async () => {
+  it("reads a remembered deadline of exactly FarFuture as unlocked, under Infinity hours", async () => {
     const world = makeWorld()
     const vault = await world.open()
     await vault.unlock('pw one')
     const written = await world.deviceDB.readUnlock(scopeOf('u1'))
     if (written === null) { throw new Error('expected a remembered unlock on the device') }
     await world.deviceDB.writeUnlock({ ...written, expires_at: FarFuture })
-    const reopened = await world.open()
+    const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
     expect(reopened.getSnapshot().state).to.eq('unlocked')
     expect(reopened.getSnapshot().askPassphraseAt).to.eq(FarFuture)
   })
@@ -261,7 +267,8 @@ describe("the remembered unlock", () => {
       const written = await world.deviceDB.readUnlock(scopeOf('u1'))
       if (written === null) { throw new Error('expected a remembered unlock on the device') }
       await world.deviceDB.writeUnlock({ ...written, expires_at: expiresAt })
-      const reopened = await world.open()
+      // Under Infinity no window check refuses it: only the bounds can.
+      const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
       expect(reopened.getSnapshot().state).to.eq('locked')
       expect(reopened.getSnapshot().askPassphraseAt).to.be.null
       expect(await world.deviceDB.readUnlock(scopeOf('u1'))).to.be.null
@@ -295,6 +302,87 @@ describe("the remembered unlock", () => {
     const vault = await world.open({ forcePassphraseReentryHours: 1e6 })
     await vault.unlock('pw one')
     expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + (1e6 * HourMs))
+  })
+})
+
+describe("the remembered unlock, when the host changes forcePassphraseReentryHours", () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it("lowered from Infinity to one hour, forgets a device already remembered at its next open, and the next unlock lasts an hour", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ forcePassphraseReentryHours: Infinity })
+    await vault.unlock('pw one')
+    world.advance(30 * 24 * HourMs)
+    const lowered = await world.open({ forcePassphraseReentryHours: 1 })
+    expect(lowered.getSnapshot().state).to.eq('locked')
+    expect(await world.deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+    await lowered.unlock('pw one')
+    expect(lowered.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + HourMs)
+    const reloaded = await world.open({ forcePassphraseReentryHours: 1 })
+    expect(reloaded.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("writes no record on any open, shortened or not", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ forcePassphraseReentryHours: Infinity })
+    await vault.unlock('pw one')
+    const writeUnlock = vi.spyOn(world.deviceDB, 'writeUnlock')
+    await world.open({ forcePassphraseReentryHours: Infinity })
+    await world.open({ forcePassphraseReentryHours: 1 })
+    await world.open({ forcePassphraseReentryHours: 1 })
+    expect(writeUnlock).not.toHaveBeenCalled()
+  })
+
+  it("never brings back a remembered unlock that another tab's lock() erased during the open", async () => {
+    const world = makeWorld()
+    const otherTab = await world.open({ forcePassphraseReentryHours: Infinity })
+    await otherTab.unlock('pw one')
+    const readUnlock = world.deviceDB.readUnlock.bind(world.deviceDB)
+    vi.spyOn(world.deviceDB, 'readUnlock').mockImplementationOnce(async (scope) => {
+      const kept = await readUnlock(scope)
+      await otherTab.lock()
+      return kept
+    })
+    await world.open({ forcePassphraseReentryHours: 1 })
+    expect(await world.deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+    const later = await world.open({ forcePassphraseReentryHours: 1 })
+    expect(later.getSnapshot().state).to.eq('locked')
+  })
+
+  it("raised, lengthens no unlock already remembered", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ forcePassphraseReentryHours: 12 })
+    await vault.unlock('pw one')
+    const given = world.clock.now() + (12 * HourMs)
+    world.advance(HourMs)
+    const raised = await world.open({ forcePassphraseReentryHours: Infinity })
+    expect(raised.getSnapshot().askPassphraseAt).to.eq(given)
+    expect(await rememberedDeadlineOf(world)).to.eq(given)
+  })
+
+  it("lowered to a window that still reaches past the deadline given, leaves the unlock and its record as they were", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ forcePassphraseReentryHours: 12 })
+    await vault.unlock('pw one')
+    const given = world.clock.now() + (12 * HourMs)
+    world.advance(11 * HourMs)
+    const lowered = await world.open({ forcePassphraseReentryHours: 2 })
+    expect(lowered.getSnapshot().state).to.eq('unlocked')
+    expect(lowered.getSnapshot().askPassphraseAt).to.eq(given)
+    expect(await rememberedDeadlineOf(world)).to.eq(given)
+  })
+
+  it("keeps a deadline exactly at the new window's end, and forgets one a millisecond past it", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ forcePassphraseReentryHours: 12 })
+    await vault.unlock('pw one')
+    const oneMsShort = 12 - (1 / HourMs)
+    world.advance(1)
+    const exactly = await world.open({ forcePassphraseReentryHours: oneMsShort })
+    expect(exactly.getSnapshot().state).to.eq('unlocked')
+    world.advance(-1)
+    const pastIt = await world.open({ forcePassphraseReentryHours: oneMsShort })
+    expect(pastIt.getSnapshot().state).to.eq('locked')
   })
 })
 
