@@ -239,6 +239,9 @@ type VaultKeyPair = { transientKey: CryptoKey, sessionKey: CryptoKey }
  * never prompting: asking for a passphrase is the host's job, and only when a whisper is
  * actually wanted.
  *
+ * An open that fails -- storage refusing a user not yet signed in, say -- rejects with the
+ * storage's own error and leaves nothing running behind it, so the host simply opens again later.
+ *
  * @example
  *   const vault = await openVault({ applabel: 'acme', userId: session.userId, vaultlabel: 'main', vaultDB, ...browserOpts() })
  *   vault.getSnapshot().state  // 'absent' | 'locked' | 'unlocked'
@@ -783,8 +786,15 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
   const unsubscribeDB = vaultDB.subscribe(scope, () => { void quietRefresh() })
 
-  await refresh()
-  await rememberedUnlock()
+  try {
+    await refresh()
+    await rememberedUnlock()
+  } catch (err) {
+    // A failed open hands its caller no handle to close, so it closes itself: no storage watch
+    // (with Convex, a live query) may outlive it. The caller gets the original error.
+    vault.close()
+    throw err
+  }
   bump()
   return vault
 }
