@@ -1,7 +1,9 @@
 # Thread 2: the storage verbs and versionedUpdate, in the core (2026-10-15)
 
-Branch `20261014-storage_verbs`, PR not yet filed. Justify: root green (243 tests, build, attw,
-publint); `packages/safebyok-react` green (7 tests).
+Branch `20261014-storage_verbs`, PR [#18](https://github.com/mrflip/safebyok/pull/18), on main.
+Justify: root green (244 tests, build, attw, publint); `packages/safebyok-react` green (7 tests).
+Reviewed: b6cdd2c (the reviewer's) makes `subscribe` wrap an adapter's throw as
+`storage_unavailable` too; the IndexedDB erase window is now noted.
 
 * **Built**:
   - `VaultDB` (`src/vault-db.ts`) is the verbs alone. Each public verb validates and calls a
@@ -89,7 +91,7 @@ publint); `packages/safebyok-react` green (7 tests).
     are three new error kinds, and the `BundleExpectation`/`LockboxExpectation` types. An
     adapter author renames their primitives to the `do*` verbs and does each update's check
     atomically. No stored record changed shape.
-  - **Minor question**: should `eraseBox` carry a `vault_id`-only expectation? The rulings say
+  - **Open question** (in the PR): should `eraseBox` carry a `vault_id`-only expectation? The rulings say
     "no *version* expectation", and `vault_id` is not a version. It would let `erase()` drop its
     look-before, as `store()` did, and close the reborn-vault window for erase too. It would
     change the verb's signature, and thread 3's `eraseBox`. I'd recommend it, as a follow-up.
