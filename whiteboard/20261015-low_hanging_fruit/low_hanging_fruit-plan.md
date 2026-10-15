@@ -121,6 +121,13 @@ Start: 1, 3, 4. Then the lowest-numbered thread whose base exists, as slots free
     mask and the log line around it. Under the Coach's directive ("if you can safely strip things
     that would cause weird display (like the wrong end of a bidi), do so"), they are stripped too.
     The cost: those scripts vanish from a mask. On #37's open questions for the Coach to reverse.
+14. **`store()` sleeps a long random while before each retry, doubling** (the Coach, in chat):
+    "it should include a long random sleep that doubles each time to avoid thundering herds";
+    three attempts in all stays ("more poetic"). As a new PR, thread 14 `store_backoff`, cut
+    from #44's tip, so #44 can merge as it stands. My numbers, a two-way door: before retry
+    *n* (1 or 2), a uniformly random wait in [2^(n-1), 2^n) seconds, so 1-2 s, then 2-4 s,
+    at most 6 s added to a store that lost two races. Named constants, not options. The jitter is
+    `Math.random`: it guards no secret.
 
 ## The threads
 
