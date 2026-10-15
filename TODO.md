@@ -89,6 +89,8 @@ package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
     while the core's in-memory store lets it escape the write that rang it. One catch in the
     shared `subscribe` fixes every adapter, and `reportError`, where the platform has it, is the
     option for not dropping it silently.
+  This matter is under discussion in the sprint doc's Open Matters tab:
+  <https://claude.ai/code/artifact/5a4d1c6c-b0ef-4483-becd-1a4dde21fc94>.
 * **No null as an error's cause.** IndexedDB's `request.error` can be null on an abort, so a
   failed write's `cause` can be null. Report a calm "the write failed for an unknown reason"
   error instead, and never null.
@@ -102,7 +104,13 @@ package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
   that store's decision. #89's Postgres machinery is a lot of weight for that: a counter column, a
   trigger, a bundle-row lock on every lockbox insert and erase, and serialization failures at
   stricter isolation. Revisit whether Postgres should guarantee it at all, or simply declare a
-  limit the vault enforces. No backward compatibility needed.
+  limit the vault enforces. No backward compatibility needed. This matter is under discussion in
+  the sprint doc's Open Matters tab:
+  <https://claude.ai/code/artifact/5a4d1c6c-b0ef-4483-becd-1a4dde21fc94>.
+* **Revocation and server signing.** Removing an unlock envelope is not revocation today (the vaultKey
+  never rotates; `notes/security.md`); what revocation should mean, and whether the server signs,
+  are open. This matter is under discussion in the sprint doc's Open Matters tab:
+  <https://claude.ai/code/artifact/5a4d1c6c-b0ef-4483-becd-1a4dde21fc94>.
 * **`listBoxRecords`** ([#73](https://github.com/mrflip/safebyok/pull/73), used by
   [#78](https://github.com/mrflip/safebyok/pull/78)): the recommendation is to move it into the
   `VaultDB` base class, so no store writes it (`human/20261015-sprint_big_feats_rulings.md`). It
@@ -112,30 +120,24 @@ package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
   `navigator.credentials`. Also check that `addPasskey`'s proof-first order still gets the prompt
   on a slow device or an older Safari, where the click's user activation may run out
   ([#88](https://github.com/mrflip/safebyok/pull/88)).
-* **Still awaiting a ruling** (the rulings note explains each): adding `vault_id` and the scope to
-  the passkey HKDF `info`; the epoch revocation note in `notes/security.md`; pnpm's
-  `minimumReleaseAge` as a repo-wide age rule; `addPasskey`'s function-argument shape; Postgres's
-  default limit of 1000.
+* **What level of e2e testing is appropriate?** Much is tested against fakes today (a fake
+  `navigator.credentials`, jsdom, in-process stores). The Coach runs acceptance tests by hand on
+  real authenticators and real backends; whether to automate any of that, and how far, is open.
+* **Ruled since** (sprint matters; the rulings note explains each): the passkey HKDF `info` gains
+  `vault_id` and the scope, and every derivation and cipher binding was swept for a written field
+  left out (thread 1); pnpm's `minimumReleaseAge` is a repo-wide seven-day rule (thread 2);
+  `addPasskey`'s function-argument shape is kept as built. The epoch revocation note in
+  `notes/security.md` is now part of the revocation matter above, under discussion in the sprint
+  doc's Open Matters tab.
 
 ## Sand in the sandals
 
 Small irritants, each a few lines, picked up by whoever is nearby.
 
-* The root scripts chain with `&&`, so a root-level failure hides package failures until it is
-  fixed.
-* Convex's `--no-error-on-unmatched-pattern` should go when it gets its own configs.
-* The demo's coverage has no `include`.
-* **The second flaky tamper test.** [#25](https://github.com/mrflip/safebyok/pull/25) fixed
-  `packages/safebyok/tests/crypto.test.ts` with `tweakB64`; the same overwrite-with-`A` remains in
-  `packages/safebyok/tests/vault.test.ts` ("a lockbox with altered ciphertext refuses to open")
-  and fails one run in sixty-four. Use the helper. (Low-hanging-fruit thread 10 sweeps it in.)
 * **Click through the demo's passphrase dialog.** No agent has a browser, so the dialog in
   `demos/safebyok-demo-react` has never been exercised by hand since `safebyok-react` became a
   built package. `pnpm --filter safebyok-demo-react dev`, then set, enter, mistype and dismiss a
   passphrase; anything odd becomes a TODO.
-* The root eslint config does not ignore a root `dist/`, so a stale build from before the core
-  moved (gitignored, so invisible to `git status`) fails the whole justify with thousands of
-  warnings. Ignore `**/dist/` at the root; until then, `rm -rf dist` at the root clears it.
 
 ## Roadmapped
 
