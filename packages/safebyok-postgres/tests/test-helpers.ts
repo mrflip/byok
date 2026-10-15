@@ -1,0 +1,120 @@
+import { PGlite } from '@electric-sql/pglite'
+import type { VaultDB } from 'safebyok'
+import type { VaultDBVerbs } from 'safebyok/testing'
+import { postgresVaultDB } from '../src/index'
+import type { PostgresClient, PostgresListen } from '../src/index'
+import { VaultTablesSql } from '../src/vault-tables'
+
+// Everything the core's tests use too, so a test here star-imports this one module as TH.
+export * from 'safebyok/testing'
+
+const made: { db?: Promise<PGlite> } = {}
+
+/**
+ * This test file's database: one PGlite, made once with {@link VaultTablesSql} run in it. A
+ * PGlite takes seconds to start, so a file's tests share one and {@link emptyDatabase} it.
+ */
+export const database = (): Promise<PGlite> => {
+  made.db ??= madeDatabase()
+  return made.db
+}
+
+const madeDatabase = async (): Promise<PGlite> => {
+  const db = new PGlite()
+  await db.exec(VaultTablesSql)
+  return db
+}
+
+/** This file's database, its tables emptied. */
+export const emptyDatabase = async (): Promise<PGlite> => {
+  const db = await database()
+  await db.exec('TRUNCATE safebyok_lockboxes, safebyok_bundles')
+  return db
+}
+
+/** A PGlite's own `listen`, as the README wires it. */
+export const listenOn = (db: PGlite): PostgresListen => (channel, onNotify) => db.listen(channel, onNotify)
+
+/**
+ * One VaultDB per user, each made for that user as a server makes one per request: the core's
+ * suite reaches two users' vaults through one adapter, where a server's request is one user's.
+ */
+export const perUser = (vaultDBFor: (userId: string) => VaultDB): VaultDBVerbs => {
+  const vaultDBs = new Map<string, VaultDB>()
+  const as = ({ user_id }: { user_id: string }): VaultDB => {
+    const known = vaultDBs.get(user_id)
+    if (known) { return known }
+    const vaultDB = vaultDBFor(user_id)
+    vaultDBs.set(user_id, vaultDB)
+    return vaultDB
+  }
+  const anyone = vaultDBFor('anyone')
+  return {
+    maxRecordBytes: anyone.maxRecordBytes,
+    maxVaultBytes:  anyone.maxVaultBytes,
+    readBundle:     (scope) => as(scope).readBundle(scope),
+    createBundle:   (bundle) => as(bundle).createBundle(bundle),
+    updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
+    readBox:        (scope, boxlabel) => as(scope).readBox(scope, boxlabel),
+    listBoxes:      (scope) => as(scope).listBoxes(scope),
+    updateBox:      (scope, lockbox, expected) => as(scope).updateBox(scope, lockbox, expected),
+    eraseBox:       (scope, boxlabel, expected) => as(scope).eraseBox(scope, boxlabel, expected),
+    eraseVault:     (scope, expected) => as(scope).eraseVault(scope, expected),
+    subscribe:      (scope, onChange) => as(scope).subscribe(scope, onChange),
+  }
+}
+
+/** One statement a {@link spyClient} was handed. */
+export type SentStatement = { text: string, params: unknown[] }
+
+/**
+ * A PostgresClient that passes each statement to `client` -- or, where `answer` says, answers it
+ * itself -- and keeps every statement it was handed, in order.
+ *
+ * @example
+ *   const spy = TH.spyClient(db)
+ *   spy.sent.length  // 0, until the VaultDB asks something
+ */
+export const spyClient = (client: PostgresClient, answer?: (text: string) => Promise<{ rows: unknown[] }> | undefined) => {
+  const sent: SentStatement[] = []
+  const spied: PostgresClient = {
+    query: async (text, params) => {
+      sent.push({ text, params })
+      return await (answer?.(text) ?? client.query(text, params))
+    },
+  }
+  return { client: spied, sent }
+}
+
+/** A PostgresClient whose every statement rejects with `err`, as a driver does when the database is down. */
+export const failingClient = (err: Error): PostgresClient => ({
+  query: () => Promise.reject(err),
+})
+
+/** What `operation` rejected with; fails the test if it resolved. */
+export const refusalOf = async (operation: Promise<unknown>): Promise<{ kind?: unknown, cause?: unknown, message?: unknown }> => {
+  try {
+    await operation
+  } catch (err) {
+    return err as { kind?: unknown }
+  }
+  throw new Error('the operation was not refused')
+}
+
+/** Resolves once `check` holds, looking every few milliseconds; rejects after a second. */
+export const eventually = async (check: () => boolean): Promise<void> => {
+  for (let ii = 0; ii < 200; ii += 1) {
+    if (check()) { return }
+    await new Promise((resolve) => { setTimeout(resolve, 5) })
+  }
+  throw new Error('it never came to pass')
+}
+
+/** Whether `onChange` got called, kept for a test to look at. */
+export const changeCounter = () => {
+  const heard = { count: 0 }
+  return { heard, onChange: () => { heard.count += 1 } }
+}
+
+/** The postgresVaultDB a request for `userId` makes over `db`, listening there. */
+export const requestFor = (db: PGlite, userId: string | null) => postgresVaultDB({ client: db, userId, listen: listenOn(db) })

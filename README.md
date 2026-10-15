@@ -12,6 +12,8 @@ This repository is a pnpm workspace. Its packages:
   and a guard that asks for the passphrase on demand.
 * [`safebyok-convex`](packages/safebyok-convex) -- Convex storage: a Convex component, and the
   `VaultDB` adapter that speaks to it.
+* [`safebyok-postgres`](packages/safebyok-postgres) -- Postgres storage: the tables, and the
+  server-side `VaultDB` over them, through the driver your app already has.
 * [`safebyok-demo-react`](demos/safebyok-demo-react) -- a playground app; never published.
 
 `pnpm install`, then `pnpm justify` lints, typechecks, tests and builds every package.
