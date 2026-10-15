@@ -699,6 +699,8 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await expectRefusal(vaultDB.readBox(scopeOf('u1'), 'not:a:label'), 'bad_label')
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('Not_a_label', 'one'), noBoxYet), 'bad_label')
       await expectRefusal(vaultDB.eraseBox({ ...scopeOf('u1'), user_id: '' }, 'anthropic', thisVault), 'bad_label')
+      const overlongScope = scopeOf('u'.repeat(101))
+      await expectRefusal(vaultDB.listBoxes(overlongScope), 'bad_label')
     })
 
     it("refuses a malformed record or expectation, or a bundle under another vault_id, before storage sees it", async () => {
