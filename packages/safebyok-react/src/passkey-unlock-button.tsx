@@ -16,7 +16,9 @@ import { askPasskey, passkeysAvailable } from './passkey'
  * or a failure that is no VaultError -- never reaches the host's page: the button takes itself
  * away, `onGripe` hears "Your passkey can't be used here just now. Unlock with your passphrase
  * instead.", and React reports the error through the root's `onCaughtError` (the console, by
- * default, with the component stack), where the developer and an error tracker meet it.
+ * default, with the component stack), where the developer and an error tracker meet it. Focus
+ * the button held falls to the page then: a dialog of the host's own moves it to its passphrase
+ * field, as `PassphraseModal` does.
  *
  * @example <PasskeyUnlockButton vault={vault} onDone={close} onGripe={setGripe} />
  * @example <PasskeyUnlockButton vault={vault} rpId="acme.example" onDone={close} onGripe={setGripe} />  // passkeys made under that rp.id

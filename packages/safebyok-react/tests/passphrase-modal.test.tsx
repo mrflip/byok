@@ -94,6 +94,13 @@ describe("PassphraseModal", () => {
       expect(heard).to.deep.equal([])
     })
 
+    it("announces the message to a screen reader", async () => {
+      render(<PassphraseModal vault={wrong()} onDone={noop} />)
+      submitPassphrase('pw wrong')
+      const said = await screen.findByRole('alert')
+      expect(said.textContent).to.eq('That passphrase did not open the vault.')
+    })
+
     it("clears the message once the user types again", async () => {
       render(<PassphraseModal vault={wrong()} onDone={noop} />)
       submitPassphrase('pw wrong')
@@ -120,7 +127,7 @@ describe("PassphraseModal", () => {
       const { reported } = TH.renderReporting(<Catcher><PassphraseModal vault={vaultUnlockingWith(() => Promise.reject(closed))} onDone={(unlocked) => { heard.push(unlocked) }} /></Catcher>)
       submitPassphrase('pw one')
       expect(await screen.findByText('Something went wrong')).to.not.be.null
-      expect(screen.getByRole('alert').textContent).to.match(Trouble)
+      expect(screen.getByRole('alertdialog', { name: 'Something went wrong' }).textContent).to.match(Trouble)
       expect(reported).to.deep.equal([closed])
       expect(reported[0]).to.equal(closed)
       expect(screen.queryByText(/caught:/)).to.be.null
@@ -136,6 +143,15 @@ describe("PassphraseModal", () => {
       expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
       expect(screen.queryByDisplayValue('pw one')).to.be.null
       expect(document.activeElement).to.equal(screen.getByRole('button', { name: 'Close' }))
+    })
+
+    it("closes as if dismissed when the user presses Escape on the notice", async () => {
+      const heard: boolean[] = []
+      const vault = vaultUnlockingWith(() => Promise.reject(new VaultError('vault_closed', 'The vault was closed.')))
+      TH.renderReporting(<PassphraseModal vault={vault} onDone={(unlocked) => { heard.push(unlocked) }} />)
+      submitPassphrase('pw one')
+      fireEvent.keyDown(await screen.findByRole('button', { name: 'Close' }), { key: 'Escape' })
+      expect(heard).to.deep.equal([false])
     })
 
     it("closes as if dismissed when the user closes the notice", async () => {
