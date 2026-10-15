@@ -5,11 +5,12 @@ Four shelves. **Roadmapped**: the order we build in, in flight or next, each a s
 is blocked. **Soonish**: wanted, but a design question stands in the way; the note says which.
 **Not yet**: reasonable, deferred; do not anticipate them in your implementation.
 
-The scattered small tasks have their own preplan:
-`whiteboard/20261014-low_hanging_fruit/20261014-low_hanging_fruit-preplan.md` (flaky tamper
-tests, explicit options with a `safebyok/browser` defaults export, the provider surfacing a
-failed open, `mask` in `safebyok/utils`, the boundary audit, `stale_write` retry, a size budget in CI, a
-docs sweep, the label-grammar report).
+The scattered small tasks have their own preplan, ready to start:
+`whiteboard/20261014-low_hanging_fruit/20261014-low_hanging_fruit-preplan.md` (the vault-size
+cap, explicit options with a `safebyok/browser` defaults export, the provider surfacing a failed
+open, epoch milliseconds everywhere, `mask` in `safebyok/utils`, the boundary audit,
+`stale_write` retry, a size budget in CI, the sand below, a docs sweep, the label-grammar
+report).
 
 ## Sand in the sandals
 
@@ -22,12 +23,10 @@ Small irritants, each a few lines, picked up by whoever is nearby.
   longer in the cloud.
 * Convex's `--no-error-on-unmatched-pattern` should go when it gets its own configs.
 * The demo's coverage has no `include`.
-* **Flaky tamper tests** (low_hanging_fruit thread 1). Two tests alter ciphertext by writing `A`
-  over its first base64url character; one run in sixty-four that character already is `A`,
-  nothing changes, and the test fails. [#25](https://github.com/mrflip/safebyok/pull/25) fixes
-  `packages/safebyok/tests/crypto.test.ts`; the same pattern remains in
-  `packages/safebyok/tests/vault.test.ts` ("a lockbox with altered ciphertext refuses to open"),
-  which should use the same helper.
+* **The second flaky tamper test.** [#25](https://github.com/mrflip/safebyok/pull/25) fixed
+  `packages/safebyok/tests/crypto.test.ts` with `tweakB64`; the same overwrite-with-`A` remains in
+  `packages/safebyok/tests/vault.test.ts` ("a lockbox with altered ciphertext refuses to open")
+  and fails one run in sixty-four. Use the helper. (Low-hanging-fruit thread 10 sweeps it in.)
 * **Dependabot after the move.** `.github/dependabot.yml` still says `directory: /`, which should
   cover a pnpm workspace from its root lockfile, but nobody has seen it update a dependency under
   `packages/` or `demos/` since the core moved there. Check its next weekly run; if it skips them,
@@ -36,6 +35,9 @@ Small irritants, each a few lines, picked up by whoever is nearby.
   `demos/safebyok-demo-react` has never been exercised by hand since `safebyok-react` became a
   built package. `pnpm --filter safebyok-demo-react dev`, then set, enter, mistype and dismiss a
   passphrase; anything odd becomes a TODO.
+* The root eslint config does not ignore a root `dist/`, so a stale build from before the core
+  moved (gitignored, so invisible to `git status`) fails the whole justify with thousands of
+  warnings. Ignore `**/dist/` at the root; until then, `rm -rf dist` at the root clears it.
 * Make a test helpers library, `TestHelpers.ts`, star-imported as `TH`. Look for things like
   `await new Promise((resolve) => { setTimeout(resolve, 0) })` and replace them with helpers (eg
   `await TH.wakeupAtNextTick()`). #25's `tweakB64` would move into it.
@@ -44,14 +46,14 @@ Small irritants, each a few lines, picked up by whoever is nearby.
 
 In order. A later item that depends on an earlier one says so.
 
-### 1. Releases: version, bump, publish all work -- in flight
+### 1. Releases: version, bump, publish all work -- built, unproven
 
-Sprint **pr_releases** (`whiteboard/20261014-pr_releases/`): `safebyok-react` publishable
-([#15](https://github.com/mrflip/safebyok/pull/15), merged), the core under `packages/safebyok`
-([#16](https://github.com/mrflip/safebyok/pull/16), merged), then changesets, the release script
-and the rewritten `release.yml` ([#22](https://github.com/mrflip/safebyok/pull/22), in review). Done when a changeset merged
-to `main` produces a Version PR, and merging that PR stages every public package on npm for the
-Coach's approval. Left after the sprint, for the first real release to answer:
+Sprint **pr_releases** landed ([#15](https://github.com/mrflip/safebyok/pull/15),
+[#16](https://github.com/mrflip/safebyok/pull/16),
+[#22](https://github.com/mrflip/safebyok/pull/22); its sprint doc is
+[#23](https://github.com/mrflip/safebyok/pull/23)): PROCESS.md *Releases* is the contract now.
+What remains is the first real release, which only the Coach can run, and which proves or
+disproves the machinery:
 
 * The npm staging questions: does a staged version keep the `--tag` it was staged with when
   approved? Is the provenance statement still attached after approval? Does a rejected stage use
@@ -60,23 +62,30 @@ Coach's approval. Left after the sprint, for the first real release to answer:
 * The Coach's switches before the first release (the sprint's progress file lists them): allow
   Actions to create PRs, the first changeset, the tag ruleset, a token for the Version PR's CI.
 * Deprecate `safebyok@0.0.0` once a real version is live.
+* Before `safebyok-convex` joins the lockstep group: `safebyok` becomes its peer (today a
+  dependency, so a host could hold two copies and `instanceof VaultError` would fail across
+  them; low-hanging-fruit thread 10), and the package gets a publishable `dist/` (2).
 
-### 2. Convex backend, documented well enough to test from another app -- in flight
+### 2. Convex backend, documented well enough to test from another app -- built, unwalked
 
-Sprint **convex_vaultdb** (`whiteboard/20261014-convex_vaultdb/`): the Convex agent skills,
-the core's storage verbs with `versionedUpdate` and `stale_write` (`20261014-storage_verbs`),
-the Convex component, then `convexVaultDB(client, api)`. Done when the sprint's whole-vault test
-passes over the adapter. What the sprint leaves for after it, in this order:
+Sprint **convex_vaultdb** landed ([#17](https://github.com/mrflip/safebyok/pull/17) to
+[#21](https://github.com/mrflip/safebyok/pull/21)): the storage verbs with versioned updates,
+the component, `convexVaultDB(client, api.safebyok)`, and a README that already says what is
+stored and how big a vault can be. CI covers the package (`pnpm -r`). What is left:
 
-* **The package README as an install guide**: `npm install safebyok safebyok-convex`, the
-  `convex.config` line, `getUserId`, the client, what is stored and what is not, every error
-  kind the adapter raises. Written so the Coach can follow it cold in the other app; that walk
-  is the acceptance test.
+* **The Coach walks the README cold in the other app.** That walk is the acceptance test; what
+  trips becomes a TODO. Before it, the vault-size cap (3), so the README's "about 150" becomes
+  a number the library enforces.
 * **A demo over Convex** (the React demo gains a Convex store beside IndexedDB), so a second
   device seeing a write is something a person can click through.
-* **CI for `safebyok-convex`** (the Coach wires it after #15 lands).
-* **Component packaging**: how `convex.config` and the generated types ship in the build
-  (design.md's open question; the component thread answers it or reports).
+* **Component packaging**: a publishable `dist/` with `convex.config` and the generated types
+  (design.md's open question, still open), and `safebyok` as a peer (1).
+* **Rulings the sprint asked for** (`human/20261015-sprint_convex_vaultdb_done.md`): whether a
+  vault locks itself on `not_permitted` (sign-out); `destroy()` on a handle that never saw a
+  bundle resolving without erasing, and a retry after a refused `destroy()` taking the reborn
+  vault; whether the label grammar is enforced server-side; the tests' `react` dev dependency
+  (keep, recommended); the first-emit deviation of `watchVault` (accept; design.md records it).
+  A failed `openVault` leaking its subscription is in flight as `20261015-open_vault_unsubscribe`.
 
 ### 3. Reservations before the first release: the stored format and the public surface
 
@@ -115,6 +124,10 @@ first release; the Convex sprint's component thread puts the same columns in its
   binding; the Convex design already strips them on read, and surfacing them to a host is a
   later additive field on the listing. What no tag gives is verification while locked: a signed
   listing would need a vault signing keypair, and it is additive later, so it is not reserved.
+* **Every time is UTC epoch milliseconds, an integer** (ruled; now in STYLE.md): stored
+  records, the snapshot, the device record, the Convex columns, the demo's own records. The
+  low-hanging-fruit `epoch_millis` thread does the code outside the stored records; the records
+  switch here, with the rename below, since the old fields go anyway.
 * **Timestamps named for the event, as epoch-millisecond integers, and only three.** Lockbox
   `registered_at` (first stored through the library; carried forward) and `changed_at` (ruled
   the stronger contract: it moves only when the serialized whisper differs; `store()` decrypts
@@ -140,6 +153,18 @@ first release; the Convex sprint's component thread puts the same columns in its
   bag; the Convex table omits an empty bag as it did an absent note.
 * **The device record's deadline is named for its consequence**: `expires_at` becomes
   `ask_passphrase_at` (see 4). Local-only, so this one is cheap at any time.
+* **A vault has a size cap, mirrored on the adapter** (low-hanging-fruit thread 1 builds it;
+  listed here because it is a surface to settle before the release). Today nothing caps how
+  many lockboxes a vault holds, and on Convex listing, watching and erasing each read the whole
+  vault in one 16 MiB transaction (erase reads it twice): past about 150 of the largest default
+  lockboxes a vault cannot be erased, so "delete my account" fails, and every write re-lists a
+  vault that only grows. The pattern already used for `maxWhisperBytes` against
+  `maxRecordBytes`: `openVault` takes `maxLockboxes` (default 100, the host raises it freely),
+  the adapter declares `maxVaultBytes` (Convex: 8 MiB, half its read budget; IndexedDB and
+  local: Infinity), and `openVault` refuses as `bad_option` when `maxLockboxes` times
+  `maxWhisperBytes` exceeds it, so raising either knob keeps the erase guarantee. `store()` of a
+  new boxlabel at the cap refuses as `vault_full`, a condition the user can act on. A batched
+  erase is not needed once the cap holds, and would leave list and watch unbounded anyway.
 * **Surface names that are breaking after `0.1.0` and free before it**: `keyDeriver` required
   (low-hanging-fruit thread 2); `rememberForMs` -> `forcePassphraseReentryHours` and the
   snapshot's `expiresAt` -> `askPassphraseAt` (the field names ship now even if the shut timer
@@ -301,11 +326,6 @@ Ruled "with the retry work": a way for a host to hear about an erase-versus-upda
 after the retry limit, rather than only a `stale_write`. API design: is it an `openVault` option,
 a snapshot field, or an error the provider surfaces? Decide after the retry (low-hanging-fruit
 thread 6) has been used in anger.
-
-### Convex skills in the convex sub-package
-
-In flight as thread 1 of the convex sprint; stays here until it lands. Add the Convex skill
-**scoped** to `packages/safebyok-convex/` only, with only the files likely to be relevant.
 
 ### Others
 
