@@ -1,8 +1,8 @@
 # Thread 10: docs_housekeeping (2026-10-15)
 
 Branch `20261015-docs_housekeeping`, PR [#86](https://github.com/mrflip/safebyok/pull/86),
-stacked on #77 `12fc4d0` (restacked onto thread 9 at assembly). Justify: green, 1,954 tests
-(core 940, convex 275, graphql 142, postgres 134, demo 124, root 123, indexeddb 101, react 71,
+stacked on #77 `12fc4d0` (restacked onto thread 9 at assembly). Justify: green, 1,955 tests
+(core 941, convex 275, graphql 142, postgres 134, demo 124, root 123, indexeddb 101, react 71,
 argon2-wasm 44); `pnpm size` green.
 
 * **Built**:
@@ -19,7 +19,12 @@ argon2-wasm 44); `pnpm size` green.
     adapter in its opening and its *Errors* section.
   - `notes/security.md`: a "Dependencies: hash-wasm has no published audit" entry right after
     thread 1's argon2-wasm entry (not at the end, to stay clear of other threads' appends),
-    pointing at that entry for the unzeroed working memory.
+    pointing at that entry for the unzeroed working memory. At the review, it and two older
+    entries (2026-10-14's Argon2id, thread 1's argon2-wasm) stopped calling `@noble/hashes`'s
+    Argon2id audited: its README says its one audit (Cure53, January 2022, at 1.0.0) left `argon2`
+    out of scope. Our Argon2id is unaudited either way.
+  - The review (`fixed`) added a limits test that bites and a u2 routing test for
+    `updateBundle`, `subscribe`, `eraseBox` and `eraseVault`.
   - `graphql-yoga` 5.24.1 (2026-09-17) and `@graphql-tools/schema` 10.1.3 (2026-09-30), exact
     pins, in `safebyok-graphql`'s devDependencies.
 * **Decisions taken**:
@@ -42,7 +47,12 @@ argon2-wasm 44); `pnpm size` green.
   - `@graphql-tools/schema` now has two copies in the lockfile: ours at 10.1.3, and 10.1.4
     under `graphql-yoga` (its own `^10` range). They share one `graphql`, so nothing breaks;
     transitive dependencies (`@graphql-tools/utils` 12.0.4 among them) can still be days old.
-  - The plan's "leave `passphrase_epoch` alone" held trivially: nothing here mentions it.
+  - **For thread 7 at restack**: the review's u2 routing test in the core's
+    `tests/test-helpers.test.ts` names `passphrase_epoch` (twice, in one `updateBundle` call);
+    rename it with the rest.
+  - Left as minor: perUser's `@example` (`postgresVaultDB({ client, userId })`) is not a call the
+    core's tests make, and leaves out `listen`; `servingOnly` lets a blank `user_id` through to
+    `localVaultDB` (which refuses it `bad_label`), where a server refuses `not_permitted`.
   - TODO.md still names `safebyok-argon2-wasm` "or so" and lists the IndexedDB and Postgres
     side quests; that is the sprint's wrap-up to strike, so left alone.
 * **For the Coach**:
