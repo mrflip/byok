@@ -7,9 +7,9 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 | # | Thread             | Base                  | Status  |
 | - | ------------------ | --------------------- | ------- |
-| 1 | kdf_configs        | #66 tip `dfdbbec`     | pending |
-| 2 | vaultdb_validation | #66 tip `dfdbbec`     | pending |
-| 3 | react_dialog       | #66 tip `dfdbbec`     | pending |
+| 1 | kdf_configs        | #66 tip `dfdbbec`     | underway |
+| 2 | vaultdb_validation | #66 tip `dfdbbec`     | underway |
+| 3 | react_dialog       | #66 tip `dfdbbec`     | underway |
 | 4 | ci_tooling         | #66 tip `dfdbbec`     | pending |
 | 5 | docs_refresh       | #66 tip `dfdbbec`     | pending |
 | 6 | thin_tests         | #66 tip `dfdbbec`     | pending |
