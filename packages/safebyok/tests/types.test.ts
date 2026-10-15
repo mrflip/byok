@@ -80,6 +80,7 @@ describe("VaultScope", () => {
 const OldIso = '2026-10-14T00:00:00.000Z'
 const { registered_at: _bundleTime, ...bundleWithoutTime } = TH.bundleOf('u1')
 const { unlocks: _unlocks, ...bundleWithoutUnlocks } = TH.bundleOf('u1')
+const { unlock_epoch: _epoch, ...bundleWithoutEpoch } = TH.bundleOf('u1')
 /** The three fields a bundle held its one passphrase in, before `unlocks`. */
 const EnvelopeFieldsOfOld = {
   key_deriver_label:            'test_digest_v0',
@@ -104,6 +105,7 @@ const BundleCases = [
   [bundleWithoutTime,                                       false,  'a bundle missing its registered_at'],
   [{ ...bundleWithoutTime, created_at: OldIso, updated_at: OldIso }, false, 'a bundle from before its time was named registered_at'],
   [{ ...bundleWithoutUnlocks, ...EnvelopeFieldsOfOld },      false,  'a bundle from before its unlocks were a list of envelopes'],
+  [{ ...bundleWithoutEpoch, passphrase_epoch: 1 },           false,  'a bundle from before its epoch was named unlock_epoch'],
 ] as const
 
 const manyEnvelopes = (count: number) => Array.from({ length: count }, (_unused, ii) => TH.envelopeOf(`phrase${String(ii)}`))
