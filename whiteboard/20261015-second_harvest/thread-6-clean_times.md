@@ -1,6 +1,6 @@
 # Thread 6: clean_times (2026-10-15)
 
-Branch `20261015-clean_times`, PR not yet filed, stacked on [#52](https://github.com/mrflip/safebyok/pull/52)
+Branch `20261015-clean_times`, PR [#64](https://github.com/mrflip/safebyok/pull/64), stacked on [#52](https://github.com/mrflip/safebyok/pull/52)
 (the top of the merge stack, `2ca104f`; first cut from #62 at `4303367` and rebased). Justify green:
 core 669, convex 265, react 27, demo 61, root 105. `pnpm size` within the stack's limits
 (everything 22.13 -> 22.45 kB, openVault 15.11 -> 15.43 kB; no limit raised).
