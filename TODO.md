@@ -220,6 +220,9 @@ first release; the Convex sprint's component thread puts the same columns in its
   binding; the Convex design already strips them on read, and surfacing them to a host is a
   later additive field on the listing. What no tag gives is verification while locked: a signed
   listing would need a vault signing keypair, and it is additive later, so it is not reserved.
+  *Built for lockboxes in [#97](https://github.com/mrflip/safebyok/pull/97) (sprint matters,
+  thread 1), which binds the whole public header. The `whisper_codec` and `public` bag
+  reservations remain, and are bound automatically once they enter the schema.*
 * **Every time is UTC epoch milliseconds, an integer** (ruled; now in STYLE.md; **built**,
   second_harvest thread 6, with the two bullets below it): stored
   records, the snapshot, the device record, the Convex columns, the demo's own records. The
