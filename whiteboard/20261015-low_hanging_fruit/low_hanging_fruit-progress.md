@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 2 filing; 1, 3, 4, 5, 9, 10, 11 filed; 6 and 8 start from 2 once it files, then 7. Newer than the plan wherever the two disagree.
+**Status**: 6 and 8 building (from #40 at ea3dc98); 1, 2, 3, 4, 5, 9, 10, 11 filed; 7 waits on 6. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -9,13 +9,13 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | #  | Thread | Base | Status |
 | -- | ------ | ---- | ------ |
 | 1  | `vault_size_cap` | `origin/main` | filed [#34](https://github.com/mrflip/safebyok/pull/34) |
-| 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | filing |
+| 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | filed [#40](https://github.com/mrflip/safebyok/pull/40), stacked on #34 |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
 | 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37) |
-| 6  | `boundary_audit` | thread 2 | pending |
+| 6  | `boundary_audit` | thread 2 (#40, ea3dc98) | underway |
 | 7  | `stale_write_retry` | thread 6 | pending |
-| 8  | `size_budget` | thread 2 | pending |
+| 8  | `size_budget` | thread 2 (#40, ea3dc98) | underway |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
 | 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
@@ -67,7 +67,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   - *Review:* fixed (security note: concurrent stores on one handle overshoot too). Taken at
     filing: an undeclared `maxRecordBytes` refused too; "not even one lockbox fits". Left: no
     server-side cap; a full vault refreshes on every refused store. Rebased onto #29.
-* **Thread 2** (`explicit_options`) -- for threads 6, 7, 8:
+* **Thread 2** (`explicit_options`, [#40](https://github.com/mrflip/safebyok/pull/40), stacked on #34) -- for threads 6, 7, 8:
   - `keyDeriver` is required (Zod-checked, the given object kept); `safebyok/browser`'s
     `browserOpts({ dbName }?)` returns one frozen bag per `dbName` (so an inline spread in a
     React render does not reopen the vault). `expiresAt` is `askPassphraseAt`;
