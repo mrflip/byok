@@ -173,6 +173,12 @@ up for a poor name, or marks off a stanza that should be its own function is a s
 Vitest, in each package's `tests/`, path for path with its `src/`: `src/foo/bar.ts` is tested in
 `tests/foo/bar.test.ts`. Test and build artifacts never land in `src/`.
 
+* **Test helpers live in one module, `tests/test-helpers.ts`, star-imported as `TH`**:
+  `import * as TH from './test-helpers'`, then `TH.scopeOf('u1')`. It exports everything. The
+  core's is also published as `safebyok/testing`, so another package's tests reach the same
+  helpers; a package with helpers of its own keeps them in its own `tests/test-helpers.ts`, which
+  re-exports `safebyok/testing` beside them, so each test still has one `TH`.
+
 * **Assertions are chai-style**: `expect(foo).to.eq(bar)`, `to.deep.equal` (`to.equal` is `===`;
   an object or array wants `deep`), `to.have.lengthOf`, `to.throw`, `to.have.members`. `true`,
   `false`, `null` and `undefined` in chai's property form: `to.be.null`, never `to.eq(null)`.
