@@ -64,6 +64,10 @@ makes for itself. Any option you pass after the spread replaces the default it n
 * `safebyok/idb` -- the IndexedDB device store, `idbDeviceDB`, and `inspectIdbDeviceDB`, a raw
   window onto its rows for a debug panel. The IndexedDB vault store, `idbVaultDB`, is a package
   of its own, `safebyok-indexeddb`.
+* `safebyok/validators` -- the checks for names and notes (`Label`, `UserId`, `LockboxNote`,
+  `DefaultValidators`, `AnyTextValidators`), their bounds (`MaxLabelChars`, `LabelPattern`,
+  `MaxUserIdChars`, `MaxNoteChars`) and the `Whisper` and `EpochMillis` schemas, for a form, a
+  server or another library to check what the vault will. All are in the main entry too.
 
 `openVault` takes its `keyDeriver` and `deviceDB` from you, with no default behind them. A
 default would be imported by `openVault` itself, so every app would ship it, used or not: a
@@ -72,6 +76,43 @@ makes differently -- another implementation of the same Argon2id spec, in WebAss
 to its platform -- and such an app should not also ship this one (about 15 kB minified). So the
 main entry names no default and imports nothing from `safebyok/browser`, and the package is
 marked `sideEffects: false`: what you never import never ships.
+
+## Names, notes, and your own checks
+
+By default a label (`applabel`, `vaultlabel`, `boxlabel`) is lowercase words of letters and
+digits joined by single underscores, 2 to 40 characters (`Label`); a `userId` is text of 1 to 100
+characters (`UserId`); and a note is text of at most 256 characters (`LockboxNote`). That suits
+API keys. A host that wants more -- labels in Hebrew, Arabic or Thai, a password manager's
+long notes, its own auth's id shape -- passes its own Zod schemas as `validators`, and each
+**replaces** ours outright:
+
+```ts
+import * as z from 'zod'
+import { AnyTextValidators, UserId } from 'safebyok/validators'
+
+// Built once, at module level.
+const validators = {
+  ...AnyTextValidators,                                 // labels and notes of any text
+  boxlabel: z.string().min(1).max(200),                 // ...but box names of 1 to 200 characters
+  userId:   z.string().regex(/^user_[A-Za-z0-9]{27}$/), // and Clerk's user ids
+}
+const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB, validators, ...browserOpts() })
+await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team account, billed monthly' })
+```
+
+* **A check only checks.** What passes is kept exactly as you passed it, never what the schema
+  makes of it: a name is bound into the ciphertext and names its rows, so a schema that trims or
+  lowercases would otherwise send the same user to another vault.
+* **The refusal is the vault's own**: kind `bad_label` (`bad_option` for a note), naming the
+  field, never quoting the name or your schema's issues. A schema must check synchronously; one
+  that is async or throws is refused as `bad_option`.
+* **Every name is checked everywhere**, records read back included. Narrow a check later and a
+  lockbox stored under a name the new one refuses reads back as `corrupt_record`.
+* **Sizes follow the names.** Each `store()` weighs its lockbox -- whisper, names and note -- and
+  refuses one heavier than the backend holds in a record (`lockbox_too_large`), or one that
+  would take the vault past what the backend holds of a vault (`vault_full`).
+* Labels of any text are shown to your users as written: mind what bidirectional and invisible
+  characters can make one look like.
 
 ## Your own storage adapter
 
@@ -94,6 +135,10 @@ Each ckey is the JSON text of its kind and names, so a name may hold any text at
 quote, a bracket -- and no two vaults ever share a ckey or list each other's lockboxes. The ckeys
 are part of the stored format: use these, not a join of your own, and every version finds your
 rows.
+
+Your `do*` methods take any text as a name: the public verbs check every name and note, with the
+vault's `validators`, which each takes as its last argument. An adapter that hands its calls on
+to another VaultDB's public verbs passes them `AnyTextValidators`, as its own have checked.
 
 ## Key derivation
 
@@ -332,7 +377,7 @@ render for that, and hands a condition down as `openError`).
 
 | Kind                  | What happened                                                    | What to do                                              |
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
-| `bad_label`           | a label (or the `userId`) that fails the rules, or an `unlocklabel` the vault already has | Pass labels the app chose; check a user-typed one first with `Label`, and against the snapshot's `unlocks` |
+| `bad_label`           | a label (or the `userId`) that fails the vault's check: `Label` (or `UserId`) by default, or the host's own in `validators`; or an `unlocklabel` the vault already has | Pass labels the app chose; check a user-typed one first with the same check, and against the snapshot's `unlocks` |
 | `bad_whisper`         | a whisper JSON cannot carry (`undefined`, a function, a class instance) | Store plain JSON; to empty a lockbox, `erase` it |
 | `bad_option`          | an option or argument out of its range: an `openVault` option, an `argon2idDeriver` spec, a `store()` note, a passphrase or callback of the wrong type, a record handed to a `VaultDB` write; a passkey's answer of the wrong shape, or one already a way in | Fix the call; the message names what it takes |
 | `vault_closed`        | the vault handle was closed                                      | Open the vault again; do not use a handle after `close()` |
@@ -352,7 +397,8 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `absent_vault`        | the vault has never been created, or was deleted elsewhere, and the call will not create it | Unlock with a new passphrase to create it |
 | `absent_unlock`       | no way into the vault has that `unlock_id`, or is the passkey that answered: it may have been removed on another device | Look again at the snapshot's `unlocks`, and ask the user which they mean |
 | `whisper_too_large`   | a whisper over the vault's `maxWhisperBytes`                     | Tell the user it is too large; a host that means to allow more passes a larger `maxWhisperBytes` |
-| `vault_full`          | a new lockbox in a vault already holding its `maxLockboxes`, or a write the storage backend has no room for | Tell the user to erase a lockbox first; the host may raise `maxLockboxes` where the backend allows |
+| `lockbox_too_large`   | a lockbox -- its whisper, boxlabel and note together, as the UTF-8 bytes of its JSON -- over its storage's `maxRecordBytes`; only a host whose validators admit long names or notes, or a backend with small records, meets it | Tell the user to store a smaller whisper or a shorter note |
+| `vault_full`          | a new lockbox in a vault already holding its `maxLockboxes`, a lockbox whose names and note would take the vault past its storage's `maxVaultBytes`, or a write the storage backend has no room for | Tell the user to erase a lockbox first; the host may raise `maxLockboxes` where the backend allows |
 | `too_many_unlocks`    | a passphrase or passkey added to a vault already holding `MaxUnlocks` (8) ways in | Tell the user to remove one first             |
 | `last_unlock`         | removing the vault's last passphrase: a vault always keeps one, since a passkey can be lost with its device | Add another passphrase first; to be rid of the vault, `destroy()` it |
 | `corrupt_record`      | a stored record failed validation or decryption verification     | Nothing was changed. Do not retry; tell the user, and see a developer: the record is damaged, was moved, or came from a newer safebyok. A lockbox whose damage leaves the vault's listing readable (altered ciphertext, a missing whisper, a record naming another boxlabel) can be removed with `erase()`; a lockbox row that breaks the listing still stops `openVault` |
