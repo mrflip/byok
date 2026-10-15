@@ -1,6 +1,6 @@
 # Thread 5: mask_utils (2026-10-15)
 
-Branch `20261015-mask_utils`, PR [#37](https://github.com/mrflip/safebyok/pull/37), cut from `origin/main`. Justify: green (core 343
+Branch `20261015-mask_utils`, PR [#37](https://github.com/mrflip/safebyok/pull/37), cut from `origin/main`. Justify: green (core 397
 tests, convex 213, react 7, demo 24, root 91).
 
 * **Built**: `safebyok/utils`, a new entry point (`src/utils.ts`, a `tsdown.config.ts` line, the
@@ -19,31 +19,41 @@ tests, convex 213, react 7, demo 24, root 91).
     never splits a surrogate pair; `Array.from` and `[...str]` are both refused by the linter).
     A cut may part an emoji sequence, a flag or a skin tone: what is left is visible text.
   - **The final stage is `plainLine`, private to `mask.ts`** (not exported: it would be public
-    surface to carry, and the property test exercises it through `mask`). It runs `normalize('NFC')`
-    (a letter and its accent become one letter), then strips `\p{M}` (every combining mark that
-    remains, which defeats stacked "Zalgo" marks), `\p{C}` (controls, format characters, lone
-    surrogates, private-use, unassigned), `\p{Z}` (every space and the line and paragraph
-    separators), `\p{Default_Ignorable_Code_Point}` (soft hyphen, fillers, variation selectors,
-    tags, invisible operators), `\p{Bidi_Control}` and U+2800 (the blank braille pattern). Strip,
-    never escape.
+    surface to carry, and the property test exercises it through `mask`). It runs `normalize('NFC')`,
+    strips `\p{M}` (every combining mark that remains, which defeats stacked "Zalgo" marks), `\p{C}`
+    (controls, format characters, lone surrogates, private-use, unassigned), `\p{Z}` (every space
+    and the line and paragraph separators), `\p{Default_Ignorable_Code_Point}`, `\p{Bidi_Control}`,
+    U+2800 (blank braille), U+1D159 (musical null notehead, drawn blank), U+FFFC (object replacement,
+    drawn as a box) and the strong right-to-left spans below; then composes and strips a second
+    time, so jamo parted by an invisible compose. Strip, never escape. U+FFFD stays (visible).
   - **It runs twice**: on the whisper before it is counted (so invisible characters and marks do
     not count as characters, and a cut cannot orphan a mark), and on the whole result before it
     is returned (the backstop the Coach asked for; today a no-op, because the pieces were already
     clean and stars and the marker are ASCII).
   - **Whitespace is removed entirely, not collapsed to one space**: a key has no meaningful
     spaces, and a result with none cannot start or end on a blank or wrap.
-  - **Strong right-to-left letters stay** (Hebrew, Arabic and so on): they are visible text, and
-    `\p{Bidi_Class}` is not available in JavaScript regexes, so excluding them would mean listing
-    scripts by hand and would erase whole languages from a mask. With every explicit bidi control
-    gone, what remains is the ordinary bidi algorithm on letters, ASCII stars and dots: the result
-    stays on one line and cannot change how the text around it displays. A stricter reading is
-    one line of regex if the Coach wants it.
+  - **Strong right-to-left letters and numbers are stripped** (*my earlier case for keeping them
+    was wrong; changed by the orchestrator on review under the Coach's directive*): with every bidi
+    control gone, RTL letters still reorder the digits, stars and punctuation beside them, in the
+    mask and in the log line around it (`אבגדהוזחטיכלמנ123` gave `אב***...***נ123`). The pattern
+    `StrongRtl` is the spans DerivedBidiClass.txt (the Unicode Character Database) gives R, AL and AN
+    by default: U+0590-08FF, U+FB1D-FDFF, U+FE70-FEFF, U+10800-10FFF and U+1E800-1EFFF. **Ranges, not
+    script names**, as the orchestrator suggested names: JavaScript regexes have no `Bidi_Class`, and a
+    list of names misses Arabic numbers and any script added later. Checked against the engine
+    (Node 24): every script name asked for is accepted (Garay too), and every letter and number of
+    them lies inside the ranges; the only `Script_Extensions` members outside are shared punctuation,
+    marks and left-to-right numbers (Aegean, Ugaritic). The tests assert each script's letters by the
+    engine's own script data, independent of the ranges. Cost: those scripts vanish from a mask; an
+    all-RTL whisper gives the all-stripped rule's `minStars` stars.
   - **Cost of stripping `\p{M}`**: scripts whose vowels are combining marks (Devanagari, Thai,
     Arabic with harakat) lose them in the mask. Accepted by the Coach's "fidelity left the
     building"; flagged here so it is a known consequence.
   - **`maxLen` too small never throws**: the collapsed form (`head***...***tail`) that does not
     fit gives `'*'.repeat(maxLen)`, no head, no tail, no ellipsis; `maxLen: 0` gives `''`.
-    `Infinity` never collapses. The default is 15 again (it no longer grows with `head` and
+    `Infinity` never collapses. **`head`, `tail` and `minStars` are capped at 1000** (a whiff, not a
+    copy), refused as `bad_option` above it, so no option builds an unbounded string (a vast
+    `minStars` with `maxLen: Infinity` was a bare `RangeError` with no kind); `maxLen` may be any
+    safe integer or `Infinity`, and the message names both limits. The default is 15 again (it no longer grows with `head` and
     `tail`, so `{ head: 4 }` alone on a long whisper gives 15 stars). `maxLen` counts code points
     and wins over `minStars`. Nonsense (negative, fractional, NaN, text) is still `bad_option`
     at the entry.
@@ -65,9 +75,15 @@ tests, convex 213, react 7, demo 24, root 91).
   `safebyok/browser` needs the same line (a mechanical conflict). `unicorn/prefer-spread` and
   `@typescript-eslint/no-misused-spread` together refuse `Array.from(str)` and `[...str]`, hence
   `text.match(/./gsu)`. The remote branch had been rebased by the orchestrator onto a newer main
-  while this worktree was gone; the local branch was reset to the remote tip.
+  while this worktree was gone; the local branch was reset to the remote tip. Not rebased again at
+  filing (the Coach said not to; the PR was mergeable).
 * **For thread 8**: a size-budget entry for `import { mask } from 'safebyok/utils'` waits on this
   merging; it ships `errors` and `zod` (core's peer), not the vault.
-* **For the Coach**: whether to keep right-to-left letters (above), the `\p{M}` cost to Indic and
-  Thai text, whitespace removed rather than collapsed, and whether `mask` should validate lighter
-  than `Z.object` (it ships zod). The changeset is `minor`.
+* **Commits after the last review** (the reviewer's last were 492ecc4, f9f8406 and 2b76f54): the
+  `api:` and `docs:` commits that strip right-to-left letters, U+FFFC, double-compose, cap
+  `head`/`tail`/`minStars`, and widen the property test. They were not reviewed.
+* **For the Coach**: **RTL letters and numbers are stripped (orchestrator, under the Coach's
+  directive); the cost: those scripts vanish from a mask.** Reverse by dropping `StrongRtl` from
+  `composeAndStrip`. Also: the `\p{M}` cost to Indic and Thai text, whitespace removed rather than
+  collapsed, the 1000 cap, and whether `mask` should validate lighter than `Z.object` (it ships
+  zod). The changeset is `minor`.
