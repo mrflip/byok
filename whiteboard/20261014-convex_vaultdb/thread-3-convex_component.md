@@ -1,6 +1,6 @@
 # Thread 3: the Convex component (2026-10-15)
 
-Branch `20261014-convex_component`, PR not yet filed, stacked on #18 (restacked onto its final
+Branch `20261014-convex_component`, PR [#19](https://github.com/mrflip/safebyok/pull/19), stacked on #18 (restacked onto its final
 tip, `0e67d7a`). Justify: root green (268 tests, build, attw, publint); `packages/safebyok-convex`
 green (lint, typecheck, 99 tests).
 
@@ -84,7 +84,13 @@ green (lint, typecheck, 99 tests).
   - **For thread 4**: `tests/helpers.ts` has `realRecords()` (a vault made by the core) and
     `componentTest()`. A ConvexError's `data` arrives intact through `convex-test`.
 
+* **Review**: clean, no commits. Two of its minor notes taken as docs (`62c2051`): Convex's
+  validation errors quote refused arguments into the host's logs (`notes/security.md`), and
+  `./test` assumes vitest or Vite (README).
+
 * **For the Coach**:
+  - **Vault size**: no write enforces a cap, so a vault can outgrow one transaction's erase
+    (and later list and watch). Should a write-side cap or a batched erase come before publishing?
   - **CI**: `safebyok-convex` is in no CI job. Wiring it waits on #15. It needs `pnpm build` at
     the root first.
   - **Publishing**: a built `dist/` needs each component module kept as its own file (no
