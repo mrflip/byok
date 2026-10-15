@@ -5,8 +5,10 @@ const MinutesPerHour = 60
 const MinutesPerDay = 24 * MinutesPerHour
 const MsPerHour = 3_600_000
 
-/** Pluralized count, 'minute' to '15 minutes'. */
-const counted = (count: number, unit: string): string => `${String(count)} ${unit}${count === 1 ? '' : 's'}`
+/** A count with its unit spelled out and pluralized: 'minute' to '15 minutes', in English. */
+const counted = (count: number, unit: 'day' | 'hour' | 'minute'): string => (
+  new Intl.NumberFormat('en', { style: 'unit', unit, unitDisplay: 'long', useGrouping: false }).format(count)
+)
 
 /**
  * What the dialog promises about how long an unlock lasts, from the vault's
