@@ -34,9 +34,11 @@ budget.
   - **Lockbox: whole header, not more positional parts** -- roadmap 3's "first decision", so a
     future field is bound the day it is added. Scope and `vault_id` stay positional (the record
     does not hold them).
-  - **Device record and envelopes: explicit parts**, built from what the vault expects (its scope,
-    the bundle's `vault_id` and epoch), not from the record, so a record moved to another scope
-    still fails its AEAD as well as the scope check (security.md promised this).
+  - **Device record and envelopes: explicit parts.** The device record's are built from what the
+    vault expects (its scope, the bundle's `vault_id` and epoch), not from the record, so a record
+    moved to another scope still fails its AEAD as well as the scope check (security.md promised
+    this). An envelope's scope is the vault's own too, but its `vault_id` and `registered_at` are
+    the stored bundle's: the bundle is the record being verified.
   - **Bundle: only the immutable fields** (`vault_id`, `registered_at`) go into envelopes.
 * **Left unbound, with the reason in `notes/security.md`**: the bundle's `unlock_epoch` and
   `unlocks` list (each envelope's key is its own way in's; a change to one must not rewrap the
@@ -61,7 +63,13 @@ budget.
     `wrong_passphrase`); `destroy()` needs no unlock, so a host can clear one. The changeset says
     so.
 * **For the Coach**: the Argon2 associated-data reason (above) is a judgment call: say if you want
-  the passphraseKey's derivation bound too, and it becomes a `KeyDeriver` interface change.
+  the passphraseKey's derivation bound too, and it becomes a `KeyDeriver` interface change. A
+  tampered `registered_at` (or any envelope field) reads as `wrong_passphrase` or `wrong_passkey`,
+  not `corrupt_record`: the AEAD cannot tell a wrong proof from an altered bundle (going to the
+  Coach as a matter).
+* **Review's minor leftovers** (thread-reviewer, no change made): `CipherBindingPart` accepting
+  `undefined` also silently drops a field set to undefined by mistake; the lockbox format tag is
+  bound twice (the leading tag and the header's `format`), harmless.
 * **For thread 4 (TODO.md)**: roadmap 3's "Every field the library writes is in the binding" is
   built for the lockbox (whole header) by this thread; the `whisper_codec` and `public` bag
   reservations remain, and will be bound automatically when added to the schema.
