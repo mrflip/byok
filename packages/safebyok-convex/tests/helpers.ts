@@ -1,8 +1,11 @@
 import { anyApi, defineSchema } from 'convex/server'
+import type { Infer } from 'convex/values'
 import { convexTest, defineTestApp } from 'convex-test'
 import { Lockbox, VaultBundle, localVaultDB, memoryDeviceDB, memoryStore, openVault } from 'safebyok'
 import type { StringStore, VaultScope, Whisper } from 'safebyok'
 import type { ComponentApi } from '../src/component-api'
+import type { Lockbox as LockboxRecord } from '../src/component/validators'
+import { toConvexLockbox } from '../src/convex-vault-db'
 import { SafebyokComponent } from '../src/server'
 import type { GetUserId } from '../src/server'
 import { modules, register, schema } from '../src/test'
@@ -11,7 +14,7 @@ import { modules, register, schema } from '../src/test'
 import { testDeriver } from '../../safebyok/tests/helpers'
 
 /** The component's functions, called directly as a root app's: no host wrapper, no auth. */
-export const vaults = anyApi.vaults as unknown as ComponentApi['vaults']
+export const vaults = anyApi['vaults'] as unknown as ComponentApi['vaults']
 
 /**
  * A fresh in-memory backend holding only the component, its functions at the root. With
@@ -29,7 +32,10 @@ export const hostWith = (getUserId: GetUserId) => {
 }
 
 /** The README's getUserId: the signed-in identity's subject, or null when no one is. */
-export const bySubject: GetUserId = async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null
+export const bySubject: GetUserId = async (ctx) => {
+  const identity = await ctx.auth.getUserIdentity()
+  return identity?.subject ?? null
+}
 
 export const scopeOf = (userId: string, vaultlabel = 'main'): VaultScope => ({ applabel: 'acme', user_id: userId, vaultlabel })
 
@@ -43,6 +49,7 @@ export const bundleOf = (userId: string, overrides: Partial<VaultBundle> = {}): 
   vault_id:            `vault-id-${userId}`,
   passphrase_epoch:    1,
   key_deriver_label:   'test_digest_v0',
+  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- base64 of the literal text 'salt-for-tests': a fake salt (which is public material anyway), not a credential
   passphrase_salt_b64: 'c2FsdC1mb3ItdGVzdHM',
   vault_key_passphrase_wrapped: fakeCiphered(`bundle-${userId}`),
   created_at:          '2026-10-15T00:00:00.000Z',
@@ -50,8 +57,11 @@ export const bundleOf = (userId: string, overrides: Partial<VaultBundle> = {}): 
   ...overrides,
 })
 
-/** A shape-valid Lockbox whose ciphered fields are fake. */
-export const boxOf = (boxlabel: string, tag: string, overrides: Partial<Lockbox> = {}): Lockbox => ({
+/**
+ * A shape-valid Lockbox whose ciphered fields are fake, as the component's validator types it (a
+ * note or none): what the core writes, so it serves the core's VaultDB verbs too.
+ */
+export const boxOf = (boxlabel: string, tag: string, overrides: Partial<Infer<typeof LockboxRecord>> = {}): Infer<typeof LockboxRecord> => ({
   format:              'safebyok-lockbox-v1',
   boxlabel,
   revision_id:         `rev-${tag}`,
@@ -96,7 +106,7 @@ export const realRecords = async (userId = 'u1') => {
     bundle:     VaultBundle.parse(bundleRow.record),
     boxes:      rows.flatMap((row) => {
       const checked = Lockbox.safeParse(row.record)
-      return checked.success ? [{ ckey: row.ckey, lockbox: checked.data }] : []
+      return checked.success ? { ckey: row.ckey, lockbox: toConvexLockbox(checked.data) } : []
     }),
   }
 }

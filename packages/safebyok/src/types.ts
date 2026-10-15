@@ -103,7 +103,11 @@ export const Lockbox = Z.object({
   lockbox_key_wrapped: Ciphered,
   /** The whisper, ciphered under this lockbox's lockboxKey. */
   whisper_ciphered:    Ciphered,
-  /** Public note shown beside the lockbox while locked. Never put secret material here. */
+  /**
+   * Public note shown beside the lockbox while locked. Never put secret material here. Written
+   * only when there is one; read as absent when undefined too, as earlier versions stored it and
+   * IndexedDB keeps it.
+   */
   note:                Z.string().max(256).optional(),
   created_at:          Z.string(),
   updated_at:          Z.string(),

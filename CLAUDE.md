@@ -139,6 +139,9 @@ pnpm changeset                     # a PR's release note; `--empty` when it need
 * `packages/safebyok/eslint.config.mjs` -- mechanically enforced style; the other packages' and
   the root's configs are cut from it. Where it and a prose document disagree, it is a bug -- flag
   it.
+* `tsconfig.base.json` -- every compiler strictness flag, extended by every tsconfig, which adds
+  only its runtime (lib, types, jsx). Its `@safebyok/source` condition has tsc, the editor and
+  lint read a sibling package's `src/`, never a stale `dist/`.
 
 ## Conventions At A Glance
 

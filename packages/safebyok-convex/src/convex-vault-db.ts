@@ -3,6 +3,8 @@ import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex
 import { ConvexError } from 'convex/values'
 import { VaultDB, VaultError } from 'safebyok'
 import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultScope } from 'safebyok'
+import type { Infer } from 'convex/values'
+import type { Lockbox as LockboxRecord } from './component/validators'
 import { isSafebyokErrorData } from './refusals'
 import type { SafebyokApi } from './server'
 
@@ -72,11 +74,28 @@ export const convexVaultDB = (client: ConvexVaultClient, api: SafebyokApi): Vaul
   return new ConvexVaultDB(client, api)
 }
 
+/**
+ * A core lockbox as Convex's validator takes it: a note, or no note field at all. The core writes
+ * no undefined note, but its record type allows one, as earlier versions stored it and IndexedDB
+ * keeps it; Convex's validator has no place for it.
+ */
+export const toConvexLockbox = (lockbox: Lockbox): Infer<typeof LockboxRecord> => {
+  const { note, ...noteless } = lockbox
+  return { ...noteless, ...(note !== undefined && { note }) }
+}
+
 /** Each verb one call to the function of the same purpose; the base class validates both ways. */
 class ConvexVaultDB extends VaultDB {
   readonly maxRecordBytes = ConvexDocumentBytes
 
-  constructor(private readonly client: ConvexVaultClient, private readonly api: SafebyokApi) { super() }
+  private readonly client: ConvexVaultClient
+  private readonly api:    SafebyokApi
+
+  constructor(client: ConvexVaultClient, api: SafebyokApi) {
+    super()
+    this.client = client
+    this.api    = api
+  }
 
   protected doReadBundle(scope: VaultScope): Promise<unknown> {
     return refusing(() => this.client.query(this.api.getBundle, { scope }))
@@ -99,7 +118,7 @@ class ConvexVaultDB extends VaultDB {
   }
 
   protected doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
-    return refusing(() => this.client.mutation(this.api.updateBox, { scope, lockbox, expected }))
+    return refusing(() => this.client.mutation(this.api.updateBox, { scope, lockbox: toConvexLockbox(lockbox), expected }))
   }
 
   protected doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {

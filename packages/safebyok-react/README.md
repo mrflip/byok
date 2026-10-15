@@ -25,6 +25,7 @@ the app share one copy of each.
 ## Development
 
 `pnpm justify` here runs lint, typecheck, tests (vitest + testing-library under jsdom) and the
-build with its publint and arethetypeswrong checks. The tests, typecheck and build resolve
-`safebyok` through its built `dist/`, as a consumer's would; each script builds the core first by
-itself (`pnpm build:deps`), so a fresh clone needs no prebuild step.
+build with its publint and arethetypeswrong checks. The typecheck and lint read `safebyok` from
+its source, through the workspace's `@safebyok/source` export condition, so they need no build. The
+tests and build resolve it through its built `dist/`, as a consumer's would, and build the core
+first by themselves (`pnpm build:deps`), so a fresh clone needs no prebuild step.

@@ -104,7 +104,7 @@ export const updateBox = mutation({
   returns: v.boolean(),
   handler: async (ctx, { scope, lockbox, expected }) => {
     const bundle = await findBundleRow(ctx.db, scope)
-    if (bundle === null || bundle.vault_id !== expected.vault_id) { return false }
+    if (bundle?.vault_id !== expected.vault_id) { return false }
     const standing = await findBoxRow(ctx.db, scope, lockbox.boxlabel)
     const standingRevisionId = standing?.revision_id ?? null
     if (standingRevisionId !== expected.revision_id) { return false }
@@ -129,7 +129,7 @@ export const eraseBox = mutation({
   returns: v.boolean(),
   handler: async (ctx, { scope, boxlabel, expected }) => {
     const bundle = await findBundleRow(ctx.db, scope)
-    if (bundle === null || bundle.vault_id !== expected.vault_id) { return false }
+    if (bundle?.vault_id !== expected.vault_id) { return false }
     const standing = await findBoxRow(ctx.db, scope, boxlabel)
     if (standing) { await ctx.db.delete('safebyok_lockboxes', standing._id) }
     return true
@@ -148,7 +148,7 @@ export const eraseVault = mutation({
   returns: v.boolean(),
   handler: async (ctx, { scope, expected }) => {
     const bundle = await findBundleRow(ctx.db, scope)
-    if (bundle === null || bundle.vault_id !== expected.vault_id) { return false }
+    if (bundle?.vault_id !== expected.vault_id) { return false }
     const boxes = await vaultBoxRows(ctx.db, scope)
     await Promise.all(boxes.map((row) => ctx.db.delete('safebyok_lockboxes', row._id)))
     await ctx.db.delete('safebyok_bundles', bundle._id)

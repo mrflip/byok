@@ -32,7 +32,8 @@ describe("getBundle and createBundle", () => {
     await t.mutation(vaults.createBundle, { bundle: bundleOf('u1') })
     const latecomer = bundleOf('u1', { vault_id: 'vault-id-latecomer' })
     expect(await t.mutation(vaults.createBundle, { bundle: latecomer })).to.deep.equal(bundleOf('u1'))
-    expect((await allRows(t)).bundles).to.have.lengthOf(1)
+    const { bundles } = await allRows(t)
+    expect(bundles).to.have.lengthOf(1)
   })
 
   it("settles two creations racing on one bundle: the creation race is closed", async () => {
@@ -42,7 +43,8 @@ describe("getBundle and createBundle", () => {
       t.mutation(vaults.createBundle, { bundle: bundleOf('u1', { vault_id: 'vault-id-two' }) }),
     ])
     expect(first.vault_id).to.eq(second.vault_id)
-    expect((await allRows(t)).bundles).to.have.lengthOf(1)
+    const { bundles } = await allRows(t)
+    expect(bundles).to.have.lengthOf(1)
   })
 
   it("keeps each user's and each vault's bundle apart", async () => {
@@ -56,7 +58,8 @@ describe("getBundle and createBundle", () => {
     const t = componentTest()
     const { format: _format, ...formatless } = bundleOf('u1')
     await expect(t.mutation(vaults.createBundle, { bundle: formatless as never })).rejects.toThrow(/format/)
-    expect((await allRows(t)).bundles).to.have.lengthOf(0)
+    const { bundles } = await allRows(t)
+    expect(bundles).to.have.lengthOf(0)
   })
 })
 
@@ -98,7 +101,8 @@ describe("getBox and updateBox", () => {
     const t = await withBundle()
     const { note: _note, ...noteless } = boxOf('anthropic_api_key', 'a1')
     await t.mutation(vaults.updateBox, { scope: u1, lockbox: noteless, expected: noBoxYet })
-    const [row] = (await allRows(t)).lockboxes
+    const { lockboxes } = await allRows(t)
+    const [row] = lockboxes
     expect(row).not.to.have.property('note')
     expect(await t.query(vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(noteless)
   })
@@ -109,7 +113,8 @@ describe("getBox and updateBox", () => {
     const landed = await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })
     expect(landed).to.be.true
     expect(await t.query(vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(boxOf('anthropic_api_key', 'a2'))
-    expect((await allRows(t)).lockboxes).to.have.lengthOf(1)
+    const { lockboxes } = await allRows(t)
+    expect(lockboxes).to.have.lengthOf(1)
   })
 
   const StaleCases = [
@@ -139,7 +144,8 @@ describe("getBox and updateBox", () => {
   it("refuses any box in a scope that holds no bundle, writing nothing", async () => {
     const t = componentTest()
     expect(await t.mutation(vaults.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a1'), expected: noBoxYet })).to.be.false
-    expect((await allRows(t)).lockboxes).to.have.lengthOf(0)
+    const { lockboxes } = await allRows(t)
+    expect(lockboxes).to.have.lengthOf(0)
   })
 
   it("keeps the same boxlabel in two users' vaults apart", async () => {
@@ -340,12 +346,14 @@ describe("a large vault, within Convex's per-transaction limits", () => {
     const t = componentTest(true)
     await t.mutation(vaults.createBundle, { bundle: bundleOf('u1') })
     for (let ii = 0; ii < BoxCount; ii++) {
-      const lockbox = boxOf(`box_${ii}`, `${ii}`, { whisper_ciphered: bigCiphered })
+      const lockbox = boxOf(`box_${String(ii)}`, String(ii), { whisper_ciphered: bigCiphered })
       await t.mutation(vaults.updateBox, { scope: u1, lockbox, expected: noBoxYet })
     }
     expect(await t.query(vaults.listBoxSummaries, { scope: u1 })).to.have.lengthOf(BoxCount)
-    expect((await t.query(vaults.watchVault, { scope: u1 })).boxes).to.have.lengthOf(BoxCount)
+    const { boxes } = await t.query(vaults.watchVault, { scope: u1 })
+    expect(boxes).to.have.lengthOf(BoxCount)
     expect(await t.mutation(vaults.eraseVault, { scope: u1, expected: thisVault })).to.be.true
-    expect((await allRows(t)).lockboxes).to.have.lengthOf(0)
+    const { lockboxes } = await allRows(t)
+    expect(lockboxes).to.have.lengthOf(0)
   })
 })

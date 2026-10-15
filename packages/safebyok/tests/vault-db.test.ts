@@ -66,7 +66,13 @@ class MapVaultDB extends VaultDB {
  * box rejects.
  */
 class TroubledVaultDB extends MapVaultDB {
-  constructor(private readonly failure: () => never) { super() }
+  private readonly failure: () => never
+
+  constructor(failure: () => never) {
+    super()
+    this.failure = failure
+  }
+
   protected override doReadBundle(): Promise<unknown> { this.failure() }
   protected override doSubscribe(): () => void { this.failure() }
   protected override doUpdateBox(): Promise<boolean> { return Promise.reject(new Error('the backend dropped the connection')) }

@@ -370,7 +370,12 @@ class StringStoreVaultDB extends VaultDB {
   // most for any one record.
   readonly maxRecordBytes = 1024 * 1024
 
-  constructor(private readonly store: StringStore) { super() }
+  private readonly store: StringStore
+
+  constructor(store: StringStore) {
+    super()
+    this.store = store
+  }
 
   // Work is deferred into the promise even though the store is synchronous: a storage fault must
   // reject the returned promise, never throw before the caller has one in hand. And each write

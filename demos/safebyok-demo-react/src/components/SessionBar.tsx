@@ -24,17 +24,6 @@ export const SessionBar = ({ auth }: { auth: Auth }) => {
     }
   }
 
-  const signOut = async () => {
-    await vault?.lock()
-    auth.signOut()
-  }
-
-  const deleteAccount = async () => {
-    if (! window.confirm('Delete this account and its vault? The stored lockboxes are gone for good.')) { return }
-    await vault?.destroy()
-    await auth.deleteAccount()
-  }
-
   if (session === null) {
     return (
       <div className="session-bar">
@@ -48,6 +37,17 @@ export const SessionBar = ({ auth }: { auth: Auth }) => {
         {gripe !== null && <span className="gripe">{gripe}</span>}
       </div>
     )
+  }
+
+  const signOut = async () => {
+    await vault?.lock()
+    auth.signOut()
+  }
+
+  const deleteAccount = async () => {
+    if (! globalThis.confirm('Delete this account and its vault? The stored lockboxes are gone for good.')) { return }
+    await vault?.destroy()
+    await auth.deleteAccount()
   }
 
   return (

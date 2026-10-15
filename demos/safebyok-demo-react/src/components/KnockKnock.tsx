@@ -11,6 +11,12 @@ import { gripeForJokeErr, tellKnockKnockJoke } from '../lib/anthropic'
 /** The lockbox the knock-knock machine keeps its key in. */
 const ApiKeyBoxlabel = 'anthropic_api_key'
 
+/** The key, as the slot below stores it: text. Anything else was put there some other way. */
+const apiKeyOf = (whisper: unknown): string => {
+  if (typeof whisper !== 'string') { throw new TypeError('The stored Anthropic key is not text: replace it.') }
+  return whisper
+}
+
 export const KnockKnock = () => {
   const { vault, withUnlockedVault } = useVault()
   const snapshot = useVaultSnapshot()
@@ -27,7 +33,7 @@ export const KnockKnock = () => {
     setJoke(null)
     setGripe(null)
     try {
-      const told = await withUnlockedVault(() => vault.use(ApiKeyBoxlabel, (whisper) => tellKnockKnockJoke(String(whisper), whosThere.trim())))
+      const told = await withUnlockedVault(() => vault.use(ApiKeyBoxlabel, (whisper) => tellKnockKnockJoke(apiKeyOf(whisper), whosThere.trim())))
       if (told !== null) { setJoke(told) }
     } catch (err) {
       setGripe(gripeForJokeErr(err))
@@ -65,29 +71,13 @@ export const KnockKnock = () => {
 }
 
 /** The facility for entering (or replacing) the Anthropic API key, stored as a lockbox. */
-const ApiKeySlot = ({ haveKeyBox, updatedAt }: { haveKeyBox: boolean, updatedAt?: string }) => {
+const ApiKeySlot = ({ haveKeyBox, updatedAt }: { haveKeyBox: boolean, updatedAt?: string | undefined }) => {
   const { vault, withUnlockedVault } = useVault()
   const [editing, setEditing] = useState(false)
   const [keyText, setKeyText] = useState('')
   const [gripe, setGripe] = useState<string | null>(null)
 
   if (vault === null) { return null }
-
-  const save = async () => {
-    setGripe(null)
-    try {
-      const saved = await withUnlockedVault(async () => {
-        await vault.store(ApiKeyBoxlabel, keyText.trim(), { note: 'feeds the knock-knock machine' })
-        return true
-      })
-      if (saved !== null) {
-        setEditing(false)
-        setKeyText('')
-      }
-    } catch (err) {
-      setGripe(err instanceof Error ? err.message : 'Could not save that key.')
-    }
-  }
 
   if (! haveKeyBox && ! editing) {
     return (
@@ -105,6 +95,23 @@ const ApiKeySlot = ({ haveKeyBox, updatedAt }: { haveKeyBox: boolean, updatedAt?
       </p>
     )
   }
+
+  const save = async () => {
+    setGripe(null)
+    try {
+      const saved = await withUnlockedVault(async () => {
+        await vault.store(ApiKeyBoxlabel, keyText.trim(), { note: 'feeds the knock-knock machine' })
+        return true
+      })
+      if (saved !== null) {
+        setEditing(false)
+        setKeyText('')
+      }
+    } catch (err) {
+      setGripe(err instanceof Error ? err.message : 'Could not save that key.')
+    }
+  }
+
   return (
     <div className="api-key-slot">
       <input

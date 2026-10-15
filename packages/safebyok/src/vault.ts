@@ -42,20 +42,20 @@ export type OpenVaultOpts = {
   vaultDB:    VaultDB
   deviceDB:   DeviceDB
   /** How long an unlock is remembered on this device. Default: seven days. */
-  rememberForMs?: number
+  rememberForMs?: number | undefined
   /** Time source for expiry; tests inject one. Default: the wall clock. */
-  clock?: Clock
+  clock?: Clock | undefined
   /**
    * What turns a passphrase into passphraseKey bytes. Default -- and the right answer -- is the
    * pinned Argon2id deriver; see {@link KeyDeriver} for the narrow reasons to substitute.
    */
-  keyDeriver?: KeyDeriver
+  keyDeriver?: KeyDeriver | undefined
   /**
    * The largest whisper `store()` accepts, in bytes of its JSON. Default: {@link MaxWhisperBytes},
    * 40444. Checked on write only, so lowering it never strands a whisper already stored. At most
    * half the vaultDB's `maxRecordBytes`: openVault refuses more with kind 'bad_option'.
    */
-  maxWhisperBytes?: number
+  maxWhisperBytes?: number | undefined
 }
 
 /**
@@ -68,9 +68,9 @@ export type OpenVaultOpts = {
  */
 export type Vault = {
   /** Current snapshot; same object until something changes (useSyncExternalStore-ready). */
-  getSnapshot(): VaultSnapshot
+  getSnapshot: () => VaultSnapshot
   /** Calls `listener` after every snapshot change; returns the unsubscribe. */
-  subscribe(listener: () => void): () => void
+  subscribe: (listener: () => void) => () => void
 
   /**
    * Open the vault with its passphrase, remembering the unlock on this device for
@@ -106,7 +106,7 @@ export type Vault = {
    * -- a stale session never writes into a vault reborn under new keys. Retrying a stale write
    * replaces what the other device wrote.
    */
-  store(boxlabel: string, whisper: Whisper, opts?: { note?: string }): Promise<void>
+  store(boxlabel: string, whisper: Whisper, opts?: { note?: string | undefined }): Promise<void>
   /** The whisper in `boxlabel`. Requires unlocked; kind 'absent_box' when there is none. */
   read(boxlabel: string): Promise<Whisper>
   /**
@@ -455,13 +455,15 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
       // reborn elsewhere, or a box written meanwhile by another device, refuses it.
       const expected = { vault_id: vaultId, revision_id: prev?.revision_id ?? null }
+      const note = storeOpts?.note ?? prev?.note
       const lockbox: Lockbox = {
         format:              'safebyok-lockbox-v1',
         boxlabel:            label,
         revision_id:         revisionId,
         lockbox_key_wrapped: await wrapKeyUnder(unlockedKey, lockboxKey, boxBinding(vaultId, label, revisionId, 'lockbox_key_wrapped')),
         whisper_ciphered:    await cipherBytes(lockboxKey, whisperBytes, boxBinding(vaultId, label, revisionId, 'whisper_ciphered')),
-        note:                storeOpts?.note ?? prev?.note,
+        // A box with no note has no note field: never an undefined one, which IndexedDB would keep.
+        ...(note !== undefined && { note }),
         created_at:          prev?.created_at ?? now,
         updated_at:          now,
       }
