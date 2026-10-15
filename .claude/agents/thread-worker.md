@@ -39,12 +39,12 @@ never write to either. Before touching code:
 
 ## The thread
 
-1. **Build**, committing at milestones: related changes together, `pnpm justify` green, messages
-   in PROCESS.md's *Commit messages* style (a part-of-the-package prefix, never `feat:` or
-   `fix:`). A thread touching a package under `packages/` also runs `pnpm justify` inside it:
-   the root's does not cover it. Your worktree is yours alone: local checkpoints are yours to
-   make and fold away before filing. Stop only the processes you started, by their PIDs, never
-   by a pattern. Scratch files go in the scratchpad subdirectory your handoff names.
+1. **Build**, committing at milestones: related changes together, `pnpm justify` green (the
+   root's runs every package's), messages in PROCESS.md's *Commit messages* style (a
+   part-of-the-package prefix, never `feat:` or `fix:`), and a changeset when the thread changes a
+   published package (PROCESS.md, *Releases*). Your worktree is yours alone: local checkpoints are
+   yours to make and fold away before filing. Stop only the processes you started, by their PIDs,
+   never by a pattern. Scratch files go in the scratchpad subdirectory your handoff names.
 2. **Ready.** With everything committed and justify green, write your thread file
    (*Syndication*), commit it (`plan:`), and report `ready`. Do not push yet: the review comes
    first, and its fixes ride along.
@@ -53,7 +53,7 @@ never write to either. Before touching code:
      main has moved; a stacked branch stays on the thread it stands on. Rebase conflicts per
      PROCESS.md, *Rebase conflicts*: repair the straightforward, and report `blocked` on one
      that takes judgment about which behaviour wins (tag the tip first, then resolve or abort).
-   - **Prove.** `pnpm justify` (and each touched package's), repairing until green.
+   - **Prove.** `pnpm justify`, repairing until green.
    - **Push** with the credential helper PROCESS.md names, and file the PR against `main`
      (`gh pr create`), per PROCESS.md, *Pull requests*: plain-language title, a **Tests:** line,
      "Stacked on #N" when it is, *Open questions*.

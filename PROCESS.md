@@ -81,6 +81,7 @@ prefix names the part of the package the commit is about, never the kind of chan
 | `docs`    | `README.md`, `PROCESS.md`, `STYLE.md`, `notes/`, `CLAUDE.md` and other directives to agents   |
 | `demo`    | the playground apps under `demos/`                                                                                                     |
 | `plan`    | `whiteboard/` plans and `human/` entries                                                                                               |
+| `rel`     | the Version PR's one commit, made by the release workflow: version bumps, CHANGELOG entries, spent changesets. Never typed by hand       |
 | `tests`   | tests and fixtures, when the tests themselves are the work                                                                             |
 
 Tests and notes that ride along with a change take its prefix
@@ -99,30 +100,41 @@ code in the PR -- then ask in chat first.
   what a consumer or an existing vault has to do about it.
 
 CI runs on every PR, over the root and every workspace package: `lint-typecheck` (lint, typecheck,
-no merge commits) and `test-build` (tests with coverage, then the builds with their package checks)
-must pass; `node-compat` runs the tests on the other Node majors and reports. CodeQL scans the
-code and the workflows, and a finding shows on the PR. Dependabot opens grouped `deps:` PRs weekly; they get the same review as any other.
+no merge commits, a changeset) and `test-build` (tests with coverage, then the builds with their
+package checks) must pass; `node-compat` runs the tests on the other Node majors and reports.
+CodeQL scans the code and the workflows, and a finding shows on the PR. Dependabot opens grouped
+`deps:` PRs weekly, asked for no changeset; they get the same review as any other.
 
 ## Releases
 
-The Coach releases; agents never tag, publish, or change a version number unasked.
+The Coach releases; agents never tag, publish, or change a version number. Changesets keeps the
+numbers and the CHANGELOGs; `.github/workflows/release.yml` does the rest.
 
-* Versions are semver. Until 1.0, a minor bump may break the public surface, and its release
-  notes say how.
-* A release is a PR that bumps `version` in `packages/safebyok/package.json`, merged; then a
-  GitHub release tagged `v<version>`. Publishing the release runs
-  `.github/workflows/release.yml`, which checks the tag against the version, runs the core's
-  `pnpm justify`, and stages the package on npm with provenance. A
-  prerelease version (`0.3.0-beta.1`) goes out under the `next` dist-tag.
+* **A changeset** is a short file in `.changeset/`, written with `pnpm changeset`: which packages
+  it bumps, by how much, and a sentence or two for the CHANGELOG. A PR that changes a public
+  package carries one, or CI fails it; one that needs no release (tooling, tests, docs) carries an
+  empty one, `pnpm changeset --empty`. Agents write changesets: they state intent, not a version.
+* **Versions are semver, in lockstep.** The public packages are one `fixed` group in
+  `.changeset/config.json`, so one bump moves them all; a test refuses a public package left out
+  of it. Private packages and demos are never versioned or released. Until 1.0, a minor bump may
+  break the public surface, and its changeset says how. Between releases, main's version is the
+  last one released: the next is not knowable until release time.
+* **The Version PR**, "Version the packages for release", is rebuilt from main's tip by every push
+  to main while changesets wait: the bumps, the CHANGELOG entries and the spent changesets, as one
+  `rel:` commit. It is the bot's: nobody rebases, edits or merges it but the Coach. CI does not
+  start on it by itself (one workflow's token cannot start another): close and reopen it to run
+  the checks before merging.
+* **Merging it is the release.** `release.yml` then checks the lockstep group, runs
+  `pnpm justify`, packs each package whose version npm lacks, stages each tarball, and tags each
+  package staged (`safebyok@0.2.0`) with a GitHub release from its CHANGELOG. A prerelease
+  version goes out under the `next` dist-tag; `pnpm changeset pre enter beta` starts prereleases
+  and `pnpm changeset pre exit` ends them.
 * **Staged, not published.** The workflow's npm trusted publisher may only `npm stage publish`.
-  The version goes public when the Coach approves it with 2FA, on npmjs.com or with
+  A version goes public when the Coach approves it with 2FA, on npmjs.com or with
   `npm stage approve <stage-id>` (`npm stage list` shows the ids); CI cannot approve its own
-  staging. A staged version nobody wants is `npm stage reject`ed.
-* **`pnpm bump`** changes the version, and only that: it rewrites `version` in
-  `packages/safebyok/package.json` and does not commit, tag or push. `pnpm bump` asks which part
-  to bump; `pnpm bump minor` (or `patch`, `major`, an exact `1.2.3`) says so, and
-  `pnpm bump prerelease --preid beta` steps `0.3.0-beta.1` to `0.3.0-beta.2`. The other packages
-  under `packages/` are not bumped with it.
+  staging. A failed run is mended by re-running its failed jobs: what is done is skipped. A staged
+  version nobody wants is `npm stage reject`ed, and its number counts as burned until the Coach
+  has tested otherwise.
 
 ## Dependencies
 
