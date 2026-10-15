@@ -1,6 +1,6 @@
 # Thread 2: dialog_wording (2026-10-15)
 
-Branch `20261015-dialog_wording`, PR [#91](https://github.com/mrflip/safebyok/pull/91), stacked on #83. Justify: green (all packages and the demo; react 55-plus tests, convex 268, demo 124).
+Branch `20261015-dialog_wording`, PR [#91](https://github.com/mrflip/safebyok/pull/91), stacked on #83. Justify: green (all packages and the demo; react 55 tests, convex 268, demo 124).
 
 * **Built**: `PassphraseModal`'s window line (`packages/safebyok-react/src/passphrase-modal.tsx`) reads "Locks again on this device in 7 days" through `new Intl.RelativeTimeFormat(Locale, { numeric: 'always', style: 'long' })`, with today's unit choice (whole days, else hours, else minutes, at least one minute). `ForeverMs` or longer reads "Stays unlocked on this device until you lock it." Where `'RelativeTimeFormat' in Intl` is false it falls back to the old "Stays unlocked on this device for 7 days." The window is `vault.reentryWindowMs`. Tests (`passphrase-modal.test.tsx`, `vault-provider.test.tsx`) carry the new wording plus four fallback cases that delete `Intl.RelativeTimeFormat` for the test and restore it after. The react README line and a patch changeset (`.changeset/20261015-dialog_wording.md`) say it.
 * **Decisions taken**:
