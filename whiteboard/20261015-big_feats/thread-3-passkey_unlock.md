@@ -56,6 +56,9 @@ limits.
     null; `SecurityError` is `bad_option`; anything else `passkey_unavailable` with the cause.
   - `PasskeyUnlockButton` throws misuse into render (error boundary), the pattern gripe_fixes'
     react_dialog recommends; conditions go to `onGripe`.
+  - *Orchestrator's YOLO call, after review:* `createPasskey`'s doc block and the React README say
+    that a dismissed second touch, like a missing PRF, leaves the new credential on the
+    authenticator.
 * **Deviations**:
   - Size budget raised again: `openVault` 17.5 to 18.5 kB (measured 18.27), everything 24.5 to
     25.5 kB (25.24). Most of it is the new verbs' messages.
@@ -70,6 +73,17 @@ limits.
     prefer-iterator-to-array then conflict on `Array.from(map.keys())`.
   - The removed-passkey-is-not-revoked test (`vault.test.ts`) shows a copy of an old bundle still
     opening: the same fact as for passphrases.
+* **Review** (thread-reviewer, `fixed`): one commit, `d2fc435` -- the demo's "Add fingerprint" made a
+  passkey before refusing an empty passphrase, orphaning it; it now asks for the passphrase first.
+  Construction and proof paths found sound. Left, as open questions in the PR:
+  - **HKDF `info` leaves out `vault_id` and the scope** (purpose and credential only); separation
+    across vaults rests on the per-envelope PRF salt plus the AAD. A construction call for the Coach.
+  - `addPasskey` checks its proof only after the passkey exists, so a wrong passphrase orphans one;
+    avoiding it means proving first, an API-shape change.
+  - One damaged passkey envelope makes `askPasskey` throw `corrupt_record` for every passkey.
+  - `PasskeyUnlockButton` reads the snapshot without subscribing, as `PassphraseModal` does.
+  - Cleanups: `sealPasskey`'s unused `sessionKey`; `saltLengthOf` (vault.ts) duplicates
+    `saltBytesOf` (envelope.ts).
 * **For the Coach**:
   - Confirm **"a vault always keeps a passphrase"**: it rules out passwordless vaults for now.
   - Confirm **any way in proves any change**: one passkey can set a new passphrase and remove the
