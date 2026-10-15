@@ -24,8 +24,9 @@ export type PostgresUnlisten = () => unknown
 /**
  * The host's way to hear Postgres notifications on `channel` (always {@link VaultChangeChannel}):
  * call `onNotify` with each one's payload, and return the unlisten, or a promise for it. A
- * PGlite's `listen` is one as it stands. With `pg`, one long-lived connection LISTENs for the whole
- * server, and this hands its notifications to every VaultDB made per request (see the README).
+ * PGlite's `listen` is one, called on its PGlite as the example does: passed bare, it loses its
+ * `this`. With `pg`, one long-lived connection LISTENs for the whole server, and this hands its
+ * notifications to every VaultDB made per request (see the README).
  *
  * @example (channel, onNotify) => pglite.listen(channel, onNotify)
  */
@@ -305,8 +306,8 @@ const jsonOrNull = (text: string): unknown => {
 
 /**
  * What a {@link PostgresListen} hands back, once it has: the unlisten, or null when the listen
- * failed. A failing listen has nobody to throw to; the vault's next foreground call meets the
- * same trouble and says so.
+ * failed. A listen that rejects has nobody to throw to, and its subscriber hears nothing more, as
+ * without a listen.
  */
 const settled = async (unlisten: PostgresUnlisten | Promise<PostgresUnlisten>): Promise<PostgresUnlisten | null> => {
   try {
