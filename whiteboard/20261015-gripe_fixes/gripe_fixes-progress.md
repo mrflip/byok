@@ -14,7 +14,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
 | 6 | thin_tests         | #70 tip `d874db3`     | filed [#75](https://github.com/mrflip/safebyok/pull/75) |
 | 7 | test_helpers       | #75 tip `c7e2da9`     | filing |
-| 8 | comment_width      | #66 tip `5fefc90`     | underway |
+| 8 | comment_width      | #66 tip `5fefc90`     | in review |
 
 ## What the threads have taught
 
@@ -146,3 +146,10 @@ cut from #66's tip, where none of the other threads' work exists, so waiting bou
 all wrote new comments within 100 columns. It reflows source comments on its base only (never
 Markdown), enforces a 100-column comment width in every lint config, and records the recipe so
 the reflow can be redone in minutes after the rest merge. The Coach merges it last.
+
+*Orchestrator:* thread 8, comment_width, is `ready` (tip `8beb048`). `@stylistic/max-len` with
+`{ code: 1e5, comments: 100, ignoreUrls: true, ignorePattern: <eslint directives> }` in all five
+configs; 116 comment lines rewrapped across 40 files, the 7 eslint-directive lines left long (a
+wrap silently unused each directive). The rule does not catch a comment trailing code (that would
+need a code-length limit). The reflow (`140f0f4`) and the rule (`323334a`) are separate commits,
+and `comment_width-reflow-recipe.md` holds the scripts to redo the reflow after the rest merge.
