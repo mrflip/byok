@@ -1,9 +1,9 @@
 # Thread 6: boundary_audit (2026-10-15)
 
 Branch `20261015-boundary_audit`, PR not yet filed, stacked on
-[#40](https://github.com/mrflip/safebyok/pull/40) at ea3dc98. Justify: green (safebyok 312,
-safebyok-convex 219, safebyok-react 8, demo 24, root 72). No sprint-doc tab: the Docs tools were
-disconnected for this session.
+[#40](https://github.com/mrflip/safebyok/pull/40) at 868ce73 (moved there from ea3dc98 after the
+Coach's restack; a clean rebase). Reviewed: clean. Justify: green (safebyok 312, safebyok-convex
+219, safebyok-react 8, demo 24, root 72). No sprint-doc tab (Docs tools disconnected).
 
 ## The audit
 
@@ -19,12 +19,10 @@ out of storage or across the public API, and trusted past that.
 | `OpenVaultOpts` | `forcePassphraseReentryHours`, `maxWhisperBytes`, `maxLockboxes` defaulted and validated at `openVault` (threads 1, 2); `keyDeriver` required and checked | `clock` is defaulted, not shape-checked: a test seam, left |
 | Snapshot, expectations | `askPassphraseAt: number \| null`; `LockboxExpectation.revision_id: string \| null` | |
 
-Why this is the boundary pattern and not paranoia: each check sits where a value enters the core
-from someone else -- the host's `store()` call, the host's `DeviceDB`, a backend's listing --
-and nothing past it re-checks. `VaultDB`'s write verbs still check labels and scope only, not the
-records the vault builds: the vault is their one producer, and parsing its own output again would
-be the paranoia. The in-tree device adapters keep their own read checks: each is a public
-function promising a typed record.
+Boundary, not paranoia: each check sits where a value enters the core from someone else (the
+host's `store()`, the host's `DeviceDB`, a backend's listing), and nothing past it re-checks.
+`VaultDB`'s write verbs still check only labels and scope: the vault is their one producer. The
+in-tree device adapters keep their own read checks, each a public function promising its type.
 
 **Roadmap 3's fields** do not exist yet, and nothing was added for them. When they land:
 
@@ -47,18 +45,14 @@ function promising a typed record.
   - `vault.ts`: `store(boxlabel, whisper, { note?: string | null })`; `parseNote` at entry,
     `noteToStore(givenNote, prev)` after the read: given wins, `undefined` keeps `prev`'s, `null`
     clears. `rememberedUnlock` parses what `deviceDB.readUnlock` returns.
-  - Tests: `types.test.ts` (`LockboxNote`, `LockboxSummary` over every stored form);
-    `vault-db.test.ts` (rows byte for byte as `store()` writes today, with and without a note; an
-    `undefined` note in an object store); `vault-db-suite.ts` (every adapter round-trips a
-    noteless box, Convex's included); `vault.test.ts` (*the note*, and *the remembered unlock,
-    from a host's own DeviceDB* over five spoiled records). The new vault tests fail on the old
-    code.
+  - Tests: every stored form of a note (types, vault-db, the adapter suite, Convex's included);
+    rows byte for byte as `store()` writes today; *the note* and *the remembered unlock, from a
+    host's own DeviceDB* in `vault.test.ts`, which fail on the old code.
   - `notes/security.md` bullet; `.changeset/20261015-boundary_audit.md` (named by hand).
 * **Decisions taken**:
-  - **The stored `Lockbox` schema is untouched**; nulling happens in `LockboxSummary`, the read
-    verb's output. A two-form `Lockbox` (stored vs in memory) would retype every adapter's
-    `doUpdateBox` and break the Convex validator mirror. So `readBox` still returns the stored
-    form, and `vault.ts` reads `prev.note` in one place, `noteToStore`.
+  - **The stored `Lockbox` schema is untouched**; nulling happens in `LockboxSummary`. A
+    two-form `Lockbox` would retype every adapter's `doUpdateBox` and the Convex mirror, so
+    `readBox` returns the stored form and `vault.ts` reads `prev.note` only in `noteToStore`.
   - **`null` clears a note.** The input takes what the output gives: a host can hand
     `box.note` straight back. Before, a note could not be removed at all.
   - **`bad_option`** for a bad note, not a new kind; `errors.ts`'s comment widened.
@@ -70,8 +64,6 @@ function promising a typed record.
   and `vaults.test.ts` (the listing read through `LockboxSummary`, as the core reads it); the
   demo's edit form passes `|| null`, so emptying a note clears it.
 * **Discoveries**:
-  - A vault already bricked by an over-long note (only a host passing one could do it) still will
-    not open: the read refuses, never repairs. No repair is offered.
   - A remembered unlock's `expires_at` is not bound into its encryption: whoever can write this
     device's IndexedDB can extend it (security note).
   - **Thread 7**: `parseNote` runs once at entry; `noteToStore(givenNote, prev)` sits right after
@@ -79,5 +71,11 @@ function promising a typed record.
   - **Thread 10's merge**: the new tests use `boxOf`, `bundleOf`, `scopeOf`, `testDeriver` from
     `./helpers`.
   - The old flaky tamper test failed once here (thread 10 fixes it).
-* **For the Coach**: `minor` over the orchestrator's suggested patch; `null`-clears as new API on
-  a field roadmap 3 may retire (the same code then serves `public`).
+* **For the Coach**: `minor` over a patch; `null`-clears is new API on a field roadmap 3 may
+  retire. Open questions (in the PR):
+  1. Clamp a remembered unlock's `expires_at` to `now + forcePassphraseReentryHours` on read? No
+     cryptography; closes the exposure the security note records; a policy change (it would also
+     settle #40's "an old unlock keeps its deadline").
+  2. Export `LockboxNote`, so a host form can check a note before `store()`? Public surface.
+  3. A vault already bricked by an over-long stored note still will not open: skip or flag the bad
+     row in `listBoxes`, or leave it?
