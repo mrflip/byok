@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach)
-* **Status**: threads 1, 2, 5 filed (#74, #71, #73); 3, 4, 6 underway
+* **Status**: threads 1, 2, 5 filed (#74, #71, #73); 3, 4 in review; 6 underway
 
 ## Read first
 
