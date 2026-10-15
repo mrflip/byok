@@ -1,7 +1,7 @@
 # Thread 1: argon2_wasm (2026-10-15)
 
 Branch `20261015-argon2_wasm`, PR not yet filed, stacked on #68 (kdf_configs). Justify: green --
-root 105, core 756, argon2-wasm 42, convex 265, react 28, demo 61. `pnpm size` within every budget.
+root 105, core 756, argon2-wasm 44, convex 265, react 28, demo 61. `pnpm size` within every budget.
 
 * **Built**: `packages/safebyok-argon2-wasm/`, a new public package (version 0.0.0, the
   placeholder; in the `fixed` group). `argon2idWasmDeriver(spec)` and `argon2idWasmWebV1Deriver`
@@ -51,6 +51,16 @@ root 105, core 756, argon2-wasm 42, convex 265, react 28, demo 61. `pnpm size` w
   yields. The README says so.
 * A test that re-imports the module after `vi.resetModules()` gets a fresh `safebyok`, whose
   `VaultError` is another class: check with the fresh core's `isVaultError`.
+
+## The review
+
+The thread-reviewer committed four fixes: a lone-surrogate passphrase among the byte-for-byte
+cases (8e21f67), Buffer's hex encoder in the test (313391b), `tests/index.test.ts` pinning the
+package's exports (a8c814e), and a security note that hash-wasm never zeroes its working memory
+(3f0a30a). Its minor findings, left open: the 1 GiB refusal still names `@noble/hashes`;
+`parseKeyDeriverSpec` takes a `KeyDeriverSpec`, not `unknown`; hash-wasm caches a failed compile,
+and older Safari may need `'unsafe-eval'`; `pnpm size` builds the core twice; `refusalOf` is
+duplicated between the core's tests and this package's.
 
 ## For the Coach
 
