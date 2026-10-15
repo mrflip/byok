@@ -16,9 +16,11 @@ settles.
 
 ## Locking
 
-An unlocked vault holds its key in memory until it expires or `vault.lock()` is called. The core
-cannot watch for a locked screen or a hidden tab (it runs where there is no `document`), so locking
-on those signals is one line in the host app:
+An unlocked vault stays unlocked until its remembered unlock expires (`rememberForMs`, seven days
+by default) or `vault.lock()` is called. `lock()` forgets the unlock in memory and on this device
+alike, so the user types their passphrase again afterwards. The core cannot watch for a locked
+screen or a hidden tab (it runs where there is no `document`), so locking on those signals is one
+line in the host app:
 
 ```ts
 document.addEventListener('visibilitychange', () => {
@@ -28,8 +30,9 @@ document.addEventListener('visibilitychange', () => {
 
 `visibilitychange` fires when the user switches tabs or the screen locks, which is as close to a
 screen-lock signal as every browser offers; Chromium's permission-gated Idle Detection API is the
-only true one. When `lockSoon()` lands, it is the gentler callee for this line (and for sign-out):
-it lets work already in hand finish before the key dies.
+only true one. The line trades the remembered unlock away: each time the user comes back to the
+tab, the vault asks for the passphrase again. When `lockSoon()` lands, it is the gentler callee
+for this line (and for sign-out): it lets work already in hand finish before the key dies.
 
 ## No recovery
 
