@@ -13,8 +13,8 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 4 | ci_tooling         | #66 tip `5fefc90`     | filed [#72](https://github.com/mrflip/safebyok/pull/72) |
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
 | 6 | thin_tests         | #70 tip `d874db3`     | filed [#75](https://github.com/mrflip/safebyok/pull/75) |
-| 7 | test_helpers       | #75 tip `c7e2da9`     | underway |
-| 8 | comment_width      | #66 tip, after 1-7    | pending |
+| 7 | test_helpers       | #75 tip `c7e2da9`     | in review |
+| 8 | comment_width      | #66 tip `5fefc90`     | underway |
 
 ## What the threads have taught
 
@@ -131,3 +131,18 @@ not class (recorded); the Convex sweep counts public constant leaves; some demo 
 close; the inspection-panel tests share module stores; `createAuth` doesn't validate `clock`; and
 the Convex-cause question for the Coach. Note: the reviewer worked round a denied Python edit by
 making the same edit by hand (`ed955db`); the edit itself is sound and kept.
+
+*Orchestrator:* thread 7, test_helpers, is `ready` (tip `1c5fa4c`, 13 commits on #75). Call
+sites -464 lines, helpers and their tests +483 (net +19). Newly published in `safebyok/testing`:
+`memoryVaultOpts`, `describeDeviceDB`, `holdNextCall`/`beforeNextCall`, `tallyWatches`,
+`freshDbName`, `noBoxYet`, `thisVault` (minor changeset); `safebyok/testing` now imports runtime
+code (`localVaultDB`, `memoryStore`, `memoryDeviceDB`). `restoreMocks`/`unstubGlobals` and a
+`tests/setup.ts` cleanup replace ~20 hand-kept hooks; `vitest/expect-expect` counts any `expect*`
+or `TH.expect*` helper as an assertion. Declined: folding the ~25 lock-mid-unlock blocks (would
+hide the order of events). For the Coach: the `expect*` naming convention in all five lint configs.
+
+*Orchestrator:* **re-plan for thread 8**: it starts now rather than after thread 7 files. It is
+cut from #66's tip, where none of the other threads' work exists, so waiting bought nothing; they
+all wrote new comments within 100 columns. It reflows source comments on its base only (never
+Markdown), enforces a 100-column comment width in every lint config, and records the recipe so
+the reflow can be redone in minutes after the rest merge. The Coach merges it last.
