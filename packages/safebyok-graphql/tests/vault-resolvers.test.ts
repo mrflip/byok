@@ -176,6 +176,16 @@ describe("vaultResolvers, the subscription", () => {
     expect(heard.unsubscribed).to.eq(1)
   })
 
+  it("unsubscribes at once when the subscription ends while it waits for a change", async () => {
+    const { served, heard } = fakeServed(() => Promise.resolve(null))
+    const changes = await subscribed(TH.schemaOver(await TH.database(), () => served))
+    const waiting = changes.next()
+    await TH.wakeupAtNextTick()
+    await changes.return()
+    expect(heard.unsubscribed).to.eq(1)
+    expect(await waiting).to.have.property('done', true)
+  })
+
   it("sends changes heard while the subscriber is busy as one", async () => {
     const { served, heard } = fakeServed(() => Promise.resolve(null))
     const changes = await subscribed(TH.schemaOver(await TH.database(), () => served))
