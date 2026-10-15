@@ -3,7 +3,7 @@ import { MaxWhisperBytes, SevenDaysMs, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB } from '../src/device-db'
 import { localVaultDB } from '../src/vault-db'
-import { memoryStore } from '../src/string-store'
+import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts } from '../src/vault'
 import { testDeriver } from './helpers'
 
@@ -603,12 +603,16 @@ describe("the session vaultKey is non-extractable", () => {
   })
 })
 
-// localVaultDB rings no change bells, so vaultOne genuinely does not notice vaultTwo's doings
-// until it next touches the backend: the stale-device scenario, miniaturized. The reborn
-// vault has a new vault_id and its own passphrase.
+const silence = (): void => undefined
+const neverRings = () => silence
+
+// vaultOne's adapter hears no change bells, so it genuinely does not notice vaultTwo's doings
+// until it next touches the backend: the stale-device scenario, miniaturized. The reborn vault
+// has a new vault_id and its own passphrase.
 const rebornWorld = async () => {
   const world = makeWorld()
-  const vaultOne = await world.open()
+  const deafStore: StringStore = { ...world.dbStore, subscribe: neverRings }
+  const vaultOne = await world.open({ vaultDB: localVaultDB(deafStore) })
   await vaultOne.unlock('pw one')
   await vaultOne.store('anthropic', 'sk-ant-fake-old')
   const vaultTwo = await world.open()
@@ -619,14 +623,21 @@ const rebornWorld = async () => {
 }
 
 describe("a stale session cannot reach into a vault reborn elsewhere", () => {
-  it("store() refuses and relocks instead of landing the write in the reborn vault", async () => {
+  it("store() is refused by storage as stale, and relocks, instead of landing in the reborn vault", async () => {
     const { vaultOne, vaultTwo } = await rebornWorld()
-    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'vault_locked')
+    expect(vaultOne.getSnapshot().state).to.eq('unlocked')
+    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'stale_write')
     expect(vaultOne.getSnapshot().state).to.eq('locked')
     expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
   })
 
-  it("erase() refuses the same way: the reborn vault keeps its box", async () => {
+  it("store() of a box the reborn vault has never held is refused all the same", async () => {
+    const { vaultOne, vaultTwo } = await rebornWorld()
+    await expectRefusal(vaultOne.store('openai', 'sk-fake-stale'), 'stale_write')
+    expect(vaultTwo.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
+  })
+
+  it("erase() looks first and relocks: the reborn vault keeps its box", async () => {
     const { vaultOne, vaultTwo } = await rebornWorld()
     await expectRefusal(vaultOne.erase('anthropic'), 'vault_locked')
     expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
@@ -642,8 +653,89 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
 
   it("unlock() syncs first: the reborn vault's own passphrase opens it from the stale handle", async () => {
     const { vaultOne } = await rebornWorld()
-    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'vault_locked')
+    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'stale_write')
     await vaultOne.unlock('pw two')
     expect(await vaultOne.read('anthropic')).to.eq('sk-ant-fake-new')
+  })
+
+  it("store() into a vault destroyed elsewhere, and not remade, is refused and finds it absent", async () => {
+    const world = makeWorld()
+    const deafStore: StringStore = { ...world.dbStore, subscribe: neverRings }
+    const vaultOne = await world.open({ vaultDB: localVaultDB(deafStore) })
+    await vaultOne.unlock('pw one')
+    const vaultTwo = await world.open()
+    await vaultTwo.destroy()
+    await expectRefusal(vaultOne.store('anthropic', 'sk-ant-fake-stale'), 'stale_write')
+    expect(vaultOne.getSnapshot().state).to.eq('absent')
+    expect(world.dbStore.ckeys()).to.have.lengthOf(0)
+  })
+})
+
+/**
+ * Two devices on one vault, and a way to slip `there`'s doings between `here`'s look at storage
+ * and its write: `beforeNextWrite` runs once, inside the next call to the verb it names, before
+ * the write itself reaches storage.
+ */
+const twoDeviceWorld = async () => {
+  const world = makeWorld()
+  const here = await world.open()
+  await here.unlock('shared pw')
+  const there = await world.open({ deviceDB: memoryDeviceDB() })
+  await there.unlock('shared pw')
+  const beforeNextWrite = (verb: 'updateBox' | 'updateBundle', meanwhile: () => Promise<void>) => {
+    if (verb === 'updateBox') {
+      const original = world.vaultDB.updateBox.bind(world.vaultDB)
+      vi.spyOn(world.vaultDB, 'updateBox').mockImplementationOnce(async (...args) => {
+        await meanwhile()
+        await original(...args)
+      })
+    } else {
+      const original = world.vaultDB.updateBundle.bind(world.vaultDB)
+      vi.spyOn(world.vaultDB, 'updateBundle').mockImplementationOnce(async (...args) => {
+        await meanwhile()
+        await original(...args)
+      })
+    }
+  }
+  return { world, here, there, beforeNextWrite }
+}
+
+describe("versioned updates: two devices writing at once", () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it("a store over a box written meanwhile elsewhere is refused as stale, and shows theirs", async () => {
+    const { here, there, beforeNextWrite } = await twoDeviceWorld()
+    await here.store('anthropic', 'sk-ant-fake-one')
+    beforeNextWrite('updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
+    await expectRefusal(here.store('anthropic', 'sk-ant-fake-mine'), 'stale_write')
+    expect(await here.read('anthropic')).to.eq('sk-ant-fake-theirs')
+    expect(here.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("a stale store, tried again, lands over what beat it: the retry is the caller's choice", async () => {
+    const { here, there, beforeNextWrite } = await twoDeviceWorld()
+    beforeNextWrite('updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
+    await expectRefusal(here.store('anthropic', 'sk-ant-fake-mine'), 'stale_write')
+    await here.store('anthropic', 'sk-ant-fake-mine')
+    expect(await there.read('anthropic')).to.eq('sk-ant-fake-mine')
+  })
+
+  it("a store over a box erased meanwhile elsewhere is refused: erase wins", async () => {
+    const { here, there, beforeNextWrite } = await twoDeviceWorld()
+    await here.store('anthropic', 'sk-ant-fake-one')
+    beforeNextWrite('updateBox', () => there.erase('anthropic'))
+    await expectRefusal(here.store('anthropic', 'sk-ant-fake-mine'), 'stale_write')
+    expect(here.getSnapshot().boxes).to.have.lengthOf(0)
+  })
+
+  it("a passphrase change racing another device's is refused as stale; theirs stands", async () => {
+    const { here, there, beforeNextWrite } = await twoDeviceWorld()
+    await here.store('anthropic', 'sk-ant-fake-one')
+    beforeNextWrite('updateBundle', () => there.changePassphrase('shared pw', 'their pw'))
+    await expectRefusal(here.changePassphrase('shared pw', 'my pw'), 'stale_write')
+    expect(here.getSnapshot().state).to.eq('locked')
+    await expectRefusal(here.unlock('my pw'), 'wrong_passphrase')
+    await here.unlock('their pw')
+    expect(await here.read('anthropic')).to.eq('sk-ant-fake-one')
   })
 })

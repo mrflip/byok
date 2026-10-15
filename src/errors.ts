@@ -11,6 +11,9 @@ export const VaultErrorKindVals = [
   'vault_closed',        // the vault handle was closed and cannot be used again
   'corrupt_record',      // a stored record failed validation or decryption verification
   'unknown_key_deriver', // the vault names a key deriver this handle was not built with
+  'stale_write',         // storage changed since this device read it, so the write was refused
+  'not_permitted',       // the storage backend refused this user: signed out, or not theirs to reach
+  'storage_unavailable', // the storage backend could not be reached, or failed
 ] as const
 export type VaultErrorKind = typeof VaultErrorKindVals[number]
 
@@ -27,8 +30,14 @@ export type VaultErrorKind = typeof VaultErrorKindVals[number]
 export class VaultError extends Error {
   readonly kind: VaultErrorKind
 
-  constructor(kind: VaultErrorKind, message: string) {
-    super(message)
+  /**
+   * @param kind - What went wrong, from {@link VaultErrorKindVals}: what a caller branches on.
+   * @param message - What went wrong and what to do, calmly. Never quotes secret material.
+   * @param opts - `cause`: the lower-level failure behind this one, such as a storage adapter's
+   *   own error, kept for debugging. Never a value that holds secret material.
+   */
+  constructor(kind: VaultErrorKind, message: string, opts?: ErrorOptions) {
+    super(message, opts)
     this.name = 'VaultError'
     this.kind = kind
   }

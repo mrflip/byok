@@ -2,47 +2,51 @@
 // exercise real IndexedDB semantics (structured clone included) without a browser.
 import 'fake-indexeddb/auto'
 import { describe, expect, it, vi } from 'vitest'
+import { createStore, set } from 'idb-keyval'
 import { idbDeviceDB, idbVaultDB, inspectIdb } from '../src/idb'
 import { boxOf, bundleOf, scopeOf, unlockOf } from './helpers'
+import { describeVaultDB } from './vault-db-suite'
 
 // Each world gets its own database so tests never see each other's rows.
 const freshDbName = () => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
+
+describeVaultDB('idbVaultDB', () => idbVaultDB({ dbName: freshDbName() }))
 
 describe("idbVaultDB", () => {
   it("declares no per-record limit: IndexedDB has none", () => {
     expect(idbVaultDB().maxRecordBytes).to.eq(Infinity)
   })
 
-  it("round-trips a bundle and a lockbox through real IndexedDB semantics", async () => {
-    const vaultDB = idbVaultDB({ dbName: freshDbName() })
-    expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
-    await vaultDB.writeBundle(bundleOf('u1'))
-    expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
-    expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(boxOf('anthropic', 'one'))
+  it("keeps each record as itself, at the ckey it always had", async () => {
+    const dbName = freshDbName()
+    const vaultDB = idbVaultDB({ dbName })
+    await vaultDB.createBundle(bundleOf('u1'))
+    await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    expect(await inspectIdb({ dbName, shelf: 'vault_db' }).rows()).to.deep.equal([
+      { ckey: 'box:acme:u1:main:anthropic', row: boxOf('anthropic', 'one') },
+      { ckey: 'vault:acme:u1:main',         row: bundleOf('u1') },
+    ])
   })
 
-  it("lists summaries and erases the vault whole, through the base class compounds", async () => {
-    const vaultDB = idbVaultDB({ dbName: freshDbName() })
-    await vaultDB.writeBundle(bundleOf('u1'))
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('openai', 'two'))
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
-    const summaries = await vaultDB.listBoxes(scopeOf('u1'))
-    expect(summaries.map((box) => box.boxlabel)).to.deep.equal(['anthropic', 'openai'])
-    await vaultDB.eraseVault(scopeOf('u1'))
-    expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
-    expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
+  it("reads a vault stored before the storage verbs: the same rows, at the same ckeys", async () => {
+    const dbName = freshDbName()
+    const shelf = createStore(`${dbName}:vault_db`, 'records')
+    await set('vault:acme:u1:main', bundleOf('u1'), shelf)
+    await set('box:acme:u1:main:anthropic', boxOf('anthropic', 'one'), shelf)
+    const vaultDB = idbVaultDB({ dbName })
+    expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
+    expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(boxOf('anthropic', 'one'))
   })
 
   it("rings its subscribers on a write, and unsubscribing silences it", async () => {
     const vaultDB = idbVaultDB({ dbName: freshDbName() })
     let heardCount = 0
     const unsubscribe = vaultDB.subscribe(scopeOf('u1'), () => { heardCount += 1 })
-    await vaultDB.writeBundle(bundleOf('u1'))
+    await vaultDB.createBundle(bundleOf('u1'))
     await vi.waitFor(() => { expect(heardCount).to.be.greaterThan(0) })
     const heardBefore = heardCount
     unsubscribe()
-    await vaultDB.writeBox(scopeOf('u1'), boxOf('anthropic', 'one'))
+    await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
     expect(heardCount).to.eq(heardBefore)
   })
 })
@@ -79,7 +83,7 @@ describe("inspectIdb", () => {
     let heardCount = 0
     const unsubscribe = inspector.subscribe(() => { heardCount += 1 })
 
-    await vaultDB.writeBundle(bundleOf('u1'))
+    await vaultDB.createBundle(bundleOf('u1'))
     const rows = await inspector.rows()
     expect(rows).to.have.lengthOf(1)
     expect(rows[0]?.ckey).to.eq('vault:acme:u1:main')
