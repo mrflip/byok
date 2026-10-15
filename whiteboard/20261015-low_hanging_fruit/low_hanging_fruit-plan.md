@@ -130,6 +130,24 @@ Start: 1, 3, 4. Then the lowest-numbered thread whose base exists, as slots free
     at most 6 s added to a store that lost two races. Named constants, not options. The jitter
     guards no secret; it is drawn from `crypto.getRandomValues` all the same, because the core's
     linter keeps `Math.random` out of `src/` (#45).
+15. **The Coach's answers after the sprint closed** (in chat):
+    * #42: yes to `size-limit` and `@size-limit/preset-small-lib` as dev dependencies.
+    * #37: `mask` lives in `safebyok/utils`; `Z.object` stays (so `mask` ships zod). Right-to-left
+      letters: "strip the text direction markers and then chomp where things land ... make the
+      string safe to butcher, then butcher, then check it is safe", and the doc says "mask is
+      intended for plain text. Calling it with arbitrary blobs may give unusual behavior". My
+      reading, built on #37: decision 13 is reversed, so right-to-left letters are kept while every
+      bidi control and mark is still stripped, and the pipeline has three named stages.
+    * #45: our retry stays; `p-retry` is noted under TODO.md's RAGEBAIT. The numbers stand.
+    * #46: no host knob. Client and storage limits that disagree are undefined behaviour ("not a
+      bug, but we won't say what will happen"), and the docs say so.
+    * #50: `unknown_key_deriver` is misuse (as built).
+    * #40: "allow unlimited, u do u". Thread 15 `unlimited_reentry`: `Infinity` is accepted, and
+      the deadline is clamped to the latest `Date` (8.64e15 ms), so nothing stored or shown is
+      infinite.
+    * Asked for more explanation before deciding: the provider handing conditions to the context;
+      #43's three questions; #44's `vault_locked` vs `stale_write`; #33/#32's screen-lock recipe
+      and the `unlock()`/`lock()` race.
 
 ## The threads
 
