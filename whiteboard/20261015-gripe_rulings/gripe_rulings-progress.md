@@ -10,7 +10,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 1 | damaged_boxes          | #83 tip    | filed [#93](https://github.com/mrflip/safebyok/pull/93) |
 | 2 | dialog_wording         | #83 tip    | filed [#91](https://github.com/mrflip/safebyok/pull/91) |
 | 3 | tuple_ckeys            | #83 tip    | filed [#92](https://github.com/mrflip/safebyok/pull/92) |
-| 4 | replaceable_validators | #92 `9218318` | in review ([#95](https://github.com/mrflip/safebyok/pull/95)) |
+| 4 | replaceable_validators | #92 `9218318` | filed [#95](https://github.com/mrflip/safebyok/pull/95) |
 
 ## What the threads have taught
 
@@ -51,3 +51,18 @@ versions open at once evict each other's unlocks; the sweep as permanent code; `
 **For thread 4**: no floor is needed in the ckeys; names are encoded as given, never normalized,
 so validators check, never transform; add label cases to `describeVaultDB`'s separator test.
 `everything` is at 24.47 of 24.5 kB.
+
+*Orchestrator:* thread 4, replaceable_validators, filed as [#95](https://github.com/mrflip/safebyok/pull/95):
+`openVault({ validators: { applabel?, vaultlabel?, boxlabel?, userId?, note? } })` and
+`VaultProvider` take any Zod 4 schema that replaces ours outright, no floor; check, never
+transform; one seam, `src/names.ts`, used by the vault and every `VaultDB` verb (each takes
+`validators?`). New entry `safebyok/validators` (`Label`, `UserId`, `LockboxNote`,
+`DefaultValidators`, `AnyTextValidators`, the bounds and `LabelPattern`), also from the main
+entry. Sizes: the static allowance gives way to weighing each record against `maxRecordBytes`
+(new kind `lockbox_too_large`) and each store's vault against `maxVaultBytes`. Budgets raised to
+25.5 kB (everything) and 17.5 kB (`openVault`). *Review:* `fixed` -- `absent_box` no longer
+quotes the boxlabel; the orchestrator also had a throwing host schema's error dropped from the
+refusal's `cause` (a side door). Left, minor: wrappers that forget the bag; the provider's quiet
+misspelt field; JSON escapes tripping `vault_full` early under tight limits; Convex weighing
+~11 bytes heavier; the entry re-exporting `Whisper`/`EpochMillis`. **For thread 1's restack**:
+a box whose name or note today's validators refuse must list as damaged and stay erasable.
