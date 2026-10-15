@@ -387,11 +387,23 @@ describe("the lockbox limit", () => {
     }
   })
 
-  it("refuses an adapter that declares no maxVaultBytes", async () => {
+  it("refuses an adapter that declares no maxVaultBytes, or no maxRecordBytes", async () => {
     const world = makeWorld()
     for (const undeclared of [undefined, NaN, 0, -1]) {
-      await expectRefusal(world.open({ vaultDB: declaringVaultBytes(world.vaultDB, undeclared) }), 'bad_option')
+      const noVaultLimit = await expectRefusal(world.open({ vaultDB: declaringVaultBytes(world.vaultDB, undeclared) }), 'bad_option')
+      expect(noVaultLimit.message).to.include('maxVaultBytes')
+      const noRecordLimit = Object.create(world.vaultDB, { maxRecordBytes: { value: undeclared } }) as VaultDB
+      const err = await expectRefusal(world.open({ vaultDB: noRecordLimit }), 'bad_option')
+      expect(err.message).to.include('maxRecordBytes')
     }
+  })
+
+  it("says so plainly when not even one lockbox of that maxWhisperBytes fits", async () => {
+    const world = makeWorld()
+    const vaultDB = declaringVaultBytes(world.vaultDB, world.vaultDB.maxRecordBytes)
+    const err = await expectRefusal(world.open({ vaultDB, maxWhisperBytes: 524_288 }), 'bad_option')
+    expect(err.message).to.include('not even one lockbox fits')
+    expect(err.message).to.not.include('at most 0')
   })
 })
 
