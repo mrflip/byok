@@ -151,6 +151,29 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('boxcount').textContent).to.eq('1') })
   })
 
+  it("the dialog promises the window the vault was opened with", async () => {
+    const world = makeWorld()
+    render(
+      <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={TH.testDeriver}
+        forcePassphraseReentryHours={0.25}>
+        <Probe />
+      </VaultProvider>,
+    )
+    await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
+    fireEvent.click(screen.getByText('put'))
+    await screen.findByPlaceholderText('vault passphrase')
+    expect(screen.queryByText('Stays unlocked on this device for 15 minutes.')).to.not.be.null
+  })
+
+  it("the dialog promises seven days when the vault was opened with the default window", async () => {
+    const world = makeWorld()
+    world.mount('u1')
+    await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
+    fireEvent.click(screen.getByText('put'))
+    await screen.findByPlaceholderText('vault passphrase')
+    expect(screen.queryByText('Stays unlocked on this device for 7 days.')).to.not.be.null
+  })
+
   it("once unlocked, further actions run without the dialog", async () => {
     const world = makeWorld()
     world.mount('u1')
