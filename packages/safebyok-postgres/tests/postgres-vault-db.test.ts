@@ -225,8 +225,9 @@ describe("postgresVaultDB, what it stores", () => {
     const vaultDB = TH.requestFor(db, 'u1')
     await vaultDB.createBundle(TH.bundleOf('u1'))
     const impostor = { ...TH.bundleOf('u1'), vault_id: 'vault-id-impostor', passphrase_epoch: 2 }
+    // The core's VaultDB refuses it before the adapter's half sees it: no vault ever writes one.
     const refusal = await TH.refusalOf(vaultDB.updateBundle(impostor, { vault_id: 'vault-id-u1', passphrase_epoch: 1 }))
-    expect(refusal.kind).to.eq('stale_write')
+    expect(refusal.kind).to.eq('bad_option')
     expect(await vaultDB.readBundle(u1)).to.deep.equal(TH.bundleOf('u1'))
   })
 
