@@ -184,7 +184,8 @@ calls each subscriber after every write to their vault, from any server and any 
 one, it never calls.
 
 `listen(channel, onNotify)` calls `onNotify` with each notification's payload and returns the
-unlisten (or a promise for it). A PGlite's own `listen` is one:
+unlisten (or a promise for it). A PGlite's own `listen` is one, called on its PGlite -- passed
+bare, as `listen: pglite.listen`, it loses its `this`, and the VaultDB hears nothing:
 
 ```ts
 const vaultDB = postgresVaultDB({ client: pglite, userId, listen: (channel, onNotify) => pglite.listen(channel, onNotify) })
