@@ -7,7 +7,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 | # | Thread                 | Base       | Status   |
 | - | ---------------------- | ---------- | -------- |
-| 1 | damaged_boxes          | #83 tip    | underway |
+| 1 | damaged_boxes          | #83 tip    | in review ([#93](https://github.com/mrflip/safebyok/pull/93)) |
 | 2 | dialog_wording         | #83 tip    | filed [#91](https://github.com/mrflip/safebyok/pull/91) |
 | 3 | tuple_ckeys            | #83 tip    | in review ([#92](https://github.com/mrflip/safebyok/pull/92)) |
 | 4 | replaceable_validators | thread 3   | pending  |
