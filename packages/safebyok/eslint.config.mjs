@@ -70,13 +70,22 @@ export default defineConfig([
   importX.flatConfigs.recommended,
   importX.flatConfigs.typescript,
 
-  // Type-aware rules need the TS project.
+  // Type-aware rules need the TS project. The import resolver reads a workspace package from its
+  // src/, through the `@safebyok/source` condition the tsconfig asks for too (tsconfig.base.json),
+  // so lint never depends on a dist/ that may be missing or stale.
   {
     name: 'safebyok/type-aware',
     languageOptions: {
       parserOptions: {
         projectService: true,
         tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    settings: {
+      'import-x/resolver': {
+        typescript: {
+          conditionNames: ['@safebyok/source', 'types', 'import', 'esm2020', 'es2020', 'es2015', 'require', 'node', 'node-addons', 'browser', 'default'],
+        },
       },
     },
   },
@@ -191,7 +200,22 @@ export default defineConfig([
     },
   },
 
-  // == [3c. Plugin defaults our own documents contradict] ==
+  // == [3c. Runs everywhere the host app does] ==
+  // src/ is platform-neutral: no Node module, and none of Node's globals. The tests and configs run
+  // under Node, so the TS project types Node's globals for them, and only this rule keeps src/ clean.
+  {
+    name: 'safebyok/platform-neutral',
+    files: ['src/**/*.ts'],
+    rules: {
+      'import-x/no-nodejs-modules': 'error',
+      'no-restricted-globals': ['error', ...['Buffer', 'process', 'global', 'require', '__dirname', '__filename', 'setImmediate'].map((nodeGlobal) => ({
+        name:    nodeGlobal,
+        message: `${nodeGlobal} is Node's alone: src/ runs in browsers, Node, Bun and the frameworks on them (CLAUDE.md).`,
+      }))],
+    },
+  },
+
+  // == [3d. Plugin defaults our own documents contradict] ==
   // Each of these is a reasonable default that STYLE.md rules out explicitly. Turned off here
   // rather than disabled at every call site.
   {
@@ -225,6 +249,15 @@ export default defineConfig([
       // STYLE.md endorses the guard clause, and asks that visual weight match didactic weight: a
       // guard is not a choice between two values, and should not have to read like one.
       'unicorn/prefer-ternary': 'off',
+      // Written for JavaScript, where a return type is only what the code happens to return. Here
+      // it is declared, and a declared union (`WhisperJson`) is the contract, not an accident.
+      'sonarjs/function-return-type': 'off',
+      // A second no-unused-vars, without the house's `_` for a binding left unused on purpose (a
+      // field dropped by destructuring): typescript-eslint's, configured above, is the one.
+      'sonarjs/no-unused-vars': 'off',
+      // `() => undefined` returns undefined and `() => {}` returns void, which TypeScript keeps
+      // apart: the rule's fix of an arrow body changes the type, so it leaves arrow bodies alone.
+      'unicorn/no-useless-undefined': ['error', { checkArrowFunctionBody: false }],
     },
   },
 

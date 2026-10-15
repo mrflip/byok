@@ -47,7 +47,7 @@ describe("SafebyokComponent.api, for the vault's own user", () => {
   for (const [fnName, call] of EveryCall) {
     it(`lets the signed-in owner call ${fnName}`, async () => {
       const t = await seeded()
-      await call(t.withIdentity({ subject: 'u1' }))
+      await expect(call(t.withIdentity({ subject: 'u1' }))).resolves.not.toThrow()
     })
   }
 
@@ -72,12 +72,14 @@ describe("SafebyokComponent.api, for anyone else", () => {
   for (const [fnName, call] of EveryCall) {
     it(`refuses ${fnName} as not_permitted when no one is signed in`, async () => {
       const t = await seeded()
-      expect((await refusalOf(call(t))).kind).to.eq('not_permitted')
+      const refusal = await refusalOf(call(t))
+      expect(refusal.kind).to.eq('not_permitted')
     })
 
     it(`refuses ${fnName} as not_permitted for another signed-in user`, async () => {
       const t = await seeded()
-      expect((await refusalOf(call(t.withIdentity({ subject: 'u2' })))).kind).to.eq('not_permitted')
+      const refusal = await refusalOf(call(t.withIdentity({ subject: 'u2' })))
+      expect(refusal.kind).to.eq('not_permitted')
     })
   }
 
@@ -112,17 +114,18 @@ describe("SafebyokComponent.api, for anyone else", () => {
 
 describe("SafebyokComponent.api, with the host's getUserId", () => {
   const SignedOutCases = [
-    [async () => null,      'treats a null user id as signed out'],
-    [async () => undefined, 'treats an undefined user id as signed out'],
-    [async () => '',        'treats an empty user id as signed out'],
-    [() => null,            'accepts a getUserId that answers synchronously'],
+    [() => Promise.resolve(null),      'treats a null user id as signed out'],
+    [() => Promise.resolve(undefined), 'treats an undefined user id as signed out'],
+    [() => Promise.resolve(''),        'treats an empty user id as signed out'],
+    [() => null,                       'accepts a getUserId that answers synchronously'],
   ] as const
 
   for (const [getUserId, blurb] of SignedOutCases) {
     it(blurb, async () => {
       const host = hostWith(getUserId)
       const t = host.createTest().withIdentity({ subject: 'u1' })
-      expect((await refusalOf(t.query(host.api.safebyok.getBundle, { scope: u1 }))).kind).to.eq('not_permitted')
+      const refusal = await refusalOf(t.query(host.api.safebyok.getBundle, { scope: u1 }))
+      expect(refusal.kind).to.eq('not_permitted')
     })
   }
 
@@ -134,6 +137,7 @@ describe("SafebyokComponent.api, with the host's getUserId", () => {
     const t = host.createTest().withIdentity({ subject: 'u1' })
     await t.mutation(host.api.safebyok.createBundle, { bundle: bundleOf('user|u1') })
     expect(await t.query(host.api.safebyok.getBundle, { scope: scopeOf('user|u1') })).to.deep.equal(bundleOf('user|u1'))
-    expect((await refusalOf(t.query(host.api.safebyok.getBundle, { scope: u1 }))).kind).to.eq('not_permitted')
+    const refusal = await refusalOf(t.query(host.api.safebyok.getBundle, { scope: u1 }))
+    expect(refusal.kind).to.eq('not_permitted')
   })
 })

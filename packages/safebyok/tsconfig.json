@@ -1,29 +1,16 @@
 {
+  // The core: platform-neutral src/, whose WebCrypto and IndexedDB are typed by the DOM lib, and
+  // tests and configs run under Node. eslint keeps Node's modules and globals out of src/.
+  "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "target": "ES2022",
     "lib": [
       "ES2023",
       "DOM",
       "DOM.Iterable"
     ],
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "moduleDetection": "force",
     "types": [
       "node"
-    ],
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
-    "allowJs": false,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "declaration": true,
-    "noEmit": true
+    ]
   },
   "include": [
     "src",

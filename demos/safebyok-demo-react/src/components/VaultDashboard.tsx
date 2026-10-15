@@ -26,20 +26,22 @@ export const VaultDashboard = () => {
 
   // A whisper is never null (the vault refuses a bare one), so null from withUnlockedVault can
   // only mean the user dismissed the passphrase dialog: the read needs no wrapping.
-  const view = (boxlabel: string) => withUnlockedVault(() => vault.read(boxlabel))
-    .then((whisper) => { if (whisper !== null) { setShown((prev) => ({ ...prev, [boxlabel]: whisper })) } })
+  const view = async (boxlabel: string) => {
+    const whisper = await withUnlockedVault(() => vault.read(boxlabel))
+    if (whisper !== null) { setShown((prev) => ({ ...prev, [boxlabel]: whisper })) }
+  }
 
   const hide = (boxlabel: string) => {
     setShown(({ [boxlabel]: _gone, ...rest }) => rest)
   }
 
-  const edit = (boxlabel: string, noteText: string) => withUnlockedVault(() => vault.read(boxlabel))
-    .then((whisper) => {
-      if (whisper !== null) { setForm({ editing: boxlabel, boxlabelText: boxlabel, whisperText: editableWhisper(whisper), noteText }) }
-    })
+  const edit = async (boxlabel: string, noteText: string) => {
+    const whisper = await withUnlockedVault(() => vault.read(boxlabel))
+    if (whisper !== null) { setForm({ editing: boxlabel, boxlabelText: boxlabel, whisperText: editableWhisper(whisper), noteText }) }
+  }
 
   const erase = async (boxlabel: string) => {
-    if (! window.confirm(`Delete the lockbox '${boxlabel}'?`)) { return }
+    if (! globalThis.confirm(`Delete the lockbox '${boxlabel}'?`)) { return }
     await withUnlockedVault(() => vault.erase(boxlabel))
     hide(boxlabel)
   }
@@ -53,7 +55,7 @@ export const VaultDashboard = () => {
       const saved = await withUnlockedVault(async () => {
         // The cast hands validation to the vault: typing "null" in the box parses to a bare
         // null, and the store's refusal lands in the gripe below.
-        await vault.store(form.boxlabelText.trim(), parseWhisperText(form.whisperText) as Whisper, { note: form.noteText.trim() || undefined })
+        await vault.store(form.boxlabelText.trim(), parseWhisperText(form.whisperText)!, { note: form.noteText.trim() || undefined })
         return true
       })
       if (saved !== null) { setForm(null) }
@@ -83,9 +85,9 @@ export const VaultDashboard = () => {
                 <tr key={box.boxlabel}>
                   <td><code>{box.boxlabel}</code></td>
                   <td className="whisper-cell">
-                    {viewed !== undefined
-                      ? <><code>{showWhisper(viewed)}</code> <button className="mini" onClick={() => { hide(box.boxlabel) }}>hide</button></>
-                      : <><span className="quiet">••••••••</span> <button className="mini" onClick={() => { void view(box.boxlabel) }}>view</button></>}
+                    {viewed === undefined
+                      ? <><span className="quiet">••••••••</span> <button className="mini" onClick={() => { void view(box.boxlabel) }}>view</button></>
+                      : <><code>{showWhisper(viewed)}</code> <button className="mini" onClick={() => { hide(box.boxlabel) }}>hide</button></>}
                   </td>
                   <td className="quiet">{box.note}</td>
                   <td className="quiet">{new Date(box.updated_at).toLocaleString()}</td>

@@ -111,6 +111,9 @@ export const EraseExpectation = v.object({
   vault_id: v.string(),
 })
 
+/** One lockbox's place in a {@link VaultSignature}: `[boxlabel, revision_id]`. */
+const BoxRevision = v.array(v.string())
+
 /**
  * The vault's change signature: its bundle's `vault_id` and `passphrase_epoch` (null while it has
  * no bundle) and each lockbox's `[boxlabel, revision_id]`, in boxlabel order. It changes exactly
@@ -121,5 +124,5 @@ export const EraseExpectation = v.object({
 export const VaultSignature = v.object({
   vault_id:         v.nullable(v.string()),
   passphrase_epoch: v.nullable(v.number()),
-  boxes:            v.array(v.array(v.string())),
+  boxes:            v.array(BoxRevision),
 })

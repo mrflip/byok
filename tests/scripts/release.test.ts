@@ -134,7 +134,16 @@ describe("packedManifest", () => {
     expect(packed.exitCode, packed.stderr).to.eq(0)
     const manifest = await Release.packedManifest(Release.processRunner(scratch), tarball)
     expect(Release.workspaceRanges(manifest)).to.deep.equal([])
-    expect((manifest.peerDependencies as Record<string, string>).safebyok).to.match(/^\^\d+\.\d+\.\d+/)
+    expect((manifest['peerDependencies'] as Record<string, string>)['safebyok']).to.match(/^\^\d+\.\d+\.\d+/)
+  }, 30_000)
+
+  it("ships the dist-only exports: the workspace's source condition never leaves the repo", async () => {
+    const tarball = path.join(scratch, 'safebyok-react.tgz')
+    const packed = await Release.processRunner(path.join(RepoRoot, 'packages', 'safebyok-react'))('pnpm', ['pack', '--out', tarball])
+    expect(packed.exitCode, packed.stderr).to.eq(0)
+    const manifest = await Release.packedManifest(Release.processRunner(scratch), tarball)
+    expect(JSON.stringify(manifest)).to.not.include('@safebyok/source')
+    expect(manifest).to.not.have.property('publishConfig')
   }, 30_000)
 })
 

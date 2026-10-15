@@ -16,7 +16,6 @@
     "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
     "build:deps": "pnpm --filter 'safebyok-convex^...' build",
     "typecheck": "tsc --noEmit",
-    "pretypecheck": "pnpm build:deps",
     "test": "vitest run",
     "pretest": "pnpm build:deps",
     "test:watch": "vitest",

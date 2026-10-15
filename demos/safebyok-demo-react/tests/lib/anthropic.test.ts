@@ -3,23 +3,22 @@ import { JokeModel, buildJokePrompt, gripeForJokeErr, tellKnockKnockJoke } from 
 
 /** A canned Anthropic response and a recorder for what the SDK actually sent. */
 const makeFakeAnthropic = (jokeText: string) => {
-  const seen: { url: string, apiKeyHeader: string | null, body: Record<string, unknown> }[] = []
-  const fetchFn: typeof fetch = (input, init) => {
+  const seen: { url: string, apiKeyHeader: string | null, body: { model: string, messages: unknown[] } }[] = []
+  const fetchFn: typeof fetch = async (input, init) => {
     const request = new Request(input, init)
-    return request.text().then((bodyText) => {
-      seen.push({
-        url:          request.url,
-        apiKeyHeader: request.headers.get('x-api-key'),
-        body:         JSON.parse(bodyText) as Record<string, unknown>,
-      })
-      const reply = {
-        id: 'msg_fake', type: 'message', role: 'assistant', model: JokeModel,
-        content: [{ type: 'text', text: jokeText }],
-        stop_reason: 'end_turn', stop_sequence: null,
-        usage: { input_tokens: 10, output_tokens: 20 },
-      }
-      return new Response(JSON.stringify(reply), { status: 200, headers: { 'content-type': 'application/json' } })
+    const bodyText = await request.text()
+    seen.push({
+      url:          request.url,
+      apiKeyHeader: request.headers.get('x-api-key'),
+      body:         JSON.parse(bodyText) as { model: string, messages: unknown[] },
     })
+    const reply = {
+      id: 'msg_fake', type: 'message', role: 'assistant', model: JokeModel,
+      content: [{ type: 'text', text: jokeText }],
+      stop_reason: 'end_turn', stop_sequence: null,
+      usage: { input_tokens: 10, output_tokens: 20 },
+    }
+    return Response.json(reply, { status: 200, headers: { 'content-type': 'application/json' } })
   }
   return { fetchFn, seen }
 }

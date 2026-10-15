@@ -8,7 +8,7 @@ import schema from './component/schema'
 /** The component's function modules, as `convex-test` loads them (under Vite, as vitest runs). */
 export const modules = import.meta.glob('./component/**/*.ts')
 
-export { schema }
+export { default as schema } from './component/schema'
 
 /**
  * Install the safebyok component into a `convex-test` instance, so the host's own functions --

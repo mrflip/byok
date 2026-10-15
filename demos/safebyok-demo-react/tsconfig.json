@@ -1,37 +1,9 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "lib": [
-      "ES2023",
-      "DOM",
-      "DOM.Iterable"
-    ],
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "moduleDetection": "force",
-    "jsx": "react-jsx",
-    "types": [
-      "vite/client"
-    ],
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
-    "allowJs": false,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "verbatimModuleSyntax": true,
-    "noEmit": true
-  },
-  "include": [
-    "src",
-    "tests",
-    "*.config.ts"
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
+  // Vite's own layout: the app (browser) and its config (Node) are separate projects, each with
+  // only its own runtime's types. `tsc -b` checks both.
+  "files": [],
+  "references": [
+    { "path": "./tsconfig.app.json" },
+    { "path": "./tsconfig.node.json" }
   ]
 }
