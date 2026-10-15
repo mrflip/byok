@@ -102,7 +102,7 @@ const SpecLimitForField: Readonly<Record<keyof KeyDeriverSpec, string>> = {
   algorithm:         "algorithm is 'argon2id', the one key derivation function safebyok runs.",
   key_deriver_label: 'key_deriver_label is a non-empty string of your own choosing, stored beside every vault made under the spec.',
   memory_kib:        'memory_kib is a whole number of KiB, at least 8 for each lane (parallelism) and at most 1048576 (1 GiB), the most @noble/hashes allocates.',
-  iterations:        'iterations is a whole number of passes, at least 1.',
+  iterations:        'iterations is a whole number of passes, at least 1 and below 2^32, the most Argon2 counts.',
   parallelism:       'parallelism is a whole number of lanes, at least 1.',
   salt_bytes:        "salt_bytes is a whole number of bytes, at least 8 (Argon2id's least) and at most 65536 (the most the platform's random source hands out at once).",
   output_bytes:      'output_bytes is 32: the passphraseKey is a 256-bit key.',
