@@ -167,6 +167,21 @@ describe("convexVaultDB, refusing", () => {
     expect(await owner.listBoxes(u1)).to.deep.equal([])
   })
 
+  it("lists a lockbox the component holds but safebyok would never write as damaged, under its boxlabel", async () => {
+    const deployment = deploy()
+    const client = deployment.client('u1')
+    const vaultDB = convexVaultDB(client, deployment.api.safebyok)
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.updateBox(u1, TH.boxOf('openai', 'two'), TH.noBoxYet)
+    // Past the adapter's own checks, straight to the component, which bounds no time's form.
+    const lockbox = toConvexLockbox({ ...TH.boxOf('anthropic', 'one'), changed_at: Date.UTC(2026, 9, 14) + 0.5 })
+    await client.mutation(deployment.api.safebyok.updateBox, { scope: u1, lockbox, expected: TH.noBoxYet })
+    const listed = await vaultDB.listBoxes(u1)
+    expect(listed.map((box) => [box.boxlabel, box.damaged])).to.deep.equal([['anthropic', true], ['openai', false]])
+    await vaultDB.eraseBox(u1, 'anthropic', { vault_id: 'vault-id-u1' })
+    expect(await vaultDB.listBoxes(u1)).to.have.lengthOf(1)
+  })
+
   it("refuses as not_permitted over a ConvexReactClient that already holds the query's refusal", async () => {
     const deployment = deploy()
     const reactClient = deployment.reactClient(null)

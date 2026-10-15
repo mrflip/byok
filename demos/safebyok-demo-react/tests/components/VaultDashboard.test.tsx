@@ -149,6 +149,40 @@ describe("VaultDashboard, its lockboxes", () => {
     expect(screen.getByText('anthropic_api_key')).to.not.be.null
   })
 
+  it("marks a damaged lockbox as such, offering only to delete it", async () => {
+    const store = memoryStore()
+    const world = TH.makeWorld({ vaultDB: localVaultDB(store) })
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key', openai_api_key: 'sk-test-not-a-real-key' })
+    store.write('box:acme:u1:main:openai_api_key', '{"not": json')
+    world.renderInVault(<VaultDashboard />)
+    await screen.findByText(/damaged: its stored record can't be read/)
+    const damagedRow = rowOf('openai_api_key')
+    expect(within(damagedRow).queryByRole('button', { name: 'view' })).to.be.null
+    expect(within(damagedRow).queryByRole('button', { name: 'use' })).to.be.null
+    vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
+    fireEvent.click(within(damagedRow).getByRole('button', { name: 'delete' }))
+    await TH.answerPassphraseDialog()
+    await waitFor(() => { expect(screen.queryByText('openai_api_key')).to.be.null })
+    expect(store.read('box:acme:u1:main:openai_api_key')).to.be.null
+    expect(screen.getByText('anthropic_api_key')).to.not.be.null
+  })
+
+  it("replaces a damaged lockbox with a fresh whisper", async () => {
+    const store = memoryStore()
+    const world = TH.makeWorld({ vaultDB: localVaultDB(store) })
+    await world.seed({ openai_api_key: 'sk-test-not-a-real-key' })
+    store.write('box:acme:u1:main:openai_api_key', '{"not": json')
+    world.renderInVault(<VaultDashboard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'replace' }))
+    expect(screen.getByLabelText<HTMLInputElement>(/^label/).disabled).to.be.true
+    fillForm({ whisper: 'sk-test-replaced' })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await TH.answerPassphraseDialog()
+    await screen.findByRole('button', { name: 'view' })
+    const vault = await world.openUnlocked()
+    expect(await vault.read('openai_api_key')).to.eq('sk-test-replaced')
+  })
+
   it("uses a whisper by whispering it back in the Psst dialog", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })

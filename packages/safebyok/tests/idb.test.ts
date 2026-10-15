@@ -67,6 +67,17 @@ describe("idbVaultDB", () => {
     expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'one'))
   })
 
+  it("lists a row that is no lockbox as damaged, under the boxlabel it is stored under", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:vault_db`, 'records')
+    await set('vault:acme:u1:main', TH.bundleOf('u1'), shelf)
+    await set('box:acme:u1:main:anthropic', 'not a lockbox', shelf)
+    await set('box:acme:u1:main:openai', TH.boxOf('openai', 'two'), shelf)
+    const listed = await idbVaultDB({ dbName }).listBoxes(TH.scopeOf('u1'))
+    expect(listed[0]).to.deep.equal({ boxlabel: 'anthropic', damaged: true })
+    expect(listed[1]).to.include({ boxlabel: 'openai', damaged: false })
+  })
+
   it("rings its subscribers on a write, and unsubscribing silences it", async () => {
     const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
     let heardCount = 0

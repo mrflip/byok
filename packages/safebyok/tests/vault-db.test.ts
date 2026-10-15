@@ -1,7 +1,7 @@
 import { omit } from 'es-toolkit'
 import { describe, expect, it } from 'vitest'
 import { memoryStore } from '../src/string-store'
-import { VaultDB, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation } from '../src/vault-db'
+import { VaultDB, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation, type StoredLockbox } from '../src/vault-db'
 import { VaultError } from '../src/errors'
 import type { Lockbox, VaultBundle, VaultScope } from '../src/types'
 import * as TH from './test-helpers'
@@ -34,8 +34,10 @@ class MapVaultDB extends VaultDB {
 
   protected doReadBox(scope: VaultScope, boxlabel: string) { return Promise.resolve(this.rows.get(this.boxCkey(scope, boxlabel)) ?? null) }
 
-  protected doListBoxes(scope: VaultScope) {
-    return Promise.resolve([...this.rows].filter(([ckey]) => ckey.startsWith(`${this.bundleCkey(scope)}/`)).map(([, row]) => row))
+  protected doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
+    const prefix = `${this.bundleCkey(scope)}/`
+    const listed = [...this.rows].filter(([ckey]) => ckey.startsWith(prefix))
+    return Promise.resolve(listed.map(([ckey, row]) => ({ boxlabel: ckey.slice(prefix.length), lockbox: row })))
   }
 
   protected doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation) {
@@ -112,11 +114,23 @@ describe("localVaultDB", () => {
     store.write('box:acme:u1:main:openai', notelessRow)
     const vaultDB = localVaultDB(store)
     const summaries = await vaultDB.listBoxes(TH.scopeOf('u1'))
-    expect(summaries.map((summary) => summary.note)).to.deep.equal(['a test box', null])
+    expect(summaries.map((box) => TH.summaryOf(box)?.note)).to.deep.equal(['a test box', null])
     const prev = await vaultDB.readBox(TH.scopeOf('u1'), 'openai')
     expect(prev).to.deep.equal(noteless)
     await vaultDB.updateBox(TH.scopeOf('u1'), noteless, { vault_id: 'vault-id-u1', revision_id: 'rev-two' })
     expect(store.read('box:acme:u1:main:openai')).to.eq(notelessRow)
+  })
+
+  it("lists a row that is not JSON as damaged, under the boxlabel it is stored under, beside the sound ones", async () => {
+    const store = memoryStore()
+    store.write('vault:acme:u1:main', JSON.stringify(TH.bundleOf('u1')))
+    store.write('box:acme:u1:main:openai', JSON.stringify(TH.boxOf('openai', 'two')))
+    store.write('box:acme:u1:main:anthropic', '{"not": json')
+    const listed = await localVaultDB(store).listBoxes(TH.scopeOf('u1'))
+    expect(listed[0]).to.deep.equal({ boxlabel: 'anthropic', damaged: true })
+    expect(listed[1]).to.include({ boxlabel: 'openai', revision_id: 'rev-two', damaged: false })
+    // Listed, never repaired: the row is still there for forensics.
+    expect(store.read('box:acme:u1:main:anthropic')).to.eq('{"not": json')
   })
 
   it("stores each record as its JSON, at the ckey it always had", async () => {
@@ -169,6 +183,20 @@ describe("localVaultDB", () => {
   })
 })
 
+/** Records an adapter may hand up from its listing, under the boxlabel each is stored under, and how each lists. */
+const ListedRecordCases = [
+  // sound:
+  ["anthropic",  TH.boxOf('anthropic', 'one'),                               [["anthropic", false]],  'a sound lockbox as its summary'],
+  // damaged, listed so they can be erased:
+  ["anthropic",  TH.boxOf('other_box', 'one'),                               [["anthropic", true]],   'a record naming another boxlabel as damaged, under the one it is stored under'],
+  ["anthropic",  { ...TH.boxOf('anthropic', 'one'), changed_at: 'later' },   [["anthropic", true]],   'a record with a malformed time as damaged'],
+  ["anthropic",  { ...TH.boxOf('anthropic', 'one'), note: 'n'.repeat(257) }, [["anthropic", true]],   'a record with an overlong note as damaged'],
+  ["anthropic",  null,                                                       [["anthropic", true]],   'a null record as damaged'],
+  ["anthropic",  'not a lockbox',                                            [["anthropic", true]],   'a record that is not an object as damaged'],
+  // unreachable by any verb, so left out:
+  ["Anthropic",  TH.boxOf('anthropic', 'one'),                               [],                      'nothing for a record stored under what is not a boxlabel'],
+] as const
+
 describe("the abstract VaultDB, around an adapter's half", () => {
   it("validates what the adapter returns: a wrong-shaped record is refused, not repaired", async () => {
     const vaultDB = new MapVaultDB()
@@ -182,19 +210,29 @@ describe("the abstract VaultDB, around an adapter's half", () => {
   it("lists a lockbox an earlier version kept with an undefined note, as IndexedDB does, with a null note", async () => {
     const vaultDB = new MapVaultDB()
     vaultDB.rows.set('acme:u1:main/anthropic', { ...TH.boxOf('anthropic', 'one'), note: undefined })
-    const [summary] = await vaultDB.listBoxes(TH.scopeOf('u1'))
+    const [listed] = await vaultDB.listBoxes(TH.scopeOf('u1'))
+    const summary = TH.summaryOf(listed)
     expect(summary).to.have.property('note')
     expect(summary?.note).to.be.null
   })
+
+  for (const [boxlabel, record, expected, blurb] of ListedRecordCases) {
+    it(`lists ${blurb}`, async () => {
+      const vaultDB = new MapVaultDB()
+      vaultDB.rows.set(`acme:u1:main/${boxlabel}`, record)
+      const listed = await vaultDB.listBoxes(TH.scopeOf('u1'))
+      expect(listed.map((box) => [box.boxlabel, box.damaged])).to.deep.equal(expected)
+    })
+  }
 
   it("accepts a listing projected server-side, without ciphered fields, so long as it keeps format", async () => {
     const vaultDB = new MapVaultDB()
     const projected = omit(TH.boxOf('anthropic', 'one'), ['lockbox_key_wrapped', 'whisper_ciphered'])
     vaultDB.rows.set('acme:u1:main/anthropic', projected)
     const summaries = await vaultDB.listBoxes(TH.scopeOf('u1'))
-    expect(summaries[0]?.revision_id).to.eq('rev-one')
+    expect(TH.summaryOf(summaries[0])?.revision_id).to.eq('rev-one')
     vaultDB.rows.set('acme:u1:main/anthropic', omit(projected, ['format']))
-    await expect(vaultDB.listBoxes(TH.scopeOf('u1'))).rejects.toThrow(/did not read back in a shape/)
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.deep.equal([{ boxlabel: 'anthropic', damaged: true }])
   })
 
   it("turns an adapter's own failure into kind 'storage_unavailable', keeping it as the cause", async () => {

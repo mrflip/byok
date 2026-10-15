@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { Label, Lockbox, LockboxSummary, MaxUserIdChars, VaultBundle, VaultScope } from './types'
+import { Label, Lockbox, LockboxSummary, MaxUserIdChars, VaultBundle, VaultScope, type DamagedLockbox } from './types'
 import { VaultError } from './errors'
 import type { StringStore } from './string-store'
 
@@ -43,6 +43,16 @@ export type EraseExpectation = Z.infer<typeof EraseExpectation>
 const EraseExpectation = Z.object({
   vault_id: VaultBundle.shape.vault_id,
 })
+
+/**
+ * One lockbox as a VaultDB's `doListBoxes` hands it up: the boxlabel it is stored under -- the
+ * one `doReadBox` and `doEraseBox` reach it by -- and its record exactly as stored, damaged or
+ * not. The listing checks the record; the boxlabel is what lets a damaged one still be named, and
+ * so erased or overwritten.
+ *
+ * @example { boxlabel: 'anthropic', lockbox: storedRecord }
+ */
+export type StoredLockbox = { boxlabel: string, lockbox: unknown }
 
 /**
  * Remote storage for vault records, as the host application plugs it in: extend this class and
@@ -150,13 +160,17 @@ export abstract class VaultDB {
 
   /**
    * Public faces of every lockbox in the vault -- ciphered fields stripped, `note` null where a
-   * lockbox has none, sorted by boxlabel -- valid while locked.
+   * lockbox has none, sorted by boxlabel -- valid while locked. A lockbox whose record does not
+   * read back as one, or names another boxlabel than it is stored under, is listed as a
+   * {@link DamagedLockbox} rather than refused, so one bad record never hides the rest; one stored
+   * under something that is not a boxlabel, which no verb could reach, is left out.
    */
-  async listBoxes(scope: VaultScope): Promise<LockboxSummary[]> {
+  async listBoxes(scope: VaultScope): Promise<(LockboxSummary | DamagedLockbox)[]> {
     const asked = checkScope(scope)
-    const raws = await fromStorage(() => this.doListBoxes(asked))
-    return raws
-      .map((raw) => LockboxSummary.parse(checkRecord(ListedLockbox, raw, 'lockbox')))
+    const stored = await fromStorage(() => this.doListBoxes(asked))
+    return stored
+      .filter((entry) => NameableLockbox.safeParse(entry).success)
+      .map((entry) => listedOrDamaged(entry))
       .toSorted((one, two) => one.boxlabel.localeCompare(two.boxlabel))
   }
 
@@ -238,11 +252,12 @@ export abstract class VaultDB {
   /** The stored lockbox record under `boxlabel`, exactly as saved, or null when there is none. */
   protected abstract doReadBox(scope: VaultScope, boxlabel: string): Promise<unknown>
   /**
-   * Every lockbox in `scope`, in any order: whole records, or -- where the backend can project --
-   * each without its two ciphered fields, `lockbox_key_wrapped` and `whisper_ciphered`. Keep
-   * `format` and every other field.
+   * Every lockbox in `scope`, in any order, each as a {@link StoredLockbox}: the boxlabel it is
+   * stored under, and its record exactly as stored -- whole, or, where the backend can project,
+   * without its two ciphered fields, `lockbox_key_wrapped` and `whisper_ciphered`. Keep `format`
+   * and every other field, and hand up a record that looks damaged as it is: the listing marks it.
    */
-  protected abstract doListBoxes(scope: VaultScope): Promise<unknown[]>
+  protected abstract doListBoxes(scope: VaultScope): Promise<StoredLockbox[]>
   /**
    * Store `lockbox` under its boxlabel if, and only if, the scope's standing bundle has
    * `expected.vault_id` and the standing lockbox has `expected.revision_id` -- or, when that is
@@ -280,6 +295,20 @@ const staleErase = () => new VaultError('stale_write', 'The vault changed in sto
  * returns whole records (whose ciphered fields this strips).
  */
 const ListedLockbox = Z.omit(Lockbox, { lockbox_key_wrapped: true, whisper_ciphered: true })
+
+// What makes a listed lockbox nameable: stored under a boxlabel the verbs accept, so they can reach it.
+const NameableLockbox = Z.object({ boxlabel: Label })
+
+/**
+ * One nameable stored lockbox as the listing shows it: its summary, or -- when its record fails
+ * the check, or names another boxlabel than it is stored under, as `readBox` would refuse it -- a
+ * {@link DamagedLockbox} under the boxlabel it is stored under.
+ */
+const listedOrDamaged = ({ boxlabel, lockbox }: StoredLockbox): LockboxSummary | DamagedLockbox => {
+  const checked = ListedLockbox.safeParse(lockbox)
+  if (! checked.success || checked.data.boxlabel !== boxlabel) { return { boxlabel, damaged: true } }
+  return LockboxSummary.parse(checked.data)
+}
 
 /**
  * The adapter's half of a verb, with anything it throws that is not already a VaultError turned
@@ -406,6 +435,12 @@ export const isBoxCkeyOf = (scope: VaultScope, ckey: unknown): ckey is string =>
   return typeof ckey === 'string' && ckey.startsWith(prefix) && ! ckey.slice(prefix.length).includes(':')
 }
 
+/** The boxlabel a lockbox is stored under, read from a ckey that {@link isBoxCkeyOf} accepts for `scope`. */
+export const boxlabelOfCkey = (scope: VaultScope, ckey: string): string => (
+  // The ckey of an empty boxlabel is the prefix every lockbox in the scope shares.
+  ckey.slice(boxCkey(scope, '').length)
+)
+
 /** `fn`'s result (or failure) as a promise: a sync throw becomes a rejection, never an escape. */
 const soon = async <ValT>(fn: () => ValT | Promise<ValT>): Promise<ValT> => await fn()
 
@@ -463,12 +498,14 @@ class StringStoreVaultDB extends VaultDB {
     return soon(() => readJson(this.store, boxCkey(scope, boxlabel)))
   }
 
-  protected doListBoxes(scope: VaultScope): Promise<unknown[]> {
+  protected doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
     return soon(() => (
       this.store.ckeys()
         .filter((ckey) => isBoxCkeyOf(scope, ckey))
-        .map((ckey) => readJson(this.store, ckey))
-        .filter((raw) => raw !== null)
+        .map((ckey) => ({ boxlabel: boxlabelOfCkey(scope, ckey), text: this.store.read(ckey) }))
+        // A row erased since the ckeys were read is gone; one that is not JSON goes up as its text.
+        .filter((row): row is { boxlabel: string, text: string } => row.text !== null)
+        .map(({ boxlabel, text }) => ({ boxlabel, lockbox: jsonOrText(text) }))
     ))
   }
 
@@ -503,6 +540,15 @@ class StringStoreVaultDB extends VaultDB {
   // harmless here, and a real adapter (Convex) subscribes precisely.
   protected override doSubscribe(_scope: VaultScope, onChange: () => void): () => void {
     return this.store.subscribe(onChange)
+  }
+}
+
+/** Stored text as the JSON it holds, or as itself when it holds none: a damaged row, for the listing to mark. */
+const jsonOrText = (text: string): unknown => {
+  try {
+    return JSON.parse(text)
+  } catch {
+    return text
   }
 }
 

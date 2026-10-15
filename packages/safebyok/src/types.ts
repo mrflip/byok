@@ -210,16 +210,34 @@ export type Lockbox = Z.infer<typeof Lockbox>
 
 /**
  * The public face of a lockbox: everything but its two encrypted fields, with `note` null when
- * the lockbox has none -- never absent, never undefined, however the record was stored. This is
- * what a VaultDB's `listBoxes` returns and a vault's snapshot holds, readable while locked.
+ * the lockbox has none -- never absent, never undefined, however the record was stored -- and
+ * `damaged` false. This, or a {@link DamagedLockbox}, is what a VaultDB's `listBoxes` returns
+ * and a vault's snapshot holds, readable while locked.
  *
  * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', registered_at, changed_at }).note  // null
  */
 export const LockboxSummary = Z.extend(
   Z.omit(Lockbox, { format: true, lockbox_key_wrapped: true, whisper_ciphered: true }),
-  { note: Z._default(Z.nullable(LockboxNote), null) },
+  {
+    note:    Z._default(Z.nullable(LockboxNote), null),
+    damaged: Z._default(Z.literal(false), false),
+  },
 )
 export type LockboxSummary = Z.infer<typeof LockboxSummary>
+
+/**
+ * A lockbox whose stored record does not read back as one -- damaged, tampered with, or written by
+ * another version of safebyok -- listed under the boxlabel it is stored under, with nothing else
+ * from it trusted. It sits in a vault's snapshot beside the {@link LockboxSummary}s, sorted among
+ * them, so a UI can offer to remove it: `erase()` removes it and `store()` writes a fresh lockbox
+ * over it, while `read()` and `use()` refuse it with kind 'corrupt_record'.
+ *
+ * @example
+ *   for (const box of snapshot.boxes) {
+ *     if (box.damaged) { showRemovable(box.boxlabel) } else { showSummary(box.boxlabel, box.note) }
+ *   }
+ */
+export type DamagedLockbox = { boxlabel: string, damaged: true }
 
 /**
  * The per-vault record the storage layer holds so any device can unlock the vault: the

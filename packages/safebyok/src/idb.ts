@@ -1,8 +1,8 @@
 import { createStore, del, delMany, entries, get, getMany, keys, set, clear, type UseStore } from 'idb-keyval'
 import { DeviceUnlock, type Lockbox, type VaultBundle, type VaultScope } from './types'
 import {
-  VaultDB, boxCkey, bundleCkey, bundleMeetsExpectation, isBoxCkeyOf, lockboxMeetsExpectation, scopePath, vaultMeetsExpectation,
-  type BundleExpectation, type EraseExpectation, type LockboxExpectation,
+  VaultDB, boxCkey, boxlabelOfCkey, bundleCkey, bundleMeetsExpectation, isBoxCkeyOf, lockboxMeetsExpectation, scopePath, vaultMeetsExpectation,
+  type BundleExpectation, type EraseExpectation, type LockboxExpectation, type StoredLockbox,
 } from './vault-db'
 import type { DeviceDB } from './device-db'
 import { parseDbName, parseInspectorOpts, type IdbOpts, type IdbShelf } from './idb-opts'
@@ -121,11 +121,11 @@ class IdbVaultDB extends VaultDB {
     return (await get(boxCkey(scope, boxlabel), this.shelf())) ?? null
   }
 
-  protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
+  protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
     const rows = await entries(this.shelf())
     return rows
-      .filter(([ckey]) => isBoxCkeyOf(scope, ckey))
-      .map(([, row]) => row as unknown)
+      .filter((entry): entry is [string, unknown] => isBoxCkeyOf(scope, entry[0]))
+      .map(([ckey, row]) => ({ boxlabel: boxlabelOfCkey(scope, ckey), lockbox: row }))
   }
 
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {

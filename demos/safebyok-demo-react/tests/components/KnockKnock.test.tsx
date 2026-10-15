@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { localVaultDB, memoryStore } from 'safebyok'
 import { KnockKnock } from '../../src/components/KnockKnock'
 import * as TH from '../test-helpers'
 
@@ -124,6 +125,24 @@ describe("KnockKnock", () => {
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
     world.renderInVault(<KnockKnock />)
     fireEvent.click(await screen.findByRole('button', { name: 'replace it' }))
+    fireEvent.change(screen.getByPlaceholderText('sk-ant-…'), { target: { value: 'sk-ant-test-replaced' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
+    await TH.answerPassphraseDialog()
+    await screen.findByText(/Anthropic key in the vault/)
+    const vault = await world.openUnlocked()
+    expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-replaced')
+  })
+
+  it("won't knock with a damaged key, and replaces it afresh", async () => {
+    const store = memoryStore()
+    const world = TH.makeWorld({ vaultDB: localVaultDB(store) })
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+    store.write('box:acme:u1:main:anthropic_api_key', '{"not": json')
+    world.renderInVault(<KnockKnock />)
+    await screen.findByText(/stored Anthropic key is damaged/)
+    fireEvent.change(screen.getByPlaceholderText('Banana'), { target: { value: 'Banana' } })
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: /Banana Who\?/ }).disabled).to.be.true
+    fireEvent.click(screen.getByRole('button', { name: 'replace it' }))
     fireEvent.change(screen.getByPlaceholderText('sk-ant-…'), { target: { value: 'sk-ant-test-replaced' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
     await TH.answerPassphraseDialog()

@@ -14,7 +14,7 @@ import type { VaultError, VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import { memoryStore } from '../src/string-store'
-import type { DeviceUnlock, Lockbox, VaultBundle, VaultScope } from '../src/types'
+import type { DamagedLockbox, DeviceUnlock, Lockbox, LockboxSummary, VaultBundle, VaultScope } from '../src/types'
 import type { OpenVaultOpts } from '../src/vault'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
 
@@ -124,6 +124,18 @@ export const boxOf = (boxlabel: string, tag: string, overrides: Partial<WrittenL
   changed_at:          Date.UTC(2026, 9, 14),
   ...overrides,
 })
+
+/**
+ * A listed lockbox as the summary it should be: undefined stays undefined, and one listed as
+ * damaged fails the test, naming its boxlabel. For a test reading a summary's fields out of a
+ * listing or a snapshot, where TypeScript would otherwise have it ask after damage first.
+ *
+ * @example expect(TH.summaryOf(vault.getSnapshot().boxes[0])?.note).to.eq('work account')
+ */
+export const summaryOf = (box: LockboxSummary | DamagedLockbox | undefined): LockboxSummary | undefined => {
+  if (box?.damaged === true) { throw new Error(`The lockbox '${box.boxlabel}' is listed as damaged, where a summary was expected.`) }
+  return box
+}
 
 /**
  * What a write into {@link bundleOf}('u1')'s vault expects when its lockbox is not there yet:
@@ -528,6 +540,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
         note:          'a test box',
         registered_at: Date.UTC(2026, 9, 14),
         changed_at:    Date.UTC(2026, 9, 14),
+        damaged:       false,
       })
     })
 
@@ -537,7 +550,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await vaultDB.updateBox(scopeOf('u1'), noteless, noBoxYet)
       expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(noteless)
       const [summary] = await vaultDB.listBoxes(scopeOf('u1'))
-      expect(summary?.note).to.be.null
+      expect(summaryOf(summary)?.note).to.be.null
     })
 
     it("keeps each scope to itself: same boxlabel, two users, no collision", async () => {
