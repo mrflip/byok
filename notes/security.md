@@ -14,8 +14,9 @@ security expert who knows what questions to ask.
   `VaultDB`'s `doListBoxes` now hands up `{ boxlabel, lockbox }` pairs; the in-tree adapters read it
   from the ckey, Convex from its column), never from the damaged record, and nothing else of the
   record reaches the snapshot. A row under a ckey that is not a valid boxlabel is left out of the
-  listing. `store()` over a lockbox whose record fails validation or verification now erases it
-  (`eraseBox`, expecting only the `vault_id`) and then writes a fresh lockbox expecting no revision,
+  listing. `store()` over a lockbox whose record fails validation (any listed as damaged, and
+  one whose ciphered fields are missing or malformed) now erases it (`eraseBox`, expecting only
+  the `vault_id`) and then writes a fresh lockbox expecting no revision,
   carrying neither its note nor its `registered_at`; two steps, so a failure between them leaves
   the box erased. Since that erase names no revision, it also removes a sound lockbox another
   device stored under the boxlabel after this store read the damaged one (this store's write then

@@ -216,10 +216,13 @@ export type Vault = {
    * `changed_at` only when the whisper differs from the one it replaces: storing the same whisper
    * again writes a new revision, and leaves `changed_at` standing.
    *
-   * A lockbox whose stored record fails verification -- one the snapshot lists as damaged -- is
-   * overwritten as though it were new: erased first, then written with nothing carried from it,
-   * neither its note nor its `registered_at`. Should the write then fail, the damaged record is
-   * gone and the call throws: storing again writes the lockbox afresh.
+   * A lockbox whose stored record cannot be read as one -- every lockbox the snapshot lists as
+   * damaged, and also one that lists as sound but whose ciphered fields are missing or malformed
+   * -- is overwritten as though it were new: erased first, then written with nothing carried
+   * from it, neither its note nor its `registered_at`. Should the write then fail, the old record
+   * is gone and the call throws: storing again writes the lockbox afresh. (A record that reads
+   * but will not decipher, its ciphertext altered, is replaced as any other, its note and
+   * `registered_at` kept.)
    *
    * `opts.note` is the lockbox's public note, shown while locked: text of at most 256
    * characters, as the exported {@link LockboxNote} checks, or null for none -- kind
