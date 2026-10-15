@@ -31,10 +31,20 @@ const served = new Map<string, Served>([
   ['eraseVault',   (vaultDB, [scope, expected]) => vaultDB.eraseVault(scope as VaultScope, expected as EraseExpectation)],
 ])
 
+/** What a request posts: its verb and arguments, or nothing when its body is not a JSON object. */
+const postedCall = async (request: Request): Promise<{ verb?: unknown, args?: unknown }> => {
+  try {
+    const posted: unknown = await request.json()
+    return typeof posted === 'object' && posted !== null ? posted : {}
+  } catch {
+    return {}
+  }
+}
+
 /** The README's POST handler, over `pool`, its signed-in user found by `signedInUserId`. */
 const vaultRoute = (pool: PostgresClient, signedInUserId: (request: Request) => Promise<string | null>) => (
   async (request: Request): Promise<Response> => {
-    const { verb, args } = await request.json() as { verb?: unknown, args?: unknown }
+    const { verb, args } = await postedCall(request)
     const serve = typeof verb === 'string' ? served.get(verb) : undefined
     if (! serve || ! Array.isArray(args)) {
       return Response.json({ refusal: { kind: 'bad_option', message: 'That is not a vault verb.' } }, { status: 400 })
@@ -179,12 +189,14 @@ describe("the README route recipe", () => {
     expect(refusal.kind).to.eq('not_permitted')
   })
 
-  it("answers 400 to anything but a vault verb, and the client says so as storage_unavailable", async () => {
+  it("answers 400 to anything but a vault verb, a malformed body among them, and the client says so as storage_unavailable", async () => {
     const route = await routeOver()
-    for (const body of [{ verb: 'subscribe', args: [] }, { verb: 'constructor', args: [] }, { verb: 'readBundle', args: 'nope' }]) {
+    for (const body of [{ verb: 'subscribe', args: [] }, { verb: 'constructor', args: [] }, { verb: 'readBundle', args: 'nope' }, null, 42]) {
       const response = await route(postOf(body))
       expect(response.status).to.eq(400)
     }
+    const notJson = await route(new Request(`https://app.example.test${VaultRouteUrl}`, { method: 'POST', body: '{"verb": "readBundle", ' }))
+    expect(notJson.status).to.eq(400)
     const broken = new RouteVaultDB(() => Promise.resolve(Response.json({}, { status: 502 })))
     const refusal = await TH.refusalOf(broken.readBundle(TH.scopeOf('u1')))
     expect(refusal.kind).to.eq('storage_unavailable')
