@@ -63,8 +63,9 @@ else's database, and stay one spelling from the wire to the code. Everything els
 `askPassphraseAt`), in a stored record, a snapshot, a test fixture and the demo alike: never an
 ISO string, never a `Date`. The clock seam (`Clock.now()`) already yields it, every index sorts
 it, and one convention means no parsing at any boundary. A field named `*_at` holds one. The
-package writes whole milliseconds; reading, `EpochMillis` checks the bounds (1981 to 2255) and
-lets a fraction through, as a host's clock may return one.
+package writes and reads whole milliseconds, which `EpochMillis` checks with the bounds (1981 to
+2255): a stored time with a fraction fails. Only a reading of the host's clock may carry a
+fraction, and the vault rounds it down as it reads it.
 
 Specificity is a virtue (`saltBytes` says it is bytes), but don't tag the obvious: `title`, not
 `titleStr`. When genericity is exactly the point, use the tag bare: `encode(bytes)`.

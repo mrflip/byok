@@ -118,6 +118,7 @@ const LockboxCases = [
   [{ ...notelessBox, changed_at: FarFuture + 1 },          false,  'a changed_at past FarFuture'],
   [{ ...notelessBox, registered_at: Infinity },            false,  'a registered_at that never comes'],
   [{ ...notelessBox, changed_at: null },                   false,  'a null changed_at'],
+  [{ ...notelessBox, registered_at: Date.UTC(2026, 9, 14) + 0.5 }, false, 'a registered_at with a fraction of a millisecond'],
   [boxWithoutTimes,                                        false,  'a lockbox missing its times'],
   [{ ...boxWithoutTimes, created_at: OldIso, updated_at: OldIso }, false, 'a lockbox from before its times were named registered_at and changed_at'],
 ] as const
@@ -212,7 +213,7 @@ const EpochMillisCases = [
   [FarFuture + 1,             false,  'one millisecond past the ceiling'],
   [8.64e15,                   false,  'the last instant a Date holds, far past the ceiling'],
   [0,                         false,  'the epoch itself'],
-  [NowMs + 0.5,               true,   'a fraction of a millisecond, as a clock may read'],
+  [NowMs + 0.5,               false,  'a fraction of a millisecond'],
   [Infinity,                  false,  'a time that never comes'],
   [NaN,                       false,  'not a number'],
   ["1792022400000",           false,  'a time written as text'],
@@ -232,13 +233,14 @@ describe("EpochMillis", () => {
     expect(tooSmall.error?.issues[0]?.message).to.match(/epoch seconds/)
     expect(tooLarge.error?.issues[0]?.message).to.match(/epoch microseconds/)
     expect(EpochMillis.safeParse(1e300).error?.issues[0]?.message).to.match(/epoch microseconds/)
+    expect(EpochMillis.safeParse(NowMs + 0.5).error?.issues[0]?.message).to.match(/whole epoch milliseconds/)
   })
 
   it("passes a time through unchanged, as its examples show", () => {
     expect(EpochMillis.parse(Date.UTC(2026, 9, 15))).to.eq(1_792_022_400_000)
     expect(EpochMillis.safeParse(1_792_022_400).success).to.be.false
     expect(EpochMillis.safeParse(1_792_022_400_000_000).success).to.be.false
-    expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.true
+    expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.false
     expect(EpochMillis.safeParse(Infinity).success).to.be.false
   })
 })

@@ -131,13 +131,21 @@ describe("the host's clock", () => {
     expect(world.dbStore.ckeys()).to.have.lengthOf(0)
   })
 
-  it("still locks when the clock has gone wrong: lock() at once, and lockSoon() at once before it refuses the clock", async () => {
+  it("still locks when the clock has gone wrong: lock(), and lockSoon() at once, without a grace", async () => {
     const world = makeWorld()
     let reading = world.clock.now()
     const vault = await world.open({ clock: { now: () => reading } })
     await vault.unlock('pw')
     reading = NaN
-    await expectRefusal(vault.lockSoon(5), 'bad_option')
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => { /* kept out of the test output */ })
+    try {
+      await vault.lockSoon(5)
+      expect(warn).toHaveBeenCalledOnce()
+      expect(String(warn.mock.calls[0]?.[0])).to.match(/locked at once/)
+      expect(String(warn.mock.calls[0]?.[0])).to.not.include('NaN')
+    } finally {
+      warn.mockRestore()
+    }
     expect(vault.getSnapshot().state).to.eq('locked')
     expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
     reading = world.clock.now()
@@ -147,6 +155,42 @@ describe("the host's clock", () => {
     await vault.lock()
     expect(vault.getSnapshot().state).to.eq('locked')
     expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+  })
+
+  it("fails closed: a reading gone wrong while unlocked drops the vaultKey before it refuses the clock", async () => {
+    const world = makeWorld()
+    let reading = world.clock.now()
+    const vault = await world.open({ clock: { now: () => reading } })
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    reading = world.clock.now() / 1000
+    await expectRefusal(vault.read('anthropic'), 'bad_option')
+    expect(vault.getSnapshot().state).to.eq('locked')
+    reading = world.clock.now()
+    await expectRefusal(vault.read('anthropic'), 'vault_locked')
+  })
+
+  it("refuses a clock whose now() throws, at openVault, keeping its error as the cause and quoting none of it", async () => {
+    const world = makeWorld()
+    const thrown = new Error('clock broke near sk-ant-SUPERSECRET')
+    const err = await expectRefusal(world.open({ clock: { now: () => { throw thrown } } }), 'bad_option')
+    expect(err.cause).to.eq(thrown)
+    expect(err.message).to.not.include('SUPERSECRET')
+  })
+
+  it("refuses, and drops the vaultKey, when now() starts throwing after the open", async () => {
+    const world = makeWorld()
+    let broken = false
+    const clock = { now: () => { if (broken) { throw new Error('no time today') } return world.clock.now() } }
+    const vault = await world.open({ clock })
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    broken = true
+    const err = await expectRefusal(vault.read('anthropic'), 'bad_option')
+    expect((err.cause as Error).message).to.eq('no time today')
+    broken = false
+    expect(vault.getSnapshot().state).to.eq('locked')
+    await expectRefusal(vault.read('anthropic'), 'vault_locked')
   })
 
   it("refuses a store when the clock has gone wrong while unlocked", async () => {
@@ -502,6 +546,7 @@ const SpoiledUnlocks = [
   [({ ask_passphrase_at: kept, ...row }: Record<string, unknown>) => ({ ...row, expires_at: kept }), 'a record from before its deadline was named ask_passphrase_at'],
   [(row: Record<string, unknown>) => ({ ...row, ask_passphrase_at: 1_792_022_400 }),          'a deadline in epoch seconds, before 1981'],
   [(row: Record<string, unknown>) => ({ ...row, ask_passphrase_at: FarFuture + 1 }),          'a deadline past FarFuture'],
+  [({ ask_passphrase_at: kept, ...row }: Record<string, unknown>) => ({ ...row, ask_passphrase_at: (kept as number) - 0.5 }), 'a deadline with a fraction of a millisecond'],
   [() => 'not a record at all',                                                               'a row that is not a record'],
 ] as const
 
@@ -511,16 +556,6 @@ describe("the remembered unlock, from a host's own DeviceDB", () => {
     const device = uncheckingDeviceDB()
     const vault = await world.open({ deviceDB: device.deviceDB })
     await vault.unlock('pw one')
-    const later = await world.open({ deviceDB: device.deviceDB })
-    expect(later.getSnapshot().state).to.eq('unlocked')
-  })
-
-  it("takes a deadline with a fraction of a millisecond, in bounds, as sound", async () => {
-    const world = makeWorld()
-    const device = uncheckingDeviceDB()
-    const vault = await world.open({ deviceDB: device.deviceDB })
-    await vault.unlock('pw one')
-    device.spoilRow(({ ask_passphrase_at: deadline, ...row }) => ({ ...row, ask_passphrase_at: (deadline as number) - 0.5 }))
     const later = await world.open({ deviceDB: device.deviceDB })
     expect(later.getSnapshot().state).to.eq('unlocked')
   })
@@ -759,6 +794,21 @@ describe("the times a vault keeps", () => {
     await vault.store('anthropic', 'sk-fake')
     expect(storedBundleOf(world)).to.include({ registered_at: world.clock.now() })
     expect(storedRowOf(world, 'anthropic')).to.include({ registered_at: world.clock.now(), changed_at: world.clock.now() })
+  })
+
+  it("refuses a stored lockbox or bundle whose time holds a fraction of a millisecond, leaving it as it is", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    const box = JSON.stringify({ ...storedRowOf(world, 'anthropic'), changed_at: world.clock.now() + 0.5 })
+    world.dbStore.write('box:acme:u1:main:anthropic', box)
+    await expectRefusal(vault.read('anthropic'), 'corrupt_record')
+    expect(world.dbStore.read('box:acme:u1:main:anthropic')).to.eq(box)
+    const bundle = JSON.stringify({ ...storedBundleOf(world), registered_at: world.clock.now() + 0.5 })
+    world.dbStore.write('vault:acme:u1:main', bundle)
+    await expectRefusal(world.open(), 'corrupt_record')
+    expect(world.dbStore.read('vault:acme:u1:main')).to.eq(bundle)
   })
 
   it("refuses a stored lockbox from before its times were renamed, leaving it as it is", async () => {

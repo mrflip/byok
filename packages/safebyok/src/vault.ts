@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { DeviceUnlock, EpochMillis, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import {
@@ -66,8 +66,10 @@ export type OpenVaultOpts = {
   /**
    * Time source for expiry and for the times stored with each record; tests inject one. Default:
    * the wall clock. Its `now()` returns epoch milliseconds, as `Date.now()` does, from 1981 to 2255
-   * ({@link FarPast} to {@link FarFuture}), fractions allowed. openVault reads it once and refuses
-   * a clock outside those bounds with kind 'bad_option'; so does any later call that reads it so.
+   * ({@link FarPast} to {@link FarFuture}), fractions allowed (each reading is rounded down to
+   * whole milliseconds). openVault reads it once and refuses a clock outside those bounds, or one
+   * that throws, with kind 'bad_option'; so does any later call that reads it so, dropping the
+   * vaultKey first, so the vault is locked.
    */
   clock?: Clock | undefined
   /**
@@ -130,7 +132,7 @@ export type Vault = {
    *
    * `graceSeconds` is from 0 to 60, fractions too; kind 'bad_option' otherwise. 0 is `lock()`.
    * `close()` cuts the grace short. A clock reading out of bounds cannot time a grace: the vault
-   * locks at once, as with `lock()`, and the call then throws kind 'bad_option'.
+   * then locks at once, as with `lock()`, and says so with a console warning.
    *
    * @param graceSeconds - How long work in hand has to finish. Default 5.
    *
@@ -268,8 +270,17 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const clock = parseClock(opts.clock)
   // Every reading of the host's clock is checked, this first one so that a clock counting in the
   // wrong unit fails the open rather than some later call.
-  const clockNow = () => readClock(clock)
-  clockNow()
+  readClock(clock)
+  /** A checked reading of the host's clock. One that fails drops the vaultKey first: no deadline can be trusted now. */
+  const clockNow = () => {
+    try {
+      return readClock(clock)
+    } catch (err) {
+      dropKey()
+      bump()
+      throw err
+    }
+  }
   const keyDeriver = parseKeyDeriver(opts.keyDeriver)
   const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
   const lockboxLimit = parseMaxLockboxes(opts.maxLockboxes)
@@ -653,11 +664,13 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       }
       try {
         shutAfter(graceMs)
-      } catch (err) {
+      } catch {
         // A clock gone wrong cannot time a grace, and the lock still wins: at once, as lock().
         await shut()
         bump()
-        throw err
+        // eslint-disable-next-line no-console -- the Coach's approved stopgap until a pluggable logger replaces it
+        console.warn("safebyok: lockSoon() could not read the clock passed to openVault, so the vault locked at once, without a grace. The clock's now() must return epoch milliseconds, as Date.now() does.")
+        return
       }
       // A shut in all but the key: an unlock under way loses, no new operation starts, and this
       // device forgets its remembered unlock now. Only the vaultKey waits, for work in hand. The
@@ -1017,9 +1030,23 @@ const parseClock = (candidate: Clock | undefined): Clock => {
   return candidate
 }
 
-/** A reading of the host's clock, checked as an {@link EpochMillis} and rounded down to whole milliseconds. */
+/**
+ * A clock reading the package accepts: epoch milliseconds from {@link FarPast} to {@link FarFuture},
+ * a fraction allowed, as a clock may return one. Floored as it is read, so every time kept is a
+ * whole-millisecond {@link EpochMillis}.
+ */
+const clockReading = Z.number().check(Z.gte(FarPast), Z.lte(FarFuture))
+
+/** A reading of the host's clock, checked and rounded down to whole milliseconds. */
 const readClock = (clock: Clock): number => {
-  const checked = EpochMillis.safeParse(clock.now())
+  let reading: unknown
+  try {
+    reading = clock.now()
+  } catch (err) {
+    // The host's own error rides along as the cause, unquoted.
+    throw new VaultError('bad_option', "The clock passed to openVault threw when read: its now() must return epoch milliseconds, as Date.now() does. The clock's own error is this error's cause.", { cause: err })
+  }
+  const checked = clockReading.safeParse(reading)
   if (! checked.success) {
     throw new VaultError('bad_option', "The clock passed to openVault read a time outside 1981 to 2255: its now() must return epoch milliseconds, as Date.now() does, not seconds or microseconds.")
   }

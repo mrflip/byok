@@ -141,18 +141,26 @@ security expert who knows what questions to ask.
   `EpochMillis`: epoch ms from `FarPast` (1981-01-01T00:00:00Z) to `FarFuture`, the microsecond
   epochalypse (`Math.floor(Number.MAX_SAFE_INTEGER / 1000)`, 2255-06-05T23:47:34.740Z) -- the
   device record's `ask_passphrase_at` (named `expires_at` until then), and the lockbox's and
-  bundle's `registered_at` and the lockbox's `changed_at`. The schema lets a fraction of a
-  millisecond through; the package writes whole ms. A device record out of bounds fails the
+  bundle's `registered_at` and the lockbox's `changed_at`: whole ms, so a stored record with a
+  fraction of a millisecond fails its schema as one out of bounds does. A device record that fails the
   schema, reads as "no remembered unlock", and is erased; it is not clamped on read. That
   includes records written by 0.1.0 and 0.2.0 under a window above about two million hours (some
   229 years), which capped the window only at `MAX_SAFE_INTEGER` ms and stored `now + window`
   unclamped. **The host's `Clock` is checked**: `openVault` reads it once and refuses a reading
-  outside those bounds (seconds, microseconds, `NaN`, `Infinity`, a non-number) as `bad_option`,
-  before touching storage; every later reading is checked the same way and floored to whole ms,
-  so a clock that goes wrong after the open makes the call that reads it throw `bad_option`
-  rather than mint a deadline or a stored time from it. A lock never waits on the clock: `lock()`
-  reads none, and `lockSoon()`, unable to time its grace, locks at once before it refuses the
-  clock. A clock in bounds but wrong (set a year ahead, say) is not detected.
+  outside those bounds (seconds, microseconds, `NaN`, `Infinity`, a non-number), or a `now()` that
+  throws (its error kept as the cause, unquoted), as `bad_option`, before touching storage. Every
+  later reading is checked the same way and floored to whole ms (a fraction is fine in a
+  reading), and one that fails **fails closed**: the vaultKey is dropped before the call throws
+  `bad_option`, so a clock gone wrong never mints a deadline or a stored time, and leaves the vault
+  locked in memory (the device record stays). A lock never waits on the clock: `lock()` reads
+  none, and `lockSoon()`, unable to time its grace, locks at once and returns normally, with a
+  console warning (below). A clock that goes wrong in the middle of a `store()`, `erase()` or
+  `changePassphrase()` lets the write land, then throws `bad_option` from the refresh after it. A
+  clock in bounds but wrong (set a year ahead, say) is not detected.
+* 2026-10-15: `lockSoon()` on a bad clock calls `console.warn` once, a fixed message quoting no
+  value. It is the package's one console write (`src/` otherwise writes none, the linter
+  enforcing it), under a single `eslint-disable-next-line no-console`, approved by the Coach until
+  a pluggable logger (second_harvest thread 7) replaces it.
 * 2026-10-15: a lockbox keeps two times, `registered_at` (first stored, carried forward) and
   `changed_at`, which moves only when the whisper's serialized form (`stableJsonify`) differs from
   the one it replaces. To know, `store()` deciphers the previous record it already reads and

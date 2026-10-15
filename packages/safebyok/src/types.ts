@@ -95,26 +95,27 @@ export const FarFuture = 9_007_199_254_740 // Math.floor(Number.MAX_SAFE_INTEGER
 export const FarPast = 347_155_200_000 // Date.UTC(1981, 0, 1)
 
 /**
- * Validator for an instant as UTC epoch milliseconds, from {@link FarPast} (1981) to
- * {@link FarFuture} (2255), both included. Every time the package stores is one -- a lockbox's
+ * Validator for an instant as whole UTC epoch milliseconds, from {@link FarPast} (1981) to
+ * {@link FarFuture} (2255), both included. Every time the package keeps is one -- a lockbox's
  * `registered_at` and `changed_at`, a vault bundle's `registered_at`, a remembered unlock's
- * `ask_passphrase_at` -- and so is every reading of the host's {@link Clock}. A host can check
- * its own times with it.
+ * `ask_passphrase_at` -- and a stored record holding anything else fails validation. A host can
+ * check its own times with it.
  *
- * Fractions of a millisecond pass, as a clock may return them; the package itself always writes
- * whole milliseconds. The bounds catch a unit mistake either way: epoch *seconds* read as
- * milliseconds land in January 1970, below the floor; epoch *microseconds* read as milliseconds
- * land tens of thousands of years out, above the ceiling. `Infinity` and `NaN` never pass.
+ * The bounds catch a unit mistake either way: epoch *seconds* read as milliseconds land in
+ * January 1970, below the floor; epoch *microseconds* read as milliseconds land tens of thousands
+ * of years out, above the ceiling. `Infinity` and `NaN` never pass. (The host's {@link Clock} may
+ * return a fraction of a millisecond; the vault rounds each reading down before keeping it.)
  *
  * @example EpochMillis.parse(Date.UTC(2026, 9, 15))                // 1792022400000
  * @example EpochMillis.safeParse(1_792_022_400).success            // false: seconds, not ms
  * @example EpochMillis.safeParse(1_792_022_400_000_000).success    // false: microseconds, not ms
- * @example EpochMillis.safeParse(1_792_022_400_000.5).success      // true: a fraction is in bounds
+ * @example EpochMillis.safeParse(1_792_022_400_000.5).success      // false: whole milliseconds only
  * @example EpochMillis.safeParse(Infinity).success                 // false: never a time
  */
 export const EpochMillis = Z.number().check(
   Z.gte(FarPast, "An instant is epoch milliseconds no earlier than 1981; a smaller number is likely epoch seconds"),
   Z.lte(FarFuture, "An instant is epoch milliseconds no later than 2255; a larger number is likely epoch microseconds"),
+  Z.int("An instant is whole epoch milliseconds"),
 )
 
 /**
@@ -262,10 +263,10 @@ export const MaxLockboxes = 100
 
 /**
  * Injected time source, so expiry is testable; defaults to the wall clock. `now()` returns epoch
- * milliseconds, as `Date.now()` does: an {@link EpochMillis}, from {@link FarPast} to
- * {@link FarFuture}, fractions allowed. The vault checks every reading, and refuses a clock that
- * reads outside those bounds -- counting in seconds or microseconds, say -- with kind
- * 'bad_option': at `openVault`, and at any later call that reads it so.
+ * milliseconds, as `Date.now()` does, from {@link FarPast} to {@link FarFuture}; a fraction is
+ * fine, and rounded down. The vault checks every reading, and refuses a clock that reads outside
+ * those bounds -- counting in seconds or microseconds, say -- or throws, with kind 'bad_option':
+ * at `openVault`, and at any later call that reads it so, which drops the vaultKey first.
  */
 export type Clock = { now(): number }
 
