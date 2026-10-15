@@ -191,13 +191,80 @@ export const LockboxSummary = Z.extend(
 export type LockboxSummary = Z.infer<typeof LockboxSummary>
 
 /**
- * The per-vault record the storage layer holds so any device can unlock the vault: the
- * passphraseSalt, the keyDeriverLabel saying how the passphraseKey is made, and the vaultKey
- * wrapped under that passphraseKey. All of it is safe in the open; none of it opens without
- * the passphrase.
+ * The ways into a vault, each an {@link UnlockEnvelope}'s `method`. Today there is one,
+ * `passphrase`; each method has an envelope shape of its own, and the vault tells them apart by
+ * this field.
+ */
+export const UnlockMethodVals = ['passphrase'] as const
+export type UnlockMethod = typeof UnlockMethodVals[number]
+
+/**
+ * The most unlock envelopes a vault holds: room for every passphrase a person plausibly keeps
+ * (a daily one, one written down at home, one a partner holds), and a bound on how long an
+ * unlock can take. An unlock not aimed at one envelope tries each passphrase envelope in turn,
+ * one key derivation apiece, so a wrong passphrase costs up to this many. A stored bundle with
+ * more fails validation.
+ */
+export const MaxUnlocks = 8
+
+/**
+ * A passphrase's way into the vault: the vaultKey wrapped under the passphraseKey that this
+ * envelope's passphrase and its own passphraseSalt make. Every field but `vault_key_wrapped` is
+ * public, and all of them are bound into that wrap, so an envelope altered or moved to another
+ * vault refuses to open.
+ */
+export const PassphraseEnvelope = Z.object({
+  method:            Z.literal('passphrase'),
+  /** Random id minted when the envelope is added, and kept when its passphrase changes. */
+  unlock_id:         Z.string().check(Z.minLength(1)),
+  /** What the user calls this way in, so they can tell one from another: `home_phrase`, say. */
+  unlocklabel:       Label,
+  /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, or a host's own label. */
+  key_deriver_label: Z.string().check(Z.minLength(1)),
+  /** This envelope's passphraseSalt: fresh for every envelope, and for every change of its passphrase. */
+  salt_b64:          Z.string().check(Z.minLength(1)),
+  /** The vaultKey, wrapped under the passphraseKey: decrypting this IS the passphrase check. */
+  vault_key_wrapped: Ciphered,
+})
+export type PassphraseEnvelope = Z.infer<typeof PassphraseEnvelope>
+
+/**
+ * One way into a vault: the vaultKey, wrapped under a key that one {@link UnlockMethod} makes,
+ * with the public fields that method needs. Told apart by `method`; today only a
+ * {@link PassphraseEnvelope}.
+ */
+export const UnlockEnvelope = Z.discriminatedUnion('method', [PassphraseEnvelope])
+export type UnlockEnvelope = Z.infer<typeof UnlockEnvelope>
+
+/** True when no two of `envelopes` share `field`. */
+const distinctIn = (envelopes: readonly UnlockEnvelope[], field: 'unlock_id' | 'unlocklabel'): boolean => (
+  new Set(envelopes.map((envelope) => envelope[field])).size === envelopes.length
+)
+
+/** A bundle's unlock envelopes: at least one, at most {@link MaxUnlocks}, no id or label twice. */
+const unlockList = Z.array(UnlockEnvelope).check(
+  Z.minLength(1, "A vault has at least one way in"),
+  Z.maxLength(MaxUnlocks, `A vault holds at most ${String(MaxUnlocks)} unlock envelopes`),
+  Z.refine((envelopes) => distinctIn(envelopes, 'unlock_id'), "No two unlock envelopes share an unlock_id"),
+  Z.refine((envelopes) => distinctIn(envelopes, 'unlocklabel'), "No two unlock envelopes share an unlocklabel"),
+)
+
+/**
+ * The public face of one way into a vault, as a vault's snapshot lists it even while locked:
+ * what a host shows the user, and what it names when it aims `unlock()` or `removeUnlock()` at
+ * one. For a passphrase, its `method`, `unlock_id` and `unlocklabel`; never its salt or wrap.
  *
- * `passphrase_epoch` goes up by one on every passphrase change, so other devices and remembered
- * unlocks know to ask again.
+ * @example vault.getSnapshot().unlocks  // [{ method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase' }]
+ */
+export type UnlockSummary = Pick<PassphraseEnvelope, 'method' | 'unlock_id' | 'unlocklabel'>
+
+/**
+ * The per-vault record the storage layer holds so any device can unlock the vault: its scope,
+ * its `vault_id`, and its `unlocks`, each an {@link UnlockEnvelope} wrapping the one vaultKey.
+ * All of it is safe in the open; none of it opens without a passphrase.
+ *
+ * `passphrase_epoch` goes up by one on every change to the unlocks -- a passphrase added,
+ * removed or changed -- so other devices and remembered unlocks know to ask again.
  */
 export const VaultBundle = Z.object({
   format:              Z.literal('safebyok-vault-v1'),
@@ -207,11 +274,8 @@ export const VaultBundle = Z.object({
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
   vault_id:            Z.string().check(Z.minLength(1)),
   passphrase_epoch:    Z.int().check(Z.positive()),
-  /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, or a host's own label. */
-  key_deriver_label:   Z.string().check(Z.minLength(1)),
-  passphrase_salt_b64: Z.string().check(Z.minLength(1)),
-  /** The vaultKey, wrapped under the passphraseKey: decrypting this IS the passphrase check. */
-  vault_key_passphrase_wrapped: Ciphered,
+  /** The ways into the vault, each wrapping the one vaultKey: see {@link UnlockEnvelope}. */
+  unlocks:             unlockList,
   /** When the vault was made, an {@link EpochMillis}; never changed. */
   registered_at:       EpochMillis,
 })

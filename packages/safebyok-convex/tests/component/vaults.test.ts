@@ -64,7 +64,7 @@ describe("getBundle and createBundle", () => {
 })
 
 describe("updateBundle", () => {
-  const rewrapped = TH.bundleOf('u1', { passphrase_epoch: 2, vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv-new', ciphertext_b64: 'ct-new' } })
+  const rewrapped = TH.bundleOf('u1', { passphrase_epoch: 2, unlocks: [TH.envelopeOf('passphrase', { vault_key_wrapped: { cipher_iv_b64: 'iv-new', ciphertext_b64: 'ct-new' } })] })
 
   const UpdateCases = [
     // the expectation holds:
@@ -532,7 +532,8 @@ describe("a vault's weight limit", () => {
 const wholeDocumentBundle = () => {
   const bundle = TH.bundleOf('u1')
   const padding = 'a'.repeat(1_048_576 - getDocumentSize(bundle) - 64)
-  return TH.bundleOf('u1', { passphrase_salt_b64: bundle.passphrase_salt_b64 + padding })
+  const [envelope] = bundle.unlocks
+  return TH.bundleOf('u1', { unlocks: [{ ...envelope!, salt_b64: envelope!.salt_b64 + padding }] })
 }
 
 /**
