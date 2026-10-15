@@ -7,7 +7,7 @@ import { boxOf, bundleOf, scopeOf } from './helpers'
  * VaultDB from the built package (`safebyok`) qualifies as readily as one extending `src/`.
  */
 export type VaultDBVerbs = Pick<VaultDB,
-  'maxRecordBytes' | 'readBundle' | 'createBundle' | 'updateBundle' | 'readBox' | 'listBoxes' | 'updateBox' | 'eraseBox' | 'eraseVault' | 'subscribe'
+  'maxRecordBytes' | 'maxVaultBytes' | 'readBundle' | 'createBundle' | 'updateBundle' | 'readBox' | 'listBoxes' | 'updateBox' | 'eraseBox' | 'eraseVault' | 'subscribe'
 >
 
 /**
@@ -224,6 +224,12 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
     it("declares the most it holds in one record", async () => {
       const vaultDB = await makeVaultDB()
       expect(vaultDB.maxRecordBytes).to.be.greaterThan(0)
+    })
+
+    it("declares the most it holds of one vault, no less than one record", async () => {
+      const vaultDB = await makeVaultDB()
+      expect(vaultDB.maxVaultBytes).to.be.a('number')
+      expect(vaultDB.maxVaultBytes).to.be.at.least(vaultDB.maxRecordBytes)
     })
 
     it("subscribe hands back an unsubscribe that can be called", async () => {

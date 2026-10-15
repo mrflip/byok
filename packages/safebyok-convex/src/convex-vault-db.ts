@@ -57,7 +57,8 @@ export type ConvexVaultClient = ConvexWatchingClient | ConvexReactWatchingClient
  * @param client - Your app's Convex client: a `ConvexClient`, or your `ConvexReactClient`.
  * @param api - The safebyok functions as your clients reference them: `api.safebyok`, from your
  *   `convex/_generated/api`, when you re-export them from `convex/safebyok.ts`.
- * @returns The VaultDB, holding at most 1 MiB in one record, Convex's document limit.
+ * @returns The VaultDB, holding at most 1 MiB in one record, Convex's document limit, and 8 MiB
+ *   in one vault, half of what one Convex function may read (erasing a vault reads it twice).
  *
  * @example
  *   import { api } from '../convex/_generated/api'
@@ -87,6 +88,9 @@ export const toConvexLockbox = (lockbox: Lockbox): Infer<typeof LockboxRecord> =
 /** Each verb one call to the function of the same purpose; the base class validates both ways. */
 class ConvexVaultDB extends VaultDB {
   readonly maxRecordBytes = ConvexDocumentBytes
+  // Listing, watching and erasing each read the whole vault in one transaction, and erasing reads
+  // every row twice: half the read budget is what a vault can hold and still be erased whole.
+  readonly maxVaultBytes = ConvexTransactionReadBytes / 2
 
   private readonly client: ConvexVaultClient
   private readonly api:    SafebyokApi
@@ -159,6 +163,9 @@ class ConvexVaultDB extends VaultDB {
 
 /** Convex's most for one document, in bytes. */
 const ConvexDocumentBytes = 1_048_576
+
+/** Convex's most for one function to read, in bytes: 16 MiB. */
+const ConvexTransactionReadBytes = 16_777_216
 
 const ignoreTrouble = (): void => undefined
 
