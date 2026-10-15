@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ForcePassphraseReentryHours, FarFuture, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
@@ -29,6 +29,18 @@ const makeWorld = () => {
 
 const HourMs = 60 * 60 * 1000
 const SevenDaysMs = 7 * 24 * HourMs
+
+/** Remembered deadlines outside EpochMillis's bounds, each a unit mistake or an older reading of "far". */
+const OutOfBoundsDeadlines = [
+  [FarFuture + 1,                                       'one millisecond past FarFuture'],
+  [8.64e15,                                             'the last instant a Date holds'],
+  [1e300,                                               'a huge finite number'],
+  [1_792_022_400_000_000,                               'epoch microseconds'],
+  [1_792_022_400,                                       'epoch seconds'],
+  [FarPast - 1,                                         'one millisecond before 1981'],
+  [Infinity,                                            'a deadline that never comes'],
+  [Date.parse('2026-10-14T12:00:00Z') + (1e9 * HourMs), 'what 0.2.0 wrote for a window of 1e9 hours'],
+] as const
 
 /** Expect `operation` to reject with a VaultError of `kind`; hands the error back for a closer look. */
 const expectRefusal = async (operation: Promise<unknown>, kind: VaultError['kind']): Promise<VaultError> => {
@@ -179,16 +191,14 @@ describe("the remembered unlock", () => {
   })
 
   describe("with forcePassphraseReentryHours: Infinity", () => {
-    it("unlocks, and stays unlocked however long it is left, showing the latest deadline a Date holds", async () => {
+    it("unlocks, and stays unlocked however long it is left, showing FarFuture as its deadline", async () => {
       const world = makeWorld()
       const vault = await world.open({ forcePassphraseReentryHours: Infinity })
       await vault.unlock('pw one')
       await vault.store('anthropic', 'sk-fake')
       expect(vault.getSnapshot().state).to.eq('unlocked')
       expect(vault.getSnapshot().askPassphraseAt).to.eq(FarFuture)
-      expect(FarFuture).to.eq(8.64e15)
-      expect(new Date(FarFuture).getTime()).to.eq(FarFuture)
-      world.advance(1000 * 365 * 24 * HourMs)
+      world.advance(200 * 365 * 24 * HourMs)
       expect(await vault.read('anthropic')).to.eq('sk-fake')
       expect(vault.getSnapshot().state).to.eq('unlocked')
     })
@@ -231,21 +241,32 @@ describe("the remembered unlock", () => {
     })
   })
 
-  it("reads a remembered deadline past what a Date holds as the latest one, and refuses an infinite one", async () => {
+  it("reads a remembered deadline of exactly FarFuture as unlocked", async () => {
     const world = makeWorld()
     const vault = await world.open()
     await vault.unlock('pw one')
     const written = await world.deviceDB.readUnlock(scopeOf('u1'))
     if (written === null) { throw new Error('expected a remembered unlock on the device') }
-    await world.deviceDB.writeUnlock({ ...written, expires_at: 1e300 })
-    const farFuture = await world.open()
-    expect(farFuture.getSnapshot().state).to.eq('unlocked')
-    expect(farFuture.getSnapshot().askPassphraseAt).to.eq(FarFuture)
-    await world.deviceDB.writeUnlock({ ...written, expires_at: Infinity })
-    const infinite = await world.open()
-    expect(infinite.getSnapshot().state).to.eq('locked')
-    expect(await world.deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+    await world.deviceDB.writeUnlock({ ...written, expires_at: FarFuture })
+    const reopened = await world.open()
+    expect(reopened.getSnapshot().state).to.eq('unlocked')
+    expect(reopened.getSnapshot().askPassphraseAt).to.eq(FarFuture)
   })
+
+  for (const [expiresAt, blurb] of OutOfBoundsDeadlines) {
+    it(`reads a remembered deadline of ${blurb} as no remembered unlock, and erases it`, async () => {
+      const world = makeWorld()
+      const vault = await world.open()
+      await vault.unlock('pw one')
+      const written = await world.deviceDB.readUnlock(scopeOf('u1'))
+      if (written === null) { throw new Error('expected a remembered unlock on the device') }
+      await world.deviceDB.writeUnlock({ ...written, expires_at: expiresAt })
+      const reopened = await world.open()
+      expect(reopened.getSnapshot().state).to.eq('locked')
+      expect(reopened.getSnapshot().askPassphraseAt).to.be.null
+      expect(await world.deviceDB.readUnlock(scopeOf('u1'))).to.be.null
+    })
+  }
 
   it("clamps a huge finite forcePassphraseReentryHours to the same latest deadline", async () => {
     const world = makeWorld()
@@ -255,6 +276,18 @@ describe("the remembered unlock", () => {
       expect(vault.getSnapshot().state).to.eq('unlocked')
       expect(vault.getSnapshot().askPassphraseAt).to.eq(FarFuture)
     }
+  })
+
+  it("makes a deadline of whole milliseconds from a clock that returns fractions, and a reopen reads it back", async () => {
+    const world = makeWorld()
+    const fractionalClock = { now: () => world.clock.now() + 0.25 }
+    const vault = await world.open({ clock: fractionalClock })
+    await vault.unlock('pw one')
+    expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + SevenDaysMs)
+    const remembered = await world.deviceDB.readUnlock(scopeOf('u1'))
+    expect(remembered?.expires_at).to.eq(world.clock.now() + SevenDaysMs)
+    const reopened = await world.open({ clock: fractionalClock })
+    expect(reopened.getSnapshot().state).to.eq('unlocked')
   })
 
   it("leaves a window that fits before the latest deadline exactly as asked", async () => {
@@ -288,11 +321,14 @@ const uncheckingDeviceDB = () => {
 }
 
 const SpoiledUnlocks = [
-  [(row: Record<string, unknown>) => ({ ...row, format: 'byok-unlock-v1' }),     'a record under the format tag before the rename'],
-  [(row: Record<string, unknown>) => ({ ...row, expires_at: '99999999999999' }), 'a deadline written as text, which would compare as a number'],
-  [(row: Record<string, unknown>) => ({ ...row, expires_at: Infinity }),         'a deadline that never comes'],
-  [({ expires_at: _gone, ...row }: Record<string, unknown>) => row,              'a record missing its deadline'],
-  [() => 'not a record at all',                                                 'a row that is not a record'],
+  [(row: Record<string, unknown>) => ({ ...row, format: 'byok-unlock-v1' }),        'a record under the format tag before the rename'],
+  [(row: Record<string, unknown>) => ({ ...row, expires_at: '99999999999999' }),    'a deadline written as text, which would compare as a number'],
+  [(row: Record<string, unknown>) => ({ ...row, expires_at: Infinity }),            'a deadline that never comes'],
+  [({ expires_at: _gone, ...row }: Record<string, unknown>) => row,                 'a record missing its deadline'],
+  [(row: Record<string, unknown>) => ({ ...row, expires_at: 1_792_022_400 }),       'a deadline in epoch seconds, before 1981'],
+  [(row: Record<string, unknown>) => ({ ...row, expires_at: FarFuture + 1 }),       'a deadline past FarFuture'],
+  [(row: Record<string, unknown>) => ({ ...row, expires_at: 1_792_022_400_000.5 }), 'a deadline with a fraction of a millisecond'],
+  [() => 'not a record at all',                                                     'a row that is not a record'],
 ] as const
 
 describe("the remembered unlock, from a host's own DeviceDB", () => {

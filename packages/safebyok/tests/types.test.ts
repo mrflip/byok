@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { FarFuture, Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { EpochMillis, FarFuture, FarPast, Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
 import { boxOf, bundleOf, scopeOf } from '../src/testing'
 
 const WhisperCases = [
@@ -157,15 +157,72 @@ describe("LockboxSummary", () => {
 })
 
 describe("FarFuture", () => {
-  it("is the last instant a Date holds: one millisecond more is no date at all", () => {
-    expect(FarFuture).to.eq(8.64e15)
-    expect(new Date(FarFuture).getTime()).to.eq(FarFuture)
-    expect(Number.isNaN(new Date(FarFuture + 1).getTime())).to.eq(true)
+  it("is the microsecond epochalypse: the last millisecond whose epoch microseconds are a safe integer", () => {
+    expect(FarFuture).to.eq(Math.floor(Number.MAX_SAFE_INTEGER / 1000))
+    expect(Number.isSafeInteger(FarFuture * 1000)).to.be.true
+    expect(Number.isSafeInteger((FarFuture + 1) * 1000)).to.be.false
+  })
+
+  it("falls in 2255, a valid Date", () => {
+    expect(new Date(FarFuture).toISOString()).to.eq('2255-06-05T23:47:34.740Z')
   })
 
   it("lets a host show 'until locked' for a deadline equal to it, and a date for any other", () => {
     const shown = (askPassphraseAt: number): string => (askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toISOString())
     expect(shown(FarFuture)).to.eq('until locked')
     expect(shown(Date.UTC(2026, 9, 22))).to.eq('2026-10-22T00:00:00.000Z')
+  })
+})
+
+describe("FarPast", () => {
+  it("is the first instant of 1981", () => {
+    expect(FarPast).to.eq(Date.UTC(1981, 0, 1))
+    expect(new Date(FarPast).toISOString()).to.eq('1981-01-01T00:00:00.000Z')
+  })
+})
+
+const NowMs = Date.UTC(2026, 9, 15)
+
+const EpochMillisCases = [
+  // regular usage:
+  [NowMs,                     true,   'today, in epoch milliseconds'],
+  [FarPast,                   true,   'the floor itself'],
+  [FarFuture,                 true,   'the ceiling itself'],
+  // unit mistakes:
+  [NowMs / 1000,              false,  'epoch seconds, which land in January 1970'],
+  [NowMs * 1000,              false,  'epoch microseconds, which land tens of thousands of years out'],
+  // edge cases:
+  [FarPast - 1,               false,  'one millisecond before 1981'],
+  [FarFuture + 1,             false,  'one millisecond past the ceiling'],
+  [8.64e15,                   false,  'the last instant a Date holds, far past the ceiling'],
+  [0,                         false,  'the epoch itself'],
+  [NowMs + 0.5,               false,  'a fraction of a millisecond'],
+  [Infinity,                  false,  'a time that never comes'],
+  [NaN,                       false,  'not a number'],
+  ["1792022400000",           false,  'a time written as text'],
+  [null,                      false,  'null'],
+] as const
+
+describe("EpochMillis", () => {
+  for (const [candidate, expected, blurb] of EpochMillisCases) {
+    it(`${expected ? 'accepts' : 'refuses'} ${blurb}`, () => {
+      expect(EpochMillis.safeParse(candidate).success).to.eq(expected)
+    })
+  }
+
+  it("says which unit a refused number likely was", () => {
+    const tooSmall = EpochMillis.safeParse(NowMs / 1000)
+    const tooLarge = EpochMillis.safeParse(NowMs * 1000)
+    expect(tooSmall.error?.issues[0]?.message).to.match(/epoch seconds/)
+    expect(tooLarge.error?.issues[0]?.message).to.match(/epoch microseconds/)
+    expect(EpochMillis.safeParse(1e300).error?.issues[0]?.message).to.match(/epoch microseconds/)
+    expect(EpochMillis.safeParse(NowMs + 0.5).error?.issues[0]?.message).to.match(/whole epoch milliseconds/)
+  })
+
+  it("passes a time through unchanged, as its examples show", () => {
+    expect(EpochMillis.parse(Date.UTC(2026, 9, 15))).to.eq(1_792_022_400_000)
+    expect(EpochMillis.safeParse(1_792_022_400).success).to.be.false
+    expect(EpochMillis.safeParse(1_792_022_400_000_000).success).to.be.false
+    expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.false
   })
 })
