@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ForcePassphraseReentryHours, LatestAskPassphraseAt, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, FarFuture, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
@@ -185,9 +185,9 @@ describe("the remembered unlock", () => {
       await vault.unlock('pw one')
       await vault.store('anthropic', 'sk-fake')
       expect(vault.getSnapshot().state).to.eq('unlocked')
-      expect(vault.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
-      expect(LatestAskPassphraseAt).to.eq(8.64e15)
-      expect(new Date(LatestAskPassphraseAt).getTime()).to.eq(LatestAskPassphraseAt)
+      expect(vault.getSnapshot().askPassphraseAt).to.eq(FarFuture)
+      expect(FarFuture).to.eq(8.64e15)
+      expect(new Date(FarFuture).getTime()).to.eq(FarFuture)
       world.advance(1000 * 365 * 24 * HourMs)
       expect(await vault.read('anthropic')).to.eq('sk-fake')
       expect(vault.getSnapshot().state).to.eq('unlocked')
@@ -199,11 +199,11 @@ describe("the remembered unlock", () => {
       await vault.unlock('pw one')
       await vault.store('anthropic', 'sk-fake')
       const remembered = await world.deviceDB.readUnlock(scopeOf('u1'))
-      expect(remembered?.expires_at).to.eq(LatestAskPassphraseAt)
+      expect(remembered?.expires_at).to.eq(FarFuture)
       world.advance(10 * 365 * 24 * HourMs)
       const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
       expect(reopened.getSnapshot().state).to.eq('unlocked')
-      expect(reopened.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
+      expect(reopened.getSnapshot().askPassphraseAt).to.eq(FarFuture)
       expect(await reopened.read('anthropic')).to.eq('sk-fake')
     })
 
@@ -225,9 +225,9 @@ describe("the remembered unlock", () => {
       await vault.unlock('pw one')
       await vault.changePassphrase('pw one', 'pw two')
       expect(vault.getSnapshot().state).to.eq('unlocked')
-      expect(vault.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
+      expect(vault.getSnapshot().askPassphraseAt).to.eq(FarFuture)
       const remembered = await world.deviceDB.readUnlock(scopeOf('u1'))
-      expect(remembered?.expires_at).to.eq(LatestAskPassphraseAt)
+      expect(remembered?.expires_at).to.eq(FarFuture)
     })
   })
 
@@ -240,7 +240,7 @@ describe("the remembered unlock", () => {
     await world.deviceDB.writeUnlock({ ...written, expires_at: 1e300 })
     const farFuture = await world.open()
     expect(farFuture.getSnapshot().state).to.eq('unlocked')
-    expect(farFuture.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
+    expect(farFuture.getSnapshot().askPassphraseAt).to.eq(FarFuture)
     await world.deviceDB.writeUnlock({ ...written, expires_at: Infinity })
     const infinite = await world.open()
     expect(infinite.getSnapshot().state).to.eq('locked')
@@ -253,7 +253,7 @@ describe("the remembered unlock", () => {
       const vault = await world.open({ deviceDB: memoryDeviceDB(), forcePassphraseReentryHours: huge })
       await vault.unlock('pw one')
       expect(vault.getSnapshot().state).to.eq('unlocked')
-      expect(vault.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
+      expect(vault.getSnapshot().askPassphraseAt).to.eq(FarFuture)
     }
   })
 

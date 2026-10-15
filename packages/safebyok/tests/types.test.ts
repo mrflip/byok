@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { FarFuture, Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
 import { boxOf, bundleOf, scopeOf } from '../src/testing'
 
 const WhisperCases = [
@@ -153,5 +153,19 @@ describe("LockboxSummary", () => {
   it("strips the two ciphered fields and the format from a whole lockbox", () => {
     const summary = LockboxSummary.parse(boxOf('anthropic_api_key', 'a1'))
     expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'created_at', 'updated_at'])
+  })
+})
+
+describe("FarFuture", () => {
+  it("is the last instant a Date holds: one millisecond more is no date at all", () => {
+    expect(FarFuture).to.eq(8.64e15)
+    expect(new Date(FarFuture).getTime()).to.eq(FarFuture)
+    expect(Number.isNaN(new Date(FarFuture + 1).getTime())).to.eq(true)
+  })
+
+  it("lets a host show 'until locked' for a deadline equal to it, and a date for any other", () => {
+    const shown = (askPassphraseAt: number): string => (askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toISOString())
+    expect(shown(FarFuture)).to.eq('until locked')
+    expect(shown(Date.UTC(2026, 9, 22))).to.eq('2026-10-22T00:00:00.000Z')
   })
 })

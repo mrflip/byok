@@ -1,5 +1,5 @@
 import * as Z from 'zod'
-import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, LatestAskPassphraseAt, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import {
@@ -384,7 +384,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         { extractable: false, usage: ['wrapKey', 'unwrapKey'] },
       )
       // Older records, or a host's own deviceDB, may hold a finite deadline past what a Date can.
-      askPassphraseAt = Math.min(remembered.expires_at, LatestAskPassphraseAt)
+      askPassphraseAt = Math.min(remembered.expires_at, FarFuture)
     } catch {
       // A record that no longer opens reads as "no remembered unlock": the safe failure.
       await deviceDB.eraseUnlock(scope)
@@ -692,7 +692,7 @@ const forcePassphraseReentryHours = Z.union([Z.number().positive(), Z.literal(In
   .pipe(Z.union([Z.number().min(1), Z.literal(Infinity)]))
 
 /** The deadline for a passphrase entered at `nowMs`: `reentryMs` later, but never past what a Date holds. */
-const deadlineAfter = (nowMs: number, reentryMs: number): number => Math.min(nowMs + reentryMs, LatestAskPassphraseAt)
+const deadlineAfter = (nowMs: number, reentryMs: number): number => Math.min(nowMs + reentryMs, FarFuture)
 
 const parseForcePassphraseReentryHours = (candidate: number | undefined): number => {
   const checked = forcePassphraseReentryHours.safeParse(candidate)
