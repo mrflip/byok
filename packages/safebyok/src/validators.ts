@@ -90,8 +90,8 @@ export type NameValidator = Z.core.$ZodType<string>
  * The vault checks with them everywhere a name passes: at openVault for the scope; at store,
  * read, use and erase for the boxlabel; at store for the note; and on every record read back. So
  * a host that narrows a check later finds a lockbox stored under a name or note the new one
- * refuses listed as damaged: `read()` refuses it, while `erase()` and `store()` still reach it by
- * the name it was stored under.
+ * refuses listed as damaged: `read()` refuses it, `erase()` still reaches it by the name it was
+ * stored under, and `store()` writes over it only where the name passes.
  *
  * @example
  *   import * as z from 'zod'

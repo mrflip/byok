@@ -1363,16 +1363,16 @@ describe("the host's validators", () => {
     expect(boxlabelsOf(narrow)).to.deep.equal(['anthropic'])
   })
 
-  it("stores over a lockbox under a refused boxlabel by that name, and still refuses a new one, writing nothing", async () => {
+  it("refuses a store under a refused boxlabel as 'bad_label', over a lockbox stored there or not, writing nothing", async () => {
     const world = makeWorld()
     const roomy = await world.openUnlocked('pw', { validators: AnyScript })
     await roomy.store('OpenAI: work', 'sk-fake', { note: 'personal account' })
     roomy.close()
+    const stored = world.dbStore.read(u1BoxCkey('OpenAI: work'))
     const narrow = await world.openUnlocked('pw')
-    await narrow.store('OpenAI: work', 'sk-new')
-    const again = await world.openUnlocked('pw', { validators: AnyScript })
-    expect(await again.read('OpenAI: work')).to.eq('sk-new')
-    expect(TH.summaryOf(again.getSnapshot().boxes[0])?.note).to.be.null
+    await TH.expectRefusal(narrow.store('OpenAI: work', 'sk-new'), 'bad_label')
+    expect(world.dbStore.read(u1BoxCkey('OpenAI: work'))).to.eq(stored)
+    expect(narrow.getSnapshot().boxes).to.deep.equal([{ boxlabel: 'OpenAI: work', damaged: true }])
     await TH.expectRefusal(narrow.store('Other: box', 'sk-fake'), 'bad_label')
     await TH.expectRefusal(narrow.erase('Other: box'), 'bad_label')
     expect(world.dbStore.read(u1BoxCkey('Other: box'))).to.be.null
