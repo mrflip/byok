@@ -32,7 +32,7 @@ const Probe = () => {
   // A whisper is never null, so null from withUnlockedVault can only mean "dismissed".
   const grab = () => {
     void withUnlockedVault(() => vault.read('anthropic_api_key'))
-      .then((whisper) => { setOutcome(whisper === null ? 'dismissed' : `read:${String(whisper)}`) })
+      .then((whisper) => { setOutcome(whisper === null ? 'dismissed' : `read:${JSON.stringify(whisper)}`) })
   }
 
   return (
@@ -100,7 +100,7 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('stored') })
 
     fireEvent.click(screen.getByText('grab'))
-    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('read:sk-fake') })
+    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('read:"sk-fake"') })
     expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
   })
 
@@ -125,7 +125,7 @@ describe("VaultProvider", () => {
 
     fireEvent.change(screen.getByPlaceholderText('vault passphrase'), { target: { value: 'the right one' } })
     fireEvent.click(screen.getByText('Unlock'))
-    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('read:sk-fake') })
+    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('read:"sk-fake"') })
   })
 
   it("dismissing the dialog resolves the action to null, and nothing is stored", async () => {
@@ -154,13 +154,18 @@ describe("VaultProvider", () => {
       </VaultProvider>,
     )
     await waitFor(() => { expect(seen.vault).to.not.be.null })
-    const vault = seen.vault
+    const { vault } = seen
     if (vault === null) { throw new Error('the provider opened no vault') }
 
     await vault.unlock('correct horse battery staple')
     expect(vault.getSnapshot().expiresAt).to.eq(61_000)
     // 'sk-fake' is nine bytes of JSON, one over the limit given.
-    const refusal = await vault.store('anthropic_api_key', 'sk-fake').catch((err: unknown) => err)
+    let refusal: unknown = null
+    try {
+      await vault.store('anthropic_api_key', 'sk-fake')
+    } catch (err) {
+      refusal = err
+    }
     expect(isVaultError(refusal, 'whisper_too_large')).to.be.true
   })
 })

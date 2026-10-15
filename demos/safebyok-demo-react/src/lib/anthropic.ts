@@ -31,7 +31,7 @@ export const tellKnockKnockJoke = async (apiKey: string, whosThere: string, fetc
     // A deliberate choice, not a shortcut: the key must stay on the user's device, so the
     // request must come from the browser.
     dangerouslyAllowBrowser: true,
-    ...(fetchFn === undefined ? {} : { fetch: fetchFn }),
+    ...(fetchFn !== undefined && { fetch: fetchFn }),
   })
   const response = await anthropic.messages.create({
     model:      JokeModel,

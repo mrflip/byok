@@ -3,7 +3,8 @@ import { defineConfig } from 'tsdown'
 // The same build as the core's (ESM and CommonJS, each with declarations and source maps; `exports`
 // writes package.json's entry points from what was built; publint and attw read the package as a
 // consumer would and fail the build on anything they find). `safebyok` and `react` are peers, so
-// they stay external and the host's single copy of each is the one the binding uses.
+// they stay external and the host's single copy of each is the one the binding uses. Its entry also
+// gains the core's `@safebyok/source` condition, for the workspace's tsconfigs.
 export default defineConfig({
   entry:      ['src/index.ts'],
   format:     ['esm', 'cjs'],
@@ -14,7 +15,7 @@ export default defineConfig({
   dts:        true,
   sourcemap:  true,
   clean:      true,
-  exports:    true,
+  exports:    { devExports: '@safebyok/source' },
   publint:    { level: 'warning' },
   attw:       { profile: 'strict', level: 'error' },
   failOnWarn: 'ci-only',

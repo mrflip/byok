@@ -36,7 +36,8 @@ const emptySnapshot: VaultSnapshot = {
   expiresAt: null,
 }
 const getEmptySnapshot = () => emptySnapshot
-const subscribeToNothing = () => () => { /* nothing to hear */ }
+const unsubscribeFromNothing = () => { /* nothing was heard */ }
+const subscribeToNothing = () => unsubscribeFromNothing
 
 /** The vault's live snapshot: lockbox summaries, lock state, unlock expiry. */
 export const useVaultSnapshot = (): VaultSnapshot => {
@@ -75,7 +76,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   const [asking, setAsking] = useState<{ settle: (unlocked: boolean) => void } | null>(null)
 
   useEffect(() => {
-    if (userId === null) { return undefined }
+    if (userId === null) { return }
     let handle: Vault | null = null
     let gone = false
     // Listed one by one so the effect re-runs on each; `satisfies` fails the build if an openVault

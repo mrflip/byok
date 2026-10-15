@@ -86,7 +86,13 @@ class IdbVaultDB extends VaultDB {
   // IndexedDB sets no per-record limit: the origin's storage quota bounds the whole database.
   readonly maxRecordBytes = Infinity
 
-  constructor(private readonly dbName: string) { super() }
+  private readonly dbName: string
+
+  constructor(dbName: string) {
+    super()
+    this.dbName = dbName
+  }
+
   private shelf() { return shelfStore(this.dbName, 'vault_db') }
   private ring() { ringBell(this.dbName, 'vault_db') }
 

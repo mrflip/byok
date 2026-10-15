@@ -27,7 +27,7 @@ type ZodLike = { def: { type: string, values?: unknown[], innerType?: ZodLike, s
 const zodShape = (schema: ZodLike): Shape => {
   const { def } = schema
   if (def.type === 'string' || def.type === 'number') { return { kind: def.type } }
-  if (def.type === 'literal') { return { kind: 'literal', values: (def.values ?? []).map(String).toSorted() } }
+  if (def.type === 'literal') { return { kind: 'literal', values: (def.values ?? []).map(String).toSorted((one, two) => one.localeCompare(two)) } }
   if (def.type === 'object') {
     const fields = Object.entries(def.shape ?? {}).map(([ckey, field]) => {
       const optional = field.def.type === 'optional'
@@ -41,21 +41,22 @@ const zodShape = (schema: ZodLike): Shape => {
 /** Convex's half: a union of literals is the set of its values, as a `format` field widens. */
 const convexShape = (validator: GenericValidator): Shape => {
   switch (validator.kind) {
-    case 'string':  { return { kind: 'string' } }
-    case 'float64': { return { kind: 'number' } }
-    case 'literal': { return { kind: 'literal', values: [String(validator.value)] } }
-    case 'union': {
-      const values = validator.members.map((member) => convexShape(member))
-      if (! values.every((shape) => shape.kind === 'literal')) { throw new Error('no shape for a union of non-literals') }
-      return { kind: 'literal', values: values.flatMap((shape) => shape.values).toSorted() }
-    }
-    case 'object': {
-      const fields = Object.entries(validator.fields).map(([ckey, field]) => (
-        [ckey, { optional: field.isOptional === 'optional', shape: convexShape(field) }] as const
-      ))
-      return { kind: 'object', fields: Object.fromEntries(fields) }
-    }
-    default: { throw new Error(`no shape for a Convex ${validator.kind}`) }
+  case 'string':  { return { kind: 'string' } }
+  case 'float64': { return { kind: 'number' } }
+  case 'literal': { return { kind: 'literal', values: [String(validator.value)] } }
+  case 'union': {
+    const shapes = validator.members.map((member) => convexShape(member))
+    const literals = shapes.filter((shape) => shape.kind === 'literal')
+    if (literals.length < shapes.length) { throw new Error('no shape for a union of non-literals') }
+    return { kind: 'literal', values: literals.flatMap((shape) => shape.values).toSorted((one, two) => one.localeCompare(two)) }
+  }
+  case 'object': {
+    const fields = Object.entries(validator.fields).map(([ckey, field]) => (
+      [ckey, { optional: field.isOptional === 'optional', shape: convexShape(field) }] as const
+    ))
+    return { kind: 'object', fields: Object.fromEntries(fields) }
+  }
+  default: { throw new Error(`no shape for a Convex ${validator.kind}`) }
   }
 }
 
@@ -72,16 +73,17 @@ const ShapeCases = [
 describe("the Convex validators, field for field with the core's Zod records", () => {
   for (const [zodRecord, convexRecord, blurb] of ShapeCases) {
     it(blurb, () => {
-      expect(convexShape(convexRecord)).to.deep.equal(zodShape(zodRecord as unknown as ZodLike))
+      expect(convexShape(convexRecord)).to.deep.equal(zodShape(zodRecord))
     })
   }
 
   it("type the same records, expectations and summaries as the core", () => {
     expectTypeOf<Infer<typeof VaultBundle>>().toEqualTypeOf<Records.VaultBundle>()
     expectTypeOf<Infer<typeof VaultScope>>().toEqualTypeOf<Records.VaultScope>()
-    expectTypeOf<Infer<typeof Lockbox>>().toMatchTypeOf<Records.Lockbox>()
-    expectTypeOf<Records.Lockbox>().toMatchTypeOf<Infer<typeof Lockbox>>()
-    expectTypeOf<Omit<Infer<typeof ListedLockbox>, 'format'>>().toMatchTypeOf<LockboxSummary>()
+    // Convex's takes a note or none, every lockbox the core writes; the core's also reads an
+    // undefined note, as earlier versions stored it.
+    expectTypeOf<Infer<typeof Lockbox>>().toExtend<Records.Lockbox>()
+    expectTypeOf<Omit<Infer<typeof ListedLockbox>, 'format'>>().toExtend<LockboxSummary>()
     expectTypeOf<Infer<typeof BundleExpectation>>().toEqualTypeOf<CoreBundleExpectation>()
     expectTypeOf<Infer<typeof LockboxExpectation>>().toEqualTypeOf<CoreLockboxExpectation>()
     expectTypeOf<Infer<typeof EraseExpectation>>().toEqualTypeOf<CoreEraseExpectation>()
@@ -93,8 +95,8 @@ describe("the Convex validators, field for field with the core's Zod records", (
 const probeApp = defineTestApp({ schema: defineSchema({}) })
 const { api: probeApi, createTest } = probeApp.defineModules({
   probe: {
-    takeBundle:  probeApp.mutation({ args: { bundle: VaultBundle }, returns: v.null(), handler: async () => null }),
-    takeLockbox: probeApp.mutation({ args: { lockbox: Lockbox }, returns: v.null(), handler: async () => null }),
+    takeBundle:  probeApp.mutation({ args: { bundle: VaultBundle }, returns: v.null(), handler: () => null }),
+    takeLockbox: probeApp.mutation({ args: { lockbox: Lockbox }, returns: v.null(), handler: () => null }),
   },
 })
 

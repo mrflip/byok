@@ -1,5 +1,5 @@
 import { mutationGeneric, queryGeneric } from 'convex/server'
-import type { ApiFromModules, GenericDataModel, GenericQueryCtx } from 'convex/server'
+import type { ApiFromModules, GenericDataModel, GenericQueryCtx, MutationBuilder, QueryBuilder } from 'convex/server'
 import { ConvexError, v } from 'convex/values'
 import type { ComponentApi } from './component-api'
 import type { SafebyokErrorData } from './refusals'
@@ -44,8 +44,12 @@ export type SafebyokApiOpts<DataModel extends GenericDataModel = GenericDataMode
  *   })
  */
 export class SafebyokComponent {
+  private readonly component: ComponentApi
+
   /** @param component - The installed component, `components.safebyok` from the host's generated api. */
-  constructor(private readonly component: ComponentApi) {}
+  constructor(component: ComponentApi) {
+    this.component = component
+  }
 
   /**
    * The nine public functions a client's `convexVaultDB` calls, one per storage verb. Each first
@@ -56,7 +60,11 @@ export class SafebyokComponent {
    * @returns The functions, to export under these names from one module of the host's `convex/`.
    */
   api<DataModel extends GenericDataModel>({ getUserId }: SafebyokApiOpts<DataModel>) {
-    const vaults = this.component.vaults
+    const { vaults } = this.component
+    // Convex's builders, typed by the host's data model, as its own codegen types them: each
+    // handler's ctx is then the one the host's getUserId is written against.
+    const publicQuery: QueryBuilder<DataModel, 'public'> = queryGeneric
+    const publicMutation: MutationBuilder<DataModel, 'public'> = mutationGeneric
 
     /** Refuses unless the caller is signed in as `userId`, the vault's own user. */
     const mustBe = async (ctx: GenericQueryCtx<DataModel>, userId: string): Promise<void> => {
@@ -70,7 +78,7 @@ export class SafebyokComponent {
     }
 
     return {
-      getBundle: queryGeneric({
+      getBundle: publicQuery({
         args:    { scope: VaultScope },
         returns: v.nullable(VaultBundle),
         handler: async (ctx, args) => {
@@ -78,7 +86,7 @@ export class SafebyokComponent {
           return await ctx.runQuery(vaults.getBundle, args)
         },
       }),
-      createBundle: mutationGeneric({
+      createBundle: publicMutation({
         args:    { bundle: VaultBundle },
         returns: VaultBundle,
         handler: async (ctx, args) => {
@@ -86,7 +94,7 @@ export class SafebyokComponent {
           return await ctx.runMutation(vaults.createBundle, args)
         },
       }),
-      updateBundle: mutationGeneric({
+      updateBundle: publicMutation({
         args:    { bundle: VaultBundle, expected: BundleExpectation },
         returns: v.boolean(),
         handler: async (ctx, args) => {
@@ -94,7 +102,7 @@ export class SafebyokComponent {
           return await ctx.runMutation(vaults.updateBundle, args)
         },
       }),
-      getBox: queryGeneric({
+      getBox: publicQuery({
         args:    { scope: VaultScope, boxlabel: v.string() },
         returns: v.nullable(Lockbox),
         handler: async (ctx, args) => {
@@ -102,7 +110,7 @@ export class SafebyokComponent {
           return await ctx.runQuery(vaults.getBox, args)
         },
       }),
-      listBoxSummaries: queryGeneric({
+      listBoxSummaries: publicQuery({
         args:    { scope: VaultScope },
         returns: v.array(ListedLockbox),
         handler: async (ctx, args) => {
@@ -110,7 +118,7 @@ export class SafebyokComponent {
           return await ctx.runQuery(vaults.listBoxSummaries, args)
         },
       }),
-      updateBox: mutationGeneric({
+      updateBox: publicMutation({
         args:    { scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation },
         returns: v.boolean(),
         handler: async (ctx, args) => {
@@ -118,7 +126,7 @@ export class SafebyokComponent {
           return await ctx.runMutation(vaults.updateBox, args)
         },
       }),
-      eraseBox: mutationGeneric({
+      eraseBox: publicMutation({
         args:    { scope: VaultScope, boxlabel: v.string(), expected: EraseExpectation },
         returns: v.boolean(),
         handler: async (ctx, args) => {
@@ -126,7 +134,7 @@ export class SafebyokComponent {
           return await ctx.runMutation(vaults.eraseBox, args)
         },
       }),
-      eraseVault: mutationGeneric({
+      eraseVault: publicMutation({
         args:    { scope: VaultScope, expected: EraseExpectation },
         returns: v.boolean(),
         handler: async (ctx, args) => {
@@ -134,7 +142,7 @@ export class SafebyokComponent {
           return await ctx.runMutation(vaults.eraseVault, args)
         },
       }),
-      watchVault: queryGeneric({
+      watchVault: publicQuery({
         args:    { scope: VaultScope },
         returns: VaultSignature,
         handler: async (ctx, args) => {

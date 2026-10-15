@@ -103,8 +103,18 @@ class FakeDeployment {
   // One message at a time, in arrival order: a fake failing is a bug in the test, so it rejects
   // where vitest reports it, and the queue carries on.
   private enqueue(job: () => Promise<void>) {
-    const done = this.work.then(job)
-    this.work = done.catch(() => undefined)
+    const before = this.work
+    const done = (async () => {
+      await before
+      await job()
+    })()
+    this.work = (async () => {
+      try {
+        await done
+      } catch {
+        // The queue carries on past a failed job.
+      }
+    })()
     void done
   }
 
@@ -134,7 +144,7 @@ class FakeDeployment {
   private async mutate(session: Session, message: Extract<ClientMessage, { type: 'Mutation' }>): Promise<void> {
     const args = jsonToConvex(message.args[0] ?? {}) as Record<string, Value>
     try {
-      const result = await this.as(session.subject).mutation(makeFunctionReference<'mutation'>(message.udfPath), args)
+      const result: unknown = await this.as(session.subject).mutation(makeFunctionReference<'mutation'>(message.udfPath), args)
       this.ts += 1
       session.socket.deliver({ type: 'MutationResponse', requestId: message.requestId, success: true, result: convexToJson(result as Value), ts: encodeTs(this.ts), logLines: [] })
     } catch (err) {
@@ -148,10 +158,12 @@ class FakeDeployment {
       for (const [queryId, watch] of other.watched) {
         const result = await this.run(other, watch.udfPath, watch.args, queryId)
         const said = JSON.stringify(result)
-        if (said !== watch.said) {
-          other.watched.set(queryId, { ...watch, said })
-          changes.push(result)
+        if (said === watch.said) {
+          continue
         }
+
+        other.watched.set(queryId, { ...watch, said })
+        changes.push(result)
       }
       this.transition(other, changes, other.version.querySet)
     }
@@ -159,11 +171,11 @@ class FakeDeployment {
 
   private async run(session: Session, udfPath: string, args: Record<string, Value>, queryId: number): Promise<QueryModification> {
     try {
-      const result = await this.as(session.subject).query(makeFunctionReference<'query'>(udfPath), args)
+      const result: unknown = await this.as(session.subject).query(makeFunctionReference<'query'>(udfPath), args)
       return { type: 'QueryUpdated', queryId, value: convexToJson(result as Value), logLines: [], journal: null }
     } catch (err) {
       const { result: errorMessage, errorData } = failureOf(err)
-      return { type: 'QueryFailed', queryId, errorMessage, logLines: [], journal: null, ...(errorData === undefined ? {} : { errorData }) }
+      return { type: 'QueryFailed', queryId, errorMessage, logLines: [], journal: null, ...(errorData !== undefined && { errorData }) }
     }
   }
 
@@ -210,7 +222,10 @@ class FakeSocket {
   onclose:   ((event: { code: number, reason: string }) => void) | null = null
   onerror:   ((event: object) => void) | null = null
 
-  constructor(private readonly line: SocketLine) {
+  private readonly line: SocketLine
+
+  constructor(line: SocketLine) {
+    this.line = line
     line.opened(this)
     setTimeout(() => { this.onopen?.({}) })
   }

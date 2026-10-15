@@ -70,10 +70,12 @@
   "types": "./dist/index.d.cts",
   "exports": {
     ".": {
+      "@safebyok/source": "./src/index.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
     },
     "./idb": {
+      "@safebyok/source": "./src/idb.ts",
       "import": "./dist/idb.js",
       "require": "./dist/idb.cjs"
     },
@@ -93,6 +95,19 @@
       "idb": [
         "./dist/idb.d.cts"
       ]
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "require": "./dist/index.cjs"
+      },
+      "./idb": {
+        "import": "./dist/idb.js",
+        "require": "./dist/idb.cjs"
+      },
+      "./package.json": "./package.json"
     }
   }
 }

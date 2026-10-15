@@ -385,7 +385,7 @@ async function main(argv: readonly string[]): Promise<number> {
   const packDir = rest.find((arg) => ! arg.startsWith('--'))
   if (command === 'stage' && packDir) {
     const dryRun = rest.includes('--dry-run')
-    const outcomes = await stage(readPackDir(path.resolve(packDir)), { run, dryRun, tagfile: process.env.CHANGESETS_OUTPUT })
+    const outcomes = await stage(readPackDir(path.resolve(packDir)), { run, dryRun, tagfile: process.env['CHANGESETS_OUTPUT'] })
     for (const outcome of outcomes) { process.stdout.write(`${describeOutcome(outcome, dryRun)}\n`) }
     if (outcomes.length === 0) { process.stdout.write('Nothing to stage.\n') }
     return outcomes.some((outcome) => outcome.kind === 'failed') ? 1 : 0

@@ -42,20 +42,20 @@ export type OpenVaultOpts = {
   vaultDB:    VaultDB
   deviceDB:   DeviceDB
   /** How long an unlock is remembered on this device. Default: seven days. */
-  rememberForMs?: number
+  rememberForMs?: number | undefined
   /** Time source for expiry; tests inject one. Default: the wall clock. */
-  clock?: Clock
+  clock?: Clock | undefined
   /**
    * What turns a passphrase into passphraseKey bytes. Default -- and the right answer -- is the
    * pinned Argon2id deriver; see {@link KeyDeriver} for the narrow reasons to substitute.
    */
-  keyDeriver?: KeyDeriver
+  keyDeriver?: KeyDeriver | undefined
   /**
    * The largest whisper `store()` accepts, in bytes of its JSON. Default: {@link MaxWhisperBytes},
    * 40444. Checked on write only, so lowering it never strands a whisper already stored. At most
    * half the vaultDB's `maxRecordBytes`: openVault refuses more with kind 'bad_option'.
    */
-  maxWhisperBytes?: number
+  maxWhisperBytes?: number | undefined
 }
 
 /**
@@ -106,7 +106,7 @@ export type Vault = {
    * -- a stale session never writes into a vault reborn under new keys. Retrying a stale write
    * replaces what the other device wrote.
    */
-  store(boxlabel: string, whisper: Whisper, opts?: { note?: string }): Promise<void>
+  store(boxlabel: string, whisper: Whisper, opts?: { note?: string | undefined }): Promise<void>
   /** The whisper in `boxlabel`. Requires unlocked; kind 'absent_box' when there is none. */
   read(boxlabel: string): Promise<Whisper>
   /**

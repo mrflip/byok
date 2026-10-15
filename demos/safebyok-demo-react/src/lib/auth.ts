@@ -20,8 +20,8 @@ type Account = {
 
 export type Auth = {
   /** Current session or null; same object until it changes (useSyncExternalStore-ready). */
-  getSnapshot(): Session | null
-  subscribe(listener: () => void): () => void
+  getSnapshot: () => Session | null
+  subscribe: (listener: () => void) => () => void
   /** Sign in as `userlabel`, creating the account on first sight. */
   signIn(userlabel: string): Promise<Session>
   /** End the session on this device. Touches no server-side data. */
@@ -77,9 +77,9 @@ export const createAuth = (opts: { applabel: string, dbStore: StringStore, devic
       }
       const ckey = accountCkey(checked.data)
       const existing = dbStore.read(ckey)
-      const account: Account = existing !== null
-        ? JSON.parse(existing) as Account
-        : { user_id: randomId(), userlabel: checked.data, created_at: new Date().toISOString() }
+      const account: Account = existing === null
+        ? { user_id: randomId(), userlabel: checked.data, created_at: new Date().toISOString() }
+        : JSON.parse(existing) as Account
       if (existing === null) { dbStore.write(ckey, JSON.stringify(account)) }
       session = { userId: account.user_id, userlabel: account.userlabel }
       deviceStore.write(sessionCkey, JSON.stringify(session))
