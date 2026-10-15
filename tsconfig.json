@@ -20,7 +20,10 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
-    "noEmit": true
+    "noEmit": true,
+    // The root's own scripts run under node, which needs the `.ts` on a relative import. Root
+    // only: no package extends this file, and a package's build must not import that way.
+    "allowImportingTsExtensions": true
   },
   "include": [
     "scripts",

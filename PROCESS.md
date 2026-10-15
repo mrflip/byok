@@ -111,9 +111,11 @@ The Coach releases; agents never tag, publish, or change a version number. Chang
 numbers and the CHANGELOGs; `.github/workflows/release.yml` does the rest.
 
 * **A changeset** is a short file in `.changeset/`, written with `pnpm changeset`: which packages
-  it bumps, by how much, and a sentence or two for the CHANGELOG. A PR that changes a public
-  package carries one, or CI fails it; one that needs no release (tooling, tests, docs) carries an
-  empty one, `pnpm changeset --empty`. Agents write changesets: they state intent, not a version.
+  it bumps, by how much, and a sentence or two for the CHANGELOG. It is named for the thread,
+  `.changeset/YYYYMMDD-<label>.md` (a second one on the thread gets `-2`, and so on):
+  `scripts/changeset.ts` runs the changesets CLI and renames what it writes. A PR that changes a
+  public package carries one, or CI fails it; one that needs no release (tooling, tests, docs)
+  carries an empty one, `pnpm changeset --empty`. Agents write changesets: they state intent, not a version.
 * **Versions are semver, in lockstep.** The public packages are one `fixed` group in
   `.changeset/config.json`, so one bump moves them all; a test refuses a public package left out
   of it. Private packages and demos are never versioned or released. Until 1.0, a minor bump may
