@@ -2082,6 +2082,23 @@ describe("a lock that lands while an unlock is under way", () => {
     expect(await fresh.read('anthropic')).to.eq('sk-fake')
   })
 
+  it("during addPasskey()'s prompt: the passkey still lands, and the vault stays locked", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.openUnlocked('pw')
+    await vault.store('anthropic', 'sk-fake')
+    const makePasskey = async () => {
+      await vault.lock()
+      return await TH.passkeyOf('laptop')
+    }
+    expect(await vault.addPasskey('pw', makePasskey, { unlocklabel: 'laptop' })).to.be.a('string')
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+
+    const fresh = await world.open({ deviceDB: memoryDeviceDB() })
+    await fresh.unlock(await TH.passkeyOf('laptop'))
+    expect(await fresh.read('anthropic')).to.eq('sk-fake')
+  })
+
   it("during changePassphrase()'s device record write: the record is erased again", async () => {
     const world = makeRacingWorld()
     const vault = await world.openUnlocked('old passphrase')
