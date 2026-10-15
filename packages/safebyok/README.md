@@ -66,8 +66,8 @@ marked `sideEffects: false`: what you never import never ships.
 An unlocked vault stays unlocked until its remembered unlock expires
 (`forcePassphraseReentryHours`, seven days by default) or the host locks it. `Infinity` hours
 means never on this device, until a lock: `askPassphraseAt` then equals the exported `FarFuture`,
-the latest instant a `Date` can hold, so a host can show "until locked" by comparing against it,
-and `new Date(askPassphraseAt)` still works.
+the latest instant the package accepts (in 2255), so a host can show "until locked" by comparing
+against it.
 
 Two calls lock, and each forgets the unlock in memory and on this device alike, so the user types
 their passphrase again afterwards:
