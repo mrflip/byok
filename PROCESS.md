@@ -181,6 +181,21 @@ offering a **disciplined interface**.
 * Version numbers and release status drift. Before pinning anything, check the current release;
   don't trust a recalled version number, including one recalled by an agent.
 * **Runs everywhere**: accessible from React Native, React, Next.js, Nuxt, node, bun.
+* **Nothing is installed until it is seven days old.** `pnpm-workspace.yaml` sets
+  `minimumReleaseAge: 10080` (minutes) with `minimumReleaseAgeStrict: true`: no version of
+  anything, transitive dependencies included, is resolved or installed younger than that, and an
+  install that could only be satisfied by one fails rather than falling back. A lockfile holding
+  such a version fails its frozen install too. A range's floor is therefore the newest release
+  that has aged: raise it as releases mature, not the day they appear. Dependabot's `cooldown`
+  matches (`.github/dependabot.yml`); security updates ignore it, and then the rule below applies.
+* **A hot release is the one exception, and is pinned more tightly, not less.** When a fix cannot
+  wait for its seventh day, pin that exact version (no range, no caret), and exempt it in
+  `minimumReleaseAgeExclude` by name and exact version (`pkg@1.2.3`; never a bare name, a glob or
+  a version list that outlives the need). Never an exclusion for convenience or to get a newer
+  feature sooner. The same day, add an entry to `notes/security.md` naming the package, the exact
+  version, why it could not wait, and the date it passes seven days; say so in the PR. Once it has
+  aged, delete the exclusion and the exact pin in one commit, returning to a range. We would
+  rather meet a hundred bugs in a conservative release than one vulnerability in a fresh one.
 
 The toolchain: TypeScript, Vitest, ESLint, tsdown.
 
