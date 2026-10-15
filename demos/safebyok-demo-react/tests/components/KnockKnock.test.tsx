@@ -48,14 +48,24 @@ describe("KnockKnock", () => {
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
   })
 
-  it("puts the key form away on Cancel, saving nothing", async () => {
+  it("puts the key form away on Cancel, saving nothing, even with the vault unlocked", async () => {
     const world = TH.makeWorld()
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+    // Unlocked on this device first, so a save would need no passphrase dialog to land.
+    const outside = await world.open()
+    await outside.unlock(TH.Passphrase)
+    outside.close()
     world.renderInVault(<KnockKnock />)
-    fireEvent.click(await screen.findByRole('button', { name: 'add your key' }))
-    fireEvent.change(screen.getByPlaceholderText('sk-ant-…'), { target: { value: 'sk-ant-test-not-a-real-key' } })
+    fireEvent.click(await screen.findByRole('button', { name: 'replace it' }))
+    fireEvent.change(screen.getByPlaceholderText('sk-ant-…'), { target: { value: 'sk-ant-test-replaced' } })
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('button', { name: 'add your key' })).to.not.be.null
-    expect((await world.vaultDB.listBoxes(TH.scopeOf('u1')))).to.have.lengthOf(0)
+    await TH.wakeupAtNextTick()
+    expect(screen.getByRole('button', { name: 'replace it' })).to.not.be.null
+    expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    const vault = await world.open()
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
+    vault.close()
   })
 
   it("tells the joke Claude tells, the key going to Anthropic and nowhere on the page", async () => {
