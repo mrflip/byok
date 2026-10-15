@@ -177,7 +177,7 @@ says four things:
 
 ## Several passphrases
 
-A vault may have up to `MaxUnlocks` (8) passphrases, each its own way in: a daily one, one
+A vault may have up to `MaxUnlocks` (8) passphrases and passkeys together, each its own way in: a daily one, one
 written down at home, one a partner holds. Each wraps the same vaultKey under its own salt, no
 passphrase is ever stored, and adding or removing one rewrites no lockbox. The snapshot lists
 them, locked or not, as `unlocks`: each a `method` (`passphrase`), an `unlock_id`, and the
@@ -206,11 +206,49 @@ await vault.unlock(passphrase, { unlockId })            // aimed at one: a singl
   whoever knew it and kept a copy of the bundle from before can still open that copy, and the
   vaultKey inside is the one the vault still uses. There is no key rotation yet.
 
+## Fingerprint unlock (passkeys)
+
+A vault's ways in may include passkeys: a fingerprint, a face, a phone or a security key, whose
+authenticator answers for the vault through the WebAuthn PRF extension. The core never calls
+WebAuthn: it takes the answer as a `PasskeyProof` (`{ credentialId, prfSaltB64, prfBytes }`),
+which `safebyok-react`'s `createPasskey` and `askPasskey` make (they import no React, so any
+framework's host can use them).
+
+```ts
+const passkey = await createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName } })
+if (passkey !== null) { await vault.addPasskey(passphrase, passkey, { unlocklabel: 'laptop' }) }
+
+vault.getSnapshot().unlocks       // [..., { method: 'passkey', unlock_id, unlocklabel: 'laptop', credential_id, prf_salt_b64 }]
+
+const answer = await askPasskey(vault.getSnapshot().unlocks)   // null if the user dismissed it
+if (answer !== null) { await vault.unlock(answer) }             // no key derivation to wait for
+```
+
+* **A passkey is a way in like a passphrase.** Its envelope wraps the same vaultKey, under a key
+  made from the passkey's answer by HKDF-SHA256; an unlock with it is remembered on the device
+  for `forcePassphraseReentryHours`, and `askPassphraseAt` applies, as for a passphrase. It counts
+  toward `MaxUnlocks`.
+* **Adding one asks for proof**, a passphrase or another passkey's answer, as every change to the
+  ways in does; `addPassphrase` and `removeUnlock` take a passkey's answer as proof too.
+  `changePassphrase` changes a passphrase only.
+* **A passkey can stand in for a forgotten passphrase**: `addPassphrase(answer, fresh, {
+  unlocklabel })`, then `removeUnlock(answer, oldId)`. But **a vault always keeps a passphrase**:
+  removing the last one refuses with kind `last_unlock`, since a passkey can be lost with its
+  device. A vault is created with a passphrase, too: a passkey's `unlock()` on an `absent` vault
+  refuses with `absent_vault`.
+* **Where it works.** A passkey answers on the device that holds it: a platform passkey synced by
+  iCloud Keychain or Google Password Manager on every device signed in to that account, a security
+  key wherever it is plugged in. Browsers and authenticators without PRF refuse with kind
+  `passkey_unavailable`; offer the passphrase then.
+* **Removal is not revocation**, here as for a passphrase: a removed passkey still opens a copy of
+  the bundle kept from before.
+
 ## No recovery
 
 There is no recovery path, on purpose. A forgotten passphrase means an unrecoverable vault: the
 user re-enters their API keys, which is annoying, not catastrophic. Say so in your UI; the React
-binding's passphrase dialog does.
+binding's passphrase dialog does. A passkey added beforehand is the one way back in: with it the
+user sets a new passphrase.
 
 ## Errors
 
