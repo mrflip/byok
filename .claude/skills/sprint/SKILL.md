@@ -75,11 +75,12 @@ directory is mirrored in full** -- a *Plan* tab, a *Progress* tab, one tab for a
 other input you copied in, and **one tab per thread** (not per worker: a resumed or replaced
 worker still writes the same thread file) holding that thread's `thread-<N>-<label>.md`, read
 from the thread's branch, with the thread's own `human/` entry, if it wrote one, below it under
-its own heading. A sprint-level `human/` entry gets a tab of its own. One writer per file keeps
-this robust: re-mirror a tab whole whenever its file changes, and mirror a thread's tab when the
-thread is `ready`, again when it files, and at any pause. Mirror the whole text, not a summary. The repo files stay the
-source of truth: write the file first, mirror it after. No Docs tools in the session: skip the
-mirror, say so in one line, and carry on.
+its own heading. A sprint-level `human/` entry gets a tab of its own. You are the doc's only
+writer; workers never touch it, so parallel threads never race for it and a background worker
+needs no Docs tools. Re-mirror a tab whole whenever its file changes, and mirror a thread's tab
+when the thread is `ready`, again when it files, and at any pause. Mirror the whole text, not a
+summary. The repo files stay the source of truth: write the file first, mirror it after. No
+Docs tools in the session: skip the mirror, say so in one line, and carry on.
 
 Post a short plan summary in chat -- threads, which run together and which wait, look-ahead
 calls -- and proceed. Do not wait for approval unless planning surfaced a *significant*
