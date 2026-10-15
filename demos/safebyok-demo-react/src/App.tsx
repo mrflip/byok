@@ -3,6 +3,7 @@ import { VaultProvider } from 'safebyok-react'
 import { KnockKnock } from './components/KnockKnock'
 import { SessionBar } from './components/SessionBar'
 import { VaultDashboard } from './components/VaultDashboard'
+import { WaysIn } from './components/WaysIn'
 import { DeviceDBInspectionPanel } from './components/inspection/DeviceDBInspectionPanel'
 import { VaultDBInspectionPanel } from './components/inspection/VaultDBInspectionPanel'
 import { createAuth } from './lib/auth'
@@ -27,6 +28,7 @@ const Page = () => {
         <>
           <KnockKnock />
           <VaultDashboard />
+          <WaysIn />
         </>
       )}
 

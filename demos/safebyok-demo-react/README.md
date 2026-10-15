@@ -26,6 +26,10 @@ fake auth's scaffolding rows sit in localStorage.
   direct manipulation of the vault: add, view, edit, delete and *use* lockboxes. Whisper-touching
   actions summon the passphrase dialog only when the vault is actually locked; an unlock is
   remembered on the device for seven days. Signing out locks the vault.
+* **Ways in** ([src/components/WaysIn.tsx](src/components/WaysIn.tsx)) -- the vault's passphrases
+  and passkeys, listed even while locked, and an "Add fingerprint" button: `createPasskey()` makes
+  a passkey, `vault.addPasskey()` adds it under your passphrase, and the passphrase dialog then
+  offers "Use a passkey". Needs a browser and authenticator with the WebAuthn PRF extension.
 * **Inspection panels** ([src/components/inspection/](src/components/inspection/)) -- the raw
   rows of the pretend-backend store and the device-local store, rendered straight from storage by
   machinery that never talks to the vault. The backend's panel has an outage switch
