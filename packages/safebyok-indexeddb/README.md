@@ -54,6 +54,9 @@ const vault = await openVault({
 
 It runs anywhere with an `indexedDB` global: every browser, and Node or Bun with
 [`fake-indexeddb`](https://github.com/dumbmatter/fakeIndexedDB), which is how its tests run.
+There, its BroadcastChannel never holds the process open, and a `subscribe` listener that throws
+never escapes as an uncaught error: what it threw is dropped, so a listener of your own reports
+its own failures.
 
 ## What is stored
 
@@ -106,7 +109,8 @@ places:
 3. **`src/bell.ts`: how your store tells listeners of a write.** Here, this tab's listeners and
    a BroadcastChannel to the others. A store with push of its own -- a live query, a socket --
    rings from that, and one with none leaves `doSubscribe` out: the vault refreshes after its own
-   writes regardless.
+   writes regardless. Whatever rings, call each listener so that one that throws stops neither
+   the others nor the write, and let no handle (a channel, a socket) hold a Node process open.
 
 And keep, as they are:
 

@@ -226,32 +226,31 @@ describe("idbVaultDB's subscribe", () => {
     otherTab.close()
   })
 
-  it("lands a write whose subscriber throws, and calls the others: each is called on its own", async () => {
+  it("lands a write whose subscriber throws, and calls the others, letting nothing escape uncaught", async () => {
     const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
     let heardCount = 0
     vaultDB.subscribe(TH.scopeOf('u1'), throwing)
     vaultDB.subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
-    // The platform would report the throwing listener's error as uncaught: caught here instead,
-    // to be looked at.
-    const caught: unknown[] = []
+    // Whatever would escape the bell's microtasks, as the platform's uncaught error, lands here.
+    const escaped: unknown[] = []
     const queueMicrotask = globalThis.queueMicrotask.bind(globalThis)
     const catching = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => {
       queueMicrotask(() => {
         try {
           task()
         } catch (err) {
-          caught.push(err)
+          escaped.push(err)
         }
       })
     })
     try {
       await vaultDB.createBundle(TH.bundleOf('u1'))
       await vi.waitFor(() => { expect(heardCount).to.eq(1) })
-      await vi.waitFor(() => { expect(caught).to.have.lengthOf(1) })
+      await TH.wakeupAtNextTick()
     } finally {
       catching.mockRestore()
     }
     expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
-    expect(caught[0]).to.be.instanceOf(Error).with.property('message', 'a listener of the host')
+    expect(escaped).to.be.empty
   })
 })

@@ -5,6 +5,9 @@
  * The bell names no scope and carries nothing: a listener's only news is that something changed,
  * and it reads again. A backend of your own with push of its own (a live query, a socket) rings
  * from that instead.
+ *
+ * Under Node or Bun, where a test or a server-side render may open a vault, the channel never
+ * keeps the process alive: it exits when its own work is done, as it would without the bell.
  */
 
 const listenersByDbName = new Map<string, Set<() => void>>()
@@ -14,13 +17,20 @@ const channels = new Map<string, BroadcastChannel>()
 // running in one, so it stays as it is.
 const channelName = (dbName: string) => `safebyok-idb:${dbName}:vault_db`
 
-// Each listener is called on its own, after the ringing code has run on: one that throws is
-// reported as the platform reports any uncaught error, and neither silences the others nor
-// fails the write that rang. One unsubscribed before its turn comes is not called.
+// Each listener is called on its own, after the ringing code has run on, and one unsubscribed
+// before its turn comes is not called. One that throws silences no other, fails no write, and
+// never escapes as an uncaught error, which would end a Node or Bun process. Its error is
+// dropped, not reported: the bell has no logger, and what a listener threw is the listener's
+// own to report (the vault's own listener never throws: it logs a failed refresh itself).
 const callEach = (listeners: Set<() => void> | undefined) => {
   listeners?.forEach((listener) => {
     queueMicrotask(() => {
-      if (listeners.has(listener)) { listener() }
+      if (! listeners.has(listener)) { return }
+      try {
+        listener()
+      } catch {
+        // Dropped: see above.
+      }
     })
   })
 }
@@ -60,6 +70,14 @@ const channelOf = (dbName: string): BroadcastChannel | undefined => {
   if (kept !== undefined) { return kept }
   const channel = new BroadcastChannel(channelName(dbName))
   channel.addEventListener('message', () => { callEach(listenersByDbName.get(dbName)) })
+  letProcessExit(channel)
   channels.set(dbName, channel)
   return channel
+}
+
+// Node's and Bun's BroadcastChannel holds its process open until it is closed, and this one is
+// kept for the life of the page; unref() lets the process exit regardless. A browser's has no
+// unref, and needs none.
+const letProcessExit = (channel: BroadcastChannel & { unref?: () => unknown }) => {
+  if (typeof channel.unref === 'function') { channel.unref() }
 }

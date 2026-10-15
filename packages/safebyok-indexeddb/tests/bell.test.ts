@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { describe, expect, it, vi } from 'vitest'
 import { onBell, ringBell } from '../src/bell'
 import * as TH from './test-helpers'
@@ -78,5 +79,48 @@ describe("the change bell", () => {
     } finally {
       vi.unstubAllGlobals()
     }
+  })
+
+  it("calls the other listeners when one throws, and lets nothing escape as an uncaught error", async () => {
+    const dbName = TH.freshDbName()
+    const heard: string[] = []
+    const stops = [
+      onBell(dbName, () => { throw new Error('a listener that throws') }),
+      onBell(dbName, () => { heard.push('two') }),
+    ]
+    ringBell(dbName)
+    await vi.waitFor(() => { expect(heard).to.deep.equal(['two']) })
+    await TH.wakeupAtNextTick()
+    for (const stop of stops) { stop() }
+  })
+
+  it("unrefs its channel where the platform's has unref, so it never holds a process open", () => {
+    const unrefs = vi.fn()
+    class NodeLikeChannel extends EventTarget {
+      postMessage = vi.fn()
+      unref = unrefs
+    }
+    vi.stubGlobal('BroadcastChannel', NodeLikeChannel)
+    try {
+      const stop = onBell(TH.freshDbName(), () => undefined)
+      ringBell(TH.freshDbName())
+      expect(unrefs).toHaveBeenCalledTimes(2)
+      stop()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("lets a Node process that rang it exit on its own, a throwing listener and all", () => {
+    const bellUrl = new URL('../src/bell.ts', import.meta.url).href
+    const script = `
+      const { onBell, ringBell } = await import(${JSON.stringify(bellUrl)})
+      onBell('exits', () => { throw new Error('a listener that throws') })
+      ringBell('exits')
+    `
+    const ran = spawnSync(process.execPath, ['--input-type=module', '--no-warnings', '--eval', script], { encoding: 'utf8', timeout: 10_000 })
+    expect(ran.signal, 'the process was still running after ten seconds').to.be.null
+    expect(ran.stderr).to.eq('')
+    expect(ran.status).to.eq(0)
   })
 })
