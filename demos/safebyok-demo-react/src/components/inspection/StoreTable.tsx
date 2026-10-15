@@ -11,7 +11,7 @@ import type { IdbRow } from 'safebyok/idb'
 
 export type StoreRow = { ckey: string, text: string, flavor: 'plain' | 'ciphered' | 'keyhandle' }
 
-/** An inspectIdb window, as safebyok/idb hands one out. */
+/** A window onto an IndexedDB shelf, as inspectIdbVaultDB and inspectIdbDeviceDB hand one out. */
 export type IdbInspector = {
   rows(): Promise<IdbRow[]>
   subscribe(listener: () => void): () => void

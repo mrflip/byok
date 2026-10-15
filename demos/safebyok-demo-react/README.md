@@ -12,8 +12,9 @@ pnpm justify                 # from demos/safebyok-demo-react: lint, typecheck, 
 
 Whispers are encrypted on this device before anything reaches storage: the inspection panels show
 the ciphertext rows a backend would hold, and the remembered unlock around a key handle the
-browser will not export. The vault's records live in IndexedDB (through `safebyok/idb`); only the
-fake auth's scaffolding rows sit in localStorage.
+browser will not export. The vault's records live in IndexedDB (through `safebyok-indexeddb`, and the
+remembered unlock through `safebyok/idb`); only the fake auth's scaffolding rows sit in
+localStorage.
 
 ## The page
 

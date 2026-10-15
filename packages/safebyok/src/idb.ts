@@ -1,64 +1,54 @@
-import { createStore, del, delMany, entries, get, getMany, keys, set, clear, type UseStore } from 'idb-keyval'
-import { DeviceUnlock, type Lockbox, type VaultBundle, type VaultScope } from './types'
-import {
-  VaultDB, boxCkey, bundleCkey, bundleMeetsExpectation, isBoxCkeyOf, lockboxMeetsExpectation, scopePath, vaultMeetsExpectation,
-  type BundleExpectation, type EraseExpectation, type LockboxExpectation,
-} from './vault-db'
+import { createStore, del, entries, get, keys, set, clear, type UseStore } from 'idb-keyval'
+import { DeviceUnlock, type VaultScope } from './types'
+import { scopePath } from './vault-db'
 import type { DeviceDB } from './device-db'
-import { parseDbName, parseInspectorOpts, type IdbOpts, type IdbShelf } from './idb-opts'
+import { parseDbName, type IdbOpts } from './idb-opts'
 import { VaultError } from './errors'
 
-export type { IdbOpts, IdbShelf } from './idb-opts'
+export type { IdbOpts } from './idb-opts'
 
 /**
- * The browser adapters, over IndexedDB (through `idb-keyval`): a vault that lives entirely on
- * this device. `idbDeviceDB` is the real thing -- device storage is exactly what IndexedDB is,
- * and the only browser storage that can hold a non-extractable localUnlockKey. `idbVaultDB` is
- * the no-backend tier: everything a synced backend would hold, kept on this device instead, so a
- * purely client-side app still gets its whispers encrypted at rest.
+ * The device store over this browser's IndexedDB (through `idb-keyval`), as an entry point of its
+ * own, `safebyok/idb`: device storage is exactly what IndexedDB is, and the only browser storage
+ * that can hold a non-extractable localUnlockKey. Where a vault itself lives is a backend choice,
+ * not a fact about the device, so the IndexedDB vault store is a package of its own,
+ * `safebyok-indexeddb`.
  *
- * Browser storage is best-effort: the browser may evict it under pressure, and "clear site data"
- * removes it. An app leaning on `idbVaultDB` should call `navigator.storage.persist()` and say
- * plainly that the vault lives only in this browser.
- *
- * This entry point touches IndexedDB only when an adapter is used, so importing it is safe
- * anywhere; the adapters themselves need a browser (or anything else with `indexedDB`).
+ * This entry point touches IndexedDB only when the store is used, so importing it is safe
+ * anywhere; the store itself needs a browser (or anything else with `indexedDB`).
  */
 
-// One UseStore per (dbName, shelf), shared by adapters and inspectors alike: idb-keyval opens
-// the underlying database lazily, so making these is free until something reads or writes.
+// One UseStore per dbName, shared by stores and inspectors alike: idb-keyval opens the
+// underlying database lazily, so making these is free until something reads or writes.
 const shelfStores = new Map<string, UseStore>()
-const shelfStore = (dbName: string, shelf: IdbShelf): UseStore => {
-  const ckey = `${dbName}:${shelf}`
-  const kept = shelfStores.get(ckey)
+const shelfStore = (dbName: string): UseStore => {
+  const kept = shelfStores.get(dbName)
   if (kept !== undefined) { return kept }
-  const fresh = createStore(`${dbName}:${shelf}`, 'records')
-  shelfStores.set(ckey, fresh)
+  const fresh = createStore(`${dbName}:device_db`, 'records')
+  shelfStores.set(dbName, fresh)
   return fresh
 }
 
-// Change bells, one per (dbName, shelf): local listeners hear this tab's writes directly, and a
+// Change bells, one per dbName: local listeners hear this tab's writes directly, and a
 // BroadcastChannel carries them to other tabs (the channel never echoes to its own sender).
 const bells = new Map<string, Set<() => void>>()
 const channels = new Map<string, BroadcastChannel>()
-const bellCkey = (dbName: string, shelf: IdbShelf) => `safebyok-idb:${dbName}:${shelf}`
+const bellCkey = (dbName: string) => `safebyok-idb:${dbName}:device_db`
 
-const ringBell = (dbName: string, shelf: IdbShelf) => {
-  const ckey = bellCkey(dbName, shelf)
-  bells.get(ckey)?.forEach((listener) => { listener() })
-  channels.get(ckey)?.postMessage('changed')
+const ringBell = (dbName: string) => {
+  bells.get(dbName)?.forEach((listener) => { listener() })
+  channels.get(dbName)?.postMessage('changed')
 }
 
-const onBell = (dbName: string, shelf: IdbShelf, listener: () => void): (() => void) => {
-  const ckey = bellCkey(dbName, shelf)
-  let ringers = bells.get(ckey)
+const onBell = (dbName: string, listener: () => void): (() => void) => {
+  let ringers = bells.get(dbName)
   if (ringers === undefined) {
     ringers = new Set()
-    bells.set(ckey, ringers)
+    bells.set(dbName, ringers)
     if (typeof BroadcastChannel !== 'undefined') {
-      const channel = new BroadcastChannel(ckey)
-      channel.addEventListener('message', () => { bells.get(ckey)?.forEach((ring) => { ring() }) })
-      channels.set(ckey, channel)
+      const channel = new BroadcastChannel(bellCkey(dbName))
+      channel.addEventListener('message', () => { bells.get(dbName)?.forEach((ring) => { ring() }) })
+      channels.set(dbName, channel)
     }
   }
   ringers.add(listener)
@@ -66,102 +56,6 @@ const onBell = (dbName: string, shelf: IdbShelf, listener: () => void): (() => v
 }
 
 const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
-
-/**
- * VaultDB over this browser's IndexedDB: the local-only tier. Nothing syncs -- this "backend"
- * never leaves the device -- but every secret field is ciphertext all the same, and the stored
- * rows are exactly what a real backend would hold. Kind 'bad_option' for a `dbName` that is not
- * non-empty text.
- *
- * @example
- *   const vaultDB = idbVaultDB({ dbName: 'my_app' })
- *   const vault = await openVault({ applabel: 'my_app', userId, vaultlabel: 'main', vaultDB, ...browserOpts({ dbName: 'my_app' }) })
- */
-export const idbVaultDB = (opts?: IdbOpts): VaultDB => new IdbVaultDB(parseDbName(opts, 'idbVaultDB'))
-
-class IdbVaultDB extends VaultDB {
-  // IndexedDB sets no limit per record or per vault: the origin's storage quota bounds the whole
-  // database.
-  readonly maxRecordBytes = Infinity
-  readonly maxVaultBytes = Infinity
-
-  private readonly dbName: string
-
-  constructor(dbName: string) {
-    super()
-    this.dbName = dbName
-  }
-
-  private shelf() { return shelfStore(this.dbName, 'vault_db') }
-  private ring() { ringBell(this.dbName, 'vault_db') }
-
-  protected async doReadBundle(scope: VaultScope): Promise<unknown> {
-    return (await get(bundleCkey(scope), this.shelf())) ?? null
-  }
-
-  // The creates and updates below check, then save, in two IndexedDB transactions: another tab
-  // can write in between, a window notes/security.md records.
-  protected async doCreateBundle(bundle: VaultBundle): Promise<unknown> {
-    const standing: unknown = await get(bundleCkey(bundle), this.shelf())
-    if (standing !== undefined) { return standing }
-    await set(bundleCkey(bundle), bundle, this.shelf())
-    this.ring()
-    return bundle
-  }
-
-  protected async doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean> {
-    const standing: unknown = await get(bundleCkey(bundle), this.shelf())
-    if (! bundleMeetsExpectation(standing, expected)) { return false }
-    await set(bundleCkey(bundle), bundle, this.shelf())
-    this.ring()
-    return true
-  }
-
-  protected async doReadBox(scope: VaultScope, boxlabel: string): Promise<unknown> {
-    return (await get(boxCkey(scope, boxlabel), this.shelf())) ?? null
-  }
-
-  protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
-    const rows = await entries(this.shelf())
-    return rows
-      .filter(([ckey]) => isBoxCkeyOf(scope, ckey))
-      .map(([, row]) => row as unknown)
-  }
-
-  protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
-    const [standingBundle, standingBox] = await getMany<unknown>([bundleCkey(scope), boxCkey(scope, lockbox.boxlabel)], this.shelf())
-    if (! lockboxMeetsExpectation(standingBundle, standingBox, expected)) { return false }
-    await set(boxCkey(scope, lockbox.boxlabel), lockbox, this.shelf())
-    this.ring()
-    return true
-  }
-
-  protected async doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
-    if (! vaultMeetsExpectation(await get(bundleCkey(scope), this.shelf()), expected)) { return false }
-    await del(boxCkey(scope, boxlabel), this.shelf())
-    this.ring()
-    return true
-  }
-
-  // The look at the bundle, the listing and the deletion are separate IndexedDB transactions: a
-  // box another tab writes in between survives, orphaned, and a vault another tab destroys and
-  // makes anew in between can be erased (notes/security.md). The delMany itself is one
-  // transaction, so the rows listed go together, or none of them do.
-  protected async doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
-    if (! vaultMeetsExpectation(await get(bundleCkey(scope), this.shelf()), expected)) { return false }
-    const ckeys = await keys(this.shelf())
-    const doomed = ckeys.filter((ckey) => isBoxCkeyOf(scope, ckey))
-    await delMany([...doomed, bundleCkey(scope)], this.shelf())
-    this.ring()
-    return true
-  }
-
-  // Rings on every write to the shelf, not only ones in scope: a spurious refresh is harmless,
-  // and cross-tab news arrives over the BroadcastChannel for free.
-  protected override doSubscribe(_scope: VaultScope, onChange: () => void): () => void {
-    return onBell(this.dbName, 'vault_db', onChange)
-  }
-}
 
 /**
  * DeviceDB over this browser's IndexedDB: the real device storage. IndexedDB keeps the
@@ -178,8 +72,8 @@ class IdbVaultDB extends VaultDB {
  */
 export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
   const dbName = parseDbName(opts, 'idbDeviceDB')
-  const shelf = () => shelfStore(dbName, 'device_db')
-  const ring = () => { ringBell(dbName, 'device_db') }
+  const shelf = () => shelfStore(dbName)
+  const ring = () => { ringBell(dbName) }
 
   return {
     readUnlock: async (scope) => {
@@ -214,25 +108,30 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
   }
 }
 
-/** One stored row, as {@link inspectIdb} reports it: its ckey and the raw stored value. */
+/** One stored row, as {@link inspectIdbDeviceDB} reports it: its ckey and the raw stored value. */
 export type IdbRow = { ckey: string, row: unknown }
 
 /**
- * A window onto one safebyok shelf in IndexedDB, for inspectors and debug panels: the raw rows, a
- * change bell, and a wipe. This is how the demo shows "what the backend sees" without asking the
- * vault's opinion -- what it reports is what is actually stored.
+ * A window onto the rows {@link idbDeviceDB} keeps, for inspectors and debug panels: the raw
+ * rows, a change bell, and a wipe. This is how the demo shows what this device remembers without
+ * asking the vault's opinion -- what it reports is what is actually stored. The vault store's
+ * own rows have their window beside it, `inspectIdbVaultDB` from `safebyok-indexeddb`.
+ *
+ * @param opts - The database to look at: `dbName`, default 'safebyok'.
+ * @returns The inspector. Kind 'bad_option' for a `dbName` that is not non-empty text, and from
+ *   its `subscribe`, for a listener that is not a function.
  *
  * @example
- *   const inspector = inspectIdb({ shelf: 'vault_db' })
+ *   const inspector = inspectIdbDeviceDB({ dbName: 'acme' })
  *   const rows = await inspector.rows()
  *   const stop = inspector.subscribe(() => { void inspector.rows().then(render) })
  */
-export const inspectIdb = (opts: IdbOpts & { shelf: IdbShelf }) => {
-  const { dbName, shelf } = parseInspectorOpts(opts)
+export const inspectIdbDeviceDB = (opts?: IdbOpts) => {
+  const dbName = parseDbName(opts, 'inspectIdbDeviceDB')
   return {
     /** Every stored row on the shelf, sorted by ckey. */
     rows: async (): Promise<IdbRow[]> => {
-      const stored = await entries(shelfStore(dbName, shelf))
+      const stored = await entries(shelfStore(dbName))
       return stored
         .filter((pair): pair is [string, unknown] => typeof pair[0] === 'string')
         .map(([ckey, row]) => ({ ckey, row }))
@@ -241,12 +140,12 @@ export const inspectIdb = (opts: IdbOpts & { shelf: IdbShelf }) => {
     /** Calls `listener` after any write to the shelf, this tab or another; returns the unsubscribe. */
     subscribe: (listener: () => void): (() => void) => {
       if (typeof listener !== 'function') { throw new VaultError('bad_option', 'subscribe needs a listener function to call after each write.') }
-      return onBell(dbName, shelf, listener)
+      return onBell(dbName, listener)
     },
-    /** Remove every row on the shelf. */
+    /** Remove every row on the shelf: every remembered unlock in this database. */
     wipe: async (): Promise<void> => {
-      await clear(shelfStore(dbName, shelf))
-      ringBell(dbName, shelf)
+      await clear(shelfStore(dbName))
+      ringBell(dbName)
     },
   }
 }
