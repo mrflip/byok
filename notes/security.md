@@ -16,7 +16,9 @@ security expert who knows what questions to ask.
   the record reaches the snapshot. A row whose boxlabel or note the vault's `validators` refuse --
   stored under other checks, before a host narrowed them -- lists as damaged too, and `erase()`
   reaches it by its stored name: for a box that already stands, erase checks the boxlabel only as
-  text (the ckey it rebuilds is still this scope's own). `store()` checks every boxlabel against
+  text (the ckey it rebuilds is still this scope's own). So the snapshot carries a damaged box's
+  boxlabel as stored, text the host's check refuses: one who can write storage can put any text
+  there, as a name a host renders. `store()` checks every boxlabel against
   the host's check, so it refuses a refused name (`bad_label`, writing nothing) even over a box
   standing under it; over a box whose note alone is refused, it writes afresh. `store()` over a
   lockbox whose record fails validation (any listed as damaged, and one whose ciphered fields are

@@ -334,8 +334,7 @@ const ListedLockbox = Z.omit(Lockbox, { lockbox_key_wrapped: true, whisper_ciphe
 
 /**
  * True when a listed lockbox is stored under text, which reaches it whatever the vault's checks:
- * a vault erases or stores over a box by the name it was stored under, even one its boxlabel
- * check now refuses.
+ * a vault erases a box by the name it was stored under, even one its boxlabel check now refuses.
  */
 const isNameable = (stored: StoredLockbox): boolean => typeof (stored as { boxlabel?: unknown }).boxlabel === 'string'
 
