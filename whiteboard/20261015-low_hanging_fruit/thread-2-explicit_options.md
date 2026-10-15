@@ -1,7 +1,8 @@
 # Thread 2: explicit_options (2026-10-15)
 
-Branch `20261015-explicit_options`, PR not yet filed, stacked on
-[#34](https://github.com/mrflip/safebyok/pull/34). Justify: green (safebyok 283, safebyok-convex
+Branch `20261015-explicit_options`, PR [#40](https://github.com/mrflip/safebyok/pull/40), stacked
+on [#34](https://github.com/mrflip/safebyok/pull/34) at dd8c7ca. Reviewed: one fix, f0cb46e (the
+security note and changeset say noble drops out only under a tree-shaking bundler). Justify: green (safebyok 283, safebyok-convex
 217, safebyok-react 8, demo 24, root 72).
 
 * **Built**:
@@ -75,7 +76,8 @@ Branch `20261015-explicit_options`, PR not yet filed, stacked on
 * **For the Coach**:
   - Confirm the entry name `safebyok/browser` (your word was `safebyok/basic`). It names the
     assumptions: IndexedDB, and noble's pure-JS Argon2id.
-  - Confirm that fractional hours are accepted, and that there is no upper bound on
-    `forcePassphraseReentryHours`.
+  - Confirm that fractional hours are accepted. Decide on an upper bound for
+    `forcePassphraseReentryHours` (review): with none, an absurd value pushes `askPassphraseAt`
+    and the stored `expires_at` past `Number.MAX_SAFE_INTEGER` and `Date`'s range. A year, say?
   - `browserOpts` keeps one bag per `dbName` for the life of the page: a little module state, the
     same as `idb.ts` already keeps.
