@@ -114,7 +114,8 @@ security expert who knows what questions to ask.
   (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus unlockEpoch
   for key wraps (since 2026-10-15, the device record's only: an unlock envelope binds its own
   header instead, below) and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
-  moved between users, vaults, boxes or revisions refuses to open.
+  moved between users, vaults, boxes or revisions refuses to open. (Widened 2026-10-15 to every
+  field each record writes: the sweep entry below.)
 * 2026-10-14: a wrong passphrase is learned from the vaultKey envelope's AEAD failure, never a
   comparison; there is no separate passphrase verifier field.
 * 2026-10-14: the localUnlockKey is a non-extractable WebCrypto key persisted only by structured
@@ -241,6 +242,7 @@ security expert who knows what questions to ask.
   keeps `registered_at`; `created_at` and `updated_at` are gone from both records. None of the
   times is in the cipherAdditionalData (the binding is still the positional list), so a backend
   can alter them undetected; binding the whole header is TODO.md's roadmap 3, not yet built.
+  (Built since: the sweep entry below binds both times and the note.)
 * 2026-10-15: until 1.0.0 a stored-shape change carries no migration (the Coach's ruling). A
   lockbox or bundle written with `created_at`/`updated_at`, or a device record with
   `expires_at`, fails its schema: the vault refuses it as `corrupt_record` and leaves it as it
@@ -357,6 +359,7 @@ security expert who knows what questions to ask.
   remembered unlock. `VaultDB`'s write verbs check labels and scope only, not the records the
   vault builds. A remembered unlock's `ask_passphrase_at` is not bound into its encryption, so
   whoever can write this device's IndexedDB can extend it (to any finite number of milliseconds).
+  (Bound since: the sweep entry below.)
 * 2026-10-14: releases run from `.github/workflows/release.yml` on every push to main, in jobs
   that each hold only what they need. Only `publish` (in the `npm` environment) may mint an npm
   OIDC token, and it runs no package's scripts (`pnpm install --ignore-scripts`): it stages the
@@ -488,7 +491,8 @@ security expert who knows what questions to ask.
   random `salt_b64` (never shared between envelopes) and its own `unlock_id`, and its wrap's
   additional data is the format, scope, `vault_id`, a purpose per method
   (`vault_key_passphrase_wrapped`), and the envelope's whole public header (`method`,
-  `unlock_id`, `unlocklabel`, `key_deriver_label`, `salt_b64`) as key-sorted JSON. The
+  `unlock_id`, `unlocklabel`, `key_deriver_label`, `salt_b64`) as key-sorted JSON (and, since
+  the sweep entry below, the bundle's `registered_at`). The
   `unlock_epoch` is no longer in it, since a change to one envelope bumps the epoch and the
   others, whose passphrases the device does not hold, must still open: a backend can therefore
   splice an envelope from an older bundle of the same vault (a removed passphrase's, or one from
@@ -513,7 +517,8 @@ security expert who knows what questions to ask.
   Its envelope holds `credential_id` and `prf_salt_b64` (32 random bytes, minted by the React
   binding's `createPasskey` with `crypto.getRandomValues`, checked for length by the core). The
   passkeyKey is HKDF-SHA256 over the 32-byte PRF answer, with an empty salt and `info` =
-  `["safebyok-vault-v1", "vault_key_passkey_wrapped", credential_id]` as JSON; the wrap's additional
+  `["safebyok-vault-v1", "vault_key_passkey_wrapped", credential_id]` as JSON (since the sweep
+  entry below, the wrap's whole additional data); the wrap's additional
   data is the format, scope, `vault_id`, purpose `vault_key_passkey_wrapped` and the envelope's
   public header, as for a passphrase envelope. A stored salt that is not base64url of 32 bytes
   refuses as `corrupt_record`, checked at unlock rather than in the schema (the size budget, as for
@@ -529,6 +534,32 @@ security expert who knows what questions to ask.
   ID can ask the authenticator for the answer (with the user's touch), as it could read a typed
   passphrase. The credential's challenge is random and never verified, and no attestation is
   checked: the authenticator is the user's to trust.
+* 2026-10-15: **every field a record writes is bound, unless a reason below says not** (the
+  Coach: "make everything verifiable unless there's a good reason not to"). A passkey envelope's
+  HKDF `info` is now its wrap's whole additional data -- format, scope, `vault_id`, the bundle's
+  `registered_at`, purpose, and the envelope's public header (`credential_id`, `prf_salt_b64`,
+  `unlock_id`, `unlocklabel`) -- so the passkeyKey itself, not only the wrap, belongs to one vault
+  and one envelope; HKDF info and AES-GCM additional data are the same bytes, fed to different
+  primitives. Every unlock envelope's wrap binds the bundle's `registered_at`. A lockbox's two
+  encryptions bind its whole public header (`format`, `boxlabel`, `revision_id`, `note`,
+  `registered_at`, `changed_at`: every field but the two ciphered ones, as Zod's parse leaves the
+  record; an absent or undefined note is left out alike), so a backend that alters a note or a time
+  makes `read()` refuse `corrupt_record`; a future field is bound the day it is added to the
+  schema. While the vault is locked, the listing still shows these fields unverified: nothing
+  checks them before a box is opened. The device record binds `ask_passphrase_at`, under its own
+  format tag (`safebyok-unlock-v1`, formerly the bundle's); a deadline moved on the device now
+  fails to open and is erased, so the forgetting is logged. No compatibility: every passkey
+  envelope, lockbox and remembered unlock written before refuses to open (`wrong_passkey`,
+  `corrupt_record`, a fresh passphrase prompt), and a passphrase envelope refuses its passphrase.
+  **Left unbound, and why**: the bundle's `unlock_epoch` and the list of `unlocks` (order, length,
+  membership), because each envelope's key is held only by its own way in, and a change to one
+  must not rewrap the others (the 2026-10-15 envelope entry above: an old envelope can be spliced
+  back); the passphraseKey's derivation, which takes no context: its salt is fresh for every
+  envelope and bound in the wrap, so the key wraps exactly one thing, and binding it further would
+  put Argon2's associated data into the host-pluggable `KeyDeriver` seam and every stand-in
+  behind a label, for no added check; the PRF salt, which is random and already bound; and the
+  stored ciphertexts and IVs, which the AEAD tag covers. An adapter's own columns are never in a
+  record, so never bound.
 * 2026-10-15: any way in proves any change. A passkey's answer is accepted as proof by
   `addPassphrase`, `addPasskey` and `removeUnlock`, so whoever holds one passkey can set a new
   passphrase and remove the user's others: the vault is as strong as its weakest way in. A vault

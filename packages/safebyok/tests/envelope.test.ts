@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { makeVaultKey, toB64 } from '../src/crypto'
+import { cipherBinding, deriveWrappingKey, makeVaultKey, toB64, unwrapKeyUnder } from '../src/crypto'
 import * as Envelope from '../src/envelope'
 import { VaultError } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
@@ -7,7 +7,8 @@ import { VaultBundle, type PasskeyEnvelope, type PasskeyProof, type PassphraseEn
 import * as TH from './test-helpers'
 
 const scope = TH.scopeOf('u1')
-const vaultId = 'vault-id-u1'
+/** The bundle every envelope here is sealed for: its `vault_id` and `registered_at` are what a wrap binds of it. */
+const identity = TH.bundleOf('u1')
 
 /** A testDeriver that counts its derivations: the deriver, and the spy that counts. */
 const countingDeriver = () => {
@@ -17,7 +18,7 @@ const countingDeriver = () => {
 
 /** A real passphrase envelope around `vaultKey`, labelled `unlocklabel`. */
 const sealed = async (passphrase: string, unlocklabel: string, vaultKey: CryptoKey, keyDeriver: KeyDeriver = TH.testDeriver) => {
-  const { envelope } = await Envelope.sealPassphrase(keyDeriver, passphrase, scope, vaultId, { unlock_id: `unlock-${unlocklabel}`, unlocklabel }, vaultKey)
+  const { envelope } = await Envelope.sealPassphrase(keyDeriver, passphrase, scope, identity, { unlock_id: `unlock-${unlocklabel}`, unlocklabel }, vaultKey)
   return envelope
 }
 
@@ -51,7 +52,7 @@ describe("Envelope.sealPassphrase", () => {
 
   it("hands back a session handle on the vaultKey that cannot be exported", async () => {
     const vaultKey = await makeVaultKey()
-    const { sessionKey } = await Envelope.sealPassphrase(TH.testDeriver, 'pw', scope, vaultId, { unlock_id: 'unlock-one', unlocklabel: 'one' }, vaultKey)
+    const { sessionKey } = await Envelope.sealPassphrase(TH.testDeriver, 'pw', scope, identity, { unlock_id: 'unlock-one', unlocklabel: 'one' }, vaultKey)
     expect(sessionKey.extractable).to.be.false
     expect(sessionKey.usages).to.have.members(['wrapKey', 'unwrapKey'])
   })
@@ -171,6 +172,12 @@ describe("an envelope's binding", () => {
     await expectRefusal(Envelope.openWithPassphrase(TH.testDeriver, 'pw', TH.scopeOf('u2'), bundleWith([envelope])), 'wrong_passphrase')
   })
 
+  it("refuses to open in a bundle whose registered_at was altered", async () => {
+    const envelope = await sealed('pw', 'passphrase', await makeVaultKey())
+    const redated = VaultBundle.parse(TH.bundleOf('u1', { registered_at: identity.registered_at + 1, unlocks: [envelope] }))
+    await expectRefusal(Envelope.openWithPassphrase(TH.testDeriver, 'pw', scope, redated), 'wrong_passphrase')
+  })
+
   it("does not bind the unlock epoch: an envelope opens at any epoch of its vault", async () => {
     const vaultKey = await makeVaultKey()
     const bundle = VaultBundle.parse(TH.bundleOf('u1', { unlock_epoch: 7, unlocks: [await sealed('pw', 'passphrase', vaultKey)] }))
@@ -195,7 +202,7 @@ describe("Envelope.summarize", () => {
 
 /** A real passkey envelope around `vaultKey`, labelled `unlocklabel`, for the passkey `passkey` answered. */
 const sealedPasskey = async (passkey: PasskeyProof, unlocklabel: string, vaultKey: CryptoKey) => {
-  const { envelope } = await Envelope.sealPasskey(passkey, scope, vaultId, { unlock_id: `unlock-${unlocklabel}`, unlocklabel }, vaultKey)
+  const { envelope } = await Envelope.sealPasskey(passkey, scope, identity, { unlock_id: `unlock-${unlocklabel}`, unlocklabel }, vaultKey)
   return envelope
 }
 
@@ -210,7 +217,7 @@ describe("Envelope.sealPasskey", () => {
   })
 
   it("hands back a session handle on the vaultKey that cannot be exported", async () => {
-    const { sessionKey } = await Envelope.sealPasskey(await TH.passkeyOf('laptop'), scope, vaultId, { unlock_id: 'unlock-laptop', unlocklabel: 'laptop' }, await makeVaultKey())
+    const { sessionKey } = await Envelope.sealPasskey(await TH.passkeyOf('laptop'), scope, identity, { unlock_id: 'unlock-laptop', unlocklabel: 'laptop' }, await makeVaultKey())
     expect(sessionKey.extractable).to.be.false
     expect(sessionKey.usages).to.have.members(['wrapKey', 'unwrapKey'])
   })
@@ -294,6 +301,38 @@ describe("a passkey envelope's binding", () => {
     const otherVault = VaultBundle.parse(TH.bundleOf('u1', { vault_id: 'vault-id-other', unlocks: [envelope] }))
     await expectRefusal(Envelope.openWithPasskey(laptop, scope, otherVault), 'wrong_passkey')
     await expectRefusal(Envelope.openWithPasskey(laptop, TH.scopeOf('u2'), bundleWith([envelope])), 'wrong_passkey')
+  })
+
+  it("refuses to open in a bundle whose registered_at was altered", async () => {
+    const laptop = await TH.passkeyOf('laptop')
+    const envelope = await sealedPasskey(laptop, 'laptop', await makeVaultKey())
+    const redated = VaultBundle.parse(TH.bundleOf('u1', { registered_at: identity.registered_at + 1, unlocks: [envelope] }))
+    await expectRefusal(Envelope.openWithPasskey(laptop, scope, redated), 'wrong_passkey')
+  })
+})
+
+/** Unwrap `envelope` under the key HKDF makes of `prfBytes` with `info`, its wrap bound to `binding`. */
+const unwrapsUnder = async (envelope: PasskeyEnvelope, prfBytes: Uint8Array, info: Uint8Array, binding: Uint8Array) => {
+  const passkeyKey = await deriveWrappingKey(prfBytes, info)
+  return await unwrapKeyUnder(passkeyKey, envelope.vault_key_wrapped, binding, { extractable: false, usage: ['wrapKey'] })
+}
+
+describe("a passkey envelope's key", () => {
+  it("is HKDF over the answer with the wrap's whole binding as its info: scope, vault_id, registered_at, purpose and header", async () => {
+    const laptop = await TH.passkeyOf('laptop')
+    const envelope = await sealedPasskey(laptop, 'laptop', await makeVaultKey())
+    const { vault_key_wrapped: _wrapped, ...header } = envelope
+    const binding = cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', 'vault-id-u1', identity.registered_at, 'vault_key_passkey_wrapped', header)
+    expect(await unwrapsUnder(envelope, laptop.prfBytes, binding, binding)).to.be.instanceOf(CryptoKey)
+  })
+
+  it("is not the key an info of the purpose and credential alone makes: the vault is in it", async () => {
+    const laptop = await TH.passkeyOf('laptop')
+    const envelope = await sealedPasskey(laptop, 'laptop', await makeVaultKey())
+    const { vault_key_wrapped: _wrapped, ...header } = envelope
+    const binding = cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', 'vault-id-u1', identity.registered_at, 'vault_key_passkey_wrapped', header)
+    const vaultlessInfo = cipherBinding('safebyok-vault-v1', 'vault_key_passkey_wrapped', laptop.credentialId)
+    await expect(unwrapsUnder(envelope, laptop.prfBytes, vaultlessInfo, binding)).rejects.toThrow()
   })
 })
 
