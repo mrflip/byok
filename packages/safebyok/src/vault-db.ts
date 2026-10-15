@@ -354,10 +354,10 @@ export const isBoxCkeyOf = (scope: VaultScope, ckey: unknown): ckey is string =>
 const soon = async <ValT>(fn: () => ValT | Promise<ValT>): Promise<ValT> => await fn()
 
 /**
- * VaultDB over a {@link StringStore}: rows as JSON text under scope-prefixed ckeys. The demo
- * backs one with localStorage to stand in for a real backend; tests back one with a Map. Every
- * secret field in what it stores is ciphertext, so the only thing pretend about it is reach --
- * rows stay on this device instead of syncing through a shared database.
+ * VaultDB over a {@link StringStore}: rows as JSON text under scope-prefixed ckeys. A host
+ * backs one with localStorage, for a vault that lives on this device alone; tests back one with a
+ * Map. Every secret field in what it stores is ciphertext; what it lacks is reach -- rows stay
+ * on this device instead of syncing through a shared database.
  *
  * @example
  *   const vaultDB = localVaultDB(memoryStore())
@@ -366,7 +366,7 @@ const soon = async <ValT>(fn: () => ValT | Promise<ValT>): Promise<ValT> => awai
 export const localVaultDB = (store: StringStore): VaultDB => new StringStoreVaultDB(store)
 
 class StringStoreVaultDB extends VaultDB {
-  // localStorage holds about five megabytes per origin, in all: a mebibyte is this stand-in's
+  // localStorage holds about five megabytes per origin, in all: a mebibyte is this adapter's
   // most for any one record.
   readonly maxRecordBytes = 1024 * 1024
 

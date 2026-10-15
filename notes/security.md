@@ -7,11 +7,12 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
-* 2026-10-14: the package is staged on npm by `.github/workflows/release.yml`, run when a
-  GitHub release is published, authenticating by npm's trusted publishing (OIDC, no stored
-  token) from the `npm` environment, with provenance. `prepublishOnly` runs lint, typecheck,
-  tests and the build in that same job. A maintainer's 2FA approval makes the staged version
-  public; CI cannot give it.
+* 2026-10-14 (revised 2026-10-15 for the push-to-main workflow): the package is staged on npm by `.github/workflows/release.yml`, run on every push
+  to main (when the Coach has merged the Version PR, and a version npm lacks is waiting),
+  authenticating by npm's trusted publishing (OIDC, no stored token) from the `npm`
+  environment, with provenance. The `pack` job runs `pnpm justify` (lint, typecheck, tests and
+  the build) before `publish`, which runs no package's scripts. A maintainer's 2FA approval makes
+  the staged version public; CI cannot give it.
 * 2026-10-14: the npm trusted publisher allows `npm stage publish` and `npm dist-tag`, and not
   `npm publish`. A run of the release workflow can therefore repoint a dist-tag (`latest`,
   `next`) at any version already public, with no 2FA approval; the workflow does not run
@@ -163,3 +164,14 @@ security expert who knows what questions to ask.
   The token is narrowed to contents and pull requests (write) on this repository; the job's own
   GITHUB_TOKEN reads only. Its commits go through the GitHub API, signed by GitHub and attributed
   to the App.
+* 2026-10-15: the GitHub App's private key (`RELEASE_APP_PRIVATE_KEY`, with `RELEASE_APP_ID` as a
+  variable) is a secret of the `releasing` environment, which only `main` may use
+  (#27, eed83f0). Whoever holds the key can mint installation tokens for the App with every
+  permission the App was granted, however narrowly `release.yml` asks for its own; the key never
+  expires, and revoking it means generating a new one in the App's settings. In the workflow only
+  the `create-github-app-token` step receives the key. The token it mints (contents and pull
+  requests write on this repository, short-lived) goes to the changesets action, which also runs
+  `pnpm release:version`, repository code from main's tip, in the same job: so what merges to main
+  can use that token when it next runs. The token can create branches and tags and open, edit and
+  close pull requests; whether it can also push to or merge into `main` depends on the branch
+  protection's allowances for the App, which this repository's files do not record.
