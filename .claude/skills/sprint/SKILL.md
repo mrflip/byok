@@ -69,9 +69,14 @@ Commit both (`plan:`) and push the sprint branch, so the Coach can read them on 
 Claude Docs tools are in the session, load the live guide before your first docs call
 (`guide( items = ["topic.index", "topic.tabs"] )`: that surface moves quickly; work from what it
 says today), then birth one doc named for the sprint with a *Plan* tab and a *Progress* tab, and
-hand the Coach its link once in chat. The repo files stay the source of truth: write the file
-first, mirror it after. No Docs tools in the session: skip the mirror, say so in one line, and
-carry on.
+hand the Coach its link once in chat. The worktree's files live on a branch the Coach's checkout
+is not on, so the doc is where they usually read: **every file in the sprint's whiteboard
+directory is mirrored in full, one tab per file** -- the plan, the progress document, any
+preplan or other input you copied in, each worker's `thread-<N>-<label>.md` once it exists (read it
+from the thread's branch) -- and so is each `human/` entry you write for the sprint. Mirror the
+whole text, not a summary; a file that changes is re-mirrored whole. The repo files stay the
+source of truth: write the file first, mirror it after. No Docs tools in the session: skip the
+mirror, say so in one line, and carry on.
 
 Post a short plan summary in chat -- threads, which run together and which wait, look-ahead
 calls -- and proceed. Do not wait for approval unless planning surfaced a *significant*
