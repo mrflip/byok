@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
-    "build:deps": "pnpm --filter 'safebyok-demo-react^...' build",
+    "build:deps": "[ -n \"$SAFEBYOK_SKIP_BUILD_DEPS\" ] || SAFEBYOK_SKIP_BUILD_DEPS=1 pnpm --filter 'safebyok-demo-react^...' build",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "pretest": "pnpm build:deps",

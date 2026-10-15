@@ -61,9 +61,6 @@ Small irritants, each a few lines, picked up by whoever is nearby.
 
 * The root scripts chain with `&&`, so a root-level failure hides package failures until it is
   fixed.
-* The react and demo pre-scripts rebuild the core several times, and `workspaceConcurrency: 1`
-  serialises `pnpm -r` for lint and typecheck as well. The whole justify takes ~29 s locally and
-  longer in the cloud.
 * Convex's `--no-error-on-unmatched-pattern` should go when it gets its own configs.
 * The demo's coverage has no `include`.
 * **The second flaky tamper test.** [#25](https://github.com/mrflip/safebyok/pull/25) fixed
