@@ -31,7 +31,7 @@ describe("idbVaultDB's options", () => {
 
   it("keeps its records in 'safebyok' given no options, or no dbName", async () => {
     await idbVaultDB().createBundle(TH.bundleOf('default_u1'))
-    expect(await get('vault:acme:default_u1:main', rawShelf('safebyok'))).to.deep.equal(TH.bundleOf('default_u1'))
+    expect(await get('["vault","acme","default_u1","main"]', rawShelf('safebyok'))).to.deep.equal(TH.bundleOf('default_u1'))
     expect(await idbVaultDB({ dbName: undefined }).readBundle(TH.scopeOf('default_u1'))).to.deep.equal(TH.bundleOf('default_u1'))
   })
 })
@@ -49,38 +49,40 @@ describe("idbVaultDB", () => {
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
     expect(await inspectIdbVaultDB({ dbName }).rows()).to.deep.equal([
-      { ckey: 'box:acme:u1:main:anthropic', row: TH.boxOf('anthropic', 'one') },
-      { ckey: 'vault:acme:u1:main',         row: TH.bundleOf('u1') },
+      { ckey: '["box","acme","u1","main","anthropic"]', row: TH.boxOf('anthropic', 'one') },
+      { ckey: '["vault","acme","u1","main"]',           row: TH.bundleOf('u1') },
     ])
   })
 
-  it("reads a vault the core's safebyok/idb wrote: the same database, rows and ckeys", async () => {
+  it("reads rows filed under the colon-joined ckeys of 0.2 and before as absent, and leaves them be", async () => {
     const dbName = TH.freshDbName()
     await set('vault:acme:u1:main', TH.bundleOf('u1'), rawShelf(dbName))
     await set('box:acme:u1:main:anthropic', TH.boxOf('anthropic', 'one'), rawShelf(dbName))
     const vaultDB = idbVaultDB({ dbName })
-    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
-    expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'one'))
+    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
+    expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.be.null
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
+    expect(await inspectIdbVaultDB({ dbName }).rows()).to.have.lengthOf(2)
   })
 
   it("strips a field the record does not have before storing it", async () => {
     const dbName = TH.freshDbName()
     const stray = { ...TH.bundleOf('u1'), stray_field: 'never stored' }
     await idbVaultDB({ dbName }).createBundle(stray)
-    expect(await get('vault:acme:u1:main', rawShelf(dbName))).to.deep.equal(TH.bundleOf('u1'))
+    expect(await get('["vault","acme","u1","main"]', rawShelf(dbName))).to.deep.equal(TH.bundleOf('u1'))
   })
 
   it("refuses a damaged bundle as corrupt_record, and leaves it as it is", async () => {
     const dbName = TH.freshDbName()
-    await set('vault:acme:u1:main', { vault_id: 'vault-id-u1', unlock_epoch: 'one' }, rawShelf(dbName))
+    await set(bundleCkey(TH.scopeOf('u1')), { vault_id: 'vault-id-u1', unlock_epoch: 'one' }, rawShelf(dbName))
     const refusal = await TH.refusalOf(idbVaultDB({ dbName }).readBundle(TH.scopeOf('u1')))
     expect(refusal.kind).to.eq('corrupt_record')
-    expect(await get('vault:acme:u1:main', rawShelf(dbName))).to.deep.equal({ vault_id: 'vault-id-u1', unlock_epoch: 'one' })
+    expect(await get('["vault","acme","u1","main"]', rawShelf(dbName))).to.deep.equal({ vault_id: 'vault-id-u1', unlock_epoch: 'one' })
   })
 
   it("lands no update on a damaged bundle, even one that shows the expected vault_id", async () => {
     const dbName = TH.freshDbName()
-    await set('vault:acme:u1:main', { vault_id: 'vault-id-u1' }, rawShelf(dbName))
+    await set(bundleCkey(TH.scopeOf('u1')), { vault_id: 'vault-id-u1' }, rawShelf(dbName))
     const refusal = await TH.refusalOf(idbVaultDB({ dbName }).updateBundle(TH.bundleOf('u1', { unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }))
     expect(refusal.kind).to.eq('stale_write')
   })

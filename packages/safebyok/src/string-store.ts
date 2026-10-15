@@ -67,7 +67,7 @@ export const memoryStore = (): StringStore => {
  *
  * @example
  *   const dbStore = domStore(localStorage, 'safebyok-demo:db:')
- *   dbStore.write('vault:acme:u1:main', text)   // lands at 'safebyok-demo:db:vault:acme:u1:main'
+ *   dbStore.write('greeting', 'hi')   // lands at 'safebyok-demo:db:greeting'
  */
 export const domStore = (webStorage: Storage, prefix: string): StringStore => {
   const bell = makeBell()

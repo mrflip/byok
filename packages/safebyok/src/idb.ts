@@ -1,6 +1,6 @@
-import { createStore, del, entries, get, keys, set, clear, type UseStore } from 'idb-keyval'
-import { DeviceUnlock, type VaultScope } from './types'
-import { scopePath } from './vault-db'
+import { createStore, del, entries, get, set, clear, type UseStore } from 'idb-keyval'
+import { DeviceUnlock } from './types'
+import * as Ckeys from './ckeys'
 import type { DeviceDB } from './device-db'
 import { parseDbName, type IdbOpts } from './idb-opts'
 import { VaultError } from './errors'
@@ -55,8 +55,6 @@ const onBell = (dbName: string, listener: () => void): (() => void) => {
   return () => { ringers.delete(listener) }
 }
 
-const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
-
 /**
  * DeviceDB over this browser's IndexedDB: the real device storage. IndexedDB keeps the
  * DeviceUnlock record by structured clone, which is the only way a browser persists the
@@ -77,11 +75,11 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
 
   return {
     readUnlock: async (scope) => {
-      const raw: unknown = await get(unlockCkey(scope), shelf())
+      const raw: unknown = await get(Ckeys.unlock(scope), shelf())
       if (raw === undefined || raw === null) { return null }
       const checked = DeviceUnlock.safeParse(raw)
       if (! checked.success) {
-        await del(unlockCkey(scope), shelf())
+        await del(Ckeys.unlock(scope), shelf())
         ring()
         return null
       }
@@ -89,20 +87,19 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
     },
 
     writeUnlock: async (unlock) => {
-      await set(unlockCkey(unlock), unlock, shelf())
+      await set(Ckeys.unlock(unlock), unlock, shelf())
       ring()
     },
 
     eraseUnlock: async (scope) => {
-      await del(unlockCkey(scope), shelf())
+      await del(Ckeys.unlock(scope), shelf())
       ring()
     },
 
+    // The shelf holds remembered unlocks and nothing else, so forgetting them all is clearing it:
+    // any row an earlier version filed under another ckey goes too.
     eraseAll: async () => {
-      const ckeys = await keys(shelf())
-      for (const ckey of ckeys) {
-        if (typeof ckey === 'string' && ckey.startsWith('unlock:')) { await del(ckey, shelf()) }
-      }
+      await clear(shelf())
       ring()
     },
   }
