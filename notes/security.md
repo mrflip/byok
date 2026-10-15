@@ -124,10 +124,12 @@ security expert who knows what questions to ask.
   windows. It is client-side politeness, not a vault-wide synced policy: nothing stored enforces
   it across devices, and a modified client could choose any window it likes. The real bounds
   stay the passphrase and the device-bound localUnlockKey.
-* 2026-10-15: a host may let a device stay unlocked indefinitely, by passing
-  `forcePassphraseReentryHours: Infinity` (or any huge number); that is the host's choice, with no
-  upper cap. The stored deadline is then clamped to `FarFuture` (see the next entry), so
-  `expires_at` stays a finite number and the stored shape is unchanged. What still ends such an
+* 2026-10-15 (revised the same day by clean_times): a host may let a device stay unlocked
+  indefinitely, by passing `forcePassphraseReentryHours: Infinity` (or any huge number); that is
+  the host's choice, with no upper cap. `openVault` turns it, as it parses the option, into a
+  finite window of `FarFuture - FarPast` ms, so the deadline it sets from any in-bounds clock
+  reading is `FarFuture` (see the next entry), and the stored `ask_passphrase_at` is a finite
+  number; no schema past that parse, and no stored field, accepts `Infinity`. What still ends such an
   unlock: `lock()` (memory and device record), a passphrase change on another device (the next
   look at the bundle sees a new epoch), and the vault being destroyed or made anew (a new
   `vault_id`). Nothing else does: no timer, and no idle detection. Two consequences: an open
@@ -135,18 +137,37 @@ security expert who knows what questions to ask.
   the vaultDB pushes), so a handle that only reads whispers, on storage that pushes nothing, keeps
   its vaultKey in memory until then; and lowering the option later ends an unlock a device
   already remembers only at its next open (see the entry below).
-* 2026-10-15: the device record's `expires_at` is an `EpochMillis`: a whole number of epoch ms
-  from `FarPast` (1981-01-01T00:00:00Z) to `FarFuture`, the microsecond epochalypse
-  (`Math.floor(Number.MAX_SAFE_INTEGER / 1000)`, 2255-06-05T23:47:34.740Z). It is the only epoch-ms
-  field (other stored times are ISO strings; the Convex package stores no epoch ms). A device
-  record out of bounds or fractional fails the schema, reads as "no remembered unlock", and is
-  erased; it is not clamped on read. That includes records written by 0.1.0 and 0.2.0 under a
-  window above about two million hours (some 229 years), which capped the window only at
-  `MAX_SAFE_INTEGER` ms and stored `now + window` unclamped: such a user enters the passphrase
-  once more. `deadlineAfter` floors its result to whole ms. The host's `Clock` is not checked
-  against the bounds. One counting in seconds writes device records that, under any usual window,
-  never read back, but keeps an unlock in memory a thousand times its window; one counting in
-  microseconds has every unlock expire the moment it is made.
+* 2026-10-15 (revised the same day by clean_times): every time the package stores is an
+  `EpochMillis`: epoch ms from `FarPast` (1981-01-01T00:00:00Z) to `FarFuture`, the microsecond
+  epochalypse (`Math.floor(Number.MAX_SAFE_INTEGER / 1000)`, 2255-06-05T23:47:34.740Z) -- the
+  device record's `ask_passphrase_at` (named `expires_at` until then), and the lockbox's and
+  bundle's `registered_at` and the lockbox's `changed_at`. The schema lets a fraction of a
+  millisecond through; the package writes whole ms. A device record out of bounds fails the
+  schema, reads as "no remembered unlock", and is erased; it is not clamped on read. That
+  includes records written by 0.1.0 and 0.2.0 under a window above about two million hours (some
+  229 years), which capped the window only at `MAX_SAFE_INTEGER` ms and stored `now + window`
+  unclamped. **The host's `Clock` is checked**: `openVault` reads it once and refuses a reading
+  outside those bounds (seconds, microseconds, `NaN`, `Infinity`, a non-number) as `bad_option`,
+  before touching storage; every later reading is checked the same way and floored to whole ms,
+  so a clock that goes wrong after the open makes the call that reads it throw `bad_option`
+  rather than mint a deadline or a stored time from it. A lock never waits on the clock: `lock()`
+  reads none, and `lockSoon()`, unable to time its grace, locks at once before it refuses the
+  clock. A clock in bounds but wrong (set a year ahead, say) is not detected.
+* 2026-10-15: a lockbox keeps two times, `registered_at` (first stored, carried forward) and
+  `changed_at`, which moves only when the whisper's serialized form (`stableJsonify`) differs from
+  the one it replaces. To know, `store()` deciphers the previous record it already reads and
+  compares the two serialized whispers with plain string equality, in memory on the client; the
+  comparison is not constant-time. A previous record that will not open counts as changed and is
+  written over, as before. The backend learns one bit it did not before: a `changed_at` that
+  stands still across a new `revision_id` says the host stored the same whisper again. The bundle
+  keeps `registered_at`; `created_at` and `updated_at` are gone from both records. None of the
+  times is in the cipherAdditionalData (the binding is still the positional list), so a backend
+  can alter them undetected; binding the whole header is roadmap 3's, not yet built.
+* 2026-10-15: until 1.0.0 a stored-shape change carries no migration (the Coach's ruling). A
+  lockbox or bundle written with `created_at`/`updated_at`, or a device record with
+  `expires_at`, fails its schema: the vault refuses it as `corrupt_record` and leaves it as it
+  is (a device record is erased, and the user enters the passphrase again). A Convex deployment
+  holding such rows refuses the new component schema at deploy until those rows are deleted.
 * 2026-10-15: lowering `forcePassphraseReentryHours` reaches devices already remembered. At each
   open, a remembered unlock whose deadline lies past now plus that open's setting was remembered
   under a longer one, and is treated as a record that does not fit: erased, and the vault opens
@@ -238,7 +259,7 @@ security expert who knows what questions to ask.
   `corrupt_record`). Whatever a `DeviceDB` hands back -- the host may supply its own -- is checked
   against `DeviceUnlock` by the vault, and one that does not pass is erased and reads as no
   remembered unlock. `VaultDB`'s write verbs check labels and scope only, not the records the
-  vault builds. A remembered unlock's `expires_at` is not bound into its encryption, so whoever
+  vault builds. A remembered unlock's `ask_passphrase_at` is not bound into its encryption, so whoever
   can write this device's IndexedDB can extend it (to any finite number of milliseconds).
 * 2026-10-14: releases run from `.github/workflows/release.yml` on every push to main, in jobs
   that each hold only what they need. Only `publish` (in the `npm` environment) may mint an npm

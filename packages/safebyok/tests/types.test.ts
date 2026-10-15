@@ -76,6 +76,10 @@ describe("VaultScope", () => {
   }
 })
 
+/** An ISO time, as records stored them before every time became epoch milliseconds. */
+const OldIso = '2026-10-14T00:00:00.000Z'
+const { registered_at: _bundleTime, ...bundleWithoutTime } = TH.bundleOf('u1')
+
 const BundleCases = [
   // regular usage:
   [TH.bundleOf('u1'),                                         true,   'a whole bundle'],
@@ -85,6 +89,11 @@ const BundleCases = [
   [{ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 },          false,  'an epoch is a whole number'],
   [{ ...TH.bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
   [{ ...TH.bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, 'an envelope missing its ciphertext'],
+  [{ ...TH.bundleOf('u1'), registered_at: 1_792_022_400 },   false,  'a registered_at in epoch seconds'],
+  [{ ...TH.bundleOf('u1'), registered_at: Infinity },        false,  'a registered_at that never comes'],
+  [{ ...TH.bundleOf('u1'), registered_at: OldIso },          false,  'a registered_at as an ISO string'],
+  [bundleWithoutTime,                                      false,  'a bundle missing its registered_at'],
+  [{ ...bundleWithoutTime, created_at: OldIso, updated_at: OldIso }, false, 'a bundle from before its time was named registered_at'],
 ] as const
 
 describe("VaultBundle", () => {
@@ -94,6 +103,7 @@ describe("VaultBundle", () => {
 })
 
 const { note: _note, ...notelessBox } = TH.boxOf('anthropic_api_key', 'a1')
+const { registered_at: _boxRegistered, changed_at: _boxChanged, ...boxWithoutTimes } = notelessBox
 const LockboxCases = [
   // regular usage:
   [TH.boxOf('anthropic_api_key', 'a1'),                       true,   'a whole lockbox, with its note'],
@@ -105,6 +115,11 @@ const LockboxCases = [
   [{ ...notelessBox, note: null },                         false,  'a null note'],
   [{ ...notelessBox, note: 'n'.repeat(257) },              false,  'a note over 256 characters'],
   [{ ...notelessBox, format: 'safebyok-lockbox-v2' },      false,  'a format this version does not know'],
+  [{ ...notelessBox, changed_at: FarFuture + 1 },          false,  'a changed_at past FarFuture'],
+  [{ ...notelessBox, registered_at: Infinity },            false,  'a registered_at that never comes'],
+  [{ ...notelessBox, changed_at: null },                   false,  'a null changed_at'],
+  [boxWithoutTimes,                                        false,  'a lockbox missing its times'],
+  [{ ...boxWithoutTimes, created_at: OldIso, updated_at: OldIso }, false, 'a lockbox from before its times were named registered_at and changed_at'],
 ] as const
 
 describe("Lockbox", () => {
@@ -153,7 +168,7 @@ describe("LockboxSummary", () => {
 
   it("strips the two ciphered fields and the format from a whole lockbox", () => {
     const summary = LockboxSummary.parse(TH.boxOf('anthropic_api_key', 'a1'))
-    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'created_at', 'updated_at'])
+    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'registered_at', 'changed_at'])
   })
 })
 
@@ -197,7 +212,7 @@ const EpochMillisCases = [
   [FarFuture + 1,             false,  'one millisecond past the ceiling'],
   [8.64e15,                   false,  'the last instant a Date holds, far past the ceiling'],
   [0,                         false,  'the epoch itself'],
-  [NowMs + 0.5,               false,  'a fraction of a millisecond'],
+  [NowMs + 0.5,               true,   'a fraction of a millisecond, as a clock may read'],
   [Infinity,                  false,  'a time that never comes'],
   [NaN,                       false,  'not a number'],
   ["1792022400000",           false,  'a time written as text'],
@@ -217,14 +232,14 @@ describe("EpochMillis", () => {
     expect(tooSmall.error?.issues[0]?.message).to.match(/epoch seconds/)
     expect(tooLarge.error?.issues[0]?.message).to.match(/epoch microseconds/)
     expect(EpochMillis.safeParse(1e300).error?.issues[0]?.message).to.match(/epoch microseconds/)
-    expect(EpochMillis.safeParse(NowMs + 0.5).error?.issues[0]?.message).to.match(/whole epoch milliseconds/)
   })
 
   it("passes a time through unchanged, as its examples show", () => {
     expect(EpochMillis.parse(Date.UTC(2026, 9, 15))).to.eq(1_792_022_400_000)
     expect(EpochMillis.safeParse(1_792_022_400).success).to.be.false
     expect(EpochMillis.safeParse(1_792_022_400_000_000).success).to.be.false
-    expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.false
+    expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.true
+    expect(EpochMillis.safeParse(Infinity).success).to.be.false
   })
 })
 

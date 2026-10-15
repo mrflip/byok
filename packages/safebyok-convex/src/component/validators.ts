@@ -4,8 +4,8 @@ import { v } from 'convex/values'
  * Convex validators for safebyok's stored records, field for field with the core's Zod records
  * (`Lockbox`, `VaultBundle`, `Ciphered`, `VaultScope` in `safebyok`). They check what Convex can:
  * which fields, their types, which are optional, and each record's `format`. The finer rules -- the
- * label grammar, non-empty strings, a positive whole `passphrase_epoch`, a note's length -- are
- * the client's, checked by the core's Zod records on every write and every read.
+ * label grammar, non-empty strings, a positive whole `passphrase_epoch`, a note's length, each
+ * time's bounds as epoch milliseconds -- are the client's, checked by the core's Zod records on every write and every read.
  *
  * A new record format widens its `format` union: an additive deploy, shipped with this package.
  */
@@ -40,7 +40,8 @@ export const LockboxFormat = v.union(v.literal('safebyok-lockbox-v1'))
 
 /**
  * A vault's bundle: its scope, `vault_id`, `passphrase_epoch`, how its passphraseKey is derived,
- * and its vaultKey wrapped under that passphraseKey. Nothing in it opens without the passphrase.
+ * its vaultKey wrapped under that passphraseKey, and when it was made (`registered_at`, epoch
+ * milliseconds). Nothing in it opens without the passphrase.
  */
 export const VaultBundle = v.object({
   format:                       VaultBundleFormat,
@@ -52,14 +53,14 @@ export const VaultBundle = v.object({
   key_deriver_label:            v.string(),
   passphrase_salt_b64:          v.string(),
   vault_key_passphrase_wrapped: Ciphered,
-  created_at:                   v.string(),
-  updated_at:                   v.string(),
+  registered_at:                v.number(),
 })
 
 /**
  * One lockbox: its whisper ciphered under its own lockboxKey, that lockboxKey wrapped under the
- * vaultKey, and the public shell -- boxlabel, revision, note, timestamps. `note` is absent when
- * there is none, never `undefined`.
+ * vaultKey, and the public shell -- boxlabel, revision, note, and the epoch-millisecond times it
+ * was first stored (`registered_at`) and its whisper last changed (`changed_at`). `note` is absent
+ * when there is none, never `undefined`.
  */
 export const Lockbox = v.object({
   format:              LockboxFormat,
@@ -68,8 +69,8 @@ export const Lockbox = v.object({
   lockbox_key_wrapped: Ciphered,
   whisper_ciphered:    Ciphered,
   note:                v.optional(v.string()),
-  created_at:          v.string(),
-  updated_at:          v.string(),
+  registered_at:       v.number(),
+  changed_at:          v.number(),
 })
 
 /**

@@ -67,8 +67,7 @@ export const bundleOf = (userId: string, overrides: Partial<VaultBundle> = {}): 
   // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- base64 of the literal text 'saltsaltsaltsalt': a fake salt (which is public material anyway), not a credential
   passphrase_salt_b64: 'c2FsdHNhbHRzYWx0c2FsdA',
   vault_key_passphrase_wrapped: fakeCiphered(`bundle-${userId}`),
-  created_at:          '2026-10-14T00:00:00.000Z',
-  updated_at:          '2026-10-14T00:00:00.000Z',
+  registered_at:       Date.UTC(2026, 9, 14),
   ...overrides,
 })
 
@@ -85,8 +84,8 @@ export const boxOf = (boxlabel: string, tag: string, overrides: Partial<WrittenL
   lockbox_key_wrapped: fakeCiphered(`boxkey-${tag}`),
   whisper_ciphered:    fakeCiphered(`whisper-${tag}`),
   note:                'a test box',
-  created_at:          '2026-10-14T00:00:00.000Z',
-  updated_at:          '2026-10-14T00:00:00.000Z',
+  registered_at:       Date.UTC(2026, 9, 14),
+  changed_at:          Date.UTC(2026, 9, 14),
   ...overrides,
 })
 
@@ -98,7 +97,7 @@ export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({
   passphrase_epoch:        1,
   local_unlock_key:        await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, false, ['wrapKey', 'unwrapKey']),
   vault_key_local_wrapped: fakeCiphered(`local-${userId}`),
-  expires_at:              1_900_000_000_000,
+  ask_passphrase_at:       1_900_000_000_000,
 })
 
 /**
@@ -222,9 +221,9 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
 
     it("updateBundle refuses over a passphrase_epoch since moved on, writing nothing", async () => {
       const vaultDB = await withBundle()
-      const theirs = { ...bundleOf('u1'), passphrase_epoch: 2, updated_at: '2026-10-15T00:00:00.000Z' }
+      const theirs = { ...bundleOf('u1'), passphrase_epoch: 2, vault_key_passphrase_wrapped: fakeCiphered('theirs') }
       await vaultDB.updateBundle(theirs, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
-      const mine = { ...bundleOf('u1'), passphrase_epoch: 2, updated_at: '2026-10-16T00:00:00.000Z' }
+      const mine = { ...bundleOf('u1'), passphrase_epoch: 2, vault_key_passphrase_wrapped: fakeCiphered('mine') }
       await expectRefusal(vaultDB.updateBundle(mine, { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(theirs)
     })
@@ -299,11 +298,11 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       const summaries = await vaultDB.listBoxes(scopeOf('u1'))
       expect(summaries.map((box) => box.boxlabel)).to.deep.equal(['anthropic', 'openai'])
       expect(summaries[0]).to.deep.equal({
-        boxlabel:    'anthropic',
-        revision_id: 'rev-one',
-        note:        'a test box',
-        created_at:  '2026-10-14T00:00:00.000Z',
-        updated_at:  '2026-10-14T00:00:00.000Z',
+        boxlabel:      'anthropic',
+        revision_id:   'rev-one',
+        note:          'a test box',
+        registered_at: Date.UTC(2026, 9, 14),
+        changed_at:    Date.UTC(2026, 9, 14),
       })
     })
 

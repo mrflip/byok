@@ -73,6 +73,93 @@ describe("openVault", () => {
   })
 })
 
+/** Clock readings outside EpochMillis's bounds, each a unit mistake or no time at all. */
+const OutOfBoundsReadings = [
+  [Date.parse('2026-10-14T12:00:00Z') / 1000,   'epoch seconds'],
+  [Date.parse('2026-10-14T12:00:00Z') * 1000,   'epoch microseconds'],
+  [0,                                           'the epoch itself, before 1981'],
+  [FarFuture + 1,                               'one millisecond past FarFuture'],
+  [Infinity,                                    'Infinity'],
+  [NaN,                                         'NaN'],
+  ['1792022400000',                             'a number written as text'],
+  [new Date('2026-10-14T12:00:00Z'),            'a Date, not its epoch milliseconds'],
+] as const
+
+describe("the host's clock", () => {
+  for (const [reading, blurb] of OutOfBoundsReadings) {
+    it(`refuses a clock reading ${blurb} at openVault, before reading storage`, async () => {
+      const world = makeWorld()
+      const readBundle = vi.spyOn(world.vaultDB, 'readBundle')
+      const err = await expectRefusal(world.open({ clock: { now: () => reading as number } }), 'bad_option')
+      expect(err.message).to.match(/epoch milliseconds/)
+      expect(readBundle).not.toHaveBeenCalled()
+    })
+  }
+
+  it("refuses a clock that is not a Clock", async () => {
+    const world = makeWorld()
+    for (const nonsense of [{}, { now: 1_792_022_400_000 }, () => 1_792_022_400_000, 'now', null]) {
+      await expectRefusal(world.open({ clock: nonsense as unknown as OpenVaultOpts['clock'] }), 'bad_option')
+    }
+  })
+
+  it("takes a reading with a fraction of a millisecond, in bounds", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ clock: { now: () => world.clock.now() + 0.5 } })
+    await vault.unlock('pw')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("is checked at every reading: a clock gone wrong after the open refuses each call that reads it, and unlocks nothing", async () => {
+    const world = makeWorld()
+    let reading = world.clock.now()
+    const vault = await world.open({ clock: { now: () => reading } })
+    await vault.unlock('pw')
+    await vault.lock()
+    reading /= 1000
+    await expectRefusal(vault.unlock('pw'), 'bad_option')
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+  })
+
+  it("refuses an unlock that would create the vault, writing nothing, when the clock has gone wrong", async () => {
+    const world = makeWorld()
+    let reading = world.clock.now()
+    const vault = await world.open({ clock: { now: () => reading } })
+    reading *= 1000
+    await expectRefusal(vault.unlock('pw'), 'bad_option')
+    expect(world.dbStore.ckeys()).to.have.lengthOf(0)
+  })
+
+  it("still locks when the clock has gone wrong: lock() at once, and lockSoon() at once before it refuses the clock", async () => {
+    const world = makeWorld()
+    let reading = world.clock.now()
+    const vault = await world.open({ clock: { now: () => reading } })
+    await vault.unlock('pw')
+    reading = NaN
+    await expectRefusal(vault.lockSoon(5), 'bad_option')
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+    reading = world.clock.now()
+    await expectRefusal(vault.read('anthropic'), 'vault_locked')
+    await vault.unlock('pw')
+    reading = 0
+    await vault.lock()
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+  })
+
+  it("refuses a store when the clock has gone wrong while unlocked", async () => {
+    const world = makeWorld()
+    let reading = world.clock.now()
+    const vault = await world.open({ clock: { now: () => reading } })
+    await vault.unlock('pw')
+    reading = Infinity
+    await expectRefusal(vault.store('anthropic', 'sk-fake'), 'bad_option')
+    expect(world.dbStore.ckeys().filter((ckey) => ckey.startsWith('box:'))).to.have.lengthOf(0)
+  })
+})
+
 describe("unlock and lock", () => {
   it("the first unlock creates the vault, with that passphrase, unlocked for seven days", async () => {
     const world = makeWorld()
@@ -117,7 +204,7 @@ describe("unlock and lock", () => {
 /** The deadline this world's device remembers, or null when it remembers no unlock. */
 const rememberedDeadlineOf = async (world: ReturnType<typeof makeWorld>): Promise<number | null> => {
   const remembered = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
-  return remembered?.expires_at ?? null
+  return remembered?.ask_passphrase_at ?? null
 }
 
 describe("the remembered unlock", () => {
@@ -214,7 +301,7 @@ describe("the remembered unlock", () => {
       await vault.unlock('pw one')
       await vault.store('anthropic', 'sk-fake')
       const remembered = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
-      expect(remembered?.expires_at).to.eq(FarFuture)
+      expect(remembered?.ask_passphrase_at).to.eq(FarFuture)
       world.advance(10 * 365 * 24 * HourMs)
       const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
       expect(reopened.getSnapshot().state).to.eq('unlocked')
@@ -242,7 +329,7 @@ describe("the remembered unlock", () => {
       expect(vault.getSnapshot().state).to.eq('unlocked')
       expect(vault.getSnapshot().askPassphraseAt).to.eq(FarFuture)
       const remembered = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
-      expect(remembered?.expires_at).to.eq(FarFuture)
+      expect(remembered?.ask_passphrase_at).to.eq(FarFuture)
     })
   })
 
@@ -252,20 +339,20 @@ describe("the remembered unlock", () => {
     await vault.unlock('pw one')
     const written = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
     if (written === null) { throw new Error('expected a remembered unlock on the device') }
-    await world.deviceDB.writeUnlock({ ...written, expires_at: FarFuture })
+    await world.deviceDB.writeUnlock({ ...written, ask_passphrase_at: FarFuture })
     const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
     expect(reopened.getSnapshot().state).to.eq('unlocked')
     expect(reopened.getSnapshot().askPassphraseAt).to.eq(FarFuture)
   })
 
-  for (const [expiresAt, blurb] of OutOfBoundsDeadlines) {
+  for (const [askPassphraseAt, blurb] of OutOfBoundsDeadlines) {
     it(`reads a remembered deadline of ${blurb} as no remembered unlock, and erases it`, async () => {
       const world = makeWorld()
       const vault = await world.open()
       await vault.unlock('pw one')
       const written = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
       if (written === null) { throw new Error('expected a remembered unlock on the device') }
-      await world.deviceDB.writeUnlock({ ...written, expires_at: expiresAt })
+      await world.deviceDB.writeUnlock({ ...written, ask_passphrase_at: askPassphraseAt })
       // Under Infinity no window check refuses it: only the bounds can.
       const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
       expect(reopened.getSnapshot().state).to.eq('locked')
@@ -291,7 +378,7 @@ describe("the remembered unlock", () => {
     await vault.unlock('pw one')
     expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + SevenDaysMs)
     const remembered = await world.deviceDB.readUnlock(TH.scopeOf('u1'))
-    expect(remembered?.expires_at).to.eq(world.clock.now() + SevenDaysMs)
+    expect(remembered?.ask_passphrase_at).to.eq(world.clock.now() + SevenDaysMs)
     const reopened = await world.open({ clock: fractionalClock })
     expect(reopened.getSnapshot().state).to.eq('unlocked')
   })
@@ -408,14 +495,14 @@ const uncheckingDeviceDB = () => {
 }
 
 const SpoiledUnlocks = [
-  [(row: Record<string, unknown>) => ({ ...row, format: 'byok-unlock-v1' }),        'a record under the format tag before the rename'],
-  [(row: Record<string, unknown>) => ({ ...row, expires_at: '99999999999999' }),    'a deadline written as text, which would compare as a number'],
-  [(row: Record<string, unknown>) => ({ ...row, expires_at: Infinity }),            'a deadline that never comes'],
-  [({ expires_at: _gone, ...row }: Record<string, unknown>) => row,                 'a record missing its deadline'],
-  [(row: Record<string, unknown>) => ({ ...row, expires_at: 1_792_022_400 }),       'a deadline in epoch seconds, before 1981'],
-  [(row: Record<string, unknown>) => ({ ...row, expires_at: FarFuture + 1 }),       'a deadline past FarFuture'],
-  [(row: Record<string, unknown>) => ({ ...row, expires_at: 1_792_022_400_000.5 }), 'a deadline with a fraction of a millisecond'],
-  [() => 'not a record at all',                                                     'a row that is not a record'],
+  [(row: Record<string, unknown>) => ({ ...row, format: 'byok-unlock-v1' }),                  'a record under the format tag before the rename'],
+  [(row: Record<string, unknown>) => ({ ...row, ask_passphrase_at: '99999999999999' }),       'a deadline written as text, which would compare as a number'],
+  [(row: Record<string, unknown>) => ({ ...row, ask_passphrase_at: Infinity }),               'a deadline that never comes'],
+  [({ ask_passphrase_at: _gone, ...row }: Record<string, unknown>) => row,                    'a record missing its deadline'],
+  [({ ask_passphrase_at: kept, ...row }: Record<string, unknown>) => ({ ...row, expires_at: kept }), 'a record from before its deadline was named ask_passphrase_at'],
+  [(row: Record<string, unknown>) => ({ ...row, ask_passphrase_at: 1_792_022_400 }),          'a deadline in epoch seconds, before 1981'],
+  [(row: Record<string, unknown>) => ({ ...row, ask_passphrase_at: FarFuture + 1 }),          'a deadline past FarFuture'],
+  [() => 'not a record at all',                                                               'a row that is not a record'],
 ] as const
 
 describe("the remembered unlock, from a host's own DeviceDB", () => {
@@ -424,6 +511,16 @@ describe("the remembered unlock, from a host's own DeviceDB", () => {
     const device = uncheckingDeviceDB()
     const vault = await world.open({ deviceDB: device.deviceDB })
     await vault.unlock('pw one')
+    const later = await world.open({ deviceDB: device.deviceDB })
+    expect(later.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("takes a deadline with a fraction of a millisecond, in bounds, as sound", async () => {
+    const world = makeWorld()
+    const device = uncheckingDeviceDB()
+    const vault = await world.open({ deviceDB: device.deviceDB })
+    await vault.unlock('pw one')
+    device.spoilRow(({ ask_passphrase_at: deadline, ...row }) => ({ ...row, ask_passphrase_at: (deadline as number) - 0.5 }))
     const later = await world.open({ deviceDB: device.deviceDB })
     expect(later.getSnapshot().state).to.eq('unlocked')
   })
@@ -474,19 +571,14 @@ describe("store and read", () => {
     expect(summary).to.not.have.property('whisper')
   })
 
-  it("replacing a whisper keeps created_at and the note, and moves updated_at", async () => {
+  it("replacing a whisper keeps the note", async () => {
     const world = makeWorld()
     const vault = await world.open()
     await vault.unlock('pw')
     await vault.store('anthropic', 'sk-old', { note: 'keep me' })
-    const [before] = vault.getSnapshot().boxes
-    world.advance(60_000)
     await vault.store('anthropic', 'sk-new')
-    const [after] = vault.getSnapshot().boxes
     expect(await vault.read('anthropic')).to.eq('sk-new')
-    expect(after?.note).to.eq('keep me')
-    expect(after?.created_at).to.eq(before?.created_at)
-    expect(after?.updated_at).to.not.eq(before?.updated_at)
+    expect(vault.getSnapshot().boxes[0]?.note).to.eq('keep me')
   })
 
   it("refuses a whisper JSON cannot carry, quoting none of it", async () => {
@@ -570,6 +662,128 @@ describe("store and read", () => {
 const storedRowOf = (world: ReturnType<typeof makeWorld>, boxlabel: string): Record<string, unknown> => (
   JSON.parse(world.dbStore.read(`box:acme:u1:main:${boxlabel}`) ?? 'null') as Record<string, unknown>
 )
+
+/** The vault's stored bundle, as the backend holds it. */
+const storedBundleOf = (world: ReturnType<typeof makeWorld>): Record<string, unknown> => (
+  JSON.parse(world.dbStore.read('vault:acme:u1:main') ?? 'null') as Record<string, unknown>
+)
+
+describe("the times a vault keeps", () => {
+  it("stamps a new lockbox's registered_at and changed_at with the clock's time", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    const storedAt = world.clock.now()
+    expect(vault.getSnapshot().boxes[0]).to.include({ registered_at: storedAt, changed_at: storedAt })
+    expect(storedRowOf(world, 'anthropic')).to.include({ registered_at: storedAt, changed_at: storedAt })
+  })
+
+  it("keeps registered_at when the whisper is replaced, and moves changed_at", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-old')
+    const storedAt = world.clock.now()
+    world.advance(60_000)
+    await vault.store('anthropic', 'sk-new')
+    expect(vault.getSnapshot().boxes[0]).to.include({ registered_at: storedAt, changed_at: storedAt + 60_000 })
+  })
+
+  it("leaves changed_at standing when the same whisper is stored again, under a new revision", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('openai', { apiKey: 'sk-fake', tier: 2 })
+    const storedAt = world.clock.now()
+    const [before] = vault.getSnapshot().boxes
+    world.advance(60_000)
+    // The same whisper, its fields given in another order: it serializes the same.
+    await vault.store('openai', { tier: 2, apiKey: 'sk-fake' }, { note: 'a new note' })
+    const [after] = vault.getSnapshot().boxes
+    expect(after).to.include({ registered_at: storedAt, changed_at: storedAt, note: 'a new note' })
+    expect(after?.revision_id).to.not.eq(before?.revision_id)
+  })
+
+  it("moves changed_at when a whisper changes only in type, as its serialized form does", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('pin', '1234')
+    const storedAt = world.clock.now()
+    world.advance(60_000)
+    await vault.store('pin', 1234)
+    expect(vault.getSnapshot().boxes[0]).to.include({ changed_at: storedAt + 60_000 })
+  })
+
+  it("counts a previous record that will not open as changed, and writes over it", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    const storedAt = world.clock.now()
+    const row = storedRowOf(world, 'anthropic') as { whisper_ciphered: { ciphertext_b64: string } }
+    row.whisper_ciphered.ciphertext_b64 = TH.tweakB64(row.whisper_ciphered.ciphertext_b64)
+    world.dbStore.write('box:acme:u1:main:anthropic', JSON.stringify(row))
+    world.advance(60_000)
+    await vault.store('anthropic', 'sk-fake')
+    expect(vault.getSnapshot().boxes[0]).to.include({ registered_at: storedAt, changed_at: storedAt + 60_000 })
+    expect(await vault.read('anthropic')).to.eq('sk-fake')
+  })
+
+  it("stamps the bundle's registered_at when the vault is made, and keeps it through a passphrase change", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const madeAt = world.clock.now()
+    expect(storedBundleOf(world)).to.include({ registered_at: madeAt })
+    world.advance(60_000)
+    await vault.changePassphrase('pw one', 'pw two')
+    expect(storedBundleOf(world)).to.include({ registered_at: madeAt, passphrase_epoch: 2 })
+  })
+
+  it("writes no created_at or updated_at, to a lockbox or a bundle", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    for (const row of [storedRowOf(world, 'anthropic'), storedBundleOf(world)]) {
+      expect(row).to.not.have.any.keys('created_at', 'updated_at')
+    }
+  })
+
+  it("writes whole milliseconds from a clock that returns fractions", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ clock: { now: () => world.clock.now() + 0.75 } })
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    expect(storedBundleOf(world)).to.include({ registered_at: world.clock.now() })
+    expect(storedRowOf(world, 'anthropic')).to.include({ registered_at: world.clock.now(), changed_at: world.clock.now() })
+  })
+
+  it("refuses a stored lockbox from before its times were renamed, leaving it as it is", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    await vault.store('anthropic', 'sk-fake')
+    const { registered_at: _registered, changed_at: _changed, ...row } = storedRowOf(world, 'anthropic')
+    const olden = JSON.stringify({ ...row, created_at: '2026-10-14T00:00:00.000Z', updated_at: '2026-10-14T00:00:00.000Z' })
+    world.dbStore.write('box:acme:u1:main:anthropic', olden)
+    await expectRefusal(vault.read('anthropic'), 'corrupt_record')
+    expect(world.dbStore.read('box:acme:u1:main:anthropic')).to.eq(olden)
+  })
+
+  it("refuses a stored bundle from before its time was renamed, leaving it as it is", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    const { registered_at: _registered, ...row } = storedBundleOf(world)
+    const olden = JSON.stringify({ ...row, created_at: '2026-10-14T00:00:00.000Z', updated_at: '2026-10-14T00:00:00.000Z' })
+    world.dbStore.write('vault:acme:u1:main', olden)
+    await expectRefusal(world.open(), 'corrupt_record')
+    expect(world.dbStore.read('vault:acme:u1:main')).to.eq(olden)
+  })
+})
 
 describe("the note", () => {
   it("is null in the summary of a lockbox that has none: never absent, never undefined", async () => {

@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { DeviceUnlock, EpochMillis, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import {
@@ -63,7 +63,12 @@ export type OpenVaultOpts = {
    * vault opens locked. Raising it lengthens no unlock already remembered.
    */
   forcePassphraseReentryHours?: number | undefined
-  /** Time source for expiry; tests inject one. Default: the wall clock. */
+  /**
+   * Time source for expiry and for the times stored with each record; tests inject one. Default:
+   * the wall clock. Its `now()` returns epoch milliseconds, as `Date.now()` does, from 1981 to 2255
+   * ({@link FarPast} to {@link FarFuture}), fractions allowed. openVault reads it once and refuses
+   * a clock outside those bounds with kind 'bad_option'; so does any later call that reads it so.
+   */
   clock?: Clock | undefined
   /**
    * The largest whisper `store()` accepts, in bytes of its JSON. Default: {@link MaxWhisperBytes},
@@ -124,7 +129,8 @@ export type Vault = {
    * is dropped.
    *
    * `graceSeconds` is from 0 to 60, fractions too; kind 'bad_option' otherwise. 0 is `lock()`.
-   * `close()` cuts the grace short.
+   * `close()` cuts the grace short. A clock reading out of bounds cannot time a grace: the vault
+   * locks at once, as with `lock()`, and the call then throws kind 'bad_option'.
    *
    * @param graceSeconds - How long work in hand has to finish. Default 5.
    *
@@ -170,6 +176,10 @@ export type Vault = {
    * elsewhere, or its passphrase changed -- or this device locked, as it may be during the wait --
    * finds this device locked instead, and throws kind 'vault_locked' without writing: a stale
    * session never writes into a vault reborn under new keys.
+   *
+   * The lockbox keeps the time it was first stored as `registered_at`, and moves its
+   * `changed_at` only when the whisper differs from the one it replaces: storing the same whisper
+   * again writes a new revision, and leaves `changed_at` standing.
    *
    * `opts.note` is the lockbox's public note, shown while locked: text of at most 256
    * characters, as the exported {@link LockboxNote} checks, or null for none -- kind
@@ -255,7 +265,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const scope: VaultScope = { applabel, user_id: opts.userId, vaultlabel }
   const { vaultDB, deviceDB } = opts
   const reentryMs = parseForcePassphraseReentryHours(opts.forcePassphraseReentryHours)
-  const clock = opts.clock ?? wallClock
+  const clock = parseClock(opts.clock)
+  // Every reading of the host's clock is checked, this first one so that a clock counting in the
+  // wrong unit fails the open rather than some later call.
+  const clockNow = () => readClock(clock)
+  clockNow()
   const keyDeriver = parseKeyDeriver(opts.keyDeriver)
   const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
   const lockboxLimit = parseMaxLockboxes(opts.maxLockboxes)
@@ -276,7 +290,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const vaultState = (): VaultState => {
     if (bundle === UnreadBundle) { return 'opening' }
     if (bundle === null) { return 'absent' }
-    if (vaultKey !== null && askPassphraseAt !== null && askPassphraseAt > clock.now()) { return 'unlocked' }
+    if (vaultKey !== null && askPassphraseAt !== null && askPassphraseAt > clockNow()) { return 'unlocked' }
     return 'locked'
   }
   let snapshot: VaultSnapshot = { state: vaultState(), scope, boxes, askPassphraseAt }
@@ -320,7 +334,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
   const ensureUnlocked = (): CryptoKey => {
     ensureOpen()
-    if (vaultKey !== null && askPassphraseAt !== null && askPassphraseAt > clock.now()) { return vaultKey }
+    if (vaultKey !== null && askPassphraseAt !== null && askPassphraseAt > clockNow()) { return vaultKey }
     // A key past its deadline is dropped here, natural expiry having no timer; one that lockSoon()
     // left for work in hand is its timer's to drop.
     if (pendingShut === null) { dropKey() }
@@ -372,7 +386,6 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const binding = bundleBinding(vaultId, 1, 'vault_key_passphrase_wrapped')
     const envelope = await wrapKeyUnder(passphraseKey, freshKey, binding)
     const sessionKey = await unwrapKeyUnder(passphraseKey, envelope, binding, { extractable: false, usage: ['wrapKey', 'unwrapKey'] })
-    const now = new Date(clock.now()).toISOString()
     const draft: VaultBundle = {
       format:              'safebyok-vault-v1',
       ...scope,
@@ -381,8 +394,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       key_deriver_label:   keyDeriver.key_deriver_label,
       passphrase_salt_b64: toB64(saltBytes),
       vault_key_passphrase_wrapped: envelope,
-      created_at:          now,
-      updated_at:          now,
+      registered_at:       clockNow(),
     }
     return { draft, transientKey: freshKey, sessionKey }
   }
@@ -431,7 +443,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   /** Drop the vaultKey `graceMs` from now, unless a shut already pending falls due sooner. */
   const shutAfter = (graceMs: number) => {
-    const dueAt = clock.now() + graceMs
+    const dueAt = clockNow() + graceMs
     if (pendingShut !== null && pendingShut.dueAt <= dueAt) { return }
     cancelPendingShut()
     const timer = setTimeout(() => {
@@ -464,7 +476,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
    */
   const takeUpUnlock = async (unlocked: VaultKeyPair, standing: VaultBundle, shutsThen: number): Promise<boolean> => {
     if (outrun(standing, shutsThen)) { return false }
-    const until = deadlineAfter(clock.now(), reentryMs)
+    const until = deadlineAfter(clockNow(), reentryMs)
     // The transient's last act: wrapped into this device's remembered unlock, then dropped.
     await rememberDevice(unlocked.transientKey, standing, until)
     if (outrun(standing, shutsThen)) {
@@ -489,7 +501,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       passphrase_epoch:        standing.passphrase_epoch,
       local_unlock_key:        localUnlockKey,
       vault_key_local_wrapped: wrapped,
-      expires_at:              until,
+      ask_passphrase_at:       until,
     })
   }
 
@@ -509,12 +521,12 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const kept = await deviceDB.readUnlock(scope)
     if (kept === null) { return }
     const checked = DeviceUnlock.safeParse(kept)
-    const now = clock.now()
+    const now = clockNow()
     const fits = checked.success
       && checked.data.vault_id === bundle.vault_id
       && checked.data.passphrase_epoch === bundle.passphrase_epoch
-      && checked.data.expires_at > now
-      && checked.data.expires_at <= deadlineAfter(now, reentryMs)
+      && checked.data.ask_passphrase_at > now
+      && checked.data.ask_passphrase_at <= deadlineAfter(now, reentryMs)
     if (! fits) {
       await deviceDB.eraseUnlock(scope)
       return
@@ -529,8 +541,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         bundleBinding(bundle.vault_id, bundle.passphrase_epoch, 'vault_key_local_wrapped'),
         { extractable: false, usage: ['wrapKey', 'unwrapKey'] },
       )
-      // Older records, or a host's own deviceDB, may hold a finite deadline past what a Date can.
-      askPassphraseAt = Math.min(remembered.expires_at, FarFuture)
+      askPassphraseAt = remembered.ask_passphrase_at
     } catch {
       // A record that no longer opens reads as "no remembered unlock": the safe failure.
       await deviceDB.eraseUnlock(scope)
@@ -556,11 +567,18 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     return lockbox
   }
 
-  /** Unwrap a lockbox's lockboxKey, decipher its whisper, and hand it back validated. */
+  /** The whisper in `boxlabel`, for an operation that wants it whole. */
   const openBox = async (boxlabel: string): Promise<Whisper> => {
     const unlockedKey = ensureUnlocked()
     const lockbox = await readBoxOrThrow(boxlabel)
-    const vaultId = currentBundle().vault_id
+    return await decipherLockbox(unlockedKey, currentBundle().vault_id, lockbox)
+  }
+
+  /**
+   * Unwrap a lockbox's lockboxKey under the vaultKey, decipher its whisper, and hand it back
+   * validated: kind 'corrupt_record' when the record will not open, or opens to no whisper.
+   */
+  const decipherLockbox = async (unlockedKey: CryptoKey, vaultId: string, lockbox: Lockbox): Promise<Whisper> => {
     let whisperBytes: Uint8Array
     try {
       const lockboxKey = await unwrapKeyUnder(
@@ -578,6 +596,21 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       throw new VaultError('corrupt_record', 'The lockbox opened, but what was inside is not a whisper this package knows. It was left as it is.')
     }
     return checked.data
+  }
+
+  /**
+   * True when `prev` holds a whisper that serializes as `whisper` does. A previous record that
+   * will not open counts as different: the store clobbers it, and its `changed_at` moves.
+   */
+  const holdsWhisper = async (unlockedKey: CryptoKey, vaultId: string, prev: Lockbox, whisper: Whisper): Promise<boolean> => {
+    try {
+      // A plain comparison: both sides are this device's own, and its outcome is no secret from
+      // storage, which sees changed_at stand still or move.
+      return stableJsonify(await decipherLockbox(unlockedKey, vaultId, prev)) === stableJsonify(whisper)
+    } catch {
+      // decipherLockbox refuses only as corrupt_record: a record that will not open.
+      return false
+    }
   }
 
   const vault: Vault = {
@@ -618,12 +651,19 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         bump()
         return
       }
+      try {
+        shutAfter(graceMs)
+      } catch (err) {
+        // A clock gone wrong cannot time a grace, and the lock still wins: at once, as lock().
+        await shut()
+        bump()
+        throw err
+      }
       // A shut in all but the key: an unlock under way loses, no new operation starts, and this
       // device forgets its remembered unlock now. Only the vaultKey waits, for work in hand. The
       // gate closes by having no deadline at all, not one at now, which a clock stepped back reopens.
       shutsSoFar += 1
       askPassphraseAt = null
-      shutAfter(graceMs)
       bump()
       await deviceDB.eraseUnlock(scope)
     },
@@ -645,7 +685,6 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         passphrase_epoch:    epoch,
         passphrase_salt_b64: toB64(saltBytes),
         vault_key_passphrase_wrapped: await wrapKeyUnder(passphraseKey, proven.transientKey, bundleBinding(standing.vault_id, epoch, 'vault_key_passphrase_wrapped')),
-        updated_at:          new Date(clock.now()).toISOString(),
       }
       await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }))
       bundle = next
@@ -685,7 +724,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         const vaultId = currentBundle().vault_id
         const revisionId = randomId()
         const lockboxKey = await makeLockboxKey()
-        const now = new Date(clock.now()).toISOString()
+        const now = clockNow()
+        // A store of the whisper already there writes a new revision, and leaves changed_at standing.
+        const unchanged = prev !== null && await holdsWhisper(unlockedKey, vaultId, prev, checked.data)
         // Lands only in the vault this whisper is sealed for, over the revision just read: a vault
         // reborn elsewhere, or a box written meanwhile by another device, refuses it.
         const expected = { vault_id: vaultId, revision_id: prev?.revision_id ?? null }
@@ -698,8 +739,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
           whisper_ciphered:    await cipherBytes(lockboxKey, whisperBytes, boxBinding(vaultId, label, revisionId, 'whisper_ciphered')),
           // A box with no note is stored with no note field: never a null or undefined one.
           ...(note !== null && { note }),
-          created_at:          prev?.created_at ?? now,
-          updated_at:          now,
+          registered_at:       prev?.registered_at ?? now,
+          changed_at:          unchanged ? prev.changed_at : now,
         }
         try {
           await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected))
@@ -898,7 +939,7 @@ const WhisperShareOfStorage = 0.5
 
 /**
  * Room for a lockbox's fields besides its whisper -- its boxlabel, note, wrapped lockboxKey,
- * revision and timestamps, and the scope a backend files it under -- counted as whisper bytes
+ * revision and times, and the scope a backend files it under -- counted as whisper bytes
  * are, against {@link WhisperShareOfStorage}. A vault of many small whispers is mostly these.
  */
 const LockboxFieldsBytes = 1024
@@ -928,11 +969,19 @@ const parseGraceSeconds = (candidate: number | undefined): number => {
   return checked.data
 }
 
+/**
+ * The longest reentry window, in milliseconds: from {@link FarPast} to {@link FarFuture}, so a
+ * deadline it sets from any instant the clock may read is {@link FarFuture}. `Infinity` hours, or
+ * any number of hours as long or longer, becomes this window as the option is parsed: past that
+ * parse, no time is ever infinite.
+ */
+const ForeverMs = FarFuture - FarPast
+
 /** Hours, as the host thinks of them, to whole milliseconds, as every time inside is kept. */
 const someHours = Z.union([Z.number().check(Z.positive()), Z.literal(Infinity)])
 const reentryHours = Z._default(someHours, ForcePassphraseReentryHours)
-const hoursToMs = Z.transform((hours: number) => Math.round(hours * MsPerHour))
-const reentryWindowMs = Z.union([Z.number().check(Z.gte(1)), Z.literal(Infinity)])
+const hoursToMs = Z.transform((hours: number) => Math.min(Math.round(hours * MsPerHour), ForeverMs))
+const reentryWindowMs = Z.number().check(Z.gte(1), Z.lte(ForeverMs))
 const forcePassphraseReentryHours = Z.pipe(Z.pipe(reentryHours, hoursToMs), reentryWindowMs)
 
 /** The deadline for a passphrase entered at `nowMs`: `reentryMs` later, in whole ms, but never past {@link FarFuture}. */
@@ -944,6 +993,28 @@ const parseForcePassphraseReentryHours = (candidate: number | undefined): number
     throw new VaultError('bad_option', 'forcePassphraseReentryHours is a number of hours greater than zero; fractions are fine (0.25 is fifteen minutes), and Infinity means never.')
   }
   return checked.data
+}
+
+/** What a Clock must carry. Checked only: openVault keeps the clock it was handed, and checks each reading. */
+const clockShape = Z.object({
+  now: Z.custom<Clock['now']>((candidate) => typeof candidate === 'function'),
+})
+
+const parseClock = (candidate: Clock | undefined): Clock => {
+  if (candidate === undefined) { return wallClock }
+  if (! clockShape.safeParse(candidate).success) {
+    throw new VaultError('bad_option', 'clock is not a Clock: it needs a now() function returning epoch milliseconds, as Date.now() does.')
+  }
+  return candidate
+}
+
+/** A reading of the host's clock, checked as an {@link EpochMillis} and rounded down to whole milliseconds. */
+const readClock = (clock: Clock): number => {
+  const checked = EpochMillis.safeParse(clock.now())
+  if (! checked.success) {
+    throw new VaultError('bad_option', "The clock passed to openVault read a time outside 1981 to 2255: its now() must return epoch milliseconds, as Date.now() does, not seconds or microseconds.")
+  }
+  return Math.floor(checked.data)
 }
 
 const parseMaxWhisperBytes = (candidate: number | undefined): number => {

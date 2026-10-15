@@ -72,6 +72,52 @@ export const Label = Z.string().check(
 )
 
 /**
+ * The latest instant the package accepts, in epoch ms: the microsecond epochalypse, the last
+ * millisecond whose epoch *microseconds* still fit a safe integer, 2255-06-05T23:47:34.740Z. No
+ * time the vault keeps lies past it, and a stored record holding a later one fails validation;
+ * see {@link EpochMillis}.
+ *
+ * `askPassphraseAt` equals it when the vault never asks for the passphrase again on this device
+ * until `lock()`: `forcePassphraseReentryHours: Infinity`, or a window so large its deadline
+ * would pass it. A host compares against it to show "until locked" rather than a date in 2255.
+ *
+ * @example askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toLocaleString()
+ * @example new Date(FarFuture).toISOString()   // '2255-06-05T23:47:34.740Z'
+ */
+export const FarFuture = 9_007_199_254_740 // Math.floor(Number.MAX_SAFE_INTEGER / 1000)
+
+/**
+ * The earliest instant the package accepts, in epoch ms: 1981-01-01T00:00:00Z. A stored
+ * record holding an earlier time fails validation; see {@link EpochMillis}.
+ *
+ * @example new Date(FarPast).toISOString()   // '1981-01-01T00:00:00.000Z'
+ */
+export const FarPast = 347_155_200_000 // Date.UTC(1981, 0, 1)
+
+/**
+ * Validator for an instant as UTC epoch milliseconds, from {@link FarPast} (1981) to
+ * {@link FarFuture} (2255), both included. Every time the package stores is one -- a lockbox's
+ * `registered_at` and `changed_at`, a vault bundle's `registered_at`, a remembered unlock's
+ * `ask_passphrase_at` -- and so is every reading of the host's {@link Clock}. A host can check
+ * its own times with it.
+ *
+ * Fractions of a millisecond pass, as a clock may return them; the package itself always writes
+ * whole milliseconds. The bounds catch a unit mistake either way: epoch *seconds* read as
+ * milliseconds land in January 1970, below the floor; epoch *microseconds* read as milliseconds
+ * land tens of thousands of years out, above the ceiling. `Infinity` and `NaN` never pass.
+ *
+ * @example EpochMillis.parse(Date.UTC(2026, 9, 15))                // 1792022400000
+ * @example EpochMillis.safeParse(1_792_022_400).success            // false: seconds, not ms
+ * @example EpochMillis.safeParse(1_792_022_400_000_000).success    // false: microseconds, not ms
+ * @example EpochMillis.safeParse(1_792_022_400_000.5).success      // true: a fraction is in bounds
+ * @example EpochMillis.safeParse(Infinity).success                 // false: never a time
+ */
+export const EpochMillis = Z.number().check(
+  Z.gte(FarPast, "An instant is epoch milliseconds no earlier than 1981; a smaller number is likely epoch seconds"),
+  Z.lte(FarFuture, "An instant is epoch milliseconds no later than 2255; a larger number is likely epoch microseconds"),
+)
+
+/**
  * What names one vault: the host application's label, the authenticated user, and the vault's own
  * label. Two users may each have a vault labelled `main` without collision; so may two apps
  * sharing a backend.
@@ -98,8 +144,8 @@ export const LockboxNote = Z.string().check(Z.maxLength(256))
 
 /**
  * One lockbox as the storage layer holds it: the whisper ciphered under its own lockboxKey, that
- * lockboxKey wrapped under the vaultKey, and the public shell -- boxlabel, note, timestamps --
- * a locked vault may show. Nothing in this record opens without the vaultKey.
+ * lockboxKey wrapped under the vaultKey, and the public shell -- boxlabel, note, the times it
+ * was first stored and last changed -- a locked vault may show. Nothing in this record opens without the vaultKey.
  *
  * `revision_id` is minted fresh on every write and bound into both encryptions, so ciphertext
  * moved between revisions (or boxes, or vaults) refuses to open.
@@ -120,8 +166,13 @@ export const Lockbox = Z.object({
    * undefined too, as earlier versions stored it and IndexedDB keeps it.
    */
   note:                Z.optional(LockboxNote),
-  created_at:          Z.string(),
-  updated_at:          Z.string(),
+  /** When this boxlabel was first stored, an {@link EpochMillis}: every later store carries it forward. */
+  registered_at:       EpochMillis,
+  /**
+   * When the whisper last changed, an {@link EpochMillis}: a store whose whisper serializes the
+   * same as the one it replaces writes a new revision and leaves this standing.
+   */
+  changed_at:          EpochMillis,
 })
 export type Lockbox = Z.infer<typeof Lockbox>
 
@@ -130,7 +181,7 @@ export type Lockbox = Z.infer<typeof Lockbox>
  * the lockbox has none -- never absent, never undefined, however the record was stored. This is
  * what a VaultDB's `listBoxes` returns and a vault's snapshot holds, readable while locked.
  *
- * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', created_at, updated_at }).note  // null
+ * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', registered_at, changed_at }).note  // null
  */
 export const LockboxSummary = Z.extend(
   Z.omit(Lockbox, { format: true, lockbox_key_wrapped: true, whisper_ciphered: true }),
@@ -160,53 +211,10 @@ export const VaultBundle = Z.object({
   passphrase_salt_b64: Z.string().check(Z.minLength(1)),
   /** The vaultKey, wrapped under the passphraseKey: decrypting this IS the passphrase check. */
   vault_key_passphrase_wrapped: Ciphered,
-  created_at:          Z.string(),
-  updated_at:          Z.string(),
+  /** When the vault was made, an {@link EpochMillis}; never changed. */
+  registered_at:       EpochMillis,
 })
 export type VaultBundle = Z.infer<typeof VaultBundle>
-
-/**
- * The latest instant the package accepts, in epoch ms: the microsecond epochalypse, the last
- * millisecond whose epoch *microseconds* still fit a safe integer, 2255-06-05T23:47:34.740Z. No
- * deadline the vault makes lies past it, and a remembered unlock whose stored deadline does reads
- * as none; see {@link EpochMillis}.
- *
- * `askPassphraseAt` equals it when the vault never asks for the passphrase again on this device
- * until `lock()`: `forcePassphraseReentryHours: Infinity`, or a window so large its deadline
- * would pass it. A host compares against it to show "until locked" rather than a date in 2255.
- *
- * @example askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toLocaleString()
- * @example new Date(FarFuture).toISOString()   // '2255-06-05T23:47:34.740Z'
- */
-export const FarFuture = 9_007_199_254_740 // Math.floor(Number.MAX_SAFE_INTEGER / 1000)
-
-/**
- * The earliest instant the package accepts, in epoch ms: 1981-01-01T00:00:00Z. A remembered
- * unlock whose stored deadline is older reads as none; see {@link EpochMillis}.
- *
- * @example new Date(FarPast).toISOString()   // '1981-01-01T00:00:00.000Z'
- */
-export const FarPast = 347_155_200_000 // Date.UTC(1981, 0, 1)
-
-/**
- * Validator for an instant as whole UTC epoch milliseconds, from {@link FarPast} (1981) to
- * {@link FarFuture} (2255), both included. The device record's `expires_at` is one, and a host
- * can check its own times with it.
- *
- * The bounds catch a unit mistake either way. Epoch *seconds* read as milliseconds land in
- * January 1970, below the floor; epoch *microseconds* read as milliseconds land tens of
- * thousands of years out, above the ceiling.
- *
- * @example EpochMillis.parse(Date.UTC(2026, 9, 15))                // 1792022400000
- * @example EpochMillis.safeParse(1_792_022_400).success            // false: seconds, not ms
- * @example EpochMillis.safeParse(1_792_022_400_000_000).success    // false: microseconds, not ms
- * @example EpochMillis.safeParse(1_792_022_400_000.5).success      // false: whole milliseconds only
- */
-export const EpochMillis = Z.number().check(
-  Z.gte(FarPast, "An instant is epoch milliseconds no earlier than 1981; a smaller number is likely epoch seconds"),
-  Z.lte(FarFuture, "An instant is epoch milliseconds no later than 2255; a larger number is likely epoch microseconds"),
-  Z.int("An instant is whole epoch milliseconds"),
-)
 
 /**
  * The device-local record of a remembered unlock: this browser's localUnlockKey (a
@@ -226,8 +234,8 @@ export const DeviceUnlock = Z.object({
   local_unlock_key: cryptoKeyHandle,
   /** The vaultKey, wrapped under the localUnlockKey. */
   vault_key_local_wrapped: Ciphered,
-  /** The instant after which the remembered unlock no longer counts: an {@link EpochMillis}. */
-  expires_at:       EpochMillis,
+  /** The instant from which the remembered unlock no longer counts, and the vault asks for the passphrase: an {@link EpochMillis}. */
+  ask_passphrase_at: EpochMillis,
 })
 export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 
@@ -253,12 +261,11 @@ export const MaxWhisperBytes = 40_444 // searchable: 40444
 export const MaxLockboxes = 100
 
 /**
- * Injected time source, so expiry is testable; defaults to the wall clock. `now()` returns whole
- * epoch ms between {@link FarPast} and {@link FarFuture}. Nothing checks it, and a clock outside
- * those bounds breaks expiry. Counting in seconds, an unlock in memory outlasts its window a
- * thousandfold, while one remembered under any usual window lands before 1981 and never reads
- * back, so the vault asks for the passphrase on every open; counting in microseconds, every
- * unlock has expired the moment it is made.
+ * Injected time source, so expiry is testable; defaults to the wall clock. `now()` returns epoch
+ * milliseconds, as `Date.now()` does: an {@link EpochMillis}, from {@link FarPast} to
+ * {@link FarFuture}, fractions allowed. The vault checks every reading, and refuses a clock that
+ * reads outside those bounds -- counting in seconds or microseconds, say -- with kind
+ * 'bad_option': at `openVault`, and at any later call that reads it so.
  */
 export type Clock = { now(): number }
 

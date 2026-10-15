@@ -13,9 +13,9 @@ export type Session = {
 
 /** The demo's account row, in the pretend-remote database beside the vault rows. */
 type Account = {
-  user_id:    string
-  userlabel:  string
-  created_at: string
+  user_id:       string
+  userlabel:     string
+  registered_at: number
 }
 
 export type Auth = {
@@ -78,7 +78,7 @@ export const createAuth = (opts: { applabel: string, dbStore: StringStore, devic
       const ckey = accountCkey(checked.data)
       const existing = dbStore.read(ckey)
       const account: Account = existing === null
-        ? { user_id: randomId(), userlabel: checked.data, created_at: new Date().toISOString() }
+        ? { user_id: randomId(), userlabel: checked.data, registered_at: Date.now() }
         : JSON.parse(existing) as Account
       if (existing === null) { dbStore.write(ckey, JSON.stringify(account)) }
       session = { userId: account.user_id, userlabel: account.userlabel }

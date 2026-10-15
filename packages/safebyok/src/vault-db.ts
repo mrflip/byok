@@ -317,7 +317,7 @@ const checkBundle = (raw: unknown, scope: VaultScope): VaultBundle => {
 const checkRecord = <RecordT>(recordSchema: Z.ZodMiniType<RecordT>, raw: unknown, said: string): RecordT => {
   const checked = recordSchema.safeParse(raw)
   if (! checked.success) {
-    throw new VaultError('corrupt_record', `A stored ${said} record did not read back in a shape this package knows. It may be damaged, or written by a newer version of safebyok; it was left as it is.`)
+    throw new VaultError('corrupt_record', `A stored ${said} record did not read back in a shape this package knows. It may be damaged, or written by another version of safebyok; it was left as it is.`)
   }
   return checked.data
 }

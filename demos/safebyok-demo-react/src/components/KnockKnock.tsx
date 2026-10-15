@@ -65,13 +65,13 @@ export const KnockKnock = () => {
       {telling && <p className="quiet">Claude is clearing its throat…</p>}
       {joke !== null && <blockquote className="joke">{joke}</blockquote>}
       {gripe !== null && <p className="gripe">{gripe}</p>}
-      <ApiKeySlot haveKeyBox={keyBox !== undefined} updatedAt={keyBox?.updated_at} />
+      <ApiKeySlot haveKeyBox={keyBox !== undefined} changedAt={keyBox?.changed_at} />
     </section>
   )
 }
 
 /** The facility for entering (or replacing) the Anthropic API key, stored as a lockbox. */
-const ApiKeySlot = ({ haveKeyBox, updatedAt }: { haveKeyBox: boolean, updatedAt?: string | undefined }) => {
+const ApiKeySlot = ({ haveKeyBox, changedAt }: { haveKeyBox: boolean, changedAt?: number | undefined }) => {
   const { vault, withUnlockedVault } = useVault()
   const [editing, setEditing] = useState(false)
   const [keyText, setKeyText] = useState('')
@@ -90,7 +90,7 @@ const ApiKeySlot = ({ haveKeyBox, updatedAt }: { haveKeyBox: boolean, updatedAt?
   if (! editing) {
     return (
       <p className="api-key-slot quiet">
-        ✓ Anthropic key in the vault{updatedAt !== undefined && ` (saved ${new Date(updatedAt).toLocaleString()})`}.{' '}
+        ✓ Anthropic key in the vault{changedAt !== undefined && ` (saved ${new Date(changedAt).toLocaleString()})`}.{' '}
         <button className="mini" onClick={() => { setEditing(true) }}>replace it</button>
       </p>
     )
