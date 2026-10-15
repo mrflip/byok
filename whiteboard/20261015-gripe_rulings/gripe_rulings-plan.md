@@ -6,7 +6,7 @@
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach), ruling on what gripe_followups left
   (`human/20261015-sprint_gripe_followups_done.md`)
-* **Status**: threads 1, 2 and 3 underway; thread 4 waits on thread 3
+* **Status**: done -- one merge line #83 → #92 → #95 → #93 → #91 → #90; see `human/20261015-sprint_gripe_rulings_done.md`
 
 ## Read first
 
@@ -125,8 +125,9 @@ default"), `notes/security.md`. Size: expect a budget bump; say how much.
 
 ## Merge line
 
-At wrap-up: the gripe_followups line (#87 → #85 → #83) → #(3) → #(4) → #(1) → #(2) → this
-sprint's PR, squashed on top. Peers biggest first; thread 1 will conflict with threads 3 and 4
+The gripe_followups line (#87 → #85 → #83) → [#92](https://github.com/mrflip/safebyok/pull/92) (3) →
+[#95](https://github.com/mrflip/safebyok/pull/95) (4) → [#93](https://github.com/mrflip/safebyok/pull/93) (1) →
+[#91](https://github.com/mrflip/safebyok/pull/91) (2) → [#90](https://github.com/mrflip/safebyok/pull/90), squashed on top. Peers biggest first; thread 1 will conflict with threads 3 and 4
 in `vault-db.ts` and `vault.ts`, resolved by its worker at the restack.
 
 ## Decisions taken in YOLO

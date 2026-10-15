@@ -7,8 +7,8 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 
 | # | Thread                 | Base       | Status   |
 | - | ---------------------- | ---------- | -------- |
-| 1 | damaged_boxes          | #83 tip    | filed [#93](https://github.com/mrflip/safebyok/pull/93) |
-| 2 | dialog_wording         | #83 tip    | filed [#91](https://github.com/mrflip/safebyok/pull/91) |
+| 1 | damaged_boxes          | #95 (restacked) | filed [#93](https://github.com/mrflip/safebyok/pull/93) |
+| 2 | dialog_wording         | #93 (restacked) | filed [#91](https://github.com/mrflip/safebyok/pull/91) |
 | 3 | tuple_ckeys            | #83 tip    | filed [#92](https://github.com/mrflip/safebyok/pull/92) |
 | 4 | replaceable_validators | #92 `9218318` | filed [#95](https://github.com/mrflip/safebyok/pull/95) |
 
@@ -66,3 +66,13 @@ refusal's `cause` (a side door). Left, minor: wrappers that forget the bag; the 
 misspelt field; JSON escapes tripping `vault_full` early under tight limits; Convex weighing
 ~11 bytes heavier; the entry re-exporting `Whisper`/`EpochMillis`. **For thread 1's restack**:
 a box whose name or note today's validators refuse must list as damaged and stay erasable.
+
+*Orchestrator:* **restacked** into one line: #83 → #92 → #95 → #93 → #91 → #90. #92 and #95
+already stood in a line. #93's worker rebased it onto #95 (conflicts in the listings, the
+ckey helpers and the name checks, resolved by folding #93's damage into #95's seam: the listing
+names a row by `Ckeys.boxlabelOf`, and `listedOrDamaged` checks through `Names`), then added
+the YOLO decision that a box under a name today's validators refuse lists as damaged and is
+only erasable (`store()` there is `bad_label`); `everything`'s budget rose to 26 kB. Its second
+review fixed `Ckeys.boxlabelOf` (a planted row spelled unlike `Ckeys.box`'s output listed but
+could never be erased) and left the Coach one question: refused text now reaches the snapshot.
+#91 rebased onto #93 without a conflict; `pnpm justify` and `pnpm size` ran once, at the top.
