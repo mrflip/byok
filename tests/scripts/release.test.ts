@@ -21,7 +21,8 @@ describe("the workspace as it stands", () => {
   })
 })
 
-// A workspace like ours, one release in: the core and the binding public, convex private.
+// A workspace like ours before its first release with the Convex adapter: the core and the binding
+// public, convex still private.
 const pkgAt = (pkgname: string, dir: string, version: string, isPrivate = false): Release.WorkspacePackage => (
   { name: pkgname, version, path: path.join('/repo', dir), private: isPrivate }
 )

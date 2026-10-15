@@ -39,7 +39,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "justify": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
+    "justify": "pnpm install && pnpm lint && pnpm typecheck && pnpm test && pnpm build",
     "prepublishOnly": "pnpm justify"
   },
   "devDependencies": {

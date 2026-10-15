@@ -111,10 +111,11 @@ pnpm changeset                     # a PR's release note; `--empty` when it need
 ## Layout
 
 * `packages/` -- the workspace packages: `safebyok` (the core), `safebyok-react` (the React
-  binding), `safebyok-convex` (in design, private). Each has its own `package.json`, configs,
-  `src/` and `tests/`, and runs its own `pnpm justify`; the root's runs them all.
+  binding), `safebyok-convex` (the Convex storage adapter). Each has its own `package.json`,
+  configs, `src/` and `tests/`, and runs its own `pnpm justify`; the root's runs them all.
 * In a package, `src/index.ts` is the entry point; nothing else is importable by a consumer unless
-  it is its own entry in that package's `tsdown.config.ts`.
+  it is its own entry in that package's `tsdown.config.ts` (in `safebyok-convex`, its
+  hand-written `exports`, which follow Convex's component layout).
 * `tests/` mirrors `src/` path for path: `src/foo/bar.ts` is tested in `tests/foo/bar.test.ts`.
   `fixtures/` holds sample data, when there is some.
 * `demos/` -- private playground apps exercising the packages; never published.
