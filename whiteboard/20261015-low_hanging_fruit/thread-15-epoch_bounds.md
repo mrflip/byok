@@ -1,6 +1,6 @@
 # Thread 15, follow-up: epoch_bounds (2026-10-15)
 
-Branch `20261015-epoch_bounds`, cut from origin/main at 23551b2 (#53's merge); PR not yet filed. It follows the merged [#53](https://github.com/mrflip/safebyok/pull/53) and is not part of it: these commits were built on #53's branch after it was filed, and #53 merged without them. Justify: green (root 105, safebyok 365, safebyok-convex 219, safebyok-react 15, demo 28); `pnpm size` within every limit.
+Branch `20261015-epoch_bounds`, cut from origin/main at 23551b2 (#53's merge); PR [#57](https://github.com/mrflip/safebyok/pull/57). It follows the merged [#53](https://github.com/mrflip/safebyok/pull/53) and is not part of it: these commits were built on #53's branch after it was filed, and #53 merged without them. Justify: green (root 105, safebyok 365, safebyok-convex 219, safebyok-react 15, demo 28); `pnpm size` within every limit.
 
 The Coach: "for far future -- I'm inclined to go with the microsecond epochalypse which I think is still 200+ years away as our no-dates-past-this number, enforced by Zod; I'd also exclude epoch millis before 1981."
 
