@@ -37,20 +37,28 @@ const Probe = () => {
   )
 }
 
-/** A component that grabs the vault its provider opens, and a wait for that vault. */
+/**
+ * A component that keeps what useVault last handed it, and two ways to read that: `latest()`,
+ * and `opened()`, a wait for the vault its provider opens.
+ */
 const grabber = () => {
-  const seen: { vault: Vault | null } = { vault: null }
+  const seen: { provided: ReturnType<typeof useVault> | null } = { provided: null }
   const Grab = () => {
-    const { vault } = useVault()
-    useEffect(() => { seen.vault = vault }, [vault])
+    const provided = useVault()
+    useEffect(() => { seen.provided = provided }, [provided])
     return null
   }
-  const opened = async (): Promise<Vault> => {
-    await waitFor(() => { expect(seen.vault).to.not.be.null })
-    if (seen.vault === null) { throw new Error('the provider opened no vault') }
-    return seen.vault
+  const latest = () => {
+    if (seen.provided === null) { throw new Error('the grabber was never rendered in a provider') }
+    return seen.provided
   }
-  return { Grab, opened }
+  const opened = async (): Promise<Vault> => {
+    await waitFor(() => { expect(seen.provided?.vault ?? null).to.not.be.null })
+    const { vault } = latest()
+    if (vault === null) { throw new Error('the provider opened no vault') }
+    return vault
+  }
+  return { Grab, latest, opened }
 }
 
 /**
@@ -77,6 +85,17 @@ const shownState = () => screen.getByTestId('state').textContent
 
 /** Waits until the Probe, or the boundary in its place, shows `state`, failing if it never does. */
 const expectShown = (state: string) => waitFor(() => { expect(shownState()).to.eq(state) })
+
+/** Waits until the Probe shows `outcome` for its last action, failing if it never does. */
+const expectOutcome = (outcome: string) => waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq(outcome) })
+
+/** Puts a lockbox through the Probe into a vault not yet made, choosing `passphrase` in the dialog. */
+const putThroughNewVault = async (passphrase: string) => {
+  fireEvent.click(screen.getByText('put'))
+  fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: passphrase } })
+  fireEvent.click(screen.getByText('Create vault'))
+  await expectOutcome('stored')
+}
 
 const unreachable = () => new VaultError('storage_unavailable', 'The vault storage could not be reached: try again shortly.')
 
@@ -127,7 +146,7 @@ describe("VaultProvider", () => {
     fireEvent.change(passphraseInput, { target: { value: 'correct horse battery staple' } })
     fireEvent.click(screen.getByText('Create vault'))
 
-    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('stored') })
+    await expectOutcome('stored')
     expect(shownState()).to.eq('unlocked')
     await waitFor(() => { expect(screen.getByTestId('boxcount').textContent).to.eq('1') })
   })
@@ -136,13 +155,10 @@ describe("VaultProvider", () => {
     const world = makeWorld()
     world.mount('u1')
     await expectShown('absent')
-    fireEvent.click(screen.getByText('put'))
-    fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'a fine passphrase' } })
-    fireEvent.click(screen.getByText('Create vault'))
-    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('stored') })
+    await putThroughNewVault('a fine passphrase')
 
     fireEvent.click(screen.getByText('grab'))
-    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('read:"sk-fake"') })
+    await expectOutcome('read:"sk-fake"')
     expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
   })
 
@@ -150,10 +166,7 @@ describe("VaultProvider", () => {
     const world = makeWorld()
     const first = world.mount('u1')
     await expectShown('absent')
-    fireEvent.click(screen.getByText('put'))
-    fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'the right one' } })
-    fireEvent.click(screen.getByText('Create vault'))
-    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('stored') })
+    await putThroughNewVault('the right one')
     first.unmount()
 
     // A fresh mount after the remembered unlock is gone: lock it by clearing the device side.
@@ -167,7 +180,7 @@ describe("VaultProvider", () => {
 
     fireEvent.change(screen.getByPlaceholderText('vault passphrase'), { target: { value: 'the right one' } })
     fireEvent.click(screen.getByText('Unlock'))
-    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('read:"sk-fake"') })
+    await expectOutcome('read:"sk-fake"')
   })
 
   it("dismissing the dialog resolves the action to null, and nothing is stored", async () => {
@@ -177,7 +190,7 @@ describe("VaultProvider", () => {
     fireEvent.click(screen.getByText('put'))
     await screen.findByPlaceholderText('vault passphrase')
     fireEvent.click(screen.getByText('Cancel'))
-    await waitFor(() => { expect(screen.getByTestId('outcome').textContent).to.eq('dismissed') })
+    await expectOutcome('dismissed')
     expect(shownState()).to.eq('absent')
     expect(screen.getByTestId('boxcount').textContent).to.eq('0')
   })
@@ -290,19 +303,14 @@ describe("VaultProvider", () => {
       const world = makeWorld()
       const trouble = unreachable()
       vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(trouble)
-      const seen: { openError: VaultError | null, vault: Vault | null } = { openError: null, vault: null }
-      const Grab = () => {
-        const { openError, vault } = useVault()
-        useEffect(() => { seen.openError = openError; seen.vault = vault }, [openError, vault])
-        return null
-      }
+      const { Grab, latest } = grabber()
       render(
         <VaultProvider {...world.props} userId="u1">
           <Grab />
         </VaultProvider>,
       )
-      await waitFor(() => { expect(seen.openError).to.eq(trouble) })
-      expect(seen.vault).to.be.null
+      await waitFor(() => { expect(latest().openError).to.eq(trouble) })
+      expect(latest().vault).to.be.null
     })
 
     it("retryOpen opens again: once storage relents, the vault opens and openError clears", async () => {
@@ -343,21 +351,17 @@ describe("VaultProvider", () => {
     it("retryOpen does nothing while there is no openError", async () => {
       const world = makeWorld()
       const reads = vi.spyOn(world.vaultDB, 'readBundle')
-      const seen: { retryOpen: () => void } = { retryOpen: noop }
-      const Grab = () => {
-        const { retryOpen } = useVault()
-        useEffect(() => { seen.retryOpen = retryOpen }, [retryOpen])
-        return <Probe />
-      }
+      const { Grab, latest } = grabber()
       render(
         <VaultProvider {...world.props} userId="u1">
           <Grab />
+          <Probe />
         </VaultProvider>,
       )
       await expectShown('absent')
       const readsBefore = reads.mock.calls.length
       await act(async () => {
-        seen.retryOpen()
+        latest().retryOpen()
         await TH.wakeupAtNextTick()
       })
       expect(reads.mock.calls.length).to.eq(readsBefore)
