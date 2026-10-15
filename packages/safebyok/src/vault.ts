@@ -1,5 +1,5 @@
 import * as Z from 'zod'
-import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, LatestAskPassphraseAt, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import {
@@ -30,7 +30,9 @@ export type VaultSnapshot = {
   boxes:     readonly LockboxSummary[]
   /**
    * Epoch ms from which the vault asks for the passphrase again, while unlocked; null otherwise.
-   * The unlock's time plus `forcePassphraseReentryHours`.
+   * The unlock's time plus `forcePassphraseReentryHours`, never later than the last instant a
+   * `Date` can hold (8.64e15): with `Infinity` hours, a vault that asks again only after
+   * `lock()` reads as that far-future time, and `new Date(askPassphraseAt)` still works.
    */
   askPassphraseAt: number | null
 }
@@ -53,7 +55,9 @@ export type OpenVaultOpts = {
   /**
    * How many hours an entered passphrase lasts on this device, remembered across reloads, before
    * the vault asks for it again. Default: {@link ForcePassphraseReentryHours}, 168 (seven days).
-   * Any number above zero, fractions too: 0.25 is fifteen minutes.
+   * Any number above zero, fractions too: 0.25 is fifteen minutes. `Infinity` means never on
+   * this device: the vault stays unlocked until `lock()` (or the vault changes under it), and
+   * `askPassphraseAt` reads as the latest instant a `Date` can hold, however large the number.
    */
   forcePassphraseReentryHours?: number | undefined
   /** Time source for expiry; tests inject one. Default: the wall clock. */
@@ -444,7 +448,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       // stands there now, not against a cached one a destroy or recreate may have outdated.
       await refresh()
       const unlocked = await settleUnlock(passphrase)
-      askPassphraseAt = clock.now() + reentryMs
+      askPassphraseAt = deadlineAfter(clock.now(), reentryMs)
       // The transient's last act: wrapped into this device's remembered unlock, then dropped.
       await rememberDevice(unlocked.transientKey, currentBundle(), askPassphraseAt)
       vaultKey = unlocked.sessionKey
@@ -479,7 +483,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       }
       await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }))
       bundle = next
-      askPassphraseAt = clock.now() + reentryMs
+      askPassphraseAt = deadlineAfter(clock.now(), reentryMs)
       await rememberDevice(proven.transientKey, next, askPassphraseAt)
       vaultKey = proven.sessionKey
       bump()
@@ -682,14 +686,17 @@ const declaredBytes = Z.union([Z.number().positive(), Z.literal(Infinity)])
 const MsPerHour = 60 * 60 * 1000
 
 /** Hours, as the host thinks of them, to whole milliseconds, as every time inside is kept. */
-const forcePassphraseReentryHours = Z.number().positive().default(ForcePassphraseReentryHours)
+const forcePassphraseReentryHours = Z.union([Z.number().positive(), Z.literal(Infinity)]).default(ForcePassphraseReentryHours)
   .transform((hours) => Math.round(hours * MsPerHour))
-  .pipe(Z.number().int().min(1).max(Number.MAX_SAFE_INTEGER))
+  .pipe(Z.union([Z.number().min(1), Z.literal(Infinity)]))
+
+/** The deadline for a passphrase entered at `nowMs`: `reentryMs` later, but never past what a Date holds. */
+const deadlineAfter = (nowMs: number, reentryMs: number): number => Math.min(nowMs + reentryMs, LatestAskPassphraseAt)
 
 const parseForcePassphraseReentryHours = (candidate: number | undefined): number => {
   const checked = forcePassphraseReentryHours.safeParse(candidate)
   if (! checked.success) {
-    throw new VaultError('bad_option', 'forcePassphraseReentryHours is a number of hours greater than zero; fractions are fine (0.25 is fifteen minutes).')
+    throw new VaultError('bad_option', 'forcePassphraseReentryHours is a number of hours greater than zero; fractions are fine (0.25 is fifteen minutes), and Infinity means never.')
   }
   return checked.data
 }

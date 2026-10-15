@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, LatestAskPassphraseAt, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
@@ -166,9 +166,86 @@ describe("the remembered unlock", () => {
 
   it("refuses a forcePassphraseReentryHours that is not a span of time above zero", async () => {
     const world = makeWorld()
-    for (const nonsense of [0, -1, NaN, Infinity, 1e-12]) {
-      await expectRefusal(world.open({ forcePassphraseReentryHours: nonsense }), 'bad_option')
+    for (const nonsense of [0, -1, -Infinity, NaN, 1e-12, '12', null, true, {}]) {
+      await expectRefusal(world.open({ forcePassphraseReentryHours: nonsense as number }), 'bad_option')
     }
+  })
+
+  it("says in its refusal that Infinity is welcome", async () => {
+    const world = makeWorld()
+    const err = await expectRefusal(world.open({ forcePassphraseReentryHours: 0 }), 'bad_option')
+    expect(err.message).to.match(/greater than zero/)
+    expect(err.message).to.match(/Infinity/)
+  })
+
+  describe("with forcePassphraseReentryHours: Infinity", () => {
+    it("unlocks, and stays unlocked however long it is left, showing the latest deadline a Date holds", async () => {
+      const world = makeWorld()
+      const vault = await world.open({ forcePassphraseReentryHours: Infinity })
+      await vault.unlock('pw one')
+      await vault.store('anthropic', 'sk-fake')
+      expect(vault.getSnapshot().state).to.eq('unlocked')
+      expect(vault.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
+      expect(LatestAskPassphraseAt).to.eq(8.64e15)
+      expect(new Date(LatestAskPassphraseAt).getTime()).to.eq(LatestAskPassphraseAt)
+      const shown = new Date(vault.getSnapshot().askPassphraseAt!)
+      expect(Number.isNaN(shown.getTime())).to.be.false
+      world.advance(1000 * 365 * 24 * HourMs)
+      expect(await vault.read('anthropic')).to.eq('sk-fake')
+      expect(vault.getSnapshot().state).to.eq('unlocked')
+    })
+
+    it("writes the clamped deadline to the device, as a finite number, and a reopen picks it up", async () => {
+      const world = makeWorld()
+      const vault = await world.open({ forcePassphraseReentryHours: Infinity })
+      await vault.unlock('pw one')
+      await vault.store('anthropic', 'sk-fake')
+      const remembered = await world.deviceDB.readUnlock(scopeOf('u1'))
+      expect(remembered!.expires_at).to.eq(LatestAskPassphraseAt)
+      world.advance(10 * 365 * 24 * HourMs)
+      const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
+      expect(reopened.getSnapshot().state).to.eq('unlocked')
+      expect(reopened.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
+      expect(await reopened.read('anthropic')).to.eq('sk-fake')
+    })
+
+    it("ends with lock(), here and on the device", async () => {
+      const world = makeWorld()
+      const vault = await world.open({ forcePassphraseReentryHours: Infinity })
+      await vault.unlock('pw one')
+      await vault.lock()
+      expect(vault.getSnapshot().state).to.eq('locked')
+      expect(vault.getSnapshot().askPassphraseAt).to.be.null
+      await expectRefusal(vault.read('anthropic'), 'vault_locked')
+      const reopened = await world.open({ forcePassphraseReentryHours: Infinity })
+      expect(reopened.getSnapshot().state).to.eq('locked')
+    })
+
+    it("holds through a passphrase change on this device, with the same deadline", async () => {
+      const world = makeWorld()
+      const vault = await world.open({ forcePassphraseReentryHours: Infinity })
+      await vault.unlock('pw one')
+      await vault.changePassphrase('pw one', 'pw two')
+      expect(vault.getSnapshot().state).to.eq('unlocked')
+      expect(vault.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
+    })
+  })
+
+  it("clamps a huge finite forcePassphraseReentryHours to the same latest deadline", async () => {
+    const world = makeWorld()
+    for (const huge of [1e12, 1e300, Number.MAX_VALUE]) {
+      const vault = await world.open({ deviceDB: memoryDeviceDB(), forcePassphraseReentryHours: huge })
+      await vault.unlock('pw one')
+      expect(vault.getSnapshot().state).to.eq('unlocked')
+      expect(vault.getSnapshot().askPassphraseAt).to.eq(LatestAskPassphraseAt)
+    }
+  })
+
+  it("leaves a window that fits before the latest deadline exactly as asked", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ forcePassphraseReentryHours: 1e6 })
+    await vault.unlock('pw one')
+    expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + (1e6 * HourMs))
   })
 })
 

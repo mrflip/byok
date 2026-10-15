@@ -192,6 +192,14 @@ export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 export const ForcePassphraseReentryHours = 168 // seven days
 
 /**
+ * The latest deadline a vault will hold, in epoch ms: 8.64e15, the last instant a JavaScript
+ * `Date` can represent (the year 275760). A `forcePassphraseReentryHours` of `Infinity`, or one
+ * so large its deadline would pass this, puts `askPassphraseAt` here instead, so a deadline is
+ * always a finite time that `new Date(askPassphraseAt)` can show.
+ */
+export const LatestAskPassphraseAt = 8.64e15
+
+/**
  * The largest whisper a vault stores unless the caller says otherwise, in bytes of its JSON:
  * several times the beefiest credential (an RSA-8192 private key as PEM is about 6.4 KB), and
  * well inside what every storage backend can hold. A larger whisper is usually a sign that the
