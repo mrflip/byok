@@ -66,7 +66,7 @@ tests, convex 213, react 7, demo 24, root 72).
   merging; it ships `errors` and `zod` (core's peer), not the vault.
 * **Also on review**: `Intl` itself is guarded (`typeof Intl === 'undefined'`); `errors.ts` widens the
   `bad_option` and `bad_whisper` comments; the bulk table's expected values are in `"`; new commits are
-  `api:`-prefixed, and d30cf0d (`utils:`) can be reworded to `api:` when filing.
+  `api:`-prefixed, and the first commit was reworded from `utils:` to `api:` during the filing rebase.
 * **For the Coach**: the `maskAll` call (struck), `''` for an empty whisper, `maxLen` winning over
   `minStars` and refused below `head + tail + 9`, the strip list, and the changeset being `minor`.
   Also open: should the strip list take U+00AD, U+2061-2064, U+180E and U+034F too, and should `mask`
