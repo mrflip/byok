@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 5 (rework) and 7 in review; 1, 2, 3, 4, 6, 8, 9, 10, 11 filed. Newer than the plan wherever the two disagree.
+**Status**: 12 building (from #44 at a9b91f1); 5 rework in review; 1, 2, 3, 4, 6, 7, 8, 9, 10, 11 filed; 13 waits on 12. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -14,11 +14,11 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
 | 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37); rework to the Coach's contract in review |
 | 6  | `boundary_audit` | thread 2 (#40, 868ce73) | filed [#43](https://github.com/mrflip/safebyok/pull/43), stacked on #40 |
-| 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | filing |
+| 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | filed [#44](https://github.com/mrflip/safebyok/pull/44), stacked on #43 |
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
-| 12 | `convex_server_cap` | thread 7 | pending (the Coach's answer) |
+| 12 | `convex_server_cap` | thread 7 (#44, a9b91f1) | underway |
 | 13 | `error_kinds` | thread 12 | pending (the Coach's answer) |
 | 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
@@ -123,14 +123,16 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   can extend it. *Review:* clean, contract verified. Left for the Coach: clamp a remembered
   unlock's `expires_at` to `now + forcePassphraseReentryHours` on read (no crypto; a policy
   change); export `LockboxNote`; a vault already bricked by an over-long note still will not open.
-* **Thread 7** (`stale_write_retry`): `store()`'s read-then-write runs through `retryStale`, up
+* **Thread 7** (`stale_write_retry`, [#44](https://github.com/mrflip/safebyok/pull/44), stacked on #43): `store()`'s read-then-write runs through `retryStale`, up
   to `MaxWriteAttempts = 3` attempts (fresh `revision_id`, lockbox key, `ensureRoomFor` and
   `noteToStore` each time); a retry that finds the device relocked throws `vault_locked`; `erase()`
   is never retried. *Orchestrator:* first build re-created a box another device had erased
   mid-retry, against the ruled **"Erase wins"** (`rulings.md` line 23): sent back to surface
   `stale_write` instead, before review. Rebuilt (7f36804): erase wins across a retry; a box
   created meanwhile is retried over; under erase-wins a retry is never a new box, so
-  `ensureRoomFor` never runs twice.
+  `ensureRoomFor` runs again only when a rival created and then erased the box between attempts
+  (tested). *Review:* fixed (doc block). Open for the Coach on #44: `vault_locked` vs
+  `stale_write` on a relock; a distinct kind for erase-wins.
 * **Thread 8** (`size_budget`, [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40): `.size-limit.json` at the **root**, not the core -- size-limit
   excludes a package's peers, and zod (the core's peer) is most of the bundle, so a core-level
   config would measure `openVault` at 7 kB and never show the zod-mini thread's gain. Brotli

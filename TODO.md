@@ -340,7 +340,7 @@ shape. Same seam family as the label validator; decide them together.
 Ruled "with the retry work": a way for a host to hear about an erase-versus-update collision
 after the retry limit, rather than only a `stale_write`. API design: is it an `openVault` option,
 a snapshot field, or an error the provider surfaces? Decide after the retry (low-hanging-fruit
-thread 6) has been used in anger.
+thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in anger.
 
 ### Others
 
