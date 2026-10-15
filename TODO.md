@@ -57,24 +57,65 @@ logger is given.
 
 ## Open from big_feats (2026-10-15)
 
-Follow-ups the big_feats sprint left (`human/20261015-sprint_big_feats_done.md` has every open
-question; these are the ones that are work, not rulings).
+What the big_feats sprint and its amendments leave open. Each item is its own later thread, so the
+Coach can merge the stack and try it first. Already built in the amendments: the `unlock_epoch`
+rename ([#84](https://github.com/mrflip/safebyok/pull/84)); a `maxLockboxes` each store declares,
+which Postgres also enforces on the server ([#89](https://github.com/mrflip/safebyok/pull/89));
+`addPasskey` checking its proof first, and the IndexedDB channel's `unref` and catch
+([#88](https://github.com/mrflip/safebyok/pull/88)); `TH.perUser` in `safebyok/testing` and the
+package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
 
-* **Rename `passphrase_epoch` to `unlock_epoch`** across the core, the `VaultDB` expectation and
-  all five adapters (Convex, IndexedDB, Postgres, GraphQL, the local store): one mechanical sweep
-  once [#71](https://github.com/mrflip/safebyok/pull/71), [#73](https://github.com/mrflip/safebyok/pull/73), [#77](https://github.com/mrflip/safebyok/pull/77) and [#78](https://github.com/mrflip/safebyok/pull/78) land. Deferred in the sprint so
-  the adapters could be built in parallel.
-* **Try passkeys on a real authenticator** (Chrome platform passkey, Safari, a security key)
-  before a release: [#76](https://github.com/mrflip/safebyok/pull/76) is tested only against a fake `navigator.credentials`.
-* **A vault size cap on the Postgres server**: a lockbox-count check inside the insert, refusing
-  `vault_full`, as the Convex component has.
-* **`listBoxRecords`** ([#73](https://github.com/mrflip/safebyok/pull/73), used by [#78](https://github.com/mrflip/safebyok/pull/78)): keep it as a second verb every served
-  adapter writes, or let the core's `doListBoxes` accept summaries.
-* **Swallowed failures reach the logger**: a rejected Postgres `listen` and a failed GraphQL
-  client subscription go silent today (the same family as the Convex watch).
-* **`TH.perUser` into `safebyok/testing`**: copied between the Postgres and GraphQL tests.
-* **CLAUDE.md's *Layout***: name the new packages once they land ([#74](https://github.com/mrflip/safebyok/pull/74) adds its own line;
-  #73, #77 and #78 do not).
+* **Audit the VaultDB implementations and grow the standard battery.** `TH.describeVaultDB`
+  (`safebyok/testing`) is already the shared suite. Convex, IndexedDB, Postgres and GraphQL each
+  import it and run it on themselves, and the core runs it over `localVaultDB(memoryStore())`, the
+  test-pony memory store it exports. The thread:
+  * audits every adapter against the `VaultDB` contract;
+  * moves into the battery whatever each package proves by hand that is really the contract;
+  * then simplifies each package's bespoke tests to what is truly its own. Extra testing is fine,
+    vacuous testing is not.
+* **A race helper in the battery.** Concurrent writers are hard to prove, and every adapter must
+  prove them. Give `safebyok/testing` a helper that opens two writers, each through its own store
+  (the two-tab or two-connection case), interleaves them at the points that matter, and asserts
+  the outcome: one lands, the other is `stale_write`. Today's race tests share one connection; a
+  second writer through its own `createStore` would show the two-tab case directly.
+* **Stores share a base class, and its error handling.** One theme runs through several open
+  questions: common error classes, how failures are reported, no-op fallbacks where a verb is
+  irrelevant to a store, and sugar methods. `VaultDB` is already an abstract class; this is the
+  thread that decides how much more the base carries, so each adapter writes less. Swallowed
+  failures belong here:
+  * a rejected Postgres `listen`, a failed GraphQL client subscription and the Convex watch go
+    silent today, and should reach the vault's logger;
+  * a throwing listener is caught and dropped by IndexedDB's channel ([#88](https://github.com/mrflip/safebyok/pull/88)),
+    while the core's in-memory store lets it escape the write that rang it. One catch in the
+    shared `subscribe` fixes every adapter, and `reportError`, where the platform has it, is the
+    option for not dropping it silently.
+* **No null as an error's cause.** IndexedDB's `request.error` can be null on an abort, so a
+  failed write's `cause` can be null. Report a calm "the write failed for an unknown reason"
+  error instead, and never null.
+* **IndexedDB reads only the scope's rows.** `listBoxes` and `eraseVault` read the whole store,
+  every user's rows in that database, where a key range over the scope's prefix would do. The
+  same thread revisits the bell's BroadcastChannel lifetime (it is `unref`'d since #88, but never
+  closed).
+* **The vault cap as a soft limit.** The Coach: the app's `maxLockboxes` is an alarm bell for the
+  implementor (100 lockboxes may be unexpected) and, for some stores, a hard capacity limit. So
+  the vault refuses additions past the app's number, and whether a store also *guarantees* it is
+  that store's decision. #89's Postgres machinery is a lot of weight for that: a counter column, a
+  trigger, a bundle-row lock on every lockbox insert and erase, and serialization failures at
+  stricter isolation. Revisit whether Postgres should guarantee it at all, or simply declare a
+  limit the vault enforces. No backward compatibility needed.
+* **`listBoxRecords`** ([#73](https://github.com/mrflip/safebyok/pull/73), used by
+  [#78](https://github.com/mrflip/safebyok/pull/78)): the recommendation is to move it into the
+  `VaultDB` base class, so no store writes it (`human/20261015-sprint_big_feats_rulings.md`). It
+  belongs with the base-class thread.
+* **Try passkeys on a real authenticator** (Chrome platform passkey, Safari, a security key) once
+  [#76](https://github.com/mrflip/safebyok/pull/76) merges: it is tested only against a fake
+  `navigator.credentials`. Also check that `addPasskey`'s proof-first order still gets the prompt
+  on a slow device or an older Safari, where the click's user activation may run out
+  ([#88](https://github.com/mrflip/safebyok/pull/88)).
+* **Still awaiting a ruling** (the rulings note explains each): adding `vault_id` and the scope to
+  the passkey HKDF `info`; the epoch revocation note in `notes/security.md`; pnpm's
+  `minimumReleaseAge` as a repo-wide age rule; `addPasskey`'s function-argument shape; Postgres's
+  default limit of 1000.
 
 ## Sand in the sandals
 
