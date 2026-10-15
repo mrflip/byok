@@ -1,6 +1,6 @@
 # Thread 1: Convex agent skills, scoped to safebyok-convex (2026-10-15)
 
-Branch `20261014-convex_skills`, PR not yet filed, cut from origin/main (`7f84c7b`). Justify:
+Branch `20261014-convex_skills`, PR [#17](https://github.com/mrflip/safebyok/pull/17), cut from origin/main (`7f84c7b`). Justify:
 root green (12 files, 174 tests, build, attw, publint). The package's own `pnpm justify` fails
 at lint ("all of the files matching the glob pattern '.' are ignored") because the package has
 no JS or TS yet. That failure is the same on main, and thread 3's sources end it.
