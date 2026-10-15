@@ -8,7 +8,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
 | # | Thread            | Base                                   | Status                         |
 | - | ----------------- | -------------------------------------- | ------------------------------ |
 | 1 | argon2_wasm       | #68 (kdf_configs) `80ac694`            | underway                       |
-| 2 | unlock_envelopes  | #63 `ea4b93d`                          | in review                      |
+| 2 | unlock_envelopes  | #63 `ea4b93d`                          | filing                         |
 | 3 | passkey_unlock    | thread 2                               | pending                        |
 | 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | waiting for a slot             |
 | 5 | postgres_vaultdb  | #63 `ea4b93d`, rebased onto 2 to file  | in review                      |
