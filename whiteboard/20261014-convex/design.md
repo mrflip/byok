@@ -44,7 +44,8 @@ written as `undefined`, which Convex refuses.
 The VaultDB verbs are as the storage thread settled them (2026-10-15, thread
 `20261014-storage_verbs`): each public verb validates and calls the adapter's `do*` half, so
 `convexVaultDB` implements `doReadBundle`, `doCreateBundle` and the rest, one Convex function each.
-The rulings' `versionedUpdate` is `updateBundle` and `updateBox`.
+The rulings' `versionedUpdate` is `updateBundle` and `updateBox`; the erases carry a `vault_id`-only
+`EraseExpectation` (ruled 2026-10-15), and refuse as `stale_write` like the updates.
 
 | VaultDB verb                 | Convex function                  | Notes                                                       |
 | ---------------------------- | -------------------------------- | ----------------------------------------------------------- |
@@ -54,8 +55,8 @@ The rulings' `versionedUpdate` is `updateBundle` and `updateBox`.
 | `readBox`                    | query `getBox`                   |                                                             |
 | `listBoxes`                  | query `listBoxSummaries`         | projected server-side, keeping `format`; sorted client-side |
 | `updateBox`                  | mutation `updateBox`             | only if the scope's bundle has the expected `vault_id`, and the standing `revision_id` is the expected one (or, for null, there is none); refuses when the scope holds no bundle |
-| `eraseBox`                   | mutation `eraseBox`              | erase wins: no version expectation                          |
-| `eraseVault`                 | mutation `eraseVault`            | boxes and bundle in one transaction                         |
+| `eraseBox`                   | mutation `eraseBox`              | only if the scope's bundle has the expected `vault_id`; no revision expected, so erase wins; quiet on an absent box |
+| `eraseVault`                 | mutation `eraseVault`            | only if the bundle has the expected `vault_id`; boxes and bundle in one transaction |
 | `subscribe`                  | `onUpdate` on query `watchVault` | `{ vault_id, passphrase_epoch, boxes: [[boxlabel, revision_id]] }`; first emit skipped |
 | `maxRecordBytes`             | (a constant)                     | 1 MiB                                                       |
 
