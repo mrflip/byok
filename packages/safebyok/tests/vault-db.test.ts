@@ -13,6 +13,7 @@ import { describeVaultDB } from './vault-db-suite'
  */
 class MapVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
+  readonly maxVaultBytes = Infinity
   readonly rows = new Map<string, unknown>()
   private bundleCkey(scope: VaultScope) { return `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}` }
   private boxCkey(scope: VaultScope, boxlabel: string) { return `${this.bundleCkey(scope)}/${boxlabel}` }
@@ -84,6 +85,12 @@ describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
 describeVaultDB('the smallest honest adapter', () => new MapVaultDB())
 
 describe("localVaultDB", () => {
+  it("holds a mebibyte in one record, and sets no limit on a vault", () => {
+    const vaultDB = localVaultDB(memoryStore())
+    expect(vaultDB.maxRecordBytes).to.eq(1_048_576)
+    expect(vaultDB.maxVaultBytes).to.eq(Infinity)
+  })
+
   it("reads a vault stored before the storage verbs: the same rows, at the same ckeys", async () => {
     const store = memoryStore()
     store.write('vault:acme:u1:main', JSON.stringify(bundleOf('u1')))

@@ -47,6 +47,7 @@ const perUser = (connect: (subject: string | null) => ConvexVaultClient, api: Sa
   }
   return {
     maxRecordBytes: convexVaultDB(connect(null), api).maxRecordBytes,
+    maxVaultBytes:  convexVaultDB(connect(null), api).maxVaultBytes,
     readBundle:     (scope) => as(scope).readBundle(scope),
     createBundle:   (bundle) => as(bundle).createBundle(bundle),
     updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
@@ -102,6 +103,11 @@ describe("convexVaultDB, as it is made", () => {
   it("holds at most Convex's document limit in one record", () => {
     const deployment = deploy()
     expect(convexVaultDB(deployment.client('u1'), deployment.api.safebyok).maxRecordBytes).to.eq(1_048_576)
+  })
+
+  it("holds at most half of what one Convex function may read in one vault, since erasing reads it twice", () => {
+    const deployment = deploy()
+    expect(convexVaultDB(deployment.client('u1'), deployment.api.safebyok).maxVaultBytes).to.eq(8 * 1024 * 1024)
   })
 
   const NotClientCases = [
