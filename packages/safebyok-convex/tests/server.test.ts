@@ -1,20 +1,19 @@
 import { describe, expect, it } from 'vitest'
 import { ConvexError } from 'convex/values'
 import type { SafebyokErrorData } from '../src/server'
-import { boxOf, bundleOf, scopeOf } from 'safebyok/testing'
-import { bySubject, hostWith } from './helpers'
+import * as TH from './test-helpers'
 
-const { api, createTest } = hostWith(bySubject)
+const { api, createTest } = TH.hostWith(TH.bySubject)
 
-const u1 = scopeOf('u1')
+const u1 = TH.scopeOf('u1')
 const thisVault = { vault_id: 'vault-id-u1' }
 
 /** A backend where `u1`'s vault holds a bundle and one lockbox, written as `u1`. */
 const seeded = async () => {
   const t = createTest()
   const asU1 = t.withIdentity({ subject: 'u1' })
-  await asU1.mutation(api.safebyok.createBundle, { bundle: bundleOf('u1') })
-  await asU1.mutation(api.safebyok.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a1'), expected: { vault_id: 'vault-id-u1', revision_id: null } })
+  await asU1.mutation(api.safebyok.createBundle, { bundle: TH.bundleOf('u1') })
+  await asU1.mutation(api.safebyok.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: { vault_id: 'vault-id-u1', revision_id: null } })
   return t
 }
 
@@ -23,11 +22,11 @@ type Caller = ReturnType<ReturnType<typeof createTest>['withIdentity']>
 /** One call of each of the nine functions, on `u1`'s vault, as `caller`. */
 const EveryCall: [string, (caller: Caller) => Promise<unknown>][] = [
   ['getBundle',        (caller) => caller.query(api.safebyok.getBundle, { scope: u1 })],
-  ['createBundle',     (caller) => caller.mutation(api.safebyok.createBundle, { bundle: bundleOf('u1') })],
-  ['updateBundle',     (caller) => caller.mutation(api.safebyok.updateBundle, { bundle: bundleOf('u1', { passphrase_epoch: 2 }), expected: { vault_id: 'vault-id-u1', passphrase_epoch: 1 } })],
+  ['createBundle',     (caller) => caller.mutation(api.safebyok.createBundle, { bundle: TH.bundleOf('u1') })],
+  ['updateBundle',     (caller) => caller.mutation(api.safebyok.updateBundle, { bundle: TH.bundleOf('u1', { passphrase_epoch: 2 }), expected: { vault_id: 'vault-id-u1', passphrase_epoch: 1 } })],
   ['getBox',           (caller) => caller.query(api.safebyok.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })],
   ['listBoxSummaries', (caller) => caller.query(api.safebyok.listBoxSummaries, { scope: u1 })],
-  ['updateBox',        (caller) => caller.mutation(api.safebyok.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })],
+  ['updateBox',        (caller) => caller.mutation(api.safebyok.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })],
   ['eraseBox',         (caller) => caller.mutation(api.safebyok.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: thisVault })],
   ['eraseVault',       (caller) => caller.mutation(api.safebyok.eraseVault, { scope: u1, expected: thisVault })],
   ['watchVault',       (caller) => caller.query(api.safebyok.watchVault, { scope: u1 })],
@@ -55,8 +54,8 @@ describe("SafebyokComponent.api, for the vault's own user", () => {
   it("hands back what the component holds, exactly", async () => {
     const t = await seeded()
     const asU1 = t.withIdentity({ subject: 'u1' })
-    expect(await asU1.query(api.safebyok.getBundle, { scope: u1 })).to.deep.equal(bundleOf('u1'))
-    expect(await asU1.query(api.safebyok.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(boxOf('anthropic_api_key', 'a1'))
+    expect(await asU1.query(api.safebyok.getBundle, { scope: u1 })).to.deep.equal(TH.bundleOf('u1'))
+    expect(await asU1.query(api.safebyok.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a1'))
     expect(await asU1.query(api.safebyok.watchVault, { scope: u1 })).to.deep.equal({
       vault_id: 'vault-id-u1', passphrase_epoch: 1, boxes: [['anthropic_api_key', 'rev-a1']],
     })
@@ -65,7 +64,7 @@ describe("SafebyokComponent.api, for the vault's own user", () => {
   it("resolves a failed expectation false, not as a refusal", async () => {
     const t = await seeded()
     const stale = { vault_id: 'vault-id-u1', revision_id: 'rev-a0' }
-    expect(await t.withIdentity({ subject: 'u1' }).mutation(api.safebyok.updateBox, { scope: u1, lockbox: boxOf('anthropic_api_key', 'a2'), expected: stale })).to.be.false
+    expect(await t.withIdentity({ subject: 'u1' }).mutation(api.safebyok.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: stale })).to.be.false
   })
 })
 
@@ -89,15 +88,15 @@ describe("SafebyokComponent.api, for anyone else", () => {
     const asU2 = t.withIdentity({ subject: 'u2' })
     for (const [, call] of EveryCall) { await refusalOf(call(asU2)) }
     const asU1 = t.withIdentity({ subject: 'u1' })
-    expect(await asU1.query(api.safebyok.getBundle, { scope: u1 })).to.deep.equal(bundleOf('u1'))
-    expect(await asU1.query(api.safebyok.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(boxOf('anthropic_api_key', 'a1'))
+    expect(await asU1.query(api.safebyok.getBundle, { scope: u1 })).to.deep.equal(TH.bundleOf('u1'))
+    expect(await asU1.query(api.safebyok.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a1'))
   })
 
   it("shows a user only their own vault: their listing holds none of another's boxes", async () => {
     const t = await seeded()
     const asU2 = t.withIdentity({ subject: 'u2' })
-    await asU2.mutation(api.safebyok.createBundle, { bundle: bundleOf('u2') })
-    expect(await asU2.query(api.safebyok.listBoxSummaries, { scope: scopeOf('u2') })).to.deep.equal([])
+    await asU2.mutation(api.safebyok.createBundle, { bundle: TH.bundleOf('u2') })
+    expect(await asU2.query(api.safebyok.listBoxSummaries, { scope: TH.scopeOf('u2') })).to.deep.equal([])
   })
 
   it("says what to do, calmly, and names no user in a refusal", async () => {
@@ -123,7 +122,7 @@ describe("SafebyokComponent.api, with the host's getUserId", () => {
 
   for (const [getUserId, blurb] of SignedOutCases) {
     it(blurb, async () => {
-      const host = hostWith(getUserId)
+      const host = TH.hostWith(getUserId)
       const t = host.createTest().withIdentity({ subject: 'u1' })
       const refusal = await refusalOf(t.query(host.api.safebyok.getBundle, { scope: u1 }))
       expect(refusal.kind).to.eq('not_permitted')
@@ -131,13 +130,13 @@ describe("SafebyokComponent.api, with the host's getUserId", () => {
   }
 
   it("lets the host map identities to user ids its own way", async () => {
-    const host = hostWith(async (ctx) => {
+    const host = TH.hostWith(async (ctx) => {
       const identity = await ctx.auth.getUserIdentity()
       return identity ? `user|${identity.subject}` : null
     })
     const t = host.createTest().withIdentity({ subject: 'u1' })
-    await t.mutation(host.api.safebyok.createBundle, { bundle: bundleOf('user|u1') })
-    expect(await t.query(host.api.safebyok.getBundle, { scope: scopeOf('user|u1') })).to.deep.equal(bundleOf('user|u1'))
+    await t.mutation(host.api.safebyok.createBundle, { bundle: TH.bundleOf('user|u1') })
+    expect(await t.query(host.api.safebyok.getBundle, { scope: TH.scopeOf('user|u1') })).to.deep.equal(TH.bundleOf('user|u1'))
     const refusal = await refusalOf(t.query(host.api.safebyok.getBundle, { scope: u1 }))
     expect(refusal.kind).to.eq('not_permitted')
   })
