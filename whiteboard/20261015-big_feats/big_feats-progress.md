@@ -45,3 +45,16 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
   `openVault` duck-types `vaultDB`, since `instanceof` breaks across package copies. And #68 plus
   #70 together likely exceed the 16.5 kB `openVault` budget; thread 2 already raised it to 17.5 kB
   on its branch.
+* *Orchestrator:* **Thread 5 (postgres_vaultdb), for thread 6** (from `thread-5-postgres_vaultdb.md`
+  on `20261015-postgres_vaultdb`):
+  - **The listBoxes resolver uses `PostgresVaultDB.listBoxRecords(scope)`**, not `listBoxes`: a
+    VaultDB's public listing (summaries: no `format`, `note: null`) is not valid `doListBoxes`
+    input, so a VaultDB over a wire cannot pass it through. #70 kept listings validated by the
+    listed shape, so `listBoxRecords` stands as built.
+  - The subscription resolver wraps `vaultDB.subscribe(scope, onChange)`; one `listen` (the
+    README's `pg` fan-out) serves every per-request VaultDB. Change channel `safebyok_vault_changes`,
+    payload the scope as JSON.
+  - `describeVaultDB` over a per-request VaultDB needs `TH.perUser`. PGlite starts in about a
+    second; share one per test file and truncate between tests.
+  - Its README's route recipe (a POST handler plus a client VaultDB over `fetch`, tested in
+    `tests/route-recipe.test.ts`) is the REST shape thread 6 parallels.
