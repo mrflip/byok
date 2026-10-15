@@ -6,6 +6,8 @@ import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts, type Vault } from '../src/vault'
 import type { KeyDeriver } from '../src/key-deriver'
+import { Argon2idWebV1, MaxSaltBytes } from '../src/key-deriver-spec'
+import { fromB64 } from '../src/crypto'
 import * as TH from './test-helpers'
 
 /**
@@ -1948,6 +1950,9 @@ describe("lockSoon", () => {
   })
 })
 
+/** The testDeriver's derivation, to put in a deriver of another shape. */
+const cheapDerive: KeyDeriver['deriveKeyBytes'] = (passphrase, saltBytes) => TH.testDeriver.deriveKeyBytes(passphrase, saltBytes)
+
 describe("the key deriver seam", () => {
   it("a vault made under one deriver refuses to unlock under another, by label", async () => {
     const world = makeWorld()
@@ -1977,10 +1982,56 @@ describe("the key deriver seam", () => {
       'argon2id_web_v1',
       { key_deriver_label: 'test_digest_v0', salt_bytes: 16 },
       { ...TH.testDeriver, salt_bytes: 0 },
+      { ...TH.testDeriver, salt_bytes: 1.5 },
+      { ...TH.testDeriver, salt_bytes: MaxSaltBytes + 1 },
       { ...TH.testDeriver, key_deriver_label: '' },
     ]
     for (const notDeriver of NotDerivers) {
       await expectRefusal(world.open({ keyDeriver: notDeriver as unknown as KeyDeriver }), 'bad_option')
+    }
+  })
+
+  it("allows a foolish salt of one byte, and the longest the platform's random source hands out", async () => {
+    for (const saltBytes of [1, MaxSaltBytes]) {
+      const world = makeWorld()
+      const vault = await world.open({ keyDeriver: { ...TH.testDeriver, salt_bytes: saltBytes } })
+      await vault.unlock('pw')
+      const stored = await world.vaultDB.readBundle(TH.scopeOf('u1'))
+      expect(fromB64(stored?.passphrase_salt_b64 ?? '')).to.have.lengthOf(saltBytes)
+    }
+  })
+
+  it("refuses a deriver wearing a supplied spec's label without that spec's parameters", async () => {
+    const world = makeWorld()
+    const Impostors = [
+      { ...TH.testDeriver, key_deriver_label: Argon2idWebV1.key_deriver_label },
+      { ...Argon2idWebV1, iterations: 1, deriveKeyBytes: cheapDerive },
+      { ...Argon2idWebV1, salt_bytes: 32, deriveKeyBytes: cheapDerive },
+    ]
+    for (const impostor of Impostors) {
+      const err = await expectRefusal(world.open({ keyDeriver: impostor }), 'bad_option')
+      expect(err.message).to.include('argon2id_web_v1')
+    }
+  })
+
+  it("takes a stand-in that carries a supplied spec whole, as a WebAssembly Argon2id would", async () => {
+    const world = makeWorld()
+    const standIn: KeyDeriver = { ...Argon2idWebV1, deriveKeyBytes: cheapDerive }
+    const vault = await world.open({ keyDeriver: standIn })
+    await vault.unlock('pw')
+    const stored = await world.vaultDB.readBundle(TH.scopeOf('u1'))
+    expect(stored?.key_deriver_label).to.eq('argon2id_web_v1')
+  })
+
+  it("refuses a deriver that hands back anything but 32 key bytes, and makes no vault of it", async () => {
+    const Outputs = [new Uint8Array(16), new Uint8Array(24), new Uint8Array(64), new Uint8Array(0), 'thirty-two bytes, honest'] as const
+    for (const output of Outputs) {
+      const world = makeWorld()
+      const shortDeriver = { ...TH.testDeriver, deriveKeyBytes: () => Promise.resolve(output as Uint8Array) }
+      const vault = await world.open({ keyDeriver: shortDeriver })
+      await expectRefusal(vault.unlock('pw'), 'bad_option')
+      expect(await world.vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
+      expect(vault.getSnapshot().state).to.eq('absent')
     }
   })
 

@@ -368,3 +368,24 @@ security expert who knows what questions to ask.
   gets zod's issues, which name paths and limits but carry no input (zod's `reportInput` is
   off). The build keeps each module its own file in `dist/` (`unbundle`), so a host's bundle
   carries only the modules its imports reach.
+* 2026-10-15: a host may choose its key derivation. `argon2idDeriver(spec)` takes a whole
+  Argon2id parameter set and a label of the host's own, and runs it through `@noble/hashes` as
+  the supplied deriver does: parameters, not a new construction. `Argon2idWebV1` stays the one
+  supplied spec and what `browserOpts()` uses; no other was added (RFC 9106's first recommended
+  option needs 2 GiB, past what `@noble/hashes` allocates; its second differs from ours only in
+  four lanes, which a single-threaded JavaScript deriver runs one after another; OWASP's figures
+  are server minimums, below ours). **Refused** (`bad_option`), as what cannot run: a salt under
+  8 bytes (`@noble/hashes` and Argon2's reference code refuse it, so a 1-byte salt is refused
+  here) or over 65536 (`getRandomValues`' most), memory under 8 KiB a lane or over 1 GiB, no
+  passes or lanes, a key other than 32 bytes. **Allowed**, as foolish but workable: anything
+  weaker within those bounds -- 8 KiB of memory, one pass. Any `keyDeriver` openVault takes needs
+  a `salt_bytes` from 1 to 65536 (a non-Argon2 deriver, such as `testDeriver`, may take a 1-byte
+  salt), and the vault refuses a `deriveKeyBytes` that hands back anything but 32 bytes, before
+  wrapping anything: WebCrypto would otherwise accept 16 or 24 as a weaker AES key. **Enforced**:
+  a deriver now carries its spec's fields beside its function, and openVault and
+  `argon2idDeriver` refuse one wearing a supplied spec's label (`argon2id_web_v1`) without
+  carrying exactly that spec's parameters, so a WebAssembly or native stand-in cannot quietly
+  derive under others and strand vaults across devices. This checks what a deriver declares, not
+  the bytes it derives: a stand-in is the host's to test against `argon2idWebV1Deriver`. A host's
+  own label is not checked against anything, since a vault stores only the label; the host must
+  never change a label's parameters. The stored format is unchanged.
