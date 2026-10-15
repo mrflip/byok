@@ -1,14 +1,14 @@
 # Sprint pr_releases: progress
 
-**Status**: paused: all three threads on GitHub (#15, #16 filed; #22 draft); #15, #16 restored to the workers' tips after a flawed rebase; none restacked onto current main.
+**Status**: done: all three threads merged on 2026-10-15, restacked onto `main` first (below).
 
 ## Status
 
 | # | Thread | Model | Base | Status |
 | - | ------ | ----- | ---- | ------ |
-| 1 | `20261014-react_publishable` | sonnet | `origin/main` | filed [#15](https://github.com/mrflip/safebyok/pull/15) |
-| 2 | `20261014-core_under_packages` | opus | thread 1's tip (#15) | filed [#16](https://github.com/mrflip/safebyok/pull/16) |
-| 3 | `20261014-changeset_releases` | opus | thread 2's tip (#16) | draft [#22](https://github.com/mrflip/safebyok/pull/22), needs restack |
+| 1 | `20261014-react_publishable` | sonnet | `origin/main` | merged [#15](https://github.com/mrflip/safebyok/pull/15) |
+| 2 | `20261014-core_under_packages` | opus | thread 1's tip (#15) | merged [#16](https://github.com/mrflip/safebyok/pull/16) |
+| 3 | `20261014-changeset_releases` | opus | thread 2's tip (#16) | merged [#22](https://github.com/mrflip/safebyok/pull/22) |
 
 ## What the threads have taught
 
@@ -81,4 +81,17 @@ as burned); "already staged" is recognised only by npm's "previously published" 
 tag push or release creation is not retried by a re-run; global `npm@12.2.0` installed unpinned by hash in
 `publish`. Not run: `npm stage`, the workflows, actionlint (not installed in the reviewer's sandbox).
 
-*Orchestrator, state at pause (2026-10-15):* all three threads are on GitHub. Another session rebased #15 and #16 onto the newer `main` and the build went red; at the Coach's word, GitHub was overwritten with the workers' own pre-rebase tips (force-push, leased on the rebased tips `651d425` and `47b1175`): #15 is `495a01e` and #16 is `dae73d2` again, as reviewed. The rebased versions are still in the main checkout's local branches. Thread 3 is draft [#22](https://github.com/mrflip/safebyok/pull/22), standing on `dae73d2` with the reviewer's fix committed as its last commit. None of the three has been restacked onto the current `main` (convex PRs #17, #18, #19 have merged since); the Coach is continuing in a new sprint thread. The sprint-doc mirror holds full-text Plan and Progress tabs; the preplan, thread files and `human/` entries are not yet mirrored there.
+*Orchestrator, at close (2026-10-15):* the sprint resumed in a new session and the three threads were
+restacked onto `main` (after #17 to #21), then merged in order. The earlier restack went red because
+`safebyok-convex`, new on `main`, lacked the `build:deps` hooks; the restack added them, gave convex the
+binding's coverage and CI treatment, set `workspaceConcurrency: 1` (four commits on #15), moved main's new
+`tests/vault-db-suite.ts` with the core and repointed the Convex tests at it (two commits on #16). #22 took
+no code fix-ups; it gained an empty changeset (`.changeset/releases-bootstrap.md`) to pass its own
+"Require a changeset" gate, which turned out unneeded once #15 and #16 were on `main`, and is harmless
+(the release run on #22's merge chose "none"). Before merging, the Coach allowed Actions to create PRs
+and widened the tag ruleset "versions are frozen" to `refs/tags/safebyok*@*`; an App token for the
+Version PR is the Coach's next step. Left over, logged in TODO.md's *Sand in the sandals* (branch
+`20261015-pr_releases_b`): `vault.test.ts`'s altered-ciphertext flake
+([#25](https://github.com/mrflip/safebyok/pull/25) fixed only `crypto.test.ts`'s), dependabot's
+`directory: /` after the move, and a click-through of the demo's passphrase dialog. For the first real
+release: the first changeset, and the four checks only it can make (preplan).
