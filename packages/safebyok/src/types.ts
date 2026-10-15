@@ -165,7 +165,8 @@ export type VaultBundle = Z.infer<typeof VaultBundle>
 /**
  * The latest instant the package accepts, in epoch ms: the microsecond epochalypse, the last
  * millisecond whose epoch *microseconds* still fit a safe integer, 2255-06-05T23:47:34.740Z. No
- * deadline the vault makes, and no stored time it reads, lies past it; see {@link EpochMillis}.
+ * deadline the vault makes lies past it, and a remembered unlock whose stored deadline does reads
+ * as none; see {@link EpochMillis}.
  *
  * `askPassphraseAt` equals it when the vault never asks for the passphrase again on this device
  * until `lock()`: `forcePassphraseReentryHours: Infinity`, or a window so large its deadline
@@ -177,17 +178,17 @@ export type VaultBundle = Z.infer<typeof VaultBundle>
 export const FarFuture = 9_007_199_254_740 // Math.floor(Number.MAX_SAFE_INTEGER / 1000)
 
 /**
- * The earliest instant the package accepts, in epoch ms: 1981-01-01T00:00:00Z. No time this
- * package writes is older; see {@link EpochMillis}.
+ * The earliest instant the package accepts, in epoch ms: 1981-01-01T00:00:00Z. A remembered
+ * unlock whose stored deadline is older reads as none; see {@link EpochMillis}.
  *
  * @example new Date(FarPast).toISOString()   // '1981-01-01T00:00:00.000Z'
  */
 export const FarPast = 347_155_200_000 // Date.UTC(1981, 0, 1)
 
 /**
- * Validator for an instant, as every time in this package is kept: whole UTC epoch milliseconds,
- * from {@link FarPast} (1981) to {@link FarFuture} (2255), both included. A host can check its
- * own times with it.
+ * Validator for an instant as whole UTC epoch milliseconds, from {@link FarPast} (1981) to
+ * {@link FarFuture} (2255), both included. The device record's `expires_at` is one, and a host
+ * can check its own times with it.
  *
  * The bounds catch a unit mistake either way. Epoch *seconds* read as milliseconds land in
  * January 1970, below the floor; epoch *microseconds* read as milliseconds land tens of
