@@ -11,8 +11,10 @@ Bring Your Own Key (BYOK) Browser Vault using E2EE (End-to-end Encryption) and p
 * Accessing a vault is prohibitively difficult -- even given the application's database, code and environment.
 
 It is react-friendly (`safebyok-react`) and database agnostic: storage adapters implement a small
-abstract seam, and ship as packages of their own -- `safebyok-indexeddb` for a vault kept in this
-browser, `safebyok-convex` for Convex. The IndexedDB device store ships in `safebyok/idb`.
+abstract seam, and ship as packages of their own, each `safebyok-<store>` -- `safebyok-indexeddb`
+for a vault kept in this browser, `safebyok-convex` for Convex, `safebyok-postgres` for Postgres
+on the host's server, and `safebyok-graphql` to reach a server's VaultDB over GraphQL. The IndexedDB
+device store ships in `safebyok/idb`.
 `safebyok/testing` is for tests only, star-imported as `TH`: a cheap key deriver, a vault's
 options over stores in memory (`memoryVaultOpts`), shape-valid records with fake ciphertext, a
 live device unlock, small timing and tampering aids, a way to hold or slip work into an
@@ -292,9 +294,9 @@ user sets a new passphrase.
 
 Every vault call that refuses throws a `VaultError` (`isVaultError(err, kind?)` tests for one),
 with a calm message and a `kind` to branch on. The kinds are `VaultErrorKindVals`, and the
-whole list: the storage adapters (`safebyok-convex`, your own) throw these same kinds, and no
-package has others. An error never carries a whisper, a passphrase or any other secret, in its
-message or as a property.
+whole list: the storage adapters (`safebyok-indexeddb`, `safebyok-convex`, `safebyok-postgres`,
+`safebyok-graphql`, your own) throw these same kinds, and no package has others. An error never
+carries a whisper, a passphrase or any other secret, in its message or as a property.
 
 The kinds fall into two families, told apart by who must act.
 

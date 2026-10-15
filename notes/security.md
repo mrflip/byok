@@ -522,6 +522,11 @@ security expert who knows what questions to ask.
   its working memory (the spec's whole memory_kib, in a fresh WebAssembly instance, and in Node
   the passphrase's UTF-8 bytes in a pooled Buffer) as it is, for the garbage collector: material
   from which the passphraseKey follows stays in the heap until then.
+* 2026-10-15: **Dependencies: hash-wasm has no published audit.** `safebyok-argon2-wasm`'s one
+  runtime dependency, `hash-wasm`, derives the passphraseKey for every vault made or opened
+  through it, and no audit of it, or of the C its WebAssembly is compiled from, has been
+  published; `@noble/hashes`, the core's Argon2id, has one. Its working memory is never zeroed
+  (the entry above).
 * 2026-10-15: the IndexedDB vault store moved to a package of its own, `safebyok-indexeddb`, and
   each of its write verbs (`createBundle`, `updateBundle`, `updateBox`, `eraseBox`, `eraseVault`)
   is now one readwrite IndexedDB transaction, which reads the standing rows, compares them with
