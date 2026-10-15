@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
-import { isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
-import { useEffect, useState } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
+import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot } from '../src/vault-provider'
 
 /** A cheap deriver (one SHA-256) so the suite is not a benchmark of Argon2id. */
@@ -57,7 +57,18 @@ const makeWorld = () => {
   return { vaultDB, deviceDB, mount }
 }
 
-afterEach(cleanup)
+/** Catches what its children throw while rendering, keeping the very thrown value for the test. */
+class CatchingBoundary extends Component<{ caught: unknown[], children: ReactNode }, { failed: boolean }> {
+  override state = { failed: false }
+  static getDerivedStateFromError() { return { failed: true } }
+  override componentDidCatch(err: Error, _info: ErrorInfo) { this.props.caught.push(err) }
+  override render() { return this.state.failed ? <span data-testid="state">boundary</span> : this.props.children }
+}
+
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe("VaultProvider", () => {
   it("provides no vault without a signed-in user", () => {
@@ -167,5 +178,59 @@ describe("VaultProvider", () => {
       refusal = err
     }
     expect(isVaultError(refusal, 'whisper_too_large')).to.be.true
+  })
+
+  describe("when openVault rejects", () => {
+    /** React reports a boundary-caught render error on the console; the suite stays quiet about it. */
+    const hushConsole = () => vi.spyOn(console, 'error').mockImplementation(() => { /* expected */ })
+
+    it("throws a bad label to the error boundary, as the very VaultError", async () => {
+      hushConsole()
+      const caught: unknown[] = []
+      render(
+        <CatchingBoundary caught={caught}>
+          <VaultProvider applabel="Not A Label" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())}
+            deviceDB={memoryDeviceDB()} keyDeriver={testDeriver}>
+            <Probe />
+          </VaultProvider>
+        </CatchingBoundary>,
+      )
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('boundary') })
+      expect(caught).to.have.length(1)
+      expect(isVaultError(caught[0], 'bad_label')).to.be.true
+    })
+
+    it("throws storage trouble to the error boundary too", async () => {
+      hushConsole()
+      const world = makeWorld()
+      const trouble = new VaultError('storage_unavailable', 'The vault storage could not be reached.')
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(trouble)
+      const caught: unknown[] = []
+      render(
+        <CatchingBoundary caught={caught}>
+          <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={world.vaultDB} deviceDB={world.deviceDB} keyDeriver={testDeriver}>
+            <Probe />
+          </VaultProvider>
+        </CatchingBoundary>,
+      )
+      await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('boundary') })
+      expect(caught[0]).to.eq(trouble)
+    })
+
+    it("opens nothing, and so throws nothing, while nobody is signed in", async () => {
+      hushConsole()
+      const caught: unknown[] = []
+      render(
+        <CatchingBoundary caught={caught}>
+          <VaultProvider applabel="Not A Label" vaultlabel="main" userId={null} vaultDB={localVaultDB(memoryStore())}
+            deviceDB={memoryDeviceDB()} keyDeriver={testDeriver}>
+            <Probe />
+          </VaultProvider>
+        </CatchingBoundary>,
+      )
+      await new Promise((resolve) => { setTimeout(resolve, 0) })
+      expect(screen.getByTestId('state').textContent).to.eq('no vault')
+      expect(caught).to.have.length(0)
+    })
   })
 })
