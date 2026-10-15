@@ -1,8 +1,8 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 2 in review; 1, 3, 4, 5, 9, 10, 11 filed; 6, 7, 8 wait on 2. Newer than the plan wherever the two disagree.
+**Status**: 2 in review (re-run after an API error); 10 applying the Coach-approved script fix; 1, 3, 4, 5, 9, 11 filed; 6, 7, 8 wait on 2. Newer than the plan wherever the two disagree.
 
-Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
+Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
 ## Status
 
@@ -17,17 +17,13 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
-| 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
+| 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36); applying the approved script fix |
 | 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
 ## For the Coach
 
-* **Thread 10's root scripts drop extra arguments** (its review): they end in
-  `exit $(( root || $? ))` and pnpm appends arguments after it, so `pnpm lint --fix` loses them
-  (dash) or exits 1 with "too many arguments" (bash-as-`sh`, macOS). Nothing passes arguments
-  today. The reviewer's fix (`both() { ...; pnpm -r ... "$@"; ...; }; both`) **was refused by the
-  permission system** ("Modify Shared Resources" on root `package.json`), so it is not applied,
-  and the orchestrator did not hand it to another agent. Yours to apply or have applied.
+* ~~**Thread 10's root scripts drop extra arguments**~~ -- *the Coach approved the reviewer's
+  fix in chat at about 04:55 UTC*; thread 10's worker is applying it as a new commit on #36.
 
 * **[#31](https://github.com/mrflip/safebyok/pull/31) conflicts with main** since #29 merged
   (`demos/safebyok-demo-react/src/lib/auth.ts`, a small textual overlap). Rebasing a filed
@@ -114,9 +110,9 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   server-side grammar in Convex.
 * **Process**: `strict_configs` landed as [#29](https://github.com/mrflip/safebyok/pull/29) (one
   strict tsconfig base, a `@safebyok/source` condition, eslint configs cut from the core's):
-  threads cut before it rebase onto it at filing. Changesets are named
-  `.changeset/20261015-<label>.md` by hand until [#30](https://github.com/mrflip/safebyok/pull/30)
-  lands. Commit prefixes come from PROCESS.md's table only (`api:` for an entry point, `client:`
+  threads cut before it rebase onto it at filing. `pnpm changeset` names files `.changeset/YYYYMMDD-<label>.md` itself since
+  [#30](https://github.com/mrflip/safebyok/pull/30)
+  landed (now on main, as is #26's preplan, STYLE.md and TODO.md). Commit prefixes come from PROCESS.md's table only (`api:` for an entry point, `client:`
   for the React package). Main-checkout moves have been the owner's each time (another agent's
   work becoming #30; a rebase of `20261015-roadmap_fruit`): reviewers report them and judge.
   Slots count builders, not reviews.

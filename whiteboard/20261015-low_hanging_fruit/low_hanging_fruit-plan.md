@@ -16,8 +16,9 @@ directory: `whiteboard/20261015-low_hanging_fruit/`. Sprint doc (live mirror, a 
 ## Read first
 
 * `CLAUDE.md`, `PROCESS.md`, `STYLE.md`, `VOCABULARY.md` (main's copies).
-* **From [#26](https://github.com/mrflip/safebyok/pull/26), unmerged, so not in your worktree**:
-  read with `git -C /workspace/byok show 20261015-roadmap_fruit:<path>`:
+* *Orchestrator, 04:55 UTC:* **[#26](https://github.com/mrflip/safebyok/pull/26) has merged**, so a
+  thread cut from today's `origin/main` has these files; a thread stacked on an older branch reads
+  them with `git -C /workspace/byok show origin/main:<path>`:
   - `whiteboard/20261014-low_hanging_fruit/20261014-low_hanging_fruit-preplan.md`, the source of
     every thread below. Its header ("Rulings these rest on") and its *Open to the Coach* apply to
     all of you.
