@@ -79,6 +79,20 @@ describe("idbDeviceDB", () => {
     expect(rows.map((row) => row.ckey)).to.deep.equal([Ckeys.unlock(TH.scopeOf('u2'))])
   })
 
+  it("rings the device shelf's bell when a read sweeps, so an inspector stops showing the swept rows", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    let heardCount = 0
+    const unsubscribe = inspectIdbDeviceDB({ dbName }).subscribe(() => { heardCount += 1 })
+    await deviceDB.readUnlock(TH.scopeOf('u2'))
+    expect(heardCount).to.equal(1)
+    await deviceDB.readUnlock(TH.scopeOf('u2'))
+    expect(heardCount).to.equal(1)
+    unsubscribe()
+  })
+
   it("forgets the scope's own unlock at an erase even when the sweep fails", async () => {
     const dbName = TH.freshDbName()
     const deviceDB = idbDeviceDB({ dbName })
