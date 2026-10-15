@@ -321,6 +321,8 @@ security expert who knows what questions to ask.
   core's lint refuses classic `zod` in `src/`). Same checks, limits and messages as before; mini
   shares classic's parsing core, and the test suite passes against zod 4.0.0, the peer range's
   floor, as against the current 4.6. Mini loads no locale, so a zod issue's default message is
-  generic, but no zod message ever reaches a caller: every refusal is a VaultError of our own
-  wording. The build keeps each module its own file in `dist/` (`unbundle`), so a host's bundle
+  generic, but no zod message reaches a caller of the vault or its VaultDB: every refusal there
+  is a VaultError of our own wording. A host calling an exported schema's `.safeParse` itself
+  gets zod's issues, which name paths and limits but carry no input (zod's `reportInput` is
+  off). The build keeps each module its own file in `dist/` (`unbundle`), so a host's bundle
   carries only the modules its imports reach.
