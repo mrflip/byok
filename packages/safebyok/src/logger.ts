@@ -23,7 +23,7 @@ import { consoleLogger } from './console-logger'
  *   }
  *   const vault = await openVault({ ...opts, logger })
  * @example openVault({ ...opts, logger: { log: () => {}, warn: () => {}, error: () => {} } })  // silent
- * @example openVault({ ...opts, logger: console })  // as the default, without the 'safebyok:' tag
+ * @example openVault({ ...opts, logger: console })  // untagged, a missing story or error printed as undefined or null
  */
 export type VaultLogger = {
   /** Something worth knowing, with nothing to act on. */

@@ -150,7 +150,8 @@ const vault = await openVault({
 ```
 
 With no logger, the vault writes to the console, each message tagged `safebyok:`. Pass functions
-that do nothing for quiet, or `console` itself to drop the tag. A logger that throws, or returns
+that do nothing for quiet, or `console` itself to drop the tag (it then prints a missing story or
+error as `undefined` or `null`). A logger that throws, or returns
 a promise that rejects, is ignored: logging never breaks a lock, an open or a store. Anything
 else is refused as `bad_option`.
 
