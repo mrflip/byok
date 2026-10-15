@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as ZClassic from 'zod'
-import { EpochMillis, FarFuture, FarPast, Label, Lockbox, LockboxNote, LockboxSummary, MaxUnlocks, MaxUserIdChars, UserId, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { EpochMillis, FarFuture, FarPast, ForeverMs, Label, Lockbox, LockboxNote, LockboxSummary, MaxUnlocks, MaxUserIdChars, UserId, VaultBundle, VaultScope, Whisper } from '../src/types'
 import * as TH from './test-helpers'
 
 const WhisperCases = [
@@ -265,6 +265,13 @@ describe("FarFuture", () => {
     const shown = (askPassphraseAt: number): string => (askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toISOString())
     expect(shown(FarFuture)).to.eq('until locked')
     expect(shown(Date.UTC(2026, 9, 22))).to.eq('2026-10-22T00:00:00.000Z')
+  })
+})
+
+describe("ForeverMs", () => {
+  it("runs from FarPast to FarFuture, as its examples show", () => {
+    expect(ForeverMs).to.eq(FarFuture - FarPast)
+    expect(FarPast + ForeverMs).to.eq(FarFuture)
   })
 })
 
