@@ -308,7 +308,9 @@ Function, connected with your project's database connection string, its `userId`
 * **Listen over a direct or session-mode connection.** LISTEN needs a connection of its own for
   as long as it listens; the transaction-mode pooler (port 6543) cannot give it one.
 
-This section is a reading of Supabase's documentation, not something the package's tests run.
+**Untested on Supabase.** This package has not been run against Supabase. This section is a reading of
+Supabase's documentation, not something the package's tests run: try it against a project of your
+own before you rely on it.
 
 ## Writing an adapter of your own
 
