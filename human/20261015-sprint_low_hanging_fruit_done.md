@@ -34,7 +34,7 @@ stopped at about 04:50 UTC, when the Docs tools disconnected; the repo files are
    `tsdown.config.ts`: `safebyok/browser` (#40) and the error-kind comments (#34) landed beside it. Mechanical;
    a rebase and force-push. #50 widens nothing it touches.
 
-Plus this sprint's own PR (documents only: plan, progress, this note, and TODO.md's two additions at your word),
+Plus this sprint's own PR, [#51](https://github.com/mrflip/safebyok/pull/51) (documents only: plan, progress, this note, and TODO.md's two additions at your word),
 any time.
 
 The five rebases are yours, or say the word and the workers do them with `--force-with-lease`.
