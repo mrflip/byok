@@ -115,14 +115,26 @@ class ConvexVaultDB extends VaultDB {
   // ConvexReactClient already watching this vault delivers no first result at all, only changes.
   // A refresh that finds nothing new costs two queries and no render.
   protected override doSubscribe(scope: VaultScope, onChange: () => void): () => void {
+    const unsubscribe = this.watch(scope, onChange)
+    // Convex counts a query's watchers, and each of its unsubscribes counts down again however
+    // often it is called: a second call would end another watch of the vault (the app's own, or
+    // another vault handle's) on the same client. So only the first call reaches Convex.
+    let subscribed = true
+    return () => {
+      if (! subscribed) { return }
+      subscribed = false
+      unsubscribe()
+    }
+  }
+
+  private watch(scope: VaultScope, onChange: () => void): () => void {
     const args = { scope }
     if ('watchQuery' in this.client) {
       return this.client.watchQuery(this.api.watchVault, args).onUpdate(() => { onChange() })
     }
     // A failing watch has nobody to throw to: without this handler, ConvexClient throws it from
     // inside its socket. The vault's next foreground call meets the same trouble and says so.
-    const unsubscribe = this.client.onUpdate(this.api.watchVault, args, () => { onChange() }, ignoreTrouble)
-    return () => { unsubscribe() }
+    return this.client.onUpdate(this.api.watchVault, args, () => { onChange() }, ignoreTrouble)
   }
 }
 

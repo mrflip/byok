@@ -227,6 +227,20 @@ describe("convexVaultDB.subscribe", () => {
       expect(onChange.mock.calls.length).to.eq(heardBefore)
     })
 
+    it(`unsubscribes once over a ${clientTitle}, however often it is called, leaving another watch of the vault be`, async () => {
+      const deployment = deploy()
+      const client = connect(deployment, 'u1')
+      const alongside = vi.fn()
+      convexVaultDB(client, deployment.api.safebyok).subscribe(u1, alongside)
+      await vi.waitFor(() => { expect(alongside).toHaveBeenCalled() })
+      const unsubscribe = convexVaultDB(client, deployment.api.safebyok).subscribe(u1, () => undefined)
+      unsubscribe()
+      unsubscribe()
+      const heardBefore = alongside.mock.calls.length
+      await convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok).createBundle(bundleOf('u1'))
+      await vi.waitFor(() => { expect(alongside.mock.calls.length).to.be.greaterThan(heardBefore) })
+    })
+
     it(`subscribes calmly over a ${clientTitle} while signed out, and throws nothing later`, async () => {
       const deployment = deploy()
       const here = convexVaultDB(connect(deployment, null), deployment.api.safebyok)
