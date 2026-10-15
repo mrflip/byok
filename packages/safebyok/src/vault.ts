@@ -135,7 +135,8 @@ export type Vault = {
    * A vault with several passphrases tries this one against each in turn, one key derivation
    * apiece (with the browser's deriver, about half a second each), so a wrong passphrase takes
    * longest. `opts.unlockId`, from the snapshot's `unlocks`, aims it at that passphrase alone:
-   * one derivation, and kind 'absent_unlock' when the vault has no such passphrase.
+   * one derivation, and kind 'absent_unlock' when the vault has no such passphrase. An aimed
+   * unlock never creates the vault: on an `absent` one, it too refuses as 'absent_unlock'.
    *
    * A `lock()`, `lockSoon()` or `destroy()` called while the unlock is still under way wins: the
    * vault stays locked, this device remembers nothing, and the call throws kind 'vault_locked'. A vault the
@@ -473,10 +474,14 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   /**
    * The vaultKey for an unlock, and the bundle it was proven against: creating the vault when
-   * absent, proving the passphrase when not.
+   * absent, proving the passphrase when not. An unlock aimed at one way in never creates: the
+   * vault it named no longer stands.
    */
   const settleUnlock = async (passphrase: string, unlockId: string | undefined): Promise<{ standing: VaultBundle } & VaultKeyPair> => {
     if (bundle === null || bundle === UnreadBundle) {
+      if (unlockId !== undefined) {
+        throw new VaultError('absent_unlock', "This vault has no way in with that unlock_id: it does not exist, and may have been destroyed on another device. Unlock without an unlockId to create it anew.")
+      }
       const { draft, transientKey, sessionKey } = await draftBundle(passphrase)
       const settled = await vaultDB.createBundle(draft)
       bundle = settled
