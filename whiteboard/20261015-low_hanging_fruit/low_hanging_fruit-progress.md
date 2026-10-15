@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 2 in review (re-run after an API error); 1, 3, 4, 5, 9, 10, 11 filed; 6, 7, 8 wait on 2. Newer than the plan wherever the two disagree.
+**Status**: 2 filing; 1, 3, 4, 5, 9, 10, 11 filed; 6 and 8 start from 2 once it files, then 7. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -9,7 +9,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | #  | Thread | Base | Status |
 | -- | ------ | ---- | ------ |
 | 1  | `vault_size_cap` | `origin/main` | filed [#34](https://github.com/mrflip/safebyok/pull/34) |
-| 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | in review |
+| 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | filing |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
 | 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37) |
@@ -80,6 +80,12 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   - For whoever lands second: #33's *Locking* section mentions `rememberForMs` (rename it);
     #37's `safebyok/utils` shares the `tsdown.config.ts`, `exports` and `typesVersions` lines.
     The React passphrase dialog always says "seven days" (for the expiry thread).
+  - *Review* (re-run after an API error): fixed -- the security note and changeset now say noble
+    is dropped only by a tree-shaking bundler (the main entry still re-exports
+    `argon2idWebV1Deriver`). Left: no cap on `forcePassphraseReentryHours` lets an absurd value
+    push `askPassphraseAt` past MAX_SAFE_INTEGER (Coach); a remembered unlock keeps its old
+    deadline (expiry thread); `salt_bytes` unbounded (crypto policy); `dbName` unvalidated in all
+    three idb functions; the bundle test reads `src/` (thread 8 covers `dist/`).
 * **Thread 3** (`provider_open_rejection`, [#32](https://github.com/mrflip/safebyok/pull/32)):
   `VaultProvider` throws a rejected `openVault` during render; the React README's "When opening
   fails" section tells hosts to wrap it in an error boundary keyed on `userId`. *Review:* fixed
