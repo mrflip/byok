@@ -63,7 +63,7 @@ export type ConvexVaultClient = ConvexWatchingClient | ConvexReactWatchingClient
  * @example
  *   import { api } from '../convex/_generated/api'
  *   const vaultDB = convexVaultDB(convex, api.safebyok)
- *   const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB, deviceDB: idbDeviceDB() })
+ *   const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB, ...browserOpts() })
  */
 export const convexVaultDB = (client: ConvexVaultClient, api: SafebyokApi): VaultDB => {
   if (! isConvexClient(client)) {

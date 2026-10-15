@@ -50,7 +50,8 @@ export const useVaultSnapshot = (): VaultSnapshot => {
 
 /**
  * Every openVault option, passed through as given (an option left out gets openVault's default),
- * except that `userId` may be null.
+ * except that `userId` may be null. In a browser, spread `browserOpts()` from `safebyok/browser`
+ * for the `keyDeriver` and `deviceDB` openVault asks for.
  */
 export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
   /** The signed-in user from the host's auth, or null when nobody is: then there is no vault. */
@@ -65,8 +66,8 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
  * `modal-scrim` / `modal` class names; the host's stylesheet dresses it.
  *
  * @example
- *   <VaultProvider applabel="acme" vaultlabel="main" userId={session?.userId ?? null}
- *     vaultDB={vaultDB} deviceDB={deviceDB}>
+ *   <VaultProvider {...browserOpts()} applabel="acme" vaultlabel="main" userId={session?.userId ?? null}
+ *     vaultDB={vaultDB}>
  *     <App />
  *   </VaultProvider>
  */
