@@ -168,8 +168,10 @@ const eraseExpectationIn = (args: VaultFieldArgs): EraseExpectation => {
  * ending the iteration -- which a GraphQL server does when the subscription ends -- cancels the
  * stream, which unsubscribes. A change heard while one is still waiting to be read is that one:
  * either says the vault changed. A refusal from `subscribe` throws at once, before any stream is
- * made. The stream's own iterator goes back, being its own iterable as a GraphQL server expects:
- * graphql-js asks an iterable for its iterator twice, and a stream gives only one.
+ * made. The stream is read through a reader, not its own iterator: that one's `return` waits for
+ * a pending `next`, which for a quiet vault is forever, so a subscriber gone while it waited would
+ * keep the VaultDB listening. A reader's `cancel` ends the pending read as done, at once. The
+ * iterator is its own iterable, as a GraphQL server expects: graphql-js asks for it twice.
  */
 const changesOf = (vaultDB: ServedVaultDB, scope: VaultScope): AsyncIterableIterator<VaultScope> => {
   let unsubscribe = noUnsubscribing
@@ -182,7 +184,16 @@ const changesOf = (vaultDB: ServedVaultDB, scope: VaultScope): AsyncIterableIter
     },
     cancel: () => { unsubscribe() },
   })
-  return changes.values()
+  const reader = changes.getReader()
+  const iterator: AsyncIterableIterator<VaultScope> = {
+    next:   () => reader.read(),
+    return: async () => {
+      await reader.cancel()
+      return { done: true, value: undefined }
+    },
+    [Symbol.asyncIterator]: () => iterator,
+  }
+  return iterator
 }
 
 const noUnsubscribing = (): void => undefined
