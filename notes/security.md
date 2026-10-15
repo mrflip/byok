@@ -30,8 +30,16 @@ security expert who knows what questions to ask.
   JS, audited, no WASM -- at about half a second per derivation in V8. AES-256-GCM encryption,
   key wrapping and randomness come from WebCrypto (`crypto.subtle`, `crypto.getRandomValues`).
 * 2026-10-14: the key deriver is a seam (`OpenVaultOpts.keyDeriver`): the pinned Argon2id deriver
-  is the default, tests substitute a cheap SHA-256 deriver, and a stored vault records its
+  was the default until 2026-10-15 (below), tests substitute a cheap SHA-256 deriver, and a stored vault records its
   deriver's label and refuses to unlock under any other.
+* 2026-10-15: `openVault` has no default key deriver: `keyDeriver` is required, and
+  `browserOpts()` (the `safebyok/browser` entry) supplies the pinned Argon2id one. An app that
+  passes none is refused with `bad_option`, never quietly given one. `openVault` imports no
+  Argon2id and the main entry nothing from `safebyok/browser`, but the main entry still
+  re-exports `argon2idWebV1Deriver`: Argon2id stays out of an app only where a bundler
+  tree-shakes it (the package is `sideEffects: false`), not under a plain `require('safebyok')`
+  or an unbundled import. Substituting a deriver still commits every vault made under it to its
+  label, as above.
 * 2026-10-14: every encryption binds its context as AES-GCM additional data
   (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus passphraseEpoch
   for key wraps and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
@@ -94,7 +102,7 @@ security expert who knows what questions to ask.
   passphrase against it. A passphrase changed elsewhere does not stop a stale session's
   `store()` or `erase()` (their expectations carry no epoch); the session relocks on its next
   look at the bundle.
-* 2026-10-14: the unlock window (today `rememberForMs`, becoming `forcePassphraseReentryHours`)
+* 2026-10-14: the unlock window (`forcePassphraseReentryHours`, `rememberForMs` until 2026-10-15)
   is chosen by the app at each `openVault`, so two devices on one vault may hold different
   windows. It is client-side politeness, not a vault-wide synced policy: nothing stored enforces
   it across devices, and a modified client could choose any window it likes. The real bounds
@@ -150,6 +158,21 @@ security expert who knows what questions to ask.
   are refused `not_permitted` from then on, and its failing `watchVault` subscription is ignored,
   but the unlocked vaultKey stays in memory until the vault locks, expires or is closed. The
   README tells apps to close the vault on sign-out; nothing enforces it.
+* 2026-10-15: a vault's lockbox count is capped on the client only (`maxLockboxes`, `store()`
+  refusing `vault_full`), counted from the handle's last look at storage, so stores of new
+  lockboxes running at once -- on several devices, or on one handle, since nothing serializes
+  them -- can overshoot it. Neither in-tree backend enforces a count or a size per vault. On
+  Convex, where `destroy()` erases the vault in one transaction under a 16 MiB read budget, a
+  vault grown past what the cap admits (by a modified client, or many overshoots) may become
+  impossible to erase whole: the vault half of deleting an account.
+* 2026-10-15: records crossing into the core are checked where they cross, and trusted past it.
+  A host's `store()` note is checked against the stored lockbox's own schema before anything is
+  written (an unchecked over-long note once made every later `openVault` refuse the vault as
+  `corrupt_record`). Whatever a `DeviceDB` hands back -- the host may supply its own -- is checked
+  against `DeviceUnlock` by the vault, and one that does not pass is erased and reads as no
+  remembered unlock. `VaultDB`'s write verbs check labels and scope only, not the records the
+  vault builds. A remembered unlock's `expires_at` is not bound into its encryption, so whoever
+  can write this device's IndexedDB can extend it (to any finite number of milliseconds).
 * 2026-10-14: releases run from `.github/workflows/release.yml` on every push to main, in jobs
   that each hold only what they need. Only `publish` (in the `npm` environment) may mint an npm
   OIDC token, and it runs no package's scripts (`pnpm install --ignore-scripts`): it stages the
@@ -175,3 +198,11 @@ security expert who knows what questions to ask.
   can use that token when it next runs. The token can create branches and tags and open, edit and
   close pull requests; whether it can also push to or merge into `main` depends on the branch
   protection's allowances for the App, which this repository's files do not record.
+* 2026-10-15: `store()` retries a write storage refused as stale, up to three attempts in all.
+  Every attempt reads the box afresh and seals the whisper anew, under its own lockboxKey and
+  `revision_id`: a refused attempt's ciphertext is never reused, so no two ciphertexts share a
+  binding. The retry's first act is to require unlocked, so a refusal that caught the device up
+  with a vault reborn elsewhere (or a changed passphrase) relocks it and ends the retry as
+  `vault_locked` before any whisper is sealed for the new vault. A retry overwrites what the
+  other device wrote (last writer wins), as a host's own retry did, except that a box erased
+  elsewhere is not brought back (an erase wins: `stale_write` at once); `erase()` is never retried.

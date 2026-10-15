@@ -1,8 +1,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
-import { VaultProvider, useVault, useVaultSnapshot } from '../src/vault-provider'
+import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
 
 /** A cheap deriver (one SHA-256) so the suite is not a benchmark of Argon2id. */
 const testDeriver: KeyDeriver = {
@@ -157,6 +157,10 @@ describe("VaultProvider", () => {
     expect(screen.getByTestId('boxcount').textContent).to.eq('0')
   })
 
+  it("asks for a keyDeriver outright, as openVault does", () => {
+    expectTypeOf<Pick<VaultProviderProps, 'keyDeriver'>>().toEqualTypeOf<{ keyDeriver: KeyDeriver }>()
+  })
+
   it("passes every openVault option through, as given", async () => {
     const seen: { vault: Vault | null } = { vault: null }
     const Grab = () => {
@@ -166,7 +170,7 @@ describe("VaultProvider", () => {
     }
     render(
       <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())} deviceDB={memoryDeviceDB()}
-        keyDeriver={testDeriver} clock={{ now: () => 1000 }} rememberForMs={60_000} maxWhisperBytes={8}>
+        keyDeriver={testDeriver} clock={{ now: () => 1000 }} forcePassphraseReentryHours={1} maxWhisperBytes={8} maxLockboxes={1}>
         <Grab />
       </VaultProvider>,
     )
@@ -175,7 +179,8 @@ describe("VaultProvider", () => {
     if (vault === null) { throw new Error('the provider opened no vault') }
 
     await vault.unlock('correct horse battery staple')
-    expect(vault.getSnapshot().expiresAt).to.eq(61_000)
+    // One hour, 3,600,000 ms, after the clock's 1000.
+    expect(vault.getSnapshot().askPassphraseAt).to.eq(3_601_000)
     // 'sk-fake' is nine bytes of JSON, one over the limit given.
     let refusal: unknown = null
     try {
@@ -184,6 +189,15 @@ describe("VaultProvider", () => {
       refusal = err
     }
     expect(isVaultError(refusal, 'whisper_too_large')).to.be.true
+    // One lockbox fills the vault: a second is refused for room.
+    await vault.store('openai_api_key', 'sk')
+    let full: unknown = null
+    try {
+      await vault.store('mistral_api_key', 'sk')
+    } catch (err) {
+      full = err
+    }
+    expect(isVaultError(full, 'vault_full')).to.be.true
   })
 
   describe("when openVault rejects", () => {

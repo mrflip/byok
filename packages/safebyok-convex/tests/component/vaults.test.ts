@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { memoryStore } from 'safebyok'
+import { LockboxSummary, memoryStore } from 'safebyok'
 import { RealPassphrase, RealWhispers, boxOf, bundleOf, componentTest, openOver, realRecords, scopeOf, vaults } from '../helpers'
 
 const u1 = scopeOf('u1')
@@ -312,7 +312,7 @@ describe("a real vault's records", () => {
     vault.close()
   })
 
-  it("list as the core lists them", async () => {
+  it("list what the core reads as the summaries it lists", async () => {
     const real = await realRecords('u1')
     const t = componentTest()
     await t.mutation(vaults.createBundle, { bundle: real.bundle })
@@ -321,7 +321,8 @@ describe("a real vault's records", () => {
     }
     const vault = await openOver(memoryStoreHolding(real))
     const listed = await t.query(vaults.listBoxSummaries, { scope: u1 })
-    expect(listed.map(({ format: _format, ...summary }) => summary)).to.deep.equal(vault.getSnapshot().boxes)
+    // The core's summary strips `format` and nulls a missing note; the listing itself holds neither.
+    expect(listed.map((row) => LockboxSummary.parse(row))).to.deep.equal(vault.getSnapshot().boxes)
     vault.close()
   })
 })
@@ -333,27 +334,47 @@ const memoryStoreHolding = (real: Awaited<ReturnType<typeof realRecords>>) => {
   return store
 }
 
-describe("a large vault, within Convex's per-transaction limits", () => {
-  // The largest whisper a vault stores by default (MaxWhisperBytes, 40444 bytes of JSON), as
-  // base64url ciphertext: about 54 KB a lockbox. A Convex transaction may read 16 MiB; listing
-  // and signing read the vault once, but erasing it reads every lockbox twice (each delete
-  // reads its row again), so about 150 of the largest lockboxes is the most a vault can hold
-  // and still be erased whole. Lockboxes of API-key size are about 1 KB: thousands fit.
-  const bigCiphered = { cipher_iv_b64: 'i'.repeat(16), ciphertext_b64: 'c'.repeat(Math.ceil((40_444 + 16) * 4 / 3)) }
-  const BoxCount = 140
+// A Convex transaction may read 16 MiB. Listing and signing read the vault once, but erasing it
+// reads every lockbox twice (each delete reads its row again), so convexVaultDB declares half of
+// that, 8 MiB, as its maxVaultBytes. openVault admits a maxLockboxes only while that many
+// lockboxes at maxWhisperBytes each, plus 1 KiB apiece for their other fields, fit in half of the
+// 8 MiB: at most 101 of the largest default whisper (40444 bytes of JSON, about 54 KB stored),
+// and at most 1365 of 2 KiB whispers. The tests below fill a vault past each, with the longest
+// labels and notes, and erase it.
 
-  it("lists, signs and erases 140 of the largest lockboxes", async () => {
-    const t = componentTest(true)
-    await t.mutation(vaults.createBundle, { bundle: bundleOf('u1') })
-    for (let ii = 0; ii < BoxCount; ii++) {
-      const lockbox = boxOf(`box_${String(ii)}`, String(ii), { whisper_ciphered: bigCiphered })
-      await t.mutation(vaults.updateBox, { scope: u1, lockbox, expected: noBoxYet })
-    }
-    expect(await t.query(vaults.listBoxSummaries, { scope: u1 })).to.have.lengthOf(BoxCount)
-    const { boxes } = await t.query(vaults.watchVault, { scope: u1 })
-    expect(boxes).to.have.lengthOf(BoxCount)
-    expect(await t.mutation(vaults.eraseVault, { scope: u1, expected: thisVault })).to.be.true
-    const { lockboxes } = await allRows(t)
-    expect(lockboxes).to.have.lengthOf(0)
+/** A backend whose `u1` vault holds `count` lockboxes, each a whisper of `whisperBytes` and the heaviest public shell. */
+const fillVault = async (count: number, whisperBytes: number) => {
+  const t = componentTest(true)
+  await t.mutation(vaults.createBundle, { bundle: bundleOf('u1') })
+  const whisperCiphered = { cipher_iv_b64: 'i'.repeat(16), ciphertext_b64: 'c'.repeat(Math.ceil((whisperBytes + 16) * 4 / 3)) }
+  const lockboxKeyWrapped = { cipher_iv_b64: 'i'.repeat(16), ciphertext_b64: 'k'.repeat(64) }
+  // 256 characters of four UTF-8 bytes each: the most a note can weigh.
+  const note = '\u{1F512}'.repeat(256)
+  for (let ii = 0; ii < count; ii++) {
+    const boxlabel = `b${String(ii).padStart(39, '0')}`
+    const lockbox = boxOf(boxlabel, crypto.randomUUID(), { whisper_ciphered: whisperCiphered, lockbox_key_wrapped: lockboxKeyWrapped, note })
+    await t.mutation(vaults.updateBox, { scope: u1, lockbox, expected: noBoxYet })
+  }
+  return t
+}
+
+/** What listing, watching and erasing the `u1` vault find: each a whole transaction over it. */
+const listWatchErase = async (t: ReturnType<typeof componentTest>) => {
+  const listed = await t.query(vaults.listBoxSummaries, { scope: u1 })
+  const { boxes } = await t.query(vaults.watchVault, { scope: u1 })
+  const erased = await t.mutation(vaults.eraseVault, { scope: u1, expected: thisVault })
+  const { lockboxes } = await allRows(t)
+  return { listedCount: listed.length, watchedCount: boxes.length, erased, leftCount: lockboxes.length }
+}
+
+describe("a large vault, within Convex's per-transaction limits", () => {
+  it("lists, signs and erases 140 of the largest lockboxes, well past the 101 the core admits", async () => {
+    const t = await fillVault(140, 40_444)
+    expect(await listWatchErase(t)).to.deep.equal({ listedCount: 140, watchedCount: 140, erased: true, leftCount: 0 })
   })
+
+  it("lists, signs and erases the 1365 lockboxes of 2 KiB whispers the core admits", async () => {
+    const t = await fillVault(1365, 2048)
+    expect(await listWatchErase(t)).to.deep.equal({ listedCount: 1365, watchedCount: 1365, erased: true, leftCount: 0 })
+  }, 30_000)
 })

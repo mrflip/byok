@@ -13,6 +13,7 @@ import { describeVaultDB } from './vault-db-suite'
  */
 class MapVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
+  readonly maxVaultBytes = Infinity
   readonly rows = new Map<string, unknown>()
   private bundleCkey(scope: VaultScope) { return `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}` }
   private boxCkey(scope: VaultScope, boxlabel: string) { return `${this.bundleCkey(scope)}/${boxlabel}` }
@@ -84,6 +85,12 @@ describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
 describeVaultDB('the smallest honest adapter', () => new MapVaultDB())
 
 describe("localVaultDB", () => {
+  it("holds a mebibyte in one record, and sets no limit on a vault", () => {
+    const vaultDB = localVaultDB(memoryStore())
+    expect(vaultDB.maxRecordBytes).to.eq(1_048_576)
+    expect(vaultDB.maxVaultBytes).to.eq(Infinity)
+  })
+
   it("reads a vault stored before the storage verbs: the same rows, at the same ckeys", async () => {
     const store = memoryStore()
     store.write('vault:acme:u1:main', JSON.stringify(bundleOf('u1')))
@@ -92,6 +99,25 @@ describe("localVaultDB", () => {
     expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
     expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(boxOf('anthropic', 'one'))
     expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(1)
+  })
+
+  it("reads lockboxes as written today, with a note and without one, and writes them back the same", async () => {
+    // A stored vault is a contract: these rows are byte for byte what store() writes today.
+    const store = memoryStore()
+    const { note: _note, ...noteless } = boxOf('openai', 'two')
+    const notedRow = JSON.stringify(boxOf('anthropic', 'one'))
+    const notelessRow = JSON.stringify(noteless)
+    expect(notelessRow).to.not.include('note')
+    store.write('vault:acme:u1:main', JSON.stringify(bundleOf('u1')))
+    store.write('box:acme:u1:main:anthropic', notedRow)
+    store.write('box:acme:u1:main:openai', notelessRow)
+    const vaultDB = localVaultDB(store)
+    const summaries = await vaultDB.listBoxes(scopeOf('u1'))
+    expect(summaries.map((summary) => summary.note)).to.deep.equal(['a test box', null])
+    const prev = await vaultDB.readBox(scopeOf('u1'), 'openai')
+    expect(prev).to.deep.equal(noteless)
+    await vaultDB.updateBox(scopeOf('u1'), noteless, { vault_id: 'vault-id-u1', revision_id: 'rev-two' })
+    expect(store.read('box:acme:u1:main:openai')).to.eq(notelessRow)
   })
 
   it("stores each record as its JSON, at the ckey it always had", async () => {
@@ -156,6 +182,14 @@ describe("the abstract VaultDB, around an adapter's half", () => {
     expect((refusal as VaultError).kind).to.eq('corrupt_record')
     // Refused, never repaired or deleted: the record is still there for forensics.
     expect(vaultDB.rows.size).to.eq(1)
+  })
+
+  it("lists a lockbox an earlier version kept with an undefined note, as IndexedDB does, with a null note", async () => {
+    const vaultDB = new MapVaultDB()
+    vaultDB.rows.set('acme:u1:main/anthropic', { ...boxOf('anthropic', 'one'), note: undefined })
+    const [summary] = await vaultDB.listBoxes(scopeOf('u1'))
+    expect(summary).to.have.property('note')
+    expect(summary?.note).to.be.null
   })
 
   it("accepts a listing projected server-side, without ciphered fields, so long as it keeps format", async () => {

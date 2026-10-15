@@ -1,3 +1,4 @@
+import { browserOpts } from 'safebyok/browser'
 import { VaultProvider } from 'safebyok-react'
 import { KnockKnock } from './components/KnockKnock'
 import { SessionBar } from './components/SessionBar'
@@ -5,7 +6,7 @@ import { VaultDashboard } from './components/VaultDashboard'
 import { DeviceDBInspectionPanel } from './components/inspection/DeviceDBInspectionPanel'
 import { VaultDBInspectionPanel } from './components/inspection/VaultDBInspectionPanel'
 import { createAuth } from './lib/auth'
-import { Applabel, dbStore, deviceDB, deviceStore, vaultDB } from './lib/stores'
+import { Applabel, dbStore, deviceStore, vaultDB } from './lib/stores'
 import { useSession } from './hooks/useSession'
 
 // The demo's fake auth; a real app has its own (Google, Clerk, Convex...). All the vault needs
@@ -42,11 +43,11 @@ export const App = () => {
   const session = useSession(auth)
   return (
     <VaultProvider
+      {...browserOpts({ dbName: Applabel })}
       applabel={Applabel}
       vaultlabel="main"
       userId={session?.userId ?? null}
       vaultDB={vaultDB}
-      deviceDB={deviceDB}
     >
       <Page />
     </VaultProvider>

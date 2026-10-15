@@ -22,6 +22,23 @@ pnpm add safebyok safebyok-react react
 `safebyok` and `react` are peer dependencies: the host app installs them itself, so the binding and
 the app share one copy of each.
 
+## Use
+
+```tsx
+import { browserOpts } from 'safebyok/browser'
+import { VaultProvider } from 'safebyok-react'
+
+<VaultProvider {...browserOpts()} applabel="acme" vaultlabel="main" userId={session?.userId ?? null}
+  vaultDB={vaultDB}>
+  <App />
+</VaultProvider>
+```
+
+The provider takes every `openVault` option as a prop. `browserOpts()` supplies the two a browser
+app answers like any other, `keyDeriver` and `deviceDB`; `vaultDB` is your backend's adapter. It
+answers the same bag on every call, so it is safe in a render: the provider reopens the vault
+whenever a prop changes identity.
+
 ## When opening fails
 
 If `openVault` rejects -- a bad label or option, or storage that cannot be reached -- the provider
@@ -31,7 +48,7 @@ fresh attempt:
 
 ```tsx
 <ErrorBoundary key={userId ?? 'signed-out'} fallback={<VaultTroubleNotice />}>
-  <VaultProvider applabel="acme" vaultlabel="main" userId={userId} vaultDB={vaultDB} deviceDB={deviceDB} keyDeriver={keyDeriver}>
+  <VaultProvider {...browserOpts()} applabel="acme" vaultlabel="main" userId={userId} vaultDB={vaultDB}>
     <App />
   </VaultProvider>
 </ErrorBoundary>

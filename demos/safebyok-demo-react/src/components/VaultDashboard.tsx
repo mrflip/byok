@@ -55,7 +55,7 @@ export const VaultDashboard = () => {
       const saved = await withUnlockedVault(async () => {
         // The cast hands validation to the vault: typing "null" in the box parses to a bare
         // null, and the store's refusal lands in the gripe below.
-        await vault.store(form.boxlabelText.trim(), parseWhisperText(form.whisperText)!, { note: form.noteText.trim() || undefined })
+        await vault.store(form.boxlabelText.trim(), parseWhisperText(form.whisperText)!, { note: form.noteText.trim() || null })
         return true
       })
       if (saved !== null) { setForm(null) }
@@ -68,7 +68,7 @@ export const VaultDashboard = () => {
     <section className="vault-dashboard">
       <div className="row spread">
         <h2>Vault dashboard <span className="quiet">vault “{snapshot.scope.vaultlabel}”</span></h2>
-        <LockChip state={snapshot.state} expiresAt={snapshot.expiresAt} onLock={() => { void vault.lock() }} />
+        <LockChip state={snapshot.state} askPassphraseAt={snapshot.askPassphraseAt} onLock={() => { void vault.lock() }} />
       </div>
 
       {snapshot.boxes.length === 0 && <p className="quiet">No lockboxes yet. Whispers you add live encrypted in the database (watch the inspector below) and open only on your device.</p>}
@@ -146,11 +146,11 @@ export const VaultDashboard = () => {
   )
 }
 
-const LockChip = ({ state, expiresAt, onLock }: { state: string, expiresAt: number | null, onLock: () => void }) => {
+const LockChip = ({ state, askPassphraseAt, onLock }: { state: string, askPassphraseAt: number | null, onLock: () => void }) => {
   if (state === 'unlocked') {
     return (
       <span className="row">
-        <span className="chip unlocked">🔓 unlocked{expiresAt !== null && ` until ${new Date(expiresAt).toLocaleString()}`}</span>
+        <span className="chip unlocked">🔓 unlocked{askPassphraseAt !== null && ` until ${new Date(askPassphraseAt).toLocaleString()}`}</span>
         <button className="mini" onClick={onLock}>lock now</button>
       </span>
     )

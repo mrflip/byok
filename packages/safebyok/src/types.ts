@@ -86,6 +86,15 @@ export type VaultScope = Z.infer<typeof VaultScope>
 const cryptoKeyHandle = Z.custom<CryptoKey>((val) => val instanceof CryptoKey, 'a CryptoKey handle')
 
 /**
+ * A lockbox's public note, shown beside it while the vault is locked: text of at most 256
+ * characters. Never put secret material here.
+ *
+ * @example LockboxNote.parse('work account')
+ * @example LockboxNote.safeParse('n'.repeat(257)).success  // false: 256 characters at most
+ */
+export const LockboxNote = Z.string().max(256)
+
+/**
  * One lockbox as the storage layer holds it: the whisper ciphered under its own lockboxKey, that
  * lockboxKey wrapped under the vaultKey, and the public shell -- boxlabel, note, timestamps --
  * a locked vault may show. Nothing in this record opens without the vaultKey.
@@ -105,21 +114,25 @@ export const Lockbox = Z.object({
   /** The whisper, ciphered under this lockbox's lockboxKey. */
   whisper_ciphered:    Ciphered,
   /**
-   * Public note shown beside the lockbox while locked. Never put secret material here. Written
-   * only when there is one; read as absent when undefined too, as earlier versions stored it and
-   * IndexedDB keeps it.
+   * The lockbox's {@link LockboxNote}. Written only when there is one; read as absent when
+   * undefined too, as earlier versions stored it and IndexedDB keeps it.
    */
-  note:                Z.string().max(256).optional(),
+  note:                LockboxNote.optional(),
   created_at:          Z.string(),
   updated_at:          Z.string(),
 })
 export type Lockbox = Z.infer<typeof Lockbox>
 
 /**
- * The public face of a lockbox: everything but its two encrypted fields. This is what `list()`
- * returns and what a locked vault may show.
+ * The public face of a lockbox: everything but its two encrypted fields, with `note` null when
+ * the lockbox has none -- never absent, never undefined, however the record was stored. This is
+ * what a VaultDB's `listBoxes` returns and a vault's snapshot holds, readable while locked.
+ *
+ * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', created_at, updated_at }).note  // null
  */
-export const LockboxSummary = Lockbox.omit({ format: true, lockbox_key_wrapped: true, whisper_ciphered: true })
+export const LockboxSummary = Lockbox
+  .omit({ format: true, lockbox_key_wrapped: true, whisper_ciphered: true })
+  .extend({ note: LockboxNote.nullable().default(null) })
 export type LockboxSummary = Z.infer<typeof LockboxSummary>
 
 /**
@@ -172,8 +185,11 @@ export const DeviceUnlock = Z.object({
 })
 export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 
-/** How long an entered passphrase is remembered on the device, unless the caller says otherwise. */
-export const SevenDaysMs = 7 * 24 * 60 * 60 * 1000
+/**
+ * How many hours an entered passphrase lasts on the device before the vault asks for it again,
+ * unless the caller says otherwise: seven days.
+ */
+export const ForcePassphraseReentryHours = 168 // seven days
 
 /**
  * The largest whisper a vault stores unless the caller says otherwise, in bytes of its JSON:
@@ -182,6 +198,13 @@ export const SevenDaysMs = 7 * 24 * 60 * 60 * 1000
  * wrong value is being stored.
  */
 export const MaxWhisperBytes = 40_444 // searchable: 40444
+
+/**
+ * The most lockboxes a vault holds unless the caller says otherwise: room for every API key a
+ * person plausibly keeps, at the largest default whisper, inside what every in-tree storage
+ * adapter can hold and still erase in one go. A vault that needs more raises its `maxLockboxes`.
+ */
+export const MaxLockboxes = 100
 
 /** Injected time source, so expiry is testable; defaults to the wall clock. */
 export type Clock = { now(): number }

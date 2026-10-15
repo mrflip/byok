@@ -9,6 +9,8 @@ import { DeviceUnlock, type VaultScope } from './types'
  *
  * An adapter may answer a damaged or unreadable record with null rather than an error: losing a
  * remembered unlock only means asking for the passphrase again, and that is the safe failure.
+ * The vault checks whatever `readUnlock` hands back all the same, and erases a record that does
+ * not pass, so an adapter that returns a record exactly as it stored it is never trusted blindly.
  */
 export interface DeviceDB {
   /** The remembered unlock for one vault, or null when there is none. Expiry is the vault's call. */

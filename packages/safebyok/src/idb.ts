@@ -78,13 +78,15 @@ const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
  *
  * @example
  *   const vaultDB = idbVaultDB({ dbName: 'my_app' })
- *   const vault = await openVault({ applabel: 'my_app', userId, vaultlabel: 'main', vaultDB, deviceDB: idbDeviceDB({ dbName: 'my_app' }) })
+ *   const vault = await openVault({ applabel: 'my_app', userId, vaultlabel: 'main', vaultDB, ...browserOpts({ dbName: 'my_app' }) })
  */
 export const idbVaultDB = (opts: IdbOpts = {}): VaultDB => new IdbVaultDB(opts.dbName ?? 'safebyok')
 
 class IdbVaultDB extends VaultDB {
-  // IndexedDB sets no per-record limit: the origin's storage quota bounds the whole database.
+  // IndexedDB sets no limit per record or per vault: the origin's storage quota bounds the whole
+  // database.
   readonly maxRecordBytes = Infinity
+  readonly maxVaultBytes = Infinity
 
   private readonly dbName: string
 
