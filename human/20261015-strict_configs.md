@@ -1,6 +1,6 @@
 # 2026-10-15: Strict configs -- the IDE/tsc split was dist/, not strictness; three questions
 
-Branch `20261015-strict_configs`, PR filed from it (link in chat).
+Branch `20261015-strict_configs`, merged as #29; the follow-up is `20261015-testing_entry`, PR [#38](https://github.com/mrflip/safebyok/pull/38).
 
 **What the Coach saw.** VSCode flagged a type-only `VaultBundle` import and untyped arrow
 parameters that `tsc` and lint passed. Not a strictness gap: every package read `safebyok` through
