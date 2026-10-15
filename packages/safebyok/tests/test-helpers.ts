@@ -207,7 +207,7 @@ export const loggedText = (calls: readonly LoggedCall[]): string => (
   calls.map((call) => [call.level, call.message ?? '', JSON.stringify(call.story ?? {}), errorText(call.err)].join(' ')).join('\n')
 )
 
-/** An error and every cause under it as text: message, stack and own properties each. Anything else thrown, as String does it. */
+/** An error and every cause under it as text: message, stack and own properties each. Anything else thrown, as JSON. */
 const errorText = (thrown: unknown): string => {
   if (thrown === undefined || thrown === null) { return '' }
   if (! (thrown instanceof Error)) { return JSON.stringify(thrown) }
