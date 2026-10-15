@@ -1,7 +1,7 @@
 /**
- * The smallest storage the stub adapters need: strings by string ckey, with change notification
- * so the vault and the demo's inspector can watch it. The browser demo backs one with
- * localStorage; the tests back one with a Map.
+ * The smallest storage the local adapters need: strings by string ckey, with change notification
+ * so the vault and an inspector can watch it. A host backs one with localStorage; the tests
+ * back one with a Map.
  */
 export type StringStore = {
   /** The stored text under `ckey`, or null when there is none. */
@@ -50,8 +50,8 @@ export const memoryStore = (): StringStore => {
 
 /**
  * StringStore over a DOM Storage object (localStorage), confined to one prefix: each store sees
- * only its own entries, so the demo can keep a pretend-remote database and a device cache in the
- * same localStorage while showing them as the distinct places they stand in for.
+ * only its own entries, so one localStorage can hold two distinct places -- say a vault database and a device cache
+ * -- without either seeing the other.
  *
  * Change notification covers this tab's own writes (DOM `storage` events only fire in *other*
  * tabs, which the demo does not chase).
