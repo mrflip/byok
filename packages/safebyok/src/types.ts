@@ -334,7 +334,7 @@ export const VaultBundle = Z.object({
   vaultlabel:          Label,
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
   vault_id:            Z.string().check(Z.minLength(1)),
-  unlock_epoch:    Z.int().check(Z.positive()),
+  unlock_epoch:        Z.int().check(Z.positive()),
   /** The ways into the vault, each wrapping the one vaultKey: see {@link UnlockEnvelope}. */
   unlocks:             unlockList,
   /** When the vault was made, an {@link EpochMillis}; never changed. */
@@ -355,7 +355,7 @@ export const DeviceUnlock = Z.object({
   vaultlabel:       Label,
   vault_id:         Z.string().check(Z.minLength(1)),
   /** The bundle's unlock_epoch when this unlock was remembered; a mismatch voids it. */
-  unlock_epoch: Z.int().check(Z.positive()),
+  unlock_epoch:     Z.int().check(Z.positive()),
   /** This browser's localUnlockKey: non-extractable, usable only to unwrap what it wrapped. */
   local_unlock_key: cryptoKeyHandle,
   /** The vaultKey, wrapped under the localUnlockKey. */

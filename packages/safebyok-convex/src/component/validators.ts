@@ -88,7 +88,7 @@ export const VaultBundle = v.object({
   user_id:          v.string(),
   vaultlabel:       v.string(),
   vault_id:         v.string(),
-  unlock_epoch: v.number(),
+  unlock_epoch:     v.number(),
   unlocks:          v.array(UnlockEnvelope),
   registered_at:    v.number(),
 })
@@ -124,7 +124,7 @@ export const ListedLockbox = Lockbox.omit('lockbox_key_wrapped', 'whisper_cipher
  */
 export const BundleExpectation = v.object({
   vault_id:         v.string(),
-  unlock_epoch: v.number(),
+  unlock_epoch:     v.number(),
 })
 
 /**
@@ -161,6 +161,6 @@ const BoxRevision = v.array(v.string())
  */
 export const VaultSignature = v.object({
   vault_id:         v.nullable(v.string()),
-  unlock_epoch: v.nullable(v.number()),
+  unlock_epoch:     v.nullable(v.number()),
   boxes:            v.array(BoxRevision),
 })

@@ -13,7 +13,7 @@ import type { StringStore } from './string-store'
 export type BundleExpectation = Z.infer<typeof BundleExpectation>
 const BundleExpectation = Z.object({
   vault_id:         VaultBundle.shape.vault_id,
-  unlock_epoch: VaultBundle.shape.unlock_epoch,
+  unlock_epoch:     VaultBundle.shape.unlock_epoch,
 })
 
 /**
@@ -131,7 +131,7 @@ export abstract class VaultDB {
     }
     const landed = await fromStorage(() => this.doUpdateBundle(outgoing, expectation))
     if (! landed) {
-      throw new VaultError('stale_write', 'The vault changed in storage since this device read it -- its passphrase was changed, or it was deleted or made anew, elsewhere -- so this change was refused and nothing was written. Read the vault again before retrying.')
+      throw new VaultError('stale_write', 'The vault changed in storage since this device read it -- its ways in were changed, or it was deleted or made anew, elsewhere -- so this change was refused and nothing was written. Read the vault again before retrying.')
     }
   }
 

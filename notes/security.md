@@ -119,7 +119,7 @@ security expert who knows what questions to ask.
   erases the successor. On a vault the handle has never seen created, `destroy()` erases only
   the device-local record: lockboxes orphaned without a bundle are not reached.
   `changePassphrase()` and `unlock()` re-read the bundle first, as they must to prove the
-  passphrase against it. A passphrase changed elsewhere does not stop a stale session's
+  passphrase against it. An unlock changed elsewhere (a passphrase or passkey added, removed or changed) does not stop a stale session's
   `store()` or `erase()` (their expectations carry no epoch); the session relocks on its next
   look at the bundle.
 * 2026-10-14 (the option was named `rememberForMs` until its rename on 2026-10-15): the unlock
@@ -133,7 +133,7 @@ security expert who knows what questions to ask.
   window of `FarFuture - FarPast` ms, so the deadline it sets from any in-bounds clock reading is
   `FarFuture` (see the next entry), and the stored `ask_passphrase_at` is a finite number; no schema
   past that parse, and no stored field, accepts `Infinity`. What still ends such an unlock: `lock()`
-  (memory and device record), a passphrase change on another device (the next look at the bundle
+  (memory and device record), a change to the unlocks on another device (the next look at the bundle
   sees a new epoch), and the vault being destroyed or made anew (a new `vault_id`). Nothing else
   does: no timer, and no idle detection. Two consequences: an open handle sees that new epoch only
   when it next reads the bundle (an unlock, a write, or a change the vaultDB pushes), so a handle
