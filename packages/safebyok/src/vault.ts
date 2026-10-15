@@ -136,8 +136,9 @@ export type Vault = {
    * under new keys.
    *
    * `opts.note` is the lockbox's public note, shown while locked: text of at most 256
-   * characters, or null for none -- kind 'bad_option' otherwise. Left out, the lockbox keeps the
-   * note it has. Never put secret material in a note.
+   * characters, as the exported {@link LockboxNote} checks, or null for none -- kind
+   * 'bad_option' otherwise. Left out, the lockbox keeps the note it has. Never put secret
+   * material in a note.
    *
    * @example await vault.store('anthropic_api_key', 'sk-ant-...', { note: 'work account' })
    * @example await vault.store('anthropic_api_key', 'sk-ant-...', { note: null })  // and no note

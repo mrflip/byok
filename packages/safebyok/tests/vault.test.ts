@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, FarFuture, FarPast, LockboxNote, MaxLockboxes, MaxWhisperBytes, type DeviceUnlock, type VaultScope, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
@@ -629,6 +629,19 @@ describe("the note", () => {
     await vault.store('anthropic', 'sk-fake', { note: 'fits' })
     const again = await world.open()
     expect(again.getSnapshot().boxes.map((summary) => summary.note)).to.deep.equal(['fits'])
+  })
+
+  it("follows the exported LockboxNote, so a host's form can check a note before store()", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    await vault.unlock('pw')
+    const fits = 'n'.repeat(256)
+    const overlong = 'n'.repeat(257)
+    expect(LockboxNote.safeParse(fits).success).to.be.true
+    await vault.store('anthropic', 'sk-fake', { note: fits })
+    expect(LockboxNote.safeParse(overlong).success).to.be.false
+    await expectRefusal(vault.store('anthropic', 'sk-fake', { note: overlong }), 'bad_option')
+    expect(vault.getSnapshot().boxes[0]?.note).to.eq(fits)
   })
 })
 
