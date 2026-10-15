@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 11 building; 5 (second review) and 10 in review; 1 and 9 filing; 3 and 4 filed. Newer than the plan wherever the two disagree.
+**Status**: 11 building; 5 (second review) and 10 in review; 1 filing (#34 open); 3, 4, 9 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -8,7 +8,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 
 | #  | Thread | Base | Status |
 | -- | ------ | ---- | ------ |
-| 1  | `vault_size_cap` | `origin/main` | filing |
+| 1  | `vault_size_cap` | `origin/main` | filing ([#34](https://github.com/mrflip/safebyok/pull/34) open) |
 | 2  | `explicit_options` | thread 1 | pending |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
@@ -16,7 +16,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
-| 9  | `docs_sweep` | `origin/main` | filing |
+| 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | in review |
 | 11 | `label_grammar_report` | `origin/main` | underway |
 
@@ -86,6 +86,14 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   *Review:* fixed -- the *Locking* section now says `lock()` also erases the device's remembered
   unlock; `domStore`'s doc block. Sent back at filing: a clean recipe snippet (unsubscribe; no
   unhandled `vault_closed`), and a dated `notes/security.md` bullet for the release App key.
+  Filed: the recipe is a `lockWhenHidden(vault)` function returning an unsubscribe -- the same
+  name as the planned core API, so the expiry thread should rename one or the other.
+* *Orchestrator:* **`strict_configs` landed as [#29](https://github.com/mrflip/safebyok/pull/29)**:
+  one strict `tsconfig.base.json`, sibling packages read from source through a `@safebyok/source`
+  condition, every eslint config cut from the core's. Threads cut before it rebase onto it at
+  filing (thread 9 met two empty-arrow lint errors). [#31](https://github.com/mrflip/safebyok/pull/31)
+  (thread 4) now conflicts with main in the demo's `auth.ts`; a filed branch needs a
+  force-push to rebase, which workers may not do (Coach, below).
 * *Orchestrator:* **Slots count builders, not reviews** (YOLO, two-way): with 1, 5 and 9 all in
   review and nothing building, thread 10 started as a fourth agent.
 * *Orchestrator:* **The main checkout moves under reviewers.** Another agent's uncommitted work
@@ -94,6 +102,11 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   matching a pushed branch of another agent's, is not the review's.
 
 ## For the Coach
+
+* **[#31](https://github.com/mrflip/safebyok/pull/31) conflicts with main** since #29 merged
+  (`demos/safebyok-demo-react/src/lib/auth.ts`, a small textual overlap). Rebasing a filed branch
+  needs a force-push, which thread workers may not do: yours to rebase, or to tell the
+  orchestrator to have it done with `--force-with-lease`.
 
 * **Merge order and thread 10's `TH` rename.** Thread 10 rewrites the import line and helper
   uses of nearly every core test; the chain (1, 2, 6, 7) adds tests on the old names. Whichever
