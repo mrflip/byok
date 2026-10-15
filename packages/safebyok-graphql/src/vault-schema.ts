@@ -53,7 +53,7 @@ type SafebyokVaultBundle {
   user_id:          String!
   vaultlabel:       String!
   vault_id:         String!
-  unlock_epoch: Int!
+  unlock_epoch:     Int!
   unlocks:          [SafebyokUnlockEnvelope!]!
   registered_at:    Float!
 }
@@ -65,7 +65,7 @@ input SafebyokVaultBundleInput {
   user_id:          String!
   vaultlabel:       String!
   vault_id:         String!
-  unlock_epoch: Int!
+  unlock_epoch:     Int!
   unlocks:          [SafebyokUnlockEnvelope!]!
   registered_at:    Float!
 }
@@ -111,7 +111,7 @@ type SafebyokListedLockbox {
 """What a bundle update was proven against: it lands only while the standing bundle has both."""
 input SafebyokBundleExpectationInput {
   vault_id:         String!
-  unlock_epoch: Int!
+  unlock_epoch:     Int!
 }
 
 """

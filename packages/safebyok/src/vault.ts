@@ -141,7 +141,7 @@ export type Vault = {
    * A `lock()`, `lockSoon()` or `destroy()` called while the unlock is still under way wins: the
    * vault stays locked, this device remembers nothing, and the call throws kind 'vault_locked'. A vault the
    * unlock was creating stays created, locked, under this passphrase. So does a vault destroyed,
-   * made anew, or given a new passphrase on another device meanwhile: the passphrase was proven
+   * made anew, or with its unlocks changed on another device meanwhile: the passphrase was proven
    * against a vault that no longer stands as it was.
    *
    * `proof` may instead be a passkey's answer, a {@link PasskeyProof} (`safebyok-react`'s
@@ -502,7 +502,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       format:              'safebyok-vault-v1',
       ...scope,
       vault_id:            vaultId,
-      unlock_epoch:    1,
+      unlock_epoch:        1,
       unlocks:             [envelope],
       registered_at:       clockNow(),
     }
@@ -561,7 +561,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const proven = await unwrapWith(standing, proof, unlockId)
     const next: VaultBundle = {
       ...standing,
-      unlock_epoch: standing.unlock_epoch + 1,
+      unlock_epoch:     standing.unlock_epoch + 1,
       unlocks:          await plan.revise(standing, proven),
     }
     await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch }))
@@ -668,7 +668,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       format:                  'safebyok-unlock-v1',
       ...scope,
       vault_id:                standing.vault_id,
-      unlock_epoch:        standing.unlock_epoch,
+      unlock_epoch:            standing.unlock_epoch,
       local_unlock_key:        localUnlockKey,
       vault_key_local_wrapped: wrapped,
       ask_passphrase_at:       until,
@@ -701,7 +701,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       && checked.data.ask_passphrase_at <= deadlineAfter(now, reentryMs)
     if (! fits) {
       await deviceDB.eraseUnlock(scope)
-      // Expired, or outdated by a new passphrase or a shorter setting, is routine; unreadable is worth a word.
+      // Expired, or outdated by a change to the unlocks or a shorter setting, is routine; unreadable is worth a word.
       if (! readable) { forgetUnreadableUnlock() }
       return
     }
@@ -818,7 +818,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       if (tookUp) { return }
       // A close() meanwhile is said as such: the handle, not the vault, is what refuses now.
       ensureOpen()
-      throw new VaultError('vault_locked', 'The vault was locked, destroyed, or given a new passphrase while this unlock was under way, and that wins: nothing was unlocked, and this device remembers nothing. Unlock again to carry on.')
+      throw new VaultError('vault_locked', 'The vault was locked or destroyed here, or its ways in changed on another device, while this unlock was under way, and that wins: nothing was unlocked, and this device remembers nothing. Unlock again to carry on.')
     },
 
     lock: async () => {

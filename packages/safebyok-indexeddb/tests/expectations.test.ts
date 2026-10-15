@@ -9,7 +9,7 @@ const BundleCases = [
   // regular usage:
   [Bundle,                                        { vault_id: "vault-id-u1", unlock_epoch: 1 },  true,   'the bundle proven against'],
   [Bundle,                                        { vault_id: "vault-id-u1", unlock_epoch: 2 },  false,  'an epoch the bundle has not reached'],
-  [TH.bundleOf('u1', { unlock_epoch: 2 }),    { vault_id: "vault-id-u1", unlock_epoch: 1 },  false,  'an epoch since moved on'],
+  [TH.bundleOf('u1', { unlock_epoch: 2 }),        { vault_id: "vault-id-u1", unlock_epoch: 1 },  false,  'an epoch since moved on'],
   [TH.bundleOf('u1', { vault_id: 'reborn' }),     { vault_id: "vault-id-u1", unlock_epoch: 1 },  false,  'a vault made anew'],
   // nothing, or damage, standing:
   [undefined,                                     { vault_id: "vault-id-u1", unlock_epoch: 1 },  false,  'no bundle at all'],
