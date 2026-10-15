@@ -14,17 +14,16 @@ Everything is stacked on the second_harvest merge stack ([#66](https://github.co
 
 ## The PRs, in the order to merge them
 
-*Restacked after the sprint, at the Coach's word*: one linear merge line, each PR's base still `main`, so merging the top, [#82](https://github.com/mrflip/safebyok/pull/82), merges them all. Peers went biggest first.
+*Restacked after the sprint, at the Coach's word*: one linear merge line, each PR's base still `main`, so merging the top, [#82](https://github.com/mrflip/safebyok/pull/82), merges them all. Peers went biggest first. The line sits on `main` itself: [#66](https://github.com/mrflip/safebyok/pull/66)'s commits reached `main` under other SHAs through #63's merge, so #66 has nothing left to merge, though its PR is still open.
 
-1. **The second_harvest stack first**: [#66](https://github.com/mrflip/safebyok/pull/66), and #62, #52, #64 and #65 go with it.
-2. [#70](https://github.com/mrflip/safebyok/pull/70): validation at every entrypoint, plus the survey. Stacked on #66.
-3. [#75](https://github.com/mrflip/safebyok/pull/75): thin tests. Stacked on #70.
-4. [#80](https://github.com/mrflip/safebyok/pull/80): shared test helpers. Stacked on #75.
-5. [#68](https://github.com/mrflip/safebyok/pull/68): `argon2idDeriver(spec)`. A deriver wearing the supplied label must carry its parameters, and settings that cannot run are refused. Stacked on #80. **Breaking**: a host deriver labelled `argon2id_web_v1` without the spec's parameters is refused at open. Its restack resolved additive conflicts with #70, moved its tests onto `TH.expectRefusal`, bumped the size budget (approved) and added the KDF TODO.
-6. [#72](https://github.com/mrflip/safebyok/pull/72): CI and tooling. Stacked on #68.
-7. [#67](https://github.com/mrflip/safebyok/pull/67): the React dialog. It states the real unlock window and shows an unlock's conditions in place. Stacked on #72.
-8. [#69](https://github.com/mrflip/safebyok/pull/69): the security notes and VOCABULARY, checked against the code. Stacked on #67.
-9. [#82](https://github.com/mrflip/safebyok/pull/82): these documents. Stacked on #69; the top.
+1. [#70](https://github.com/mrflip/safebyok/pull/70): validation at every entrypoint, plus the survey. Stacked on `main`.
+2. [#75](https://github.com/mrflip/safebyok/pull/75): thin tests. Stacked on #70.
+3. [#80](https://github.com/mrflip/safebyok/pull/80): shared test helpers. Stacked on #75.
+4. [#68](https://github.com/mrflip/safebyok/pull/68): `argon2idDeriver(spec)`. A deriver wearing the supplied label must carry its parameters, and settings that cannot run are refused. Stacked on #80. **Breaking**: a host deriver labelled `argon2id_web_v1` without the spec's parameters is refused at open. Its restack resolved additive conflicts with #70, moved its tests onto `TH.expectRefusal`, bumped the size budget (approved) and added the KDF TODO.
+5. [#72](https://github.com/mrflip/safebyok/pull/72): CI and tooling. Stacked on #68.
+6. [#67](https://github.com/mrflip/safebyok/pull/67): the React dialog. It states the real unlock window and shows an unlock's conditions in place. Stacked on #72.
+7. [#69](https://github.com/mrflip/safebyok/pull/69): the security notes and VOCABULARY, checked against the code. Stacked on #67.
+8. [#82](https://github.com/mrflip/safebyok/pull/82): these documents. Stacked on #69; the top.
 
 [#81](https://github.com/mrflip/safebyok/pull/81), the comment width rule, stays out of the line: the Coach redoes it, from its recipe, after this line and big_feats' merge.
 
