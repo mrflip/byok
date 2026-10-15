@@ -73,7 +73,7 @@ prefix names the part of the package the commit is about, never the kind of chan
 | --------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `crypto`  | key derivation, encryption, key wrapping, randomness: anything a cryptographer would review. Takes precedence over every other prefix. |
 | `vault`   | the vault's lifecycle and state: create, unlock, lock, refresh, rotate, subscribe                                                      |
-| `storage` | the storage interfaces and their adapters                                                                                              |
+| `storage` | the storage interfaces and their adapters, in the core and in the `safebyok-<store>` packages, such as `safebyok-postgres`             |
 | `api`     | the public surface: exports, entry points, exported types, errors                                                                      |
 | `client`  | the companion client bindings under `packages/`, such as `safebyok-react`                                                              |
 | `tools`   | build, lint, test and TypeScript configuration, CI and release workflows                                                               |
@@ -110,6 +110,18 @@ CodeQL scans the code and the workflows, and a finding shows on the PR. Dependab
 `deps:` PRs weekly; they get the same review as any other. One is asked for a changeset only when
 it moves a public package's runtime dependencies (`scripts/runtime-deps.ts`), and the Coach adds it
 by hand; a devDependency or lockfile bump needs none.
+
+## Packages
+
+The published packages live in `packages/`: `safebyok`, the core, and its companions, each named
+for what it plugs in. A storage adapter is `safebyok-<store>` (`safebyok-convex`,
+`safebyok-indexeddb`, `safebyok-postgres`, `safebyok-graphql`), a framework binding
+`safebyok-<framework>` (`safebyok-react`), and anything else is named for what it supplies
+(`safebyok-argon2-wasm`, a key deriver). A new one copies an existing package's packaging -- its
+own `eslint.config.mjs` cut from the core's, a README, a changeset -- takes `safebyok` as a peer
+dependency, so a `VaultError` is one class across them, and joins the `fixed` group in
+`.changeset/config.json` (a test refuses a public package left out). `safebyok-indexeddb`'s
+README is written as the template for a storage adapter.
 
 ## Releases
 

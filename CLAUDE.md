@@ -116,9 +116,11 @@ pnpm changeset                     # a PR's release note; `--empty` when it need
 ## Layout
 
 * `packages/` -- the workspace packages: `safebyok` (the core), `safebyok-react` (the React
-  binding), `safebyok-convex` (the Convex storage adapter), `safebyok-argon2-wasm` (a
-  WebAssembly key deriver). Each has its own `package.json`,
-  configs, `src/` and `tests/`, and runs its own `pnpm justify`; the root's runs them all.
+  binding), `safebyok-argon2-wasm` (a WebAssembly key deriver), and the storage adapters
+  `safebyok-convex`, `safebyok-indexeddb`, `safebyok-postgres` and `safebyok-graphql`. A new one
+  is named for what it plugs in: `safebyok-<store>` for a storage adapter, `safebyok-<framework>`
+  for a binding. Each has its own `package.json`, configs, `src/` and `tests/`, and runs its own
+  `pnpm justify`; the root's runs them all.
 * In a package, `src/index.ts` is the entry point; nothing else is importable by a consumer unless
   it is its own entry in that package's `tsdown.config.ts` (in `safebyok-convex`, its
   hand-written `exports`, which follow Convex's component layout).
