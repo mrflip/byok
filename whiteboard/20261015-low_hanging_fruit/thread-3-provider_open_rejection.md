@@ -7,11 +7,11 @@ Branch `20261015-provider_open_rejection`, PR [#32](https://github.com/mrflip/sa
   `openVault` rejection in state (`openFailure`, the error wrapped in `{ err }` so a rejection of
   any value, even `null`, still reads as failed) and throws it during render, after every hook
   has run. A rejection arriving after the effect was cleaned up (user signed out, props changed)
-  is ignored. Once the provider throws, the boundary unmounts it, so a fresh attempt for a new identity needs the host to reset or re-key its boundary (the README says so); the `setOpenFailure(null)` in cleanup only matters for a provider that stays mounted. Three
+  is ignored. Once the provider throws, the boundary unmounts it, so a fresh attempt for a new identity needs the host to reset or re-key its boundary (the README says so); the `setOpenFailure(null)` in cleanup only matters for a provider that stays mounted. Five
   tests in `tests/vault-provider.test.tsx`: a bad label throws to a boundary as the very
   `bad_label` `VaultError`; a storage failure (`storage_unavailable` from `readBundle`) does too;
-  a null user opens nothing and throws nothing even with a bad label. The doc block says so.
-  Changeset `.changeset/provider_open_rejection.md`: `safebyok-react` patch.
+  a null user opens nothing and throws nothing even with a bad label; the reviewer added a `null` rejection and one arriving after sign-out. The doc block says so.
+  Changeset `.changeset/20261015-provider_open_rejection.md`: `safebyok-react` patch.
 * **Decisions taken**: the error is thrown as-is, not wrapped: it is already a `VaultError` with
   a `kind` and no secret in it, and a boundary can branch on it. `then(ok, onRejected)` rather
   than `.catch`, so only `openVault`'s rejection is caught, not a failure inside the success path.
