@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { localVaultDB, memoryStore } from 'safebyok'
+import { isVaultError, localVaultDB, memoryStore } from 'safebyok'
 import * as TH from 'safebyok/testing'
 import { OutageVaultDB, makeOutage } from '../../src/lib/outage'
 
@@ -40,18 +40,20 @@ describe("makeOutage", () => {
 // While the switch is up, it is an adapter like any other, and owes the suite every adapter owes.
 TH.describeVaultDB('OutageVaultDB, while up', () => new OutageVaultDB(localVaultDB(memoryStore()), makeOutage()))
 
+// Each refusal is checked against the host's own copy of the package too: the provider branches
+// on isVaultError, which goes by class.
 describe("OutageVaultDB, while down", () => {
   it("refuses a read as storage_unavailable, as a real adapter whose backend is down", async () => {
     const { outage, vaultDB } = downOver()
     outage.setDown(true)
-    await TH.expectRefusal(vaultDB.readBundle(scope), 'storage_unavailable')
-    await TH.expectRefusal(vaultDB.listBoxes(scope), 'storage_unavailable')
+    expect(await TH.expectRefusal(vaultDB.readBundle(scope), 'storage_unavailable')).to.satisfy(isVaultError)
+    expect(await TH.expectRefusal(vaultDB.listBoxes(scope), 'storage_unavailable')).to.satisfy(isVaultError)
   })
 
   it("refuses a write, and writes nothing", async () => {
     const { outage, vaultDB } = downOver()
     outage.setDown(true)
-    await TH.expectRefusal(vaultDB.createBundle(bundle), 'storage_unavailable')
+    expect(await TH.expectRefusal(vaultDB.createBundle(bundle), 'storage_unavailable')).to.satisfy(isVaultError)
     outage.setDown(false)
     expect(await vaultDB.readBundle(scope)).to.be.null
   })
@@ -60,7 +62,7 @@ describe("OutageVaultDB, while down", () => {
     const { outage, vaultDB } = downOver()
     await vaultDB.createBundle(bundle)
     outage.setDown(true)
-    await TH.expectRefusal(vaultDB.readBundle(scope), 'storage_unavailable')
+    expect(await TH.expectRefusal(vaultDB.readBundle(scope), 'storage_unavailable')).to.satisfy(isVaultError)
     outage.setDown(false)
     expect(await vaultDB.readBundle(scope)).to.deep.equal(bundle)
   })
