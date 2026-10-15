@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 12 building (from #44 at a9b91f1); 5 rework in review; 1, 2, 3, 4, 6, 7, 8, 9, 10, 11 filed; 13 waits on 12. Newer than the plan wherever the two disagree.
+**Status**: 12 building; 1-11 filed (#31, #32, #33, #35 merged); 13 waits on 12. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -10,17 +10,17 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | -- | ------ | ---- | ------ |
 | 1  | `vault_size_cap` | `origin/main` | filed [#34](https://github.com/mrflip/safebyok/pull/34) |
 | 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | filed [#40](https://github.com/mrflip/safebyok/pull/40), stacked on #34 |
-| 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
-| 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37); rework reviewed (flagged: RTL letters, decided); finishing |
+| 3  | `provider_open_rejection` | `origin/main` | merged [#32](https://github.com/mrflip/safebyok/pull/32) |
+| 4  | `epoch_millis` | `origin/main` | merged [#31](https://github.com/mrflip/safebyok/pull/31) |
+| 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37); filed; rework done (90ccf9e); conflicts with main in `notes/security.md` since #33 |
 | 6  | `boundary_audit` | thread 2 (#40, 868ce73) | filed [#43](https://github.com/mrflip/safebyok/pull/43), stacked on #40 |
 | 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | filed [#44](https://github.com/mrflip/safebyok/pull/44), stacked on #43 |
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
-| 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
+| 9  | `docs_sweep` | `origin/main` | merged [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
 | 12 | `convex_server_cap` | thread 7 (#44, a9b91f1) | underway |
 | 13 | `error_kinds` | thread 12 | pending (the Coach's answer) |
-| 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
+| 11 | `label_grammar_report` | `origin/main` | merged [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
 ## For the Coach
 
