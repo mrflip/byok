@@ -25,6 +25,7 @@
     "build": "pnpm -r --stream build",
     "justify:root": "pnpm lint:root && pnpm typecheck:root && pnpm test:root",
     "justify": "both() { pnpm justify:root; root=$?; pnpm -r --no-bail --stream justify \"$@\"; exit $(( root || $? )); }; both",
+    "size": "pnpm --filter safebyok build && size-limit",
     "demo:react": "pnpm --filter 'safebyok-demo-react^...' build && pnpm --filter safebyok-demo-react dev",
     "newb": "scripts/newb",
     "changeset": "node scripts/changeset.ts",
