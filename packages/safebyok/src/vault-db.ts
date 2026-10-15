@@ -82,7 +82,9 @@ export abstract class VaultDB {
    * list and erase whole: a backend that reads a vault in one transaction under a read budget
    * declares the share of that budget its heaviest verb leaves. A vault refuses to open when its
    * `maxLockboxes` lockboxes at `maxWhisperBytes` each, with room for encoding and each
-   * lockbox's other fields, might not fit in half of it.
+   * lockbox's other fields, might not fit in half of it. A backend that also enforces a limit
+   * of its own sets it above what this admits, and refuses a lockbox write past it with a
+   * VaultError of kind `vault_full`.
    */
   abstract readonly maxVaultBytes: number
 
@@ -149,7 +151,8 @@ export abstract class VaultDB {
    * Write `lockbox` under its boxlabel, only while the scope's standing bundle has the
    * `vault_id` in `expected` and the standing lockbox has its `revision_id` (or, for null, there
    * is none). Refuses with kind `stale_write` otherwise -- including when the scope holds no
-   * bundle -- and writes nothing.
+   * bundle -- and writes nothing. A backend that holds each vault to a limit of its own refuses
+   * a write past it with kind `vault_full`, writing nothing.
    */
   async updateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<void> {
     const asked = checkScope(scope)
