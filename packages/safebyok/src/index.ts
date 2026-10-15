@@ -6,7 +6,7 @@
  */
 export { Argon2idWebV1 } from './key-deriver-spec'
 export type { KeyDeriverSpec } from './key-deriver-spec'
-export { argon2idDeriver, argon2idWebV1Deriver } from './key-deriver'
+export { argon2idDeriver, argon2idWebV1Deriver, parseKeyDeriverSpec } from './key-deriver'
 export type { KeyDeriver } from './key-deriver'
 export { openVault } from './vault'
 export type { OpenVaultOpts, Vault, VaultSnapshot, VaultState } from './vault'

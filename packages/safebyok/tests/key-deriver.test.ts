@@ -1,6 +1,6 @@
 import { argon2idAsync } from '@noble/hashes/argon2.js'
 import { describe, expect, it } from 'vitest'
-import { argon2idDeriver, argon2idWebV1Deriver } from '../src/key-deriver'
+import { argon2idDeriver, argon2idWebV1Deriver, parseKeyDeriverSpec } from '../src/key-deriver'
 import { Argon2idWebV1, MaxSaltBytes, PassphraseKeyBytes, type KeyDeriverSpec } from '../src/key-deriver-spec'
 import { VaultError, isVaultError } from '../src/errors'
 
@@ -132,6 +132,36 @@ describe("argon2idDeriver's bounds", () => {
 
   it("refuses a spec wearing a supplied label with other parameters", () => {
     expect(refusalOf(() => argon2idDeriver({ ...Argon2idWebV1, memory_kib: 19_456 }))).to.include('argon2id_web_v1')
+  })
+})
+
+// A deriver over another Argon2id implementation (safebyok-argon2-wasm) checks its spec with this,
+// so its bounds and refusals are argon2idDeriver's by construction.
+describe("parseKeyDeriverSpec", () => {
+  it("hands back a host's own spec, checked", () => {
+    const spec = parseKeyDeriverSpec({ ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', memory_kib: 131_072 })
+    expect(spec).to.deep.equal({ ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', memory_kib: 131_072 })
+  })
+
+  it("keeps nothing but a spec's fields", () => {
+    const smuggled = { ...CheapSpec, deriveKeyBytes: () => Promise.resolve(new Uint8Array(32)) } as KeyDeriverSpec
+    expect(parseKeyDeriverSpec(smuggled)).to.deep.equal(CheapSpec)
+  })
+
+  it("refuses a salt Argon2id cannot take, naming the field", () => {
+    const message = refusalOf(() => parseKeyDeriverSpec({ ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', salt_bytes: 4 }))
+    expect(message).to.include('salt_bytes')
+  })
+
+  it("refuses every unworkable spec with argon2idDeriver's own words", () => {
+    for (const [change] of UnworkableSpecs) {
+      const spec = { ...CheapSpec, ...change } as unknown as KeyDeriverSpec
+      expect(refusalOf(() => parseKeyDeriverSpec(spec))).to.eq(refusalOf(() => argon2idDeriver(spec)))
+    }
+  })
+
+  it("refuses the supplied spec's label on other parameters", () => {
+    expect(refusalOf(() => parseKeyDeriverSpec({ ...Argon2idWebV1, parallelism: 4 }))).to.include('argon2id_web_v1')
   })
 })
 
