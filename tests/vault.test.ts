@@ -665,6 +665,32 @@ describe("a stale session cannot reach into a vault reborn elsewhere", () => {
     expect(world.dbStore.ckeys()).to.have.lengthOf(0)
   })
 
+  it("destroy() aims at the vault seen when it was called, not one a change bell brings in while it runs", async () => {
+    const world = makeWorld()
+    let meanwhile: (() => Promise<void>) | null = null
+    const slowDeviceDB = {
+      ...world.deviceDB,
+      eraseUnlock: async (scope: Parameters<typeof world.deviceDB.eraseUnlock>[0]) => {
+        await world.deviceDB.eraseUnlock(scope)
+        const pending = meanwhile
+        meanwhile = null
+        if (pending !== null) { await pending() }
+      },
+    }
+    const vaultOne = await world.open({ deviceDB: slowDeviceDB })
+    await vaultOne.unlock('pw one')
+    const vaultTwo = await world.open({ deviceDB: memoryDeviceDB() })
+    meanwhile = async () => {
+      await vaultTwo.destroy()
+      await vaultTwo.unlock('pw two')
+      await vaultTwo.store('anthropic', 'sk-ant-fake-new')
+      // Let vaultOne's background refreshes, rung by the writes above, settle on the reborn vault.
+      await new Promise((resolve) => { setTimeout(resolve, 0) })
+    }
+    await expectRefusal(vaultOne.destroy(), 'stale_write')
+    expect(await vaultTwo.read('anthropic')).to.eq('sk-ant-fake-new')
+  })
+
   it("changePassphrase() proves against the standing bundle, never burying the reborn one", async () => {
     const { vaultOne, vaultTwo } = await rebornWorld()
     await expectRefusal(vaultOne.changePassphrase('pw one', 'pw three'), 'wrong_passphrase')

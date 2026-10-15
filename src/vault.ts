@@ -489,12 +489,14 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
     destroy: async () => {
       ensureOpen()
+      // Only the vault this handle had read when called: one destroyed and made anew since
+      // refuses, even if a background refresh brings it in while this awaits.
+      const doomed = bundle
       vaultKey = null
       expiresAt = null
       await deviceDB.eraseUnlock(scope)
-      // Only the vault this handle last read: one destroyed and made anew since refuses.
-      if (bundle !== null && bundle !== UnreadBundle) {
-        await refreshOnStale(vaultDB.eraseVault(scope, { vault_id: bundle.vault_id }))
+      if (doomed !== null && doomed !== UnreadBundle) {
+        await refreshOnStale(vaultDB.eraseVault(scope, { vault_id: doomed.vault_id }))
       }
       await refresh()
     },
