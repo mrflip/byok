@@ -386,11 +386,10 @@ importers:
         version: 4.6.7
 
   packages/safebyok-convex:
-    dependencies:
-      safebyok:
-        specifier: workspace:*
-        version: link:../safebyok
     devDependencies:
+      '@arethetypeswrong/core':
+        specifier: ^0.18.5
+        version: 0.18.5
       '@edge-runtime/vm':
         specifier: ^5.0.0
         version: 5.0.0
@@ -433,9 +432,18 @@ importers:
       eslint-plugin-unicorn:
         specifier: ^78.0.0
         version: 78.0.0(eslint@10.12.0(jiti@2.7.0))(typescript@6.0.3)
+      publint:
+        specifier: ^0.3.25
+        version: 0.3.25
       react:
         specifier: ^19.3.0
         version: 19.3.0
+      safebyok:
+        specifier: workspace:*
+        version: link:../safebyok
+      tsdown:
+        specifier: ^0.23.1
+        version: 0.23.1(@arethetypeswrong/core@0.18.5)(publint@0.3.25)(typescript@6.0.3)
       typescript:
         specifier: 6.0.3
         version: 6.0.3
