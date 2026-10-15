@@ -121,12 +121,15 @@ export type Vault = {
    * the same revision of this lockbox (or still none). When another device got in first, the
    * store catches up with storage and tries again, over what that device wrote -- the last
    * writer wins -- for three attempts in all, and throws kind 'stale_write' only when the third is
-   * refused too, the snapshot showing the box as it now stands. A box that stood when an attempt
-   * read it and is gone on the retry was erased elsewhere, and an erase wins: nothing is written,
-   * and the call throws kind 'stale_write' at once. A retry that finds the vault destroyed or
-   * made anew elsewhere, or its passphrase changed, finds this device relocked instead, and
-   * throws kind 'vault_locked' without writing: a stale session never writes into a vault reborn
-   * under new keys.
+   * refused too, the snapshot showing the box as it now stands. Each retry waits first, a random
+   * 1 to 2 seconds before the first and 2 to 4 before the second, so that two devices which
+   * collided do not collide again in step: a store that keeps losing can take up to about six
+   * seconds longer to give up. A box that stood when an attempt read it and is gone on the retry
+   * was erased elsewhere, and an erase wins: nothing is written, and the call throws kind
+   * 'stale_write' at once, without waiting. A retry that finds the vault destroyed or made anew
+   * elsewhere, or its passphrase changed -- or this device locked, as it may be during the wait --
+   * finds this device locked instead, and throws kind 'vault_locked' without writing: a stale
+   * session never writes into a vault reborn under new keys.
    *
    * `opts.note` is the lockbox's public note, shown while locked: text of at most 256
    * characters, or null for none -- kind 'bad_option' otherwise. Left out, the lockbox keeps the
@@ -532,7 +535,17 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
           created_at:          prev?.created_at ?? now,
           updated_at:          now,
         }
-        await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected))
+        try {
+          await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected))
+        } catch (err) {
+          if (! isVaultError(err, 'stale_write')) { throw err }
+          // The catch-up has just shown what stands now. A device it relocked, or a box it shows
+          // gone, ends the store here, as the next attempt would end it, but without the wait
+          // before it that no retry could use.
+          ensureUnlocked()
+          if (boxStood && boxes.every((box) => box.boxlabel !== label)) { return 'erased' }
+          throw err
+        }
         return 'written'
       })
       if (outcome === 'erased') {
@@ -616,20 +629,55 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
  * How many times `store()` tries its versioned write before it lets a `stale_write` through: this
  * many attempts in all, the first one included, so three means one try and two retries. Small,
  * because a box that three reads in a row find changed again is being written in earnest by
- * someone else, and the caller should hear of it.
+ * someone else, and the caller should hear of it. Each retry waits first (see `WriteRetryBaseMs`),
+ * so the limit also bounds how long a losing store can take: about six seconds longer.
  */
 const MaxWriteAttempts = 3
 
 /**
+ * The shortest wait before `store()`'s first retry, in milliseconds; the retry after that waits
+ * twice as long. Two devices that collide on a box would otherwise both retry at once and collide
+ * again in lockstep -- a thundering herd -- so each waits a random time in
+ * `[WriteRetryBaseMs * 2^(n-1), WriteRetryBaseMs * 2^n)` before retry n: 1 to 2 seconds before the
+ * first, 2 to 4 before the second. The windows double, so the longer a box stays contested, the
+ * further apart the contenders spread. Not a public option: a host that needs a different policy
+ * wants the conflict-handler hook, not a knob on this one.
+ */
+const WriteRetryBaseMs = 1000
+
+/**
+ * A random wait before retry number `retryNumber` (1 for the first), uniform over
+ * `[WriteRetryBaseMs * 2^(n-1), WriteRetryBaseMs * 2^n)` milliseconds, a whole number.
+ *
+ * The jitter guards no secret -- it only spreads devices out in time -- so it needs nothing
+ * stronger than spreading. It is drawn from `crypto.getRandomValues` all the same, because the
+ * linter keeps `Math.random` out of `src/`, and one source of randomness is easier to review.
+ */
+const retryDelayMs = (retryNumber: number): number => {
+  const windowMs = WriteRetryBaseMs * (2 ** (retryNumber - 1))
+  const fraction = new DataView(randomBytes(4).buffer).getUint32(0) / (2 ** 32)
+  return windowMs + Math.floor(fraction * windowMs)
+}
+
+/** Resolve after `delayMs`. `setTimeout` runs everywhere the package does. */
+const sleep = (delayMs: number): Promise<void> => (
+  new Promise((resolve) => { setTimeout(resolve, delayMs) })
+)
+
+/**
  * Run `attempt`, and run it again when storage refuses it as stale, up to `attemptsLeft` attempts
- * in all; any other refusal, and the last stale one, is thrown as it came. The attempt must do its
- * own reading, for each try to be made from what storage holds now.
+ * in all; any other refusal, and the last stale one, is thrown as it came. Before each retry it
+ * waits a random, doubling time (`retryDelayMs`); there is no wait before the first attempt, and
+ * none after the last refusal, which is thrown at once. The attempt must do its own reading, for
+ * each try to be made from what storage holds now -- and from whether this device is still
+ * unlocked, so that a lock during the wait ends the retry without a write.
  */
 const retryStale = async <ResultT>(attempt: () => Promise<ResultT>, attemptsLeft = MaxWriteAttempts): Promise<ResultT> => {
   try {
     return await attempt()
   } catch (err) {
     if (attemptsLeft <= 1 || ! isVaultError(err, 'stale_write')) { throw err }
+    await sleep(retryDelayMs(MaxWriteAttempts - attemptsLeft + 1))
     return await retryStale(attempt, attemptsLeft - 1)
   }
 }
