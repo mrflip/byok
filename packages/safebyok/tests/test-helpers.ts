@@ -127,18 +127,19 @@ export const boxOf = (boxlabel: string, tag: string, overrides: Partial<WrittenL
 
 /**
  * What a write into {@link bundleOf}('u1')'s vault expects when its lockbox is not there yet:
- * that vault, and no revision.
+ * that vault, and no revision. Frozen, since every test shares it.
  *
  * @example vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet)
  */
-export const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null } as const
+export const noBoxYet = Object.freeze({ vault_id: 'vault-id-u1', revision_id: null } as const)
 
 /**
  * What an erase of {@link bundleOf}('u1')'s vault, or of a lockbox in it, expects: that vault.
+ * Frozen, since every test shares it.
  *
  * @example vaultDB.eraseVault(TH.scopeOf('u1'), TH.thisVault)
  */
-export const thisVault = { vault_id: 'vault-id-u1' } as const
+export const thisVault = Object.freeze({ vault_id: 'vault-id-u1' } as const)
 
 /** A real DeviceUnlock for device-storage tests: a live non-extractable localUnlockKey around fake wrapped material. */
 export const unlockOf = async (userId: string): Promise<DeviceUnlock> => ({

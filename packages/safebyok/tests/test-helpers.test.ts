@@ -204,6 +204,8 @@ describe("the fixtures", () => {
     await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet)
     await vaultDB.eraseVault(TH.scopeOf('u1'), TH.thisVault)
     expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
+    expect(Object.isFrozen(TH.noBoxYet)).to.be.true
+    expect(Object.isFrozen(TH.thisVault)).to.be.true
   })
 
   it("boxOf: a shape-valid Lockbox, with any field overridden", () => {
