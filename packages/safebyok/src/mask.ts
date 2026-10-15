@@ -47,9 +47,10 @@ const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}
  * `text` reduced to one compact, safe line: composed (so a letter and its accent are one letter),
  * then stripped, never escaped, of every combining mark (stacked "Zalgo" marks among them),
  * invisible or control character, lone surrogate, bidirectional control and space of any kind.
- * Whatever is left is visible, takes one column's room per character and cannot reorder or
- * overwrite its neighbours. Letters of right-to-left scripts stay: they are text, and the
- * controls that would make them a hazard are gone.
+ * Whatever is left is visible, stays on one line and cannot overwrite its neighbours, though a
+ * wide character (an ideograph, an emoji) takes two columns. Letters of right-to-left scripts
+ * stay: they are text, and the controls that could force an order are gone, but like any such
+ * letters they run right to left and can carry the digits and punctuation beside them along.
  */
 const plainLine = (text: string): string => text.normalize('NFC').replaceAll(Unsafe, '')
 
