@@ -58,6 +58,11 @@ a menu choice is a `kind` or a `flavor`.
 **Stored fields are underbar_case** (`salt_bytes`, `memory_kib`): they are written to someone
 else's database, and stay one spelling from the wire to the code. Everything else is camelCase.
 
+**A time is UTC epoch milliseconds, an integer** (`registered_at: 1760000000000`,
+`askPassphraseAt`), in a stored record, a snapshot, a test fixture and the demo alike: never an
+ISO string, never a `Date`. The clock seam (`Clock.now()`) already yields it, every index sorts
+it, and one convention means no parsing at any boundary. A field named `*_at` holds one.
+
 Specificity is a virtue (`saltBytes` says it is bytes), but don't tag the obvious: `title`, not
 `titleStr`. When genericity is exactly the point, use the tag bare: `encode(bytes)`.
 
