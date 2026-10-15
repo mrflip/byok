@@ -52,7 +52,13 @@ from `origin/main` at 6f9911d. Justify: green -- core 868, react 51, convex 268,
     `erase()`, so `store()` is unchanged.
   - A box whose listed fields fail validation (a fractional `changed_at`, say) still makes every
     `refresh()`, and so `openVault`, refuse `corrupt_record`. An already-open vault can now erase
-    it; a fresh open cannot reach it, and `destroy()` remains the remedy there.
+    it; a fresh open cannot reach it. `destroy()` is no remedy either, since it needs a handle,
+    which only an open gives: the package has none for a row that breaks the listing, and the
+    only one is clearing that row from storage by hand.
+  - Follow-ups, left for later (in the PR's open questions): the listing (`listBoxes`, so every
+    `refresh()`) throws on one bad row, which locks the vault out; and `erase()` reports
+    `corrupt_record` after its delete has landed when a *different* box breaks the refresh that
+    follows it.
 * **For the Coach**:
   - `PassphraseModal`'s `reentryHours` prop is removed, not deprecated (pre-1.0, minor bump).
     A host's hand-made `Vault` fake now needs `reentryWindowMs`.
