@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach)
-* **Status**: threads 1-5 filed (#74, #71, #76, #77, #73); 6 in review
+* **Status**: done -- all six threads filed (#71, #73, #74, #76, #77, #78); closing note `human/20261015-sprint_big_feats_done.md`
 
 ## Read first
 
@@ -270,6 +270,16 @@ two halves:
 
 *Touches*: a new `packages/safebyok-graphql/`, `.changeset/config.json`, the lockfile.
 *Depends on*: thread 5 (cut from its tip once filed). *Look-ahead*: none.
+
+*Review:* `fixed`. One fix: a subscriber leaving a quiet vault kept `vaultDB.subscribe`, and
+Postgres's LISTEN, alive until the next write (a `ReadableStream`'s iterator queued `return()`
+behind the pending `next()`); the stream is now read through a reader whose `cancel` ends it.
+Leaks, authorization, fidelity and coalescing held. At the orchestrator's word, the README says
+the server half and the host's server must share one copy of `graphql`. Left, minor:
+`passphrase_epoch` as Int32; validation errors read as `storage_unavailable`; a `vaultDBFor`
+misconfiguration crosses with its kind; helpers duplicated from the core. Not tried: graphql 16,
+Apollo, Mercurius, graphql-ws, a real disconnect. Filed as
+[#78](https://github.com/mrflip/safebyok/pull/78), stacked on #73.
 
 ## Order
 
