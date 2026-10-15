@@ -4,6 +4,7 @@
 * **Mode**: YOLO
 * **Review level**: medium
 * **Threads at once**: 3
+* **Status**: done -- fourteen threads, all filed; see the progress document and `human/20261015-sprint_low_hanging_fruit_done.md`.
 * **Issued by**: the Coach (flip), from the preplan
   `whiteboard/20261014-low_hanging_fruit/20261014-low_hanging_fruit-preplan.md`, which is on
   `20261015-roadmap_fruit` ([#26](https://github.com/mrflip/safebyok/pull/26), unmerged)
@@ -126,8 +127,9 @@ Start: 1, 3, 4. Then the lowest-numbered thread whose base exists, as slots free
     three attempts in all stays ("more poetic"). As a new PR, thread 14 `store_backoff`, cut
     from #44's tip, so #44 can merge as it stands. My numbers, a two-way door: before retry
     *n* (1 or 2), a uniformly random wait in [2^(n-1), 2^n) seconds, so 1-2 s, then 2-4 s,
-    at most 6 s added to a store that lost two races. Named constants, not options. The jitter is
-    `Math.random`: it guards no secret.
+    at most 6 s added to a store that lost two races. Named constants, not options. The jitter
+    guards no secret; it is drawn from `crypto.getRandomValues` all the same, because the core's
+    linter keeps `Math.random` out of `src/` (#45).
 
 ## The threads
 
