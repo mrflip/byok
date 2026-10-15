@@ -241,12 +241,14 @@ security expert who knows what questions to ask.
   names hold, and a vault's box prefix (its tuple's JSON up to the comma before the boxlabel)
   begins no other vault's ckeys; tests cover every split of a string of separators into four names.
   A name is encoded as given, never normalized: two Unicode spellings of one name are two vaults,
-  as they are two cipher bindings. Rows under the old ckeys are neither read, moved nor deleted:
-  a vault stored before reads as absent, and its rows stay in storage. On a device that leaves
-  an old remembered unlock (a localUnlockKey and the vaultKey wrapped under it) in IndexedDB,
-  where `lock()` no longer reaches it and no read ever expires it. `idbDeviceDB`'s `eraseAll()`
-  now clears the whole device shelf, old rows included, and the changeset tells a host how to
-  wipe it.
+  as they are two cipher bindings. Rows under the old ckeys are never read or moved: a vault
+  stored before reads as absent, and its rows, ciphertext only, stay in storage. An old remembered
+  unlock (a localUnlockKey and the vaultKey wrapped under it) would otherwise linger in IndexedDB
+  beyond the reach of `lock()` and of any expiry, so `idbDeviceDB` sweeps it: `readUnlock` and
+  `eraseUnlock` list the device shelf's ckeys and delete, unread, every one that is not an unlock
+  tuple (`Ckeys.isUnlock`). The first open after an upgrade does it, and a test proves no old
+  value is fetched. `eraseAll()` clears the whole shelf. `memoryDeviceDB` keeps nothing past the
+  page, so it needs no sweep.
 * 2026-10-15: the Convex component (`packages/safebyok-convex`) authenticates in the host app,
   not inside the component (where `ctx.auth` does not exist): `SafebyokComponent.api({ getUserId })`
   builds the nine public functions the host re-exports, and each refuses unless the host's
