@@ -1,7 +1,7 @@
 # Thread 6: graphql_vaultdb (2026-10-15)
 
 Branch `20261015-graphql_vaultdb`, PR not yet filed, stacked on [#73](https://github.com/mrflip/safebyok/pull/73) (thread 5, tip `d55eb9c`). Justify green: core 759,
-convex 269, postgres 132, react 28, graphql 138, demo 61, root 105.
+convex 269, postgres 132, react 28, graphql 140, demo 61, root 105.
 
 * **Built**: `packages/safebyok-graphql/`, packaged like `safebyok-postgres` (ESM+CJS, tsdown-written
   `exports`, its own eslint cut from the core's, README, changeset, a place in the `fixed` group).
@@ -43,9 +43,12 @@ convex 269, postgres 132, react 28, graphql 138, demo 61, root 105.
   - Root fields `safebyok*`, types `Safebyok*`: everything lands in the host's namespace. The SDL
     defines `type Query` etc. (not `extend type`), which graphql-tools-based servers merge.
   - `graphqlVaultDB(client)` positional, as `convexVaultDB` is; every query `network-only`.
-  - Subscription queue: `ReadableStream` (no dependency, no hand-rolled queue), its `values()`
-    iterator returned; a change heard while one waits is dropped (`desiredSize`), which also makes
-    a late `onChange` after cancel harmless.
+  - Subscription queue: `ReadableStream` (no dependency, no hand-rolled queue), **read through a
+    reader** (the review's fix, `7d8b496`): the stream's own `values()` iterator queues `return()`
+    behind a pending `next()`, so a subscriber leaving a quiet vault kept `vaultDB.subscribe` (and
+    Postgres's LISTEN) alive until the next write; `reader.cancel()` ends the pending read at once.
+    A change heard while one waits is dropped (`desiredSize`), which also makes a late `onChange`
+    after cancel harmless.
   - The server reads a lockbox expectation with `revision_id` left out as null.
 * **Deviations**:
   - `perUser` is copied from `safebyok-postgres`'s tests (it is not published). A candidate for
@@ -55,7 +58,8 @@ convex 269, postgres 132, react 28, graphql 138, demo 61, root 105.
     Yoga (loaded by Node) get the other, two realms. Test-only: a host's bundle is unaffected.
 * **Discoveries**:
   - graphql 17's `mapAsyncIterable` asks an iterable for its iterator twice: a `ReadableStream`
-    returned as is throws "locked". Return its own iterator.
+    returned as is throws "locked". And its own iterator cannot be ended mid-read (above): hence
+    the reader.
   - graphql 17 deprecates `originalError` for `cause`; the constructor's `cause` becomes it.
   - urql's `cacheExchange` adds `__typename` to every selection; `recordOf` drops it.
   - A listed record missing a non-null field would cross as a GraphQL non-null error, hence
@@ -63,7 +67,10 @@ convex 269, postgres 132, react 28, graphql 138, demo 61, root 105.
     ServedVaultDB could meet it.
   - Records on writes are validated only by the core's VaultDB (gripe_fixes' `vaultdb_validation`
     adds it); GraphQL checks every field's type but nothing inside an envelope.
-* **For the Coach** (open questions, also in the PR):
+* **At filing** (the orchestrator's YOLO calls): this file says the stream is read through a
+  reader, and the README says the server half and the host's GraphQL server must share one copy
+  of `graphql`, or every refusal is masked and its kind lost.
+* **For the Coach** (open questions, also in the PR, beside the review's minor findings there):
   - `graphql` as a runtime (optional) peer of the server half: the plan allowed it only if truly
     needed; Yoga's masking is the need. Confirm.
   - Opaque JSON envelopes over a union type: confirm the call.
