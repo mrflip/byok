@@ -184,6 +184,15 @@ from #63 once nothing else can start. *Touches*: a new `packages/safebyok-indexe
 *Depends on*: vaultdb_validation. *Look-ahead*: threads 5 and 6 are SQL and wire backends; this
 README is where "how to write an adapter" starts, so write it for an adapter author.
 
+*Review:* `fixed`. Two fixes: the bell no longer calls a listener that unsubscribed between the
+ring and its microtask (a closed vault tried to refresh and logged a warning), and
+`vaultMeetsExpectation` needs a finite `passphrase_epoch`, as the core's `StandingBundle` does.
+Atomicity, compatibility with vaults the core wrote, and a channel carrying only `'changed'` all
+held. Left, minor: the BroadcastChannel keeps a Node or Bun process alive; a throwing listener
+crashes Node (`reportError` an option); the device store's bell keeps its old ways; list and
+erase read the whole store; a failed write's `cause` can be null; the race tests share one
+connection. Filed as [#77](https://github.com/mrflip/safebyok/pull/77), stacked on #70.
+
 ### 5. postgres_vaultdb
 
 > Postgres Vault DB
