@@ -105,6 +105,7 @@ const SameBytesCases = [
   [{},                                                   "pässwörd mit Umlaut und 🔑",    'a passphrase past ASCII, encoded as UTF-8'],
   [{},                                                   "word ".repeat(40),              'a passphrase longer than one BLAKE2b block'],
   [{},                                                   " ",                             'a passphrase of one space, which a deriver takes as it is'],
+  [{},                                                   "half a \u{D83D} key",           'a lone surrogate, which each encodes as U+FFFD'],
 ] as const
 
 describe("argon2idWasmDeriver beside argon2idDeriver", () => {
