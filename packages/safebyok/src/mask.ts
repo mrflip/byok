@@ -10,8 +10,8 @@ export interface MaskOpts {
   /** Fewest stars the result may carry, however short the whisper. Default 6. */
   minStars?: number | undefined
   /**
-   * Longest result, in characters: a longer one collapses to `head`, `***...***`, `tail`. Default
-   * 15, or `head + tail + 9` when that is more. At least `head + tail + 9`; `Infinity` never collapses.
+   * Longest result, in characters (code points). A longer one collapses to `head`, `***...***`,
+   * `tail`; if even that is too long, to `maxLen` stars alone. Default 15. `Infinity` never collapses.
    */
   maxLen?: number | undefined
 }
@@ -19,76 +19,69 @@ export interface MaskOpts {
 /** The stars-and-dots a masked whisper collapses to once the result would pass `maxLen`. */
 const Collapsed = '***...***'
 
-const DefaultMaxLen = 15
-
 const wholeCount = Z.number().int().nonnegative()
 const maskOpts = Z.object({
   head:     wholeCount.default(2),
   tail:     wholeCount.default(4),
   minStars: wholeCount.default(6),
-  maxLen:   Z.union([Z.literal(Infinity), wholeCount]).optional(),
+  maxLen:   Z.union([Z.literal(Infinity), wholeCount]).default(15),
 })
 
 const parseMaskOpts = (candidate: MaskOpts | undefined): Record<keyof MaskOpts, number> => {
   const checked = maskOpts.safeParse(candidate ?? {})
   if (! checked.success) {
-    throw new VaultError('bad_option', 'mask takes head, tail and minStars as whole numbers of characters, and maxLen as a whole number or Infinity, none below zero.')
+    throw new VaultError('bad_option', 'mask takes head, tail, minStars and maxLen as whole numbers of characters, none below zero (maxLen may be Infinity).')
   }
-  const { head, tail, minStars } = checked.data
-
-  // A collapsed result is head + tail characters around the marker, so a maxLen below that could
-  // make the result longer than maxLen: refuse it, so that maxLen is always a true ceiling.
-  const shortestMaxLen = head + tail + Collapsed.length
-  const maxLen = checked.data.maxLen ?? Math.max(DefaultMaxLen, shortestMaxLen)
-  if (maxLen < shortestMaxLen) {
-    throw new VaultError('bad_option', `mask's maxLen must be at least head + tail + ${String(Collapsed.length)}, the room a collapsed result needs: with head ${String(head)} and tail ${String(tail)} that is ${String(shortestMaxLen)}. Raise maxLen, or lower head or tail.`)
-  }
-  return { head, tail, minStars, maxLen }
+  return checked.data
 }
 
 /**
- * The user-perceived characters of `text` (an emoji, or a letter with its combining accent, is
- * one), so that masking never cuts one in half. Falls back to code points on a runtime without
- * `Intl.Segmenter`.
+ * Everything `plainLine` removes: combining marks, every control, format, surrogate, private-use
+ * and unassigned code point, every space and line or paragraph separator, anything a renderer is
+ * told to ignore, the bidirectional controls, and the blank braille pattern.
  */
-const charsOf = (text: string): string[] => {
-  if (typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') { return text.match(/./gsu) ?? [] }
-  return Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text), (part) => part.segment)
-}
+const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}]/gu
 
 /**
- * What `mask` removes before it counts: control characters (newline, return and tab among them),
- * the line and paragraph separators, the bidirectional controls (which could make the end of a
- * result read in the wrong order), and the characters that take no room on screen but would
- * count as one (zero-width space, word joiner, byte-order mark). The zero-width joiner and
- * non-joiner, variation selectors and tag characters stay: emoji and many scripts need them.
+ * `text` reduced to one compact, safe line: composed (so a letter and its accent are one letter),
+ * then stripped, never escaped, of every combining mark (stacked "Zalgo" marks among them),
+ * invisible or control character, lone surrogate, bidirectional control and space of any kind.
+ * Whatever is left is visible, takes one column's room per character and cannot reorder or
+ * overwrite its neighbours. Letters of right-to-left scripts stay: they are text, and the
+ * controls that would make them a hazard are gone.
  */
-const Unprintable = /[\p{Cc}\p{Zl}\p{Zp}\p{Bidi_Control}\u{200B}\u{2060}\u{FEFF}]/gu
+const plainLine = (text: string): string => text.normalize('NFC').replaceAll(Unsafe, '')
+
+/** `text` as a list of its code points, so that a surrogate pair is never parted. */
+const codePointsOf = (text: string): string[] => text.match(/./gsu) ?? []
 
 /**
- * A whisper's outline, safe to show: its first and last few characters with stars between, so a
- * user can tell which API key a lockbox holds without the key being revealed. The result is
- * public: show it, but never count on it to hide more than it does -- it gives away the whisper's
- * ends, and (below `maxLen`) its length.
+ * A whisper's outline, to show in a log or a reminder: a whiff of interesting text from each end
+ * with stars between, so a user can tell which API key a lockbox holds without the key being
+ * revealed. It is best effort, not a copy: the result is always one plain line, and fidelity
+ * gives way to that. Combining marks (so, the accents of scripts that rely on them), invisible
+ * characters and every kind of space are dropped from the whisper first, and the result is
+ * cleaned the same way once more before it is returned. The result is public: show it, but
+ * never count on it to hide more than it does -- it gives away the whisper's ends, and (up to
+ * `maxLen`) its length.
  *
- * Control characters, bidirectional controls and invisible spaces are removed first. A character
- * is a user-perceived one, so an emoji or an accented letter is not split -- where the runtime
- * has `Intl.Segmenter`. Without it, `mask` counts code points, and may split a ZWJ sequence, a
- * flag or a skin-toned emoji, or part a letter from its combining accent. At least `minStars`
- * stars always stand in the whisper's place: a whisper too short to keep `head` and `tail` and
- * still hide `minStars` characters gives up `head` characters first, then `tail`, and one shorter
- * than `minStars` shows only stars. A result that would pass `maxLen` characters is instead the
- * `head` kept, `***...***`, then the `tail` kept, which is never longer than `maxLen` (a `maxLen`
- * too small for that is refused), and wins over `minStars` if they disagree. A whisper with
- * nothing left to show gives the empty string.
+ * What is cut is cut by code point, so a cut can part an emoji sequence or a flag; whatever that
+ * leaves is visible text. At least `minStars` stars always stand in the whisper's place: a
+ * whisper too short to keep `head` and `tail` and still hide `minStars` characters gives up
+ * `head` characters first, then `tail`, and one shorter than `minStars` shows only stars. A
+ * result that would pass `maxLen` characters is instead the `head` kept, `***...***`, then the
+ * `tail` kept; if that is too long too, it is `maxLen` stars, nothing else. Whatever the
+ * options, the result is never longer than `maxLen`. An empty whisper gives the empty string; a
+ * whisper that is nothing but removed characters gives `minStars` stars.
  *
  * Pass `{ head: 0, tail: 0 }` to show nothing of the whisper but how long it is. Lower `minStars`
  * with care: at 0 a short whisper may be shown whole.
  *
  * @param whisper - Text to mask: an API key, say.
  * @param opts - How much to keep and hide; see {@link MaskOpts}.
- * @returns The masked text. Throws a VaultError of kind 'bad_option' for an option out of range, or
- *   'bad_whisper' for a whisper that is not a string; neither message quotes the whisper.
+ * @returns The masked text. Throws a VaultError of kind 'bad_option' for an option that is not a
+ *   whole number of at least zero, or 'bad_whisper' for a whisper that is not a string; neither
+ *   message quotes the whisper.
  *
  * @example mask('sk-ant-api03-abcdefghijklmnopqrstuvwxyz')  // 'sk***...***wxyz'
  * @example mask('sk-ant-abcd1234')                          // 'sk*********1234'
@@ -97,15 +90,15 @@ const Unprintable = /[\p{Cc}\p{Zl}\p{Zp}\p{Bidi_Control}\u{200B}\u{2060}\u{FEFF}
  * @example mask('abc')                                      // '******'
  * @example mask('sk-1234abcd', { head: 0, tail: 0 })        // '***********'
  * @example mask('sk-\nant-\tabcd1234')                      // 'sk*********1234'
- * @example mask('sk-ant-abcd1234', { maxLen: 5 })           // throws 'bad_option': room for a collapsed result is head + tail + 9
+ * @example mask('sk-ant-abcd1234xyz', { maxLen: 8 })        // '********'
  */
 export const mask = (whisper: string, opts?: MaskOpts): string => {
   if (typeof whisper !== 'string') {
     throw new VaultError('bad_whisper', 'mask masks a whisper that is a string.')
   }
   const { head, tail, minStars, maxLen } = parseMaskOpts(opts)
-  const chars = charsOf(whisper.replaceAll(Unprintable, ''))
-  if (chars.length === 0) { return '' }
+  if (whisper === '') { return '' }
+  const chars = codePointsOf(plainLine(whisper))
 
   // What may be shown at all is what is left once minStars are hidden: tail has first call on it.
   const showable = Math.max(0, chars.length - minStars)
@@ -115,6 +108,8 @@ export const mask = (whisper: string, opts?: MaskOpts): string => {
 
   const headChars = chars.slice(0, headShown).join('')
   const tailChars = tailShown > 0 ? chars.slice(-tailShown).join('') : ''
-  const outLen = headShown + stars + tailShown
-  return headChars + (outLen > maxLen ? Collapsed : '*'.repeat(stars)) + tailChars
+  const whole = headChars + '*'.repeat(stars) + tailChars
+  const collapsed = headChars + Collapsed + tailChars
+  const fitting = [whole, collapsed].find((candidate) => codePointsOf(candidate).length <= maxLen)
+  return plainLine(fitting ?? '*'.repeat(maxLen))
 }
