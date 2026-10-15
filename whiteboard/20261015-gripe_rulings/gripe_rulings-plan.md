@@ -133,8 +133,9 @@ in `vault-db.ts` and `vault.ts`, resolved by its worker at the restack.
 
 * **Thread 2's fallback dropped** (flagged review of #91): the fallback for engines without
   `Intl.RelativeTimeFormat` used `Intl.NumberFormat`'s `style: 'unit'`, which every engine got
-  *after* RTF, so it would throw where it ran; any engine that runs our es2022 build has both,
-  and the dialog's DOM markup never runs on React Native. The plan's guard was the
+  *after* RTF, so it would throw on exactly the engines it was for; and the dialog's DOM markup
+  never runs on React Native. (A syntax target such as es2022 guarantees no Intl API: an engine
+  without RTF now throws to the host's error boundary, as before the thread.) The plan's guard was the
   orchestrator's addition, not the Coach's. Also: "Locks on this device in ..." when creating a
   vault, "Locks again ..." on an ordinary unlock.
 
