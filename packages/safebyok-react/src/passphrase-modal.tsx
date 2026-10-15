@@ -6,7 +6,7 @@ const MinutesPerHour = 60
 const MinutesPerDay = 24 * MinutesPerHour
 const MsPerMinute = 60_000
 
-/** The language the dialog's own sentences are in: the one place to change when it learns another. */
+/** The locale the window's count and relative phrase are formatted in. */
 const Locale = 'en'
 
 type Unit = 'day' | 'hour' | 'minute'
