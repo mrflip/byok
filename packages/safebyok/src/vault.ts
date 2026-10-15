@@ -808,6 +808,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       ensureOpen()
       parsePassphrase(oldPassphrase, 'changePassphrase')
       parsePassphrase(newPassphrase, 'changePassphrase')
+      refuseBlankProof(oldPassphrase)
       if (! newPassphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
       const unlockId = parseAim(changeOpts)
       await reviseUnlocks(oldPassphrase, unlockId, {
@@ -822,6 +823,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       ensureOpen()
       parsePassphrase(passphrase, 'addPassphrase')
       parsePassphrase(newPassphrase, 'addPassphrase')
+      refuseBlankProof(passphrase)
       if (! newPassphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
       const unlocklabel = parseUnlocklabel(labelling)
       const naming = { unlock_id: randomId(), unlocklabel }
@@ -842,6 +844,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     removeUnlock: async (passphrase, unlockId) => {
       ensureOpen()
       parsePassphrase(passphrase, 'removeUnlock')
+      refuseBlankProof(passphrase)
       const doomedId = parseUnlockId(unlockId)
       await reviseUnlocks(passphrase, undefined, {
         check: (standing) => {
@@ -1015,6 +1018,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 const asError = (thrown: unknown): Error | null => (thrown instanceof Error ? thrown : null)
 
 const lockedError = () => new VaultError('vault_locked', 'The vault is locked: ask the user for their passphrase and call unlock().')
+
+/** A blank passphrase offered as proof is refused at once, as `unlock()` refuses one: it could open nothing, and trying would cost a derivation per way in. */
+const refuseBlankProof = (passphrase: string) => {
+  if (! passphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
+}
 
 /** The `unlocklabel` of the way in a vault is created with, by its first `unlock()`. */
 const FirstUnlocklabel = 'passphrase'
