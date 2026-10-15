@@ -25,8 +25,10 @@ Gather the plan from wherever this session kept it: the chat itself, the todo li
 `-plan.md` and `-progress.md`, a thread's `whiteboard/` directory. For each item, check the
 ground rather than your recollection, and give it one status:
 
-* **done** -- committed, `pnpm justify` green; or **filed** -- its PR is open
-  (`gh pr view <n> --json state,headRefOid` matches the branch tip you pushed);
+* **done** -- committed, `pnpm justify` green; or **filed** -- its PR is open and out of draft
+  (`gh pr view <n> --json state,isDraft,headRefOid`, its head the branch tip you pushed). A PR
+  this session left in draft is taken out (`gh pr ready <n>`) before you report: drafts are only
+  for work underway (PROCESS.md, *Pull requests*);
 * **underway** -- a subagent or background task is still on it;
 * **blocked** / **not started** -- and why.
 

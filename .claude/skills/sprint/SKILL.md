@@ -106,7 +106,8 @@ Your worktree: <root>, on branch <branch>, cut from <origin/main | thread M's br
 Begin every shell command with `cd <root> && `. Mode: <normal | YOLO: prefer your recorded best
 judgment over blocking on minor calls>.
 Read <sprint_name>-plan.md and <sprint_name>-progress.md before touching code, then build
-this thread per your agent definition, and report `ready` when it is built and committed.
+this thread per your agent definition, in a draft PR from its first push, and report `ready`
+when it is built, committed and pushed, with the PR out of draft.
 Your scratch files go in <scratchpad>/<label>/.
 
 <the thread's text, verbatim>
@@ -138,10 +139,10 @@ reviewer commits the fixes it can stand behind in the worktree, and reports; any
 decide comes back `flagged` for §4.
 
 **File.** Resume the worker (SendMessage, same agent, so its context survives) with "File it",
-and anything from the review it should know. It catches up, proves the branch, pushes, files the
-PR, removes its worktree, and reports `filed` with the PR number, or `blocked`. Then post the
-reviewer's PR comment (`gh pr comment <n>`, the text from its report), so the review sits on the
-PR. A thread stacked on this one may now be cut.
+and anything from the review it should know. It catches up, proves the branch, pushes the
+review's fixes to its PR, removes its worktree, and reports `filed` with the PR number, or
+`blocked`. Then post the reviewer's PR comment (`gh pr comment <n>`, the text from its report),
+so the review sits on the PR. A thread stacked on this one may now be cut.
 
 A `blocked` or `abandoned` worker gets no review: the review is of a finished thread, and
 follows the resume that finishes it.
@@ -149,8 +150,9 @@ follows the resume that finishes it.
 ## 3. As each report comes in
 
 1. **Verify, cheaply.** For `ready`: the worker's commits are in its worktree
-   (`git -C <root> log --oneline -5`) and its tree is clean. For `filed`: `gh pr view <n>`
-   exists and names the branch. Trust the reports for the rest -- do not re-review the diff.
+   (`git -C <root> log --oneline -5`), its tree is clean, and its PR is out of draft
+   (`gh pr view <branch> --json isDraft`). For `filed`: `gh pr view <n>` exists and names the
+   branch. Trust the reports for the rest -- do not re-review the diff.
 2. **Relay, whole.** Put the report in chat verbatim -- the Coach reads the entire bolus, not a
    précis -- under one lead line of your own (thread, verdict, PR link when there is one).
 3. **Tend the documents.** Keep the status table and status lines current, and revise later
@@ -179,7 +181,7 @@ Default rules, absent other guidance:
   commits and all, and reports `ready` again. Then spawn a second reviewer over the new commits
   only (`<tip the first reviewer left>...<the new tip>`). Never a third: what is still open after
   that is the Coach's. Otherwise the finding is the Coach's: the thread waits, unfiled, in its
-  worktree.
+  worktree, and you post the reviewer's comment on its PR so the Coach sees why.
 * **Resume** a `blocked` worker when you can supply what it lacks: an answer the plan or
   progress document already holds, or -- in YOLO -- a judgment call you can make and record. A
   rebase conflict that takes judgment about which behaviour wins is the Coach's.
@@ -198,8 +200,8 @@ Default rules, absent other guidance:
     threads stacked on it; independent threads may carry on.
 * **Every remaining thread waits on a merge**: that is a pause too, naming the PRs the Coach
   would merge to free them.
-* **Stopping is cheap** outside YOLO: filed work is pushed; unfiled work is committed in its
-  worktree, waiting; a paused sprint resumes where it stood. When unsure, pause.
+* **Stopping is cheap** outside YOLO: every thread's work is pushed to its PR; unfiled work also
+  waits in its worktree; a paused sprint resumes where it stood. When unsure, pause.
 
 **YOLO** (the Coach says so, usually at the invocation): be more reluctant to pause, not more
 willing to gamble. Answer judgment calls a competent Coach would consider two-way doors, record
