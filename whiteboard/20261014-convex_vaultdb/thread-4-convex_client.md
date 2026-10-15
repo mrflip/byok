@@ -1,6 +1,6 @@
 # Thread 4: the Convex client adapter (2026-10-15)
 
-Branch `20261014-convex_client`, PR not yet filed, stacked on #19. Justify: root green (268 tests,
+Branch `20261014-convex_client`, PR [#20](https://github.com/mrflip/safebyok/pull/20), stacked on #19. Justify: root green (268 tests,
 build, attw, publint); `packages/safebyok-convex` green (lint, typecheck, 210 tests).
 
 * **Built**, all in `packages/safebyok-convex/`:
