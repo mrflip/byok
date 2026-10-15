@@ -14,9 +14,9 @@ security expert who knows what questions to ask.
   showing; a `head` and `tail` large enough to cover a short whisper show it nearly whole, and
   `minStars: 0` shows a short one entirely. Every result, even the stars, goes through a final
   normalization that strips combining marks, control, format, surrogate, private-use and
-  unassigned code points, spaces, ignorable code points and bidirectional controls (strong
-  right-to-left letters stay), so it is one plain line that cannot reorder or overwrite what
-  displays beside it. It throws `bad_option` or `bad_whisper` without quoting its input.
+  unassigned code points, spaces, ignorable code points, bidirectional controls and the two
+  symbols drawn blank, U+2800 and U+1D159 (strong right-to-left letters stay), so it is one
+  plain line that cannot reorder or overwrite what displays beside it. It throws `bad_option` or `bad_whisper` without quoting its input.
 * 2026-10-14: the package is staged on npm by `.github/workflows/release.yml`, run when a
   GitHub release is published, authenticating by npm's trusted publishing (OIDC, no stored
   token) from the `npm` environment, with provenance. `prepublishOnly` runs lint, typecheck,

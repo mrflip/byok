@@ -38,9 +38,10 @@ const parseMaskOpts = (candidate: MaskOpts | undefined): Record<keyof MaskOpts, 
 /**
  * Everything `plainLine` removes: combining marks, every control, format, surrogate, private-use
  * and unassigned code point, every space and line or paragraph separator, anything a renderer is
- * told to ignore, the bidirectional controls, and the blank braille pattern.
+ * told to ignore, the bidirectional controls, and the two symbols drawn blank (the blank braille
+ * pattern and the musical null notehead).
  */
-const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}]/gu
+const Unsafe = /[\p{M}\p{C}\p{Z}\p{Default_Ignorable_Code_Point}\p{Bidi_Control}\u{2800}\u{1D159}]/gu
 
 /**
  * `text` reduced to one compact, safe line: composed (so a letter and its accent are one letter),
