@@ -14,7 +14,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
 | 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37); reworking to the Coach's contract |
 | 6  | `boundary_audit` | thread 2 (#40, 868ce73) | filed [#43](https://github.com/mrflip/safebyok/pull/43), stacked on #40 |
-| 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | underway |
+| 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | underway (erase-wins fix before review) |
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
@@ -122,6 +122,12 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   can extend it. *Review:* clean, contract verified. Left for the Coach: clamp a remembered
   unlock's `expires_at` to `now + forcePassphraseReentryHours` on read (no crypto; a policy
   change); export `LockboxNote`; a vault already bricked by an over-long note still will not open.
+* **Thread 7** (`stale_write_retry`): `store()`'s read-then-write runs through `retryStale`, up
+  to `MaxWriteAttempts = 3` attempts (fresh `revision_id`, lockbox key, `ensureRoomFor` and
+  `noteToStore` each time); a retry that finds the device relocked throws `vault_locked`; `erase()`
+  is never retried. *Orchestrator:* first build re-created a box another device had erased
+  mid-retry, against the ruled **"Erase wins"** (`rulings.md` line 23): sent back to surface
+  `stale_write` instead, before review.
 * **Thread 8** (`size_budget`, [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40): `.size-limit.json` at the **root**, not the core -- size-limit
   excludes a package's peers, and zod (the core's peer) is most of the bundle, so a core-level
   config would measure `openVault` at 7 kB and never show the zod-mini thread's gain. Brotli
