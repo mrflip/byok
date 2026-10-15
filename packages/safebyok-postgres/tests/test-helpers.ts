@@ -1,3 +1,4 @@
+import { beforeAll } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
 import type { VaultDB } from 'safebyok'
 import type { VaultDBVerbs } from 'safebyok/testing'
@@ -24,6 +25,35 @@ const madeDatabase = async (): Promise<PGlite> => {
   await db.exec(VaultTablesSql)
   return db
 }
+
+/**
+ * The most a file's PGlite may take to boot, in milliseconds. Its WebAssembly compiles cold on a
+ * CI runner in eight seconds or more, past any test's timeout, so the boot is paid in a hook.
+ */
+export const BootMs = 60_000
+
+/**
+ * Boots this file's database before its first test, under {@link BootMs}, so no test is charged
+ * for the boot and every test's own timeout still catches a real hang. Call it at the top of
+ * every test file that touches the database.
+ *
+ * @example TH.bootDatabaseFirst()
+ */
+export const bootDatabaseFirst = (): void => {
+  beforeAll(async () => { await database() }, BootMs)
+}
+
+/**
+ * A client over this file's database that sees none of the vault's tables: each statement runs
+ * in a transaction whose search_path is a schema with nothing in it. For the database a host
+ * forgot to make the tables in, without booting a second PGlite.
+ */
+export const tablelessClient = (db: PGlite): PostgresClient => ({
+  query: (text, params) => db.transaction(async (tx) => {
+    await tx.exec('CREATE SCHEMA IF NOT EXISTS tableless; SET LOCAL search_path TO tableless')
+    return await tx.query(text, params)
+  }),
+})
 
 /** This file's database, its tables emptied. */
 export const emptyDatabase = async (): Promise<PGlite> => {
