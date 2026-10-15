@@ -1,0 +1,5 @@
+---
+'safebyok-graphql': minor
+---
+
+`safebyok-graphql`, new: safebyok's storage over GraphQL. On the server, `safebyok-graphql/server` gives `VaultSchemaSdl`, the schema as SDL -- one root field per VaultDB verb and a `safebyokVaultChanged` subscription, each record an object type with a field per stored field, each encrypted value a `SafebyokCiphered`, each unlock envelope opaque JSON -- and `vaultResolvers({ vaultDBFor })`, its resolvers over a VaultDB made per request (safebyok-postgres's, or any with `listBoxRecords`), which drop into Yoga, Apollo Server, Mercurius or graphql-tools beside the host's own schema. A refusal crosses as a GraphQL error carrying only its message and `extensions.kind`, its cause kept on the server. In the browser, `graphqlVaultDB(client)` is the VaultDB over the app's urql Client, every query network-only, each refusal rethrown as the same VaultError, and `subscribe` fed by the subscription. `@urql/core` and `graphql` are optional peers, one for each half. The README has a Yoga-on-Next.js recipe, tested whole.
