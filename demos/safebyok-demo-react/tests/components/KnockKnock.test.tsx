@@ -142,6 +142,8 @@ describe("KnockKnock", () => {
     await screen.findByText(/stored Anthropic key is damaged/)
     fireEvent.change(screen.getByPlaceholderText('Banana'), { target: { value: 'Banana' } })
     expect(screen.getByRole<HTMLButtonElement>('button', { name: /Banana Who\?/ }).disabled).to.be.true
+    fireEvent.keyDown(screen.getByPlaceholderText('Banana'), { key: 'Enter' })
+    expect(screen.queryByText(/clearing its throat/)).to.be.null
     fireEvent.click(screen.getByRole('button', { name: 'replace it' }))
     fireEvent.change(screen.getByPlaceholderText('sk-ant-…'), { target: { value: 'sk-ant-test-replaced' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
