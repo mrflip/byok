@@ -90,7 +90,7 @@ const ApiKeySlot = ({ haveKeyBox, changedAt }: { haveKeyBox: boolean, changedAt?
   if (! editing) {
     return (
       <p className="api-key-slot quiet">
-        ✓ Anthropic key in the vault{changedAt !== undefined && ` (saved ${new Date(changedAt).toLocaleString()})`}.{' '}
+        ✓ Anthropic key in the vault{changedAt !== undefined && ` (changed ${new Date(changedAt).toLocaleString()})`}.{' '}
         <button className="mini" onClick={() => { setEditing(true) }}>replace it</button>
       </p>
     )
