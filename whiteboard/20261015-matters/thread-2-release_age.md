@@ -59,9 +59,9 @@ Branch `20261015-release_age`, PR [#96](https://github.com/mrflip/safebyok/pull/
 * Under the rule, a range's floor must be a release that has aged; a worker who bumps `^x.y.z` to
   a fresh release the day it appears fails the frozen install. Bump floors to the newest mature
   release.
-* After the rule, `pnpm install` warns of 24 deprecated `@yuku-*` 0.10.2 subdependencies (the
-  older `tsdown` line's parser); they were not flagged by name before only because newer ones were
-  in use. Harmless; they vanish when the `tsdown` floor can rise past 0.23.0.
+* After the rule, `pnpm install` warns of 24 deprecated `@yuku-*` 0.10.2 subdependencies (via
+  `tsdown` 0.23.0, `rolldown-plugin-dts` 0.28.6, `yuku-parser` 0.10.2); the old lockfile used
+  0.18.1, which has not aged. Dev-only; they go when `tsdown` 0.23.1 has aged (2026-10-17).
 * The gripes line (not yet on this base) edits `package.json`s and the lockfile too: the lockfile
   will conflict. Resolve by taking this thread's lockfile, running `pnpm install`, and checking
   that the gripes line's added dependencies (if any) are seven days old.
