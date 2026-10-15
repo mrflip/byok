@@ -1,0 +1,5 @@
+---
+"safebyok-react": minor
+---
+
+The passphrase dialog and the passkey button no longer throw to the host's error boundary. A failure that is not the user's to mend -- misuse, such as a closed vault handle, an `rpId` that does not fit the page or a vault made with a key deriver this build lacks, or a failure that is no `VaultError` -- was thrown while rendering, so the host's boundary replaced whatever it wrapped (often the whole app), or with no boundary the page went blank, and `withUnlockedVault` never settled. Now `PassphraseModal` shows a calm "Something went wrong" in place of its form, whose Close calls `onDone(false)`, so `withUnlockedVault` resolves null; `PasskeyUnlockButton` takes itself away and hands `onGripe` a word pointing the user to the passphrase. Each catches the error in a boundary of its own, so React reports it through the root's `onCaughtError` (the console, by default): hook an error tracker there to hear it. A `reentryHours` of no hours is met the same way. Conditions behave as before, and `VaultProvider`'s open still throws its misuse to the host's boundary at mount.

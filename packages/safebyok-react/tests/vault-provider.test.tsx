@@ -218,6 +218,38 @@ describe("VaultProvider", () => {
     expect(screen.getByTestId('boxcount').textContent).to.eq('0')
   })
 
+  it("a dialog that meets misuse keeps the app in place, and closing it resolves the action to null", async () => {
+    const world = makeWorld()
+    const first = world.mount('u1')
+    await expectShown('absent')
+    await putThroughNewVault('the right one')
+    first.unmount()
+
+    // A tab whose build carries another key deriver than the one the vault was made with, as a
+    // stale tab beside a newer deployment would: its unlock refuses with kind 'unknown_key_deriver'.
+    const otherDeriver = { ...TH.testDeriver, key_deriver_label: 'other_deriver' }
+    const caught: unknown[] = []
+    const reported: unknown[] = []
+    render(
+      <CatchingBoundary caught={caught}>
+        <VaultProvider {...world.props} deviceDB={memoryDeviceDB()} keyDeriver={otherDeriver} userId="u1">
+          <Probe />
+        </VaultProvider>
+      </CatchingBoundary>,
+      { onCaughtError: (err) => { reported.push(err) } },
+    )
+    await expectShown('locked')
+    fireEvent.click(screen.getByText('grab'))
+    fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'the right one' } })
+    fireEvent.click(screen.getByText('Unlock'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    await expectOutcome('dismissed')
+    expect(shownState()).to.eq('locked')
+    expect(caught).to.deep.equal([])
+    expect(reported).to.have.lengthOf(1)
+    expect(isVaultError(reported[0], 'unknown_key_deriver')).to.be.true
+  })
+
   it("asks for a keyDeriver outright, as openVault does", () => {
     expectTypeOf<Pick<VaultProviderProps, 'keyDeriver'>>().toEqualTypeOf<{ keyDeriver: KeyDeriver }>()
   })
