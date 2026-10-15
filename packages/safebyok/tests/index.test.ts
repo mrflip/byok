@@ -8,7 +8,7 @@ describe("the package's entry point", () => {
     expect(Object.keys(safebyok)).to.have.members([
       'Argon2idWebV1', 'argon2idDeriver', 'argon2idWebV1Deriver',
       'openVault',
-      'Ciphered', 'EpochMillis', 'FarFuture', 'FarPast', 'ForcePassphraseReentryHours', 'Label', 'Lockbox', 'LockboxNote', 'LockboxSummary', 'MaxLockboxes', 'MaxWhisperBytes', 'VaultBundle', 'VaultScope', 'Whisper', 'wallClock',
+      'Ciphered', 'EpochMillis', 'FarFuture', 'FarPast', 'ForcePassphraseReentryHours', 'Label', 'Lockbox', 'LockboxNote', 'LockboxSummary', 'MaxLockboxes', 'MaxWhisperBytes', 'UserId', 'VaultBundle', 'VaultScope', 'Whisper', 'wallClock',
       'VaultError', 'VaultErrorFamilyForKind', 'VaultErrorFamilyVals', 'VaultErrorKindVals', 'isVaultCondition', 'isVaultError',
       'VaultDB', 'localVaultDB', 'memoryDeviceDB',
       'domStore', 'memoryStore',

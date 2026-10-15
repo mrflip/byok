@@ -36,7 +36,7 @@ import { idbVaultDB } from 'safebyok/idb'
 
 const vault = await openVault({
   applabel:   'acme',
-  userId:     session.userId,                 // stable and opaque, from your auth; never an email
+  userId:     session.userId,                 // stable and opaque, from your auth, 1 to 100 characters; never an email
   vaultlabel: 'main',
   vaultDB:    idbVaultDB({ dbName: 'acme' }), // or your backend's adapter
   ...browserOpts({ dbName: 'acme' }),         // the key deriver and device store a browser wants

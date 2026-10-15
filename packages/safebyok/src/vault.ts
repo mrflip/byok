@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxWhisperBytes, VaultBundle, VaultScope, Whisper, wallClock, type Clock } from './types'
+import { DeviceUnlock, Label, LockboxNote, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, MaxLockboxes, MaxUserIdChars, MaxWhisperBytes, UserId, VaultBundle, type VaultScope, Whisper, wallClock, type Clock } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import { MaxSaltBytes, PassphraseKeyBytes, ensureSuppliedSpecKept } from './key-deriver-spec'
@@ -42,7 +42,10 @@ export type VaultSnapshot = {
 export type OpenVaultOpts = {
   /** The host application's namespace: one backend can serve several apps without collision. */
   applabel:   string
-  /** Stable identifier of the signed-in user, from the host's auth. Never an email. */
+  /**
+   * Stable identifier of the signed-in user, from the host's auth: text of 1 to 100 characters,
+   * as the exported {@link UserId} checks. Never an email.
+   */
   userId:     string
   /** The vault's own label; an app that keeps one vault per user calls it `main`. */
   vaultlabel: string
@@ -982,10 +985,11 @@ const parseLabel = (candidate: string): string => {
   return checked.data
 }
 
+// The refusal names the bound, never the id: an id is the host's, and may say more than it should.
 const parseUserId = (candidate: string): string => {
-  const checked = VaultScope.shape.user_id.safeParse(candidate)
+  const checked = UserId.safeParse(candidate)
   if (! checked.success) {
-    throw new VaultError('bad_label', 'A vault needs the signed-in user: pass the userId from your auth layer, as non-empty text.')
+    throw new VaultError('bad_label', `A vault needs the signed-in user: pass the userId from your auth layer, as text of 1 to ${String(MaxUserIdChars)} characters.`)
   }
   return checked.data
 }
@@ -1051,8 +1055,8 @@ export const StoredBytesPerWhisperByte = 2
  * Room for a lockbox's stored fields besides its whisper, in bytes of their JSON: its format,
  * boxlabel, revision, note, times, wrapped lockboxKey, the cipherIv and tag of its
  * whisperCiphered, and the scope a backend files it under. At their largest -- a forty-character
- * boxlabel, applabel and vaultlabel, a note of 256 UTF-16 code units at three UTF-8 bytes each, a
- * user_id of 512 bytes -- they take under 1900; a vault of many small whispers is mostly these.
+ * boxlabel, applabel and vaultlabel, a note of 256 UTF-16 code units and a user_id of 100, each
+ * unit at three UTF-8 bytes -- they take under 1700; a vault of many small whispers is mostly these.
  * A JSON-text backend's escapes, six bytes for a control character, are its own way of counting.
  */
 export const LockboxFieldsBytes = 2048

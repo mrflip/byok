@@ -60,7 +60,7 @@ export const Whisper: Z.ZodMiniType<Whisper> = Z.union([
  * A freely chosen identifier (STYLE.md tag glossary): lowercase words of letters and digits
  * joined by single underscores, starting with a letter, two to forty characters. Shared by every
  * label in the package: `applabel`, `vaultlabel`, `boxlabel`. (A scope's `user_id` is the host's
- * auth identity, deliberately not a Label.)
+ * auth identity, deliberately not a Label: see {@link UserId}.)
  *
  * @example Label.parse('anthropic_api_key')
  * @example Label.safeParse('ANTHROPIC_API_KEY').success  // false: lowercase only
@@ -69,6 +69,25 @@ export const Whisper: Z.ZodMiniType<Whisper> = Z.union([
 export const Label = Z.string().check(
   Z.maxLength(40, "A label is at most forty characters"),
   Z.regex(/^[a-z](_?[a-z0-9])+$/, "A label is lowercase words of letters and digits joined by single underscores, starting with a letter"),
+)
+
+/** The longest `user_id` the package accepts, in characters (UTF-16 code units, as JavaScript counts them). */
+export const MaxUserIdChars = 100
+
+/**
+ * Validator for a scope's `user_id`: the signed-in user's id from the host's own auth, text of 1
+ * to {@link MaxUserIdChars} (100) characters. Not a {@link Label}: it takes whatever form the
+ * host's auth issues, colons and capitals and all, and is bounded only in length. Every record
+ * that names a scope checks its `user_id` with it, and `openVault` refuses a `userId` that fails
+ * it with kind 'bad_label'. A host can check an id with it before opening a vault.
+ *
+ * @example UserId.parse('user|2fJ8:google')
+ * @example UserId.safeParse('').success                // false: an empty id names no one
+ * @example UserId.safeParse('u'.repeat(101)).success   // false: 100 characters at most
+ */
+export const UserId = Z.string().check(
+  Z.minLength(1, "A user_id names the signed-in user, so it can't be empty"),
+  Z.maxLength(MaxUserIdChars, `A user_id is at most ${String(MaxUserIdChars)} characters`),
 )
 
 /**
@@ -125,7 +144,7 @@ export const EpochMillis = Z.number().check(
  */
 export const VaultScope = Z.object({
   applabel:   Label,
-  user_id:    Z.string().check(Z.minLength(1)),
+  user_id:    UserId,
   vaultlabel: Label,
 })
 export type VaultScope = Z.infer<typeof VaultScope>
@@ -202,7 +221,7 @@ export type LockboxSummary = Z.infer<typeof LockboxSummary>
 export const VaultBundle = Z.object({
   format:              Z.literal('safebyok-vault-v1'),
   applabel:            Label,
-  user_id:             Z.string().check(Z.minLength(1)),
+  user_id:             UserId,
   vaultlabel:          Label,
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
   vault_id:            Z.string().check(Z.minLength(1)),
@@ -226,7 +245,7 @@ export type VaultBundle = Z.infer<typeof VaultBundle>
 export const DeviceUnlock = Z.object({
   format:           Z.literal('safebyok-unlock-v1'),
   applabel:         Label,
-  user_id:          Z.string().check(Z.minLength(1)),
+  user_id:          UserId,
   vaultlabel:       Label,
   vault_id:         Z.string().check(Z.minLength(1)),
   /** The bundle's passphrase_epoch when this unlock was remembered; a mismatch voids it. */
