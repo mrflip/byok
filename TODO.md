@@ -49,3 +49,7 @@ Reasonable tasks that we do not plan to do in the near term. Do not anticipate t
   vetted, context-bound encryption seals the blob into a separate pluggable blob store (its own
   interface beside VaultDB), so no host app hand-rolls encryption with a key taken out of a vault.
 
+## RAGEBAIT
+
+* If the eslint configs cut from the core's (`packages/safebyok/eslint.config.mjs`) drift enough to
+  cause an uncaught bug, write a generator script to keep them in sync.

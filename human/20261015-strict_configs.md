@@ -19,14 +19,17 @@ schema to reading it, and the writer no longer writes it.
 
 ## Questions
 
-1. **Keep the eslint configs in step mechanically?** They are cut from the core's by hand, and
-   drift is how three of them ended up on `recommended` alone. A small `scripts/` generator (I
-   used a throwaway one) or a shared module the configs import would stop it; either is a new
-   piece of tooling, so it is your call.
+1. ~~Keep the eslint configs in step mechanically?~~ Parked in TODO.md, *RAGEBAIT*: a generator
+   script if drift ever causes an uncaught bug.
 2. **Tests still run against `dist/`.** Typecheck and lint read source; vitest still resolves
    `safebyok` through the build (`pretest`). Adding the condition to vitest's `resolve.conditions`
    would make the tests live too and drop the build step, at the cost of no longer testing the
    built package from a sibling. Left as is.
-3. **`pnpm publish` only.** `publishConfig.exports` is a pnpm feature; the release workflow packs
-   with `pnpm pack`, and a release test now fails if the source condition reaches a tarball. A
-   hand `npm publish` would ship it.
+3. **`pnpm publish` only.** `publishConfig.exports` is a pnpm feature. CI is covered: the
+   release workflow packs with `pnpm pack`, then `scripts/release.ts` stages the tarball with
+   `npm stage publish`, and now refuses one that still carries `@safebyok/source`, as it already
+   refused a `workspace:` range. What is left is a hand `npm publish` from a package directory.
+   The guard for that is a check in `prepublishOnly` that the publisher is pnpm (its
+   `npm_config_user_agent` starts `pnpm/`); a tarball publish runs no lifecycle script, so CI's
+   staging is untouched. Either a one-line check, hand-rolled, or `only-allow pnpm` (by pnpm's
+   authors, but its message talks about installing): your call.
