@@ -2,11 +2,14 @@ import { mutationGeneric, queryGeneric } from 'convex/server'
 import type { ApiFromModules, GenericDataModel, GenericQueryCtx } from 'convex/server'
 import { ConvexError, v } from 'convex/values'
 import type { ComponentApi } from './component-api'
+import type { SafebyokErrorData } from './refusals'
 import {
   BundleExpectation, EraseExpectation, ListedLockbox, Lockbox, LockboxExpectation, VaultBundle, VaultScope, VaultSignature,
 } from './component/validators'
 
 export type { ComponentApi } from './component-api'
+export { SafebyokErrorKindVals } from './refusals'
+export type { SafebyokErrorData, SafebyokErrorKind } from './refusals'
 
 /**
  * The host app's answer to "who is calling?": the signed-in user's id, as the vault scopes it, or
@@ -21,23 +24,6 @@ export type GetUserId<DataModel extends GenericDataModel = GenericDataModel> =
 export type SafebyokApiOpts<DataModel extends GenericDataModel = GenericDataModel> = {
   /** Who is calling: see {@link GetUserId}. */
   getUserId: GetUserId<DataModel>
-}
-
-/**
- * Every refusal safebyok's Convex functions throw, as the `kind` in a `ConvexError`'s `data`. Each
- * is the `VaultError` kind of the same name: `not_permitted`, for a caller who is signed out or is
- * not the vault's user. A failed expectation is not a refusal: the update or erase resolves `false`.
- */
-export const SafebyokErrorKindVals = ['not_permitted'] as const
-export type SafebyokErrorKind = typeof SafebyokErrorKindVals[number]
-
-/**
- * The `data` of a `ConvexError` safebyok's functions throw: a `kind` to branch on, and a calm
- * message. Neither ever names a user or quotes a record.
- */
-export type SafebyokErrorData = {
-  kind:    SafebyokErrorKind
-  message: string
 }
 
 /**

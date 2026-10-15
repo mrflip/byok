@@ -5,6 +5,7 @@
   "description": "Convex storage for safebyok: a Convex component holding vault bundles and lockboxes as ciphertext, and the VaultDB adapter that speaks to it. Source-exported workspace package while the interface settles; not yet built or published.",
   "type": "module",
   "exports": {
+    ".": "./src/index.ts",
     "./convex.config": "./src/component/convex.config.ts",
     "./convex.config.js": "./src/component/convex.config.ts",
     "./_generated/component.js": "./src/component-api.ts",

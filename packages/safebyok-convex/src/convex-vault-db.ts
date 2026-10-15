@@ -1,0 +1,175 @@
+import { getFunctionName } from 'convex/server'
+import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
+import { ConvexError } from 'convex/values'
+import { VaultDB, VaultError } from 'safebyok'
+import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultScope } from 'safebyok'
+import { isSafebyokErrorData } from './refusals'
+import type { SafebyokApi } from './server'
+
+/**
+ * The calls every Convex client makes alike: a query once, and a mutation. `ConvexClient` and
+ * `ConvexReactClient` both have them.
+ */
+export type ConvexCalls = {
+  query<QueryRef extends FunctionReference<'query'>>(queryRef: QueryRef, args: FunctionArgs<QueryRef>): Promise<FunctionReturnType<QueryRef>>
+  mutation<MutationRef extends FunctionReference<'mutation'>>(mutationRef: MutationRef, args: FunctionArgs<MutationRef>): Promise<FunctionReturnType<MutationRef>>
+}
+
+/** What {@link convexVaultDB} uses of a `ConvexClient` (from `convex/browser`): its calls, and `onUpdate`. */
+export type ConvexWatchingClient = ConvexCalls & {
+  onUpdate<QueryRef extends FunctionReference<'query'>>(
+    queryRef: QueryRef,
+    args: FunctionArgs<QueryRef>,
+    callback: (result: FunctionReturnType<QueryRef>) => unknown,
+    onError?: (err: Error) => unknown,
+  ): () => void
+}
+
+/** What {@link convexVaultDB} uses of a `ConvexReactClient` (from `convex/react`): its calls, and `watchQuery`. */
+export type ConvexReactWatchingClient = ConvexCalls & {
+  watchQuery<QueryRef extends FunctionReference<'query'>>(queryRef: QueryRef, args: FunctionArgs<QueryRef>): {
+    onUpdate(callback: () => void): () => void
+  }
+}
+
+/**
+ * The Convex client a vault talks through: a `ConvexClient`, or the `ConvexReactClient` a React
+ * app already has, so the vault shares its socket and its signed-in user.
+ */
+export type ConvexVaultClient = ConvexWatchingClient | ConvexReactWatchingClient
+
+/**
+ * safebyok's storage over Convex: a VaultDB whose every verb is one call to the safebyok functions
+ * your app serves (see `safebyok-convex/server`), through the Convex client your app already has.
+ * Hand it to `openVault` as its `vaultDB`.
+ *
+ * * **Who may reach a vault** is your Convex backend's call: a vault call made while signed out,
+ *   or for another user's vault, refuses with a VaultError of kind `not_permitted`. Signing out
+ *   does not lock a vault already unlocked: close it when your user signs out.
+ * * **Other devices' writes** reach this one live: the vault subscribes to the safebyok function
+ *   `watchVault`, and refreshes when it changes.
+ * * **Offline**, a call waits for the connection, as every Convex call does, rather than failing.
+ *   A failure Convex reports (a deployment missing the safebyok functions, say) refuses with kind
+ *   `storage_unavailable`, Convex's own error as its `cause`.
+ *
+ * @param client - Your app's Convex client: a `ConvexClient`, or your `ConvexReactClient`.
+ * @param api - The safebyok functions as your clients reference them: `api.safebyok`, from your
+ *   `convex/_generated/api`, when you re-export them from `convex/safebyok.ts`.
+ * @returns The VaultDB, holding at most 1 MiB in one record, Convex's document limit.
+ *
+ * @example
+ *   import { api } from '../convex/_generated/api'
+ *   const vaultDB = convexVaultDB(convex, api.safebyok)
+ *   const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB, deviceDB: idbDeviceDB() })
+ */
+export const convexVaultDB = (client: ConvexVaultClient, api: SafebyokApi): VaultDB => {
+  if (! isConvexClient(client)) {
+    throw new VaultError('bad_option', 'convexVaultDB needs a Convex client: a ConvexClient from convex/browser, or the ConvexReactClient your app already has.')
+  }
+  if (! isSafebyokApi(api)) {
+    throw new VaultError('bad_option', 'convexVaultDB needs the safebyok functions your app serves, as `api.safebyok` from your convex/_generated/api: the module, not the whole `api`.')
+  }
+  return new ConvexVaultDB(client, api)
+}
+
+/** Each verb one call to the function of the same purpose; the base class validates both ways. */
+class ConvexVaultDB extends VaultDB {
+  readonly maxRecordBytes = ConvexDocumentBytes
+
+  constructor(private readonly client: ConvexVaultClient, private readonly api: SafebyokApi) { super() }
+
+  protected doReadBundle(scope: VaultScope): Promise<unknown> {
+    return refusing(this.client.query(this.api.getBundle, { scope }))
+  }
+
+  protected doCreateBundle(bundle: VaultBundle): Promise<unknown> {
+    return refusing(this.client.mutation(this.api.createBundle, { bundle }))
+  }
+
+  protected doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean> {
+    return refusing(this.client.mutation(this.api.updateBundle, { bundle, expected }))
+  }
+
+  protected doReadBox(scope: VaultScope, boxlabel: string): Promise<unknown> {
+    return refusing(this.client.query(this.api.getBox, { scope, boxlabel }))
+  }
+
+  protected doListBoxes(scope: VaultScope): Promise<unknown[]> {
+    return refusing(this.client.query(this.api.listBoxSummaries, { scope }))
+  }
+
+  protected doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
+    return refusing(this.client.mutation(this.api.updateBox, { scope, lockbox, expected }))
+  }
+
+  protected doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
+    return refusing(this.client.mutation(this.api.eraseBox, { scope, boxlabel, expected }))
+  }
+
+  protected doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
+    return refusing(this.client.mutation(this.api.eraseVault, { scope, expected }))
+  }
+
+  // Every result `watchVault` delivers calls `onChange`, the first included. The vault subscribes
+  // before its first read, so the first result may already hold a write that read missed; and a
+  // ConvexReactClient already watching this vault delivers no first result at all, only changes.
+  // A refresh that finds nothing new costs two queries and no render.
+  protected override doSubscribe(scope: VaultScope, onChange: () => void): () => void {
+    const args = { scope }
+    if ('watchQuery' in this.client) {
+      return this.client.watchQuery(this.api.watchVault, args).onUpdate(() => { onChange() })
+    }
+    // A failing watch has nobody to throw to: without this handler, ConvexClient throws it from
+    // inside its socket. The vault's next foreground call meets the same trouble and says so.
+    const unsubscribe = this.client.onUpdate(this.api.watchVault, args, () => { onChange() }, ignoreTrouble)
+    return () => { unsubscribe() }
+  }
+}
+
+/** Convex's most for one document, in bytes. */
+const ConvexDocumentBytes = 1_048_576
+
+const ignoreTrouble = (): void => undefined
+
+/**
+ * `call`, with a refusal from safebyok's functions -- a `ConvexError` carrying one of its kinds --
+ * turned into the VaultError of that kind. Anything else rejects as it came, and the base class
+ * makes it `storage_unavailable`.
+ */
+const refusing = async <ValT>(call: Promise<ValT>): Promise<ValT> => {
+  try {
+    return await call
+  } catch (err) {
+    if (err instanceof ConvexError && isSafebyokErrorData(err.data)) {
+      throw new VaultError(err.data.kind, err.data.message, { cause: err })
+    }
+    throw err
+  }
+}
+
+const isConvexClient = (client: unknown): client is ConvexVaultClient => {
+  if (typeof client !== 'object' || client === null) { return false }
+  const methods = client as Partial<Record<'query' | 'mutation' | 'onUpdate' | 'watchQuery', unknown>>
+  return typeof methods.query === 'function' && typeof methods.mutation === 'function'
+    && (typeof methods.onUpdate === 'function' || typeof methods.watchQuery === 'function')
+}
+
+const SafebyokFnNames = [
+  'getBundle', 'createBundle', 'updateBundle', 'getBox', 'listBoxSummaries', 'updateBox', 'eraseBox', 'eraseVault', 'watchVault',
+] as const
+
+// Each function must name itself as `<module>:<function>`. The whole generated `api` answers any
+// property, so `api.getBundle` exists -- but names no module, and Convex refuses to name it.
+const isSafebyokApi = (api: unknown): api is SafebyokApi => {
+  if (typeof api !== 'object' || api === null) { return false }
+  const fnRefs = api as Partial<Record<string, FunctionReference<'query' | 'mutation'>>>
+  return SafebyokFnNames.every((fnName) => {
+    const fnRef = fnRefs[fnName]
+    if (fnRef === undefined) { return false }
+    try {
+      return getFunctionName(fnRef).endsWith(`:${fnName}`)
+    } catch {
+      return false
+    }
+  })
+}

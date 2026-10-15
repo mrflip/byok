@@ -1,22 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { defineTestApp } from 'convex-test'
-import { defineSchema } from 'convex/server'
 import { ConvexError } from 'convex/values'
-import { SafebyokComponent } from '../src/server'
-import type { GetUserId, SafebyokErrorData } from '../src/server'
-import { register } from '../src/test'
-import { boxOf, bundleOf, scopeOf } from './helpers'
+import type { SafebyokErrorData } from '../src/server'
+import { boxOf, bundleOf, bySubject, hostWith, scopeOf } from './helpers'
 
-/**
- * A host app as the README has it: no tables of its own, the component installed as `safebyok`,
- * and its functions re-exported from `convex/safebyok.ts`, authenticating by the identity's subject.
- */
-const hostWith = (getUserId: GetUserId) => {
-  const app = defineTestApp({ schema: defineSchema({}), components: { safebyok: { register } } })
-  return app.defineModules({ safebyok: new SafebyokComponent(app.components.safebyok).api({ getUserId }) })
-}
-
-const bySubject: GetUserId = async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null
 const { api, createTest } = hostWith(bySubject)
 
 const u1 = scopeOf('u1')
