@@ -1,7 +1,7 @@
 # Thread 10: sandals (2026-10-15)
 
-Branch `20261015-sandals`, PR not yet filed, rebased onto `origin/main` after #29, cut from `origin/main` (b329343). Justify: green --
-root 3 files / 67 tests; core 11 / 243; convex 6 / 210; react 1 / 7; demo 3 / 24. About 37 s.
+Branch `20261015-sandals`, PR [#36](https://github.com/mrflip/safebyok/pull/36), rebased onto `origin/main` after #29, cut from `origin/main` (b329343). Justify: green --
+root 3 files / 72 tests; core 11 / 249; convex 6 / 213; react 1 / 7; demo 3 / 24. About 45 s.
 
 * **Built**: TODO.md's *Sand in the sandals*, one commit per item (the changeset is its own, empty).
   - `tests:` `vault.test.ts` "a lockbox with altered ciphertext refuses to open" bends the text
