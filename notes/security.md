@@ -368,3 +368,15 @@ security expert who knows what questions to ask.
   gets zod's issues, which name paths and limits but carry no input (zod's `reportInput` is
   off). The build keeps each module its own file in `dist/` (`unbundle`), so a host's bundle
   carries only the modules its imports reach.
+* 2026-10-15: every `VaultDB` write verb validates its record and its expectation against the
+  schemas its reads use, before the adapter's half sees them, so the core never writes a record
+  its own read would refuse (an over-long note once did, and the vault could not be opened again);
+  Zod strips a field it does not know, so none reaches storage. `updateBundle` refuses a bundle
+  whose `vault_id` differs from the expected one. Listing still validates only what a listing
+  shows: a lockbox whose ciphered fields are damaged lists, and is refused at `read()`, so one
+  damaged box never makes the vault fail to open; such a box cannot be stored over or erased
+  either (both read it first), only destroyed with its vault. A remembered unlock naming another
+  scope is forgotten before any unwrap; its `vault_key_local_wrapped` binding would refuse it
+  anyway. The vault-size check counts each lockbox at twice `maxWhisperBytes` plus 2 KiB for its
+  other fields against the adapter's whole `maxVaultBytes`: the same outcomes as half the limit
+  with 1 KiB, with the fields' allowance now covering them (a test builds the heaviest row).
