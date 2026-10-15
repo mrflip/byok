@@ -88,7 +88,8 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
 
 * **Sign in first.** `userId` is the id your `getUserId` answers for the signed-in user. Open
   the vault once the Convex client is authenticated (in React, once `useConvexAuth()` says so):
-  a call made before then is refused with kind `not_permitted`.
+  a call made before then is refused with kind `not_permitted`. An `openVault` refused that way
+  leaves no watch behind: open it again once signed in.
 * **Close the vault when the user signs out.** Signing out of Convex does not lock it: every
   call it makes is refused from then on, but the unlocked vaultKey stays in memory until the
   vault locks, expires or closes.
