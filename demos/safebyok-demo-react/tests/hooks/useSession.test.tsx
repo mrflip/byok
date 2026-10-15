@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
-import { act, cleanup, renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { act, renderHook } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import { memoryStore } from 'safebyok'
 import { useSession } from '../../src/hooks/useSession'
 import { createAuth } from '../../src/lib/auth'
-
-afterEach(cleanup)
 
 describe("useSession", () => {
   it("is null while signed out, and follows the fake auth in and out", async () => {

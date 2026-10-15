@@ -1,16 +1,13 @@
 // @vitest-environment jsdom
 // fake-indexeddb installs an indexedDB global before the demo's stores open their shelves.
 import 'fake-indexeddb/auto'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { VaultDBInspectionPanel } from '../../../src/components/inspection/VaultDBInspectionPanel'
 import { dbStore, outage, vaultDB } from '../../../src/lib/stores'
 import * as TH from '../../test-helpers'
 
-afterEach(() => {
-  cleanup()
-  outage.setDown(false)
-})
+afterEach(() => { outage.setDown(false) })
 
 describe("VaultDBInspectionPanel", () => {
   it("shows the backend's vault rows as they land, ciphertext marked as such", async () => {

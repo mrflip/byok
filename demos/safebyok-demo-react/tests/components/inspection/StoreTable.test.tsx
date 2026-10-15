@@ -1,14 +1,9 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { memoryStore } from 'safebyok'
 import type { IdbRow } from 'safebyok/idb'
 import { StoreTable, WipeIdbButton, WipeStoreButton, useIdbRows, useStoreRows, type IdbInspector, type StoreRow } from '../../../src/components/inspection/StoreTable'
-
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
 
 /** An IndexedDB inspector over rows held in memory: what `inspectIdb` hands out, minus the database. */
 const fakeInspector = (rows: IdbRow[]) => {

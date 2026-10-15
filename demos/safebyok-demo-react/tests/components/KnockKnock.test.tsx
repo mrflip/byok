@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { KnockKnock } from '../../src/components/KnockKnock'
 import * as TH from '../test-helpers'
 
@@ -10,11 +10,6 @@ const stubAnthropic = (status: number, jokeText = '') => {
   vi.stubGlobal('fetch', anthropic.fetchFn)
   return anthropic
 }
-
-afterEach(() => {
-  cleanup()
-  vi.unstubAllGlobals()
-})
 
 const knockAs = (whosThere: string) => {
   fireEvent.change(screen.getByPlaceholderText('Banana'), { target: { value: whosThere } })

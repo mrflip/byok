@@ -459,8 +459,6 @@ describe("the remembered unlock", () => {
 })
 
 describe("the remembered unlock, when the host changes forcePassphraseReentryHours", () => {
-  afterEach(() => { vi.restoreAllMocks() })
-
   it("lowered from Infinity to one hour, forgets a device already remembered at its next open, and the next unlock lasts an hour", async () => {
     const world = makeWorld()
     await world.openUnlocked('pw one', { forcePassphraseReentryHours: Infinity })
@@ -937,8 +935,6 @@ const heaviestRowOf = async (whisperBytes: number) => {
 }
 
 describe("the lockbox limit", () => {
-  afterEach(() => { vi.restoreAllMocks() })
-
   it("stores up to maxLockboxes, then refuses a new lockbox as 'vault_full', quoting none of its label", async () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw', { maxLockboxes: 2 })
@@ -1381,8 +1377,6 @@ const makeRacingWorld = () => {
 }
 
 describe("a lock that lands while an unlock is under way", () => {
-  afterEach(() => { vi.restoreAllMocks() })
-
   it("during the passphrase check: the lock wins, the unlock throws 'vault_locked', and nothing is remembered", async () => {
     const world = makeRacingWorld()
     const vault = await world.openUnlocked('pw one')
@@ -1527,8 +1521,6 @@ describe("a lock that lands while an unlock is under way", () => {
 })
 
 describe("a vault that moves elsewhere while an unlock is under way", () => {
-  afterEach(() => { vi.restoreAllMocks() })
-
   it("destroyed and made anew: the unlock takes up nothing, throws 'vault_locked', and can't seal into the new vault", async () => {
     const world = makeRacingWorld()
     const vault = await world.openUnlocked('pw one')
@@ -1606,10 +1598,7 @@ describe("a vault that moves elsewhere while an unlock is under way", () => {
 describe("lockSoon", () => {
   // Only the timers: promises, and vitest's own waits, keep running as they do.
   beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] }) })
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.restoreAllMocks()
-  })
+  afterEach(() => { vi.useRealTimers() })
 
   const GraceMs = 5000
 
@@ -1962,9 +1951,7 @@ describe("close", () => {
     gate.release()
     await unlocking
     expect(await world.rememberedUnlock()).to.be.null
-    const reopened = await world.open()
-    expect(reopened.getSnapshot().state).to.eq('locked')
-    vi.restoreAllMocks()
+    expect(await world.stateOnOpen()).to.eq('locked')
   })
 
   it("a close during the unlock's device record write: the record is erased again", async () => {
@@ -1978,7 +1965,6 @@ describe("close", () => {
     gate.release()
     await unlocking
     expect(await world.rememberedUnlock()).to.be.null
-    vi.restoreAllMocks()
   })
 
   it("closing forgets nothing stored: the next open still finds the vault", async () => {
@@ -2027,8 +2013,6 @@ const FailedOpenCases: readonly (readonly [string, (world: ReturnType<typeof mak
 ]
 
 describe("a failed open", () => {
-  afterEach(() => { vi.restoreAllMocks() })
-
   for (const [blurb, arrange] of FailedOpenCases) {
     it(`rejects with the very error, and ends its storage watch, when ${blurb}`, async () => {
       const world = makeWorld()
@@ -2094,8 +2078,6 @@ const extractableUnwraps = (spied: ReturnType<typeof watchUnwraps>) => (
 )
 
 describe("the session vaultKey is non-extractable", () => {
-  afterEach(() => { vi.restoreAllMocks() })
-
   it("creating a vault unwraps only the session handle, never an extractable one", async () => {
     const world = makeWorld()
     const vault = await world.open()

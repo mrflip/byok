@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { fireEvent, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import { localVaultDB, memoryStore } from 'safebyok'
 import { tellKnockKnockJoke } from '../src/lib/anthropic'
 import * as TH from './test-helpers'
-
-afterEach(cleanup)
 
 describe("makeWorld", () => {
   it("renders a component inside a vault for u1, absent until something is stored", async () => {

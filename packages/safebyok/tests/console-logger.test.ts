@@ -1,7 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { consoleLogger } from '../src/console-logger'
-
-afterEach(() => { vi.restoreAllMocks() })
 
 const quiet = () => { /* kept out of the test output */ }
 

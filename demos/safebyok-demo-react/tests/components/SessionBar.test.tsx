@@ -1,15 +1,10 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { memoryStore } from 'safebyok'
 import { SessionBar } from '../../src/components/SessionBar'
 import { createAuth } from '../../src/lib/auth'
 import * as TH from '../test-helpers'
-
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
 
 /** The bar over a fresh fake auth, in a vault for `u1`. */
 const renderBar = () => {

@@ -9,6 +9,11 @@ export default defineConfig({
   test: {
     include:     ['tests/**/*.test.{ts,tsx}'],
     environment: 'node',
+    // Every spy and stubbed global is put back before each test, and tests/setup.ts unmounts
+    // each test's render.
+    restoreMocks:  true,
+    unstubGlobals: true,
+    setupFiles:    ['tests/setup.ts'],
     coverage: {
       provider: 'v8',
       include:  ['src/**/*.{ts,tsx}'],

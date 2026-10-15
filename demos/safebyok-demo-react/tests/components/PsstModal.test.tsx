@@ -1,9 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
 import { PsstModal } from '../../src/components/PsstModal'
-
-afterEach(cleanup)
 
 describe("PsstModal", () => {
   it("shows the whisper and the lockbox it came from", () => {

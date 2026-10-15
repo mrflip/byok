@@ -1,14 +1,11 @@
 // @vitest-environment jsdom
 // fake-indexeddb installs an indexedDB global before the demo's stores open their shelves.
 import 'fake-indexeddb/auto'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { App } from '../src/App'
 
-afterEach(() => {
-  cleanup()
-  localStorage.clear()
-})
+afterEach(() => { localStorage.clear() })
 
 describe("App", () => {
   it("shows the sign-in strip and both inspection panels to a visitor, and no vault", () => {

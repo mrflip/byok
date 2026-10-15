@@ -1,5 +1,5 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
 import * as TH from 'safebyok/testing'
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
@@ -87,11 +87,6 @@ class CatchingBoundary extends Component<{ caught: unknown[], children: ReactNod
   override componentDidCatch(err: Error, _info: ErrorInfo) { this.props.caught.push(err) }
   override render() { return this.state.failed ? <span data-testid="state">boundary</span> : this.props.children }
 }
-
-afterEach(() => {
-  cleanup()
-  vi.restoreAllMocks()
-})
 
 /** openError's @example, as a host would write it. */
 const OpenErrorExample = () => {
