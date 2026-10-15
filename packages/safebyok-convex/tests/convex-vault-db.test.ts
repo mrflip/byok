@@ -261,58 +261,58 @@ describe("a record the deployment refused", () => {
 /** Resolves once every message already sent to `vaultDB`'s client has arrived: one round trip behind them. */
 const caughtUp = async (vaultDB: ReturnType<typeof convexVaultDB>) => { await vaultDB.readBundle(u1) }
 
+/**
+ * A watch of `u1`'s vault through `vaultDB`, once its first result has come in: its `onChange`,
+ * how often that had been called by then (`heardBefore`), and its `unsubscribe`.
+ */
+const settledWatch = async (vaultDB: ReturnType<typeof convexVaultDB>) => {
+  const onChange = vi.fn()
+  const unsubscribe = vaultDB.subscribe(u1, onChange)
+  await vi.waitFor(() => { expect(onChange).toHaveBeenCalled() })
+  return { onChange, unsubscribe, heardBefore: onChange.mock.calls.length }
+}
+
 describe("convexVaultDB.subscribe", () => {
   for (const [clientTitle, connect] of ClientCases) {
     it(`calls onChange over a ${clientTitle} when another device writes to the vault`, async () => {
       const deployment = deploy()
       const here = convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok)
       const there = convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok)
-      const onChange = vi.fn()
-      here.subscribe(u1, onChange)
-      await vi.waitFor(() => { expect(onChange).toHaveBeenCalled() })
-      const heardBefore = onChange.mock.calls.length
+      const watch = await settledWatch(here)
       await there.createBundle(TH.bundleOf('u1'))
-      await vi.waitFor(() => { expect(onChange.mock.calls.length).to.be.greaterThan(heardBefore) })
+      await vi.waitFor(() => { expect(watch.onChange.mock.calls.length).to.be.greaterThan(watch.heardBefore) })
     })
 
     it(`hears nothing over a ${clientTitle} once unsubscribed`, async () => {
       const deployment = deploy()
       const here = convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok)
       const there = convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok)
-      const onChange = vi.fn()
-      const unsubscribe = here.subscribe(u1, onChange)
-      await vi.waitFor(() => { expect(onChange).toHaveBeenCalled() })
-      unsubscribe()
-      const heardBefore = onChange.mock.calls.length
+      const watch = await settledWatch(here)
+      watch.unsubscribe()
       await there.createBundle(TH.bundleOf('u1'))
       await caughtUp(here)
-      expect(onChange.mock.calls.length).to.eq(heardBefore)
+      expect(watch.onChange.mock.calls.length).to.eq(watch.heardBefore)
     })
 
     it(`hears nothing over a ${clientTitle} of another vault's writes`, async () => {
       const deployment = deploy()
       const here = convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok)
-      const onChange = vi.fn()
-      here.subscribe(u1, onChange)
-      await vi.waitFor(() => { expect(onChange).toHaveBeenCalled() })
-      const heardBefore = onChange.mock.calls.length
+      const watch = await settledWatch(here)
       await here.createBundle({ ...TH.bundleOf('u1'), vaultlabel: 'work' })
       await caughtUp(here)
-      expect(onChange.mock.calls.length).to.eq(heardBefore)
+      expect(watch.onChange.mock.calls.length).to.eq(watch.heardBefore)
     })
 
     it(`unsubscribes once over a ${clientTitle}, however often it is called, leaving another watch of the vault be`, async () => {
       const deployment = deploy()
       const client = connect(deployment, 'u1')
-      const alongside = vi.fn()
-      convexVaultDB(client, deployment.api.safebyok).subscribe(u1, alongside)
-      await vi.waitFor(() => { expect(alongside).toHaveBeenCalled() })
+      const alongside = await settledWatch(convexVaultDB(client, deployment.api.safebyok))
       const unsubscribe = convexVaultDB(client, deployment.api.safebyok).subscribe(u1, () => undefined)
       unsubscribe()
       unsubscribe()
-      const heardBefore = alongside.mock.calls.length
+      const heardBefore = alongside.onChange.mock.calls.length
       await convexVaultDB(connect(deployment, 'u1'), deployment.api.safebyok).createBundle(TH.bundleOf('u1'))
-      await vi.waitFor(() => { expect(alongside.mock.calls.length).to.be.greaterThan(heardBefore) })
+      await vi.waitFor(() => { expect(alongside.onChange.mock.calls.length).to.be.greaterThan(heardBefore) })
     })
 
     it(`subscribes calmly over a ${clientTitle} while signed out, and throws nothing later`, async () => {
