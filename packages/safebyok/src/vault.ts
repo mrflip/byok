@@ -232,9 +232,9 @@ export type Vault = {
    * from it, neither its note nor its `registered_at`. Should the write then fail, the old record
    * is gone and the call throws: storing again writes the lockbox afresh. (A record that reads
    * but will not decipher, its ciphertext altered, is replaced as any other, its note and
-   * `registered_at` kept.) One stored under a boxlabel the vault's check now refuses is stored
-   * over by that name, and lists as damaged still; a new lockbox under a refused name is kind
-   * 'bad_label'.
+   * `registered_at` kept.) A boxlabel the vault's check refuses is kind 'bad_label', writing
+   * nothing, even where a lockbox stored under other checks stands under it: `erase()` removes
+   * that one.
    *
    * `opts.note` is the lockbox's public note, shown while locked: text the vault's note check
    * passes (by default `LockboxNote`: at most 256 characters), or null for none -- kind
@@ -327,7 +327,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   if (! isBag(opts)) { throw new VaultError('bad_option', 'openVault takes one bag of options: applabel, userId, vaultlabel, vaultDB, deviceDB and keyDeriver at least.') }
   const rules = Names.rulesOf(parseValidators(opts.validators))
   // The same checks, but any text for a boxlabel: for reaching a lockbox that already stands under
-  // a name the boxlabel check refuses, which erase() and store() do by the name it stands under.
+  // a name the boxlabel check refuses, which erase() alone does, by the name it stands under.
   const standingRules: Names.NameRules = { ...rules, boxlabel: AnyTextValidators.boxlabel }
   const scope = Names.checkScope(rules, { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
   const { applabel, vaultlabel } = scope
@@ -678,10 +678,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
 
   /**
-   * `boxlabel` as text, for erase() and store(), which reach a lockbox by the name it was stored
-   * under: one the vault's boxlabel check refuses -- stored under other checks -- still stands,
-   * listed as damaged. A refused boxlabel with no lockbox under it names a new one, which meets
-   * the check: kind 'bad_label'.
+   * `boxlabel` as text, for erase(), which reaches a lockbox by the name it was stored under: one
+   * the vault's boxlabel check refuses -- stored under other checks -- still stands, listed as
+   * damaged. A refused boxlabel with no lockbox under it is kind 'bad_label'.
    */
   const checkStandingBoxlabel = async (boxlabel: string): Promise<string> => {
     const label = Names.check(standingRules, 'boxlabel', boxlabel)
@@ -855,7 +854,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
     store: async (boxlabel, whisper, storeOpts) => {
       ensureUnlocked()
-      const label = await checkStandingBoxlabel(boxlabel)
+      // A box under a name the check refuses lists as damaged, and storing there would only make
+      // another that does: such a name is refused here too, and only erase() reaches it.
+      const label = Names.check(rules, 'boxlabel', boxlabel)
       const givenNote = storeOpts?.note === undefined || storeOpts.note === null ? storeOpts?.note : Names.check(rules, 'note', storeOpts.note)
       const checked = Whisper.safeParse(whisper)
       // The refusal never quotes its input: a whisper stays out of error messages.
@@ -877,8 +878,6 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         // Erase wins: a box this store began over, and now finds gone, was erased elsewhere, and
         // a retry would silently undo that. The erase is already in the snapshot.
         if (standing === null && boxStood) { return 'erased' }
-        // A new lockbox meets the vault's boxlabel check, though a damaged one is stored over by the name it stands under.
-        if (standing === null) { Names.check(rules, 'boxlabel', label) }
         // A damaged box is overwritten as a fresh store: nothing in it can be carried forward.
         const prev = standing === 'damaged' ? null : standing
         boxStood ||= prev !== null
@@ -909,8 +908,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         try {
           // A damaged box is cleared first, as erase() would, so the write meets no revision: its
           // record cannot say which one it holds.
-          if (standing === 'damaged') { await refreshOnStale(vaultDB.eraseBox(scope, label, { vault_id: vaultId }, standingRules)) }
-          await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected, standingRules))
+          if (standing === 'damaged') { await refreshOnStale(vaultDB.eraseBox(scope, label, { vault_id: vaultId }, rules)) }
+          await refreshOnStale(vaultDB.updateBox(scope, lockbox, expected, rules))
         } catch (err) {
           if (! isVaultError(err, 'stale_write')) { throw err }
           // The catch-up has just shown what stands now. A device it relocked, or a box it shows

@@ -102,8 +102,8 @@ await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team acc
   that is async or throws is refused as `bad_option`, carrying nothing of what it threw.
 * **Every name is checked everywhere**, records read back included. Narrow a check later and a
   lockbox stored under a name or note the new one refuses is listed as damaged (see *Damaged
-  lockboxes*): `erase()` and `store()` still reach it by the name it was stored under, while a
-  new lockbox under a refused name is refused.
+  lockboxes*). `erase()` still reaches it by the name it was stored under; `store()` refuses a
+  refused name, and stores afresh over a box whose note alone is refused.
 * **Sizes follow the names.** Each `store()` weighs its lockbox -- whisper, names and note -- and
   refuses one heavier than the backend holds in a record (`lockbox_too_large`), or one that
   would take the vault past what the backend holds of a vault (`vault_full`).
@@ -337,8 +337,10 @@ record naming another boxlabel than the one it is stored under, one from a newer
 one stored under a boxlabel or with a note the vault's `validators` now refuse -- is listed in the snapshot as damaged, `{ boxlabel, damaged: true }`, sorted among the sound
 ones, which carry `damaged: false`. The rest of the vault opens and works as ever. `read()` and
 `use()` refuse a damaged lockbox (`bad_label` for one under a name the checks refuse,
-`corrupt_record` otherwise); `erase()` removes it, and `store()` writes a fresh lockbox over it,
-each by the name it is listed under, whatever the boxlabel check now says. Show it as removable:
+`corrupt_record` otherwise); `erase()` removes it by the name it is listed under, whatever the
+boxlabel check now says, and `store()` writes a fresh lockbox over it -- except under a name the
+check refuses, which `store()` refuses with `bad_label`, writing nothing, since the lockbox it
+made would list as damaged still. Show it as removable:
 
 ```ts
 for (const box of vault.getSnapshot().boxes) {

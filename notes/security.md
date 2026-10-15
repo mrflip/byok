@@ -8,27 +8,28 @@ security expert who knows what questions to ask.
 ## Of Interest
 
 * 2026-10-15: a lockbox row that fails the listing's check (not JSON, a malformed note or time, a
-  record naming another boxlabel than the ckey it sits under, an unknown `format`) is listed as `{
-  boxlabel, damaged: true }` instead of making `listBoxes` -- so every `refresh()` and `openVault`
-  -- refuse `corrupt_record`. The boxlabel comes from where the row is stored (a `VaultDB`'s
-  `doListBoxes` now hands up `{ boxlabel, lockbox }` pairs; the in-tree adapters read it from the
-  ckey, Convex from its column), never from the damaged record, and nothing else of the record
-  reaches the snapshot. A row whose boxlabel or note the vault's `validators` refuse -- stored
-  under other checks, before a host narrowed them -- lists as damaged too, and `erase()` and
-  `store()` reach it by its stored name: for a box that already stands, the vault checks the
-  boxlabel only as text (the ckey it rebuilds is still this scope's own), while a new box's
-  boxlabel meets the host's check as ever. `store()` over a lockbox whose record fails validation
-  (any listed as damaged, and one whose ciphered fields are missing or malformed) now erases it
-  (`eraseBox`, expecting only the `vault_id`) and then writes a fresh lockbox expecting no
-  revision, carrying neither its note nor its `registered_at`; two steps, so a failure between
-  them leaves the box erased. Since that erase names no revision, it also removes a sound lockbox
-  another device stored under the boxlabel after this store read the damaged one (this store's
-  write then stands in its place, as a retried store's would, but should the write fail, neither
-  stands), and an erase of the damaged box elsewhere does not stop this store. What one who can
-  write storage could already do -- erase or replace any row -- is unchanged; what is new is that
-  planting junk under a boxlabel shows the user a damaged box where a refused open used to show,
-  and that the user's next `store()` to that boxlabel clears the junk rather than refusing.
-  `read()` and `use()` still refuse a damaged box.
+  record naming another boxlabel than the ckey it sits under, an unknown `format`) is listed as
+  `{ boxlabel, damaged: true }` instead of making `listBoxes` -- so every `refresh()` and
+  `openVault` -- refuse `corrupt_record`. The boxlabel comes from where the row is stored (a
+  `VaultDB`'s `doListBoxes` now hands up `{ boxlabel, lockbox }` pairs; the in-tree adapters read
+  it from the ckey, Convex from its column), never from the damaged record, and nothing else of
+  the record reaches the snapshot. A row whose boxlabel or note the vault's `validators` refuse --
+  stored under other checks, before a host narrowed them -- lists as damaged too, and `erase()`
+  reaches it by its stored name: for a box that already stands, erase checks the boxlabel only as
+  text (the ckey it rebuilds is still this scope's own). `store()` checks every boxlabel against
+  the host's check, so it refuses a refused name (`bad_label`, writing nothing) even over a box
+  standing under it; over a box whose note alone is refused, it writes afresh. `store()` over a
+  lockbox whose record fails validation (any listed as damaged, and one whose ciphered fields are
+  missing or malformed) now erases it (`eraseBox`, expecting only the `vault_id`) and then writes
+  a fresh lockbox expecting no revision, carrying neither its note nor its `registered_at`; two
+  steps, so a failure between them leaves the box erased. Since that erase names no revision, it
+  also removes a sound lockbox another device stored under the boxlabel after this store read the
+  damaged one (this store's write then stands in its place, as a retried store's would, but should
+  the write fail, neither stands), and an erase of the damaged box elsewhere does not stop this
+  store. What one who can write storage could already do -- erase or replace any row -- is
+  unchanged; what is new is that planting junk under a boxlabel shows the user a damaged box where
+  a refused open used to show, and that the user's next `store()` to that boxlabel clears the junk
+  rather than refusing. `read()` and `use()` still refuse a damaged box.
 
 * 2026-10-15: `erase(boxlabel)` removes a lockbox whose stored record fails validation or
   verification (`corrupt_record`), rather than refusing it: it reads the record only to tell an

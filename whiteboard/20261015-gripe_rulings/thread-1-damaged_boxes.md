@@ -72,14 +72,15 @@ Branch `20261015-damaged_boxes`, PR [#93](https://github.com/mrflip/safebyok/pul
     three tests that expected a narrowed-out box to make the listing throw now expect it damaged.
     `ensureRoomFor` weighs a damaged box by its boxlabel alone.
   - Folded in (orchestrator's call under "mark a bad lockbox as removeable"): a box stored under a
-    boxlabel or note today's validators refuse lists as damaged. `erase()` and `store()` reach it by
-    its stored name: `checkStandingBoxlabel` admits any text for a box that stands, and the verbs
-    get `standingRules` (any-text boxlabel). A new box under a refused name is still `bad_label`.
+    boxlabel or note today's validators refuse lists as damaged. `erase()` reaches it by its stored
+    name: `checkStandingBoxlabel` admits any text for a box that stands, and the erase gets
+    `standingRules` (any-text boxlabel). `store()` refuses a refused name with `bad_label`, writing
+    nothing, even over a box standing there (orchestrator's call: such a store would make a box
+    that still lists as damaged); a box whose note alone is refused is stored over afresh.
     `isNameable` now asks only for a text boxlabel. Deviation from the restack brief: it said
     `NameableLockbox` should check through `Names.admits`, which would have left those boxes out of
     the listing instead of listing them damaged.
-  - Left open: storing over a box under a refused name writes it, but it still lists as damaged,
-    and `read()` refuses it as `bad_label`, not `corrupt_record`.
+  - `read()` of a box under a refused name refuses `bad_label`, not `corrupt_record`.
 * **For the Coach**:
   - Breaking for hosts (pre-1.0 minor): a host reading `snapshot.boxes[i].note` must check
     `damaged` first; a host's own `VaultDB` maps its listing to `{ boxlabel, lockbox }`.
