@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 6 building; 1, 2, 3, 4, 5, 8, 9, 10, 11 filed; 7 waits on 6. Newer than the plan wherever the two disagree.
+**Status**: 6 in review; 1, 2, 3, 4, 5, 8, 9, 10, 11 filed; 7 waits on 6. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -13,7 +13,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
 | 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37) |
-| 6  | `boundary_audit` | thread 2 (#40, ea3dc98) | underway |
+| 6  | `boundary_audit` | thread 2 (#40, ea3dc98) | in review |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
@@ -101,6 +101,16 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   decided (YOLO): a `maxLen` below `head + tail + 9` is refused, so the result never exceeds
   `maxLen` (omitted `maxLen` defaults to `max(15, head + tail + 9)`); bidi controls, U+200B,
   U+2060 and U+FEFF are stripped. Second review: fixed (grapheme-counted ceiling test; the changeset names the floor and strip).
+* **Thread 6** (`boundary_audit`) -- **for thread 7**: the note is checked once on entry to
+  `store()` (new shared `LockboxNote`, refused as `bad_option`); `noteToStore(givenNote, prev)`
+  sits right after `readBox`, so a retry re-derives it. Found and fixed: `store()` never checked
+  the note, so a note over 256 characters was written and then read back as `corrupt_record`,
+  locking the vault out for good; the vault trusted whatever a host's `DeviceDB` returned (an old
+  `byok-unlock-v1` record still unlocked; a text or `Infinity` deadline) -- `rememberedUnlock`
+  now checks it and erases one that fails. `LockboxSummary.note` is `string | null`; `null`
+  clears a note. What is written is unchanged. Security note: a remembered unlock's
+  `expires_at` sits outside its encryption binding, so whoever can write this device's IndexedDB
+  can extend it.
 * **Thread 8** (`size_budget`, [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40): `.size-limit.json` at the **root**, not the core -- size-limit
   excludes a package's peers, and zod (the core's peer) is most of the bundle, so a core-level
   config would measure `openVault` at 7 kB and never show the zod-mini thread's gain. Brotli
