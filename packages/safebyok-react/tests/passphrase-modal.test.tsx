@@ -1,15 +1,24 @@
 import { Component, type ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { VaultError, type Vault } from 'safebyok'
+import { ForeverMs, ForcePassphraseReentryHours, VaultError, openVault, type Vault } from 'safebyok'
+import * as TH from 'safebyok/testing'
 import { PassphraseModal } from '../src/passphrase-modal'
 
-/** Just enough of a Vault for the dialog to read its state; it never unlocks one here. */
-const vaultInState = (state: 'absent' | 'locked') => ({ getSnapshot: () => ({ state }) }) as unknown as Vault
+/** The window, in milliseconds, of a vault opened with the default forcePassphraseReentryHours. */
+const DefaultWindowMs = ForcePassphraseReentryHours * 3_600_000
+
+/**
+ * Just enough of a Vault for the dialog to read its state and window (the default, unless given);
+ * it never unlocks one here.
+ */
+const vaultInState = (state: 'absent' | 'locked', reentryWindowMs = DefaultWindowMs) => (
+  { getSnapshot: () => ({ state }), reentryWindowMs }
+) as unknown as Vault
 
 /** A locked Vault whose unlock runs `unlock`, which gets the passphrase the dialog submits. */
 const vaultUnlockingWith = (unlock: (passphrase: string) => Promise<void>) => (
-  { getSnapshot: () => ({ state: 'locked' }), unlock } as unknown as Vault
+  { getSnapshot: () => ({ state: 'locked' }), reentryWindowMs: DefaultWindowMs, unlock } as unknown as Vault
 )
 
 /** The dialog's `onDone` for tests that never submit. */
@@ -135,18 +144,24 @@ describe("PassphraseModal", () => {
       [1e9,               "Stays unlocked on this device until you lock it.",  'a window longer than the vault can count means until locked'],
     ] as const
 
+    // Each from a real vault, opened with the hours given, so the dialog reads what openVault made of them.
     for (const [hours, expected, blurb] of WindowCases) {
-      it(blurb, () => {
-        render(<PassphraseModal vault={vaultInState('locked')} reentryHours={hours} onDone={noop} />)
+      it(blurb, async () => {
+        const vault = await openVault(TH.memoryVaultOpts({ forcePassphraseReentryHours: hours }))
+        render(<PassphraseModal vault={vault} onDone={noop} />)
         expect(screen.queryByText(expected)).to.not.be.null
+        vault.close()
       })
     }
 
-    for (const hours of [0, -1, NaN]) {
-      it(`refuses ${String(hours)} hours, which no vault could have been opened with`, () => {
-        render(<Catcher><PassphraseModal vault={vaultInState('locked')} reentryHours={hours} onDone={noop} /></Catcher>)
-        expect(screen.queryByText(/caught: .*reentryHours is a number of hours greater than zero/)).to.not.be.null
-      })
-    }
+    it("reads ForeverMs, the longest window a vault keeps, as until locked", () => {
+      render(<PassphraseModal vault={vaultInState('locked', ForeverMs)} onDone={noop} />)
+      expect(screen.queryByText("Stays unlocked on this device until you lock it.")).to.not.be.null
+    })
+
+    it("reads a millisecond short of ForeverMs as a count, not as until locked", () => {
+      render(<PassphraseModal vault={vaultInState('locked', ForeverMs - 1)} onDone={noop} />)
+      expect(screen.queryByText(/Stays unlocked on this device for \d+ minutes\./)).to.not.be.null
+    })
   })
 })

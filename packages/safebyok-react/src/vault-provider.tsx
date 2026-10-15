@@ -159,7 +159,6 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
       {asking !== null && vault !== null && (
         <PassphraseModal
           vault={vault}
-          reentryHours={forcePassphraseReentryHours}
           onDone={(unlocked) => { setAsking(null); asking.settle(unlocked) }}
         />
       )}
