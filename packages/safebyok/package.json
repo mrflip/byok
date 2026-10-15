@@ -80,6 +80,7 @@
       "require": "./dist/idb.cjs"
     },
     "./utils": {
+      "@safebyok/source": "./src/utils.ts",
       "import": "./dist/utils.js",
       "require": "./dist/utils.cjs"
     },
@@ -113,6 +114,10 @@
       "./idb": {
         "import": "./dist/idb.js",
         "require": "./dist/idb.cjs"
+      },
+      "./utils": {
+        "import": "./dist/utils.js",
+        "require": "./dist/utils.cjs"
       },
       "./package.json": "./package.json"
     }
