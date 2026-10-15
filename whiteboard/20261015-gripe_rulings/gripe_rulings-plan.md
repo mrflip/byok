@@ -142,6 +142,11 @@ in `vault-db.ts` and `vault.ts`, resolved by its worker at the restack.
   `unlock:…` row, holding the localUnlockKey handle and the vaultKey wrapped under it, would
   outlive `lock()`. CLAUDE.md asks an old record to fail safe; deleting non-tuple rows on the
   device shelf at the first `readUnlock` reads nothing old, so it is a fail-safe, not a migration.
+* **A box under a name today's validators refuse is damaged, and only erasable** (#93's restack
+  onto #95): a host that narrows its validators after storing would otherwise have the listing
+  throw and lock the vault out. Such a box lists as damaged; `erase()` reaches it by its stored
+  name; `store()` over it refuses `bad_label` (a box stored there would still be unreadable).
+  Damage of any other kind keeps the Coach's store-over ruling.
 
 ## For the Coach
 
