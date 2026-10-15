@@ -98,7 +98,7 @@ security expert who knows what questions to ask.
   passphrase against it. A passphrase changed elsewhere does not stop a stale session's
   `store()` or `erase()` (their expectations carry no epoch); the session relocks on its next
   look at the bundle.
-* 2026-10-14: the unlock window (today `rememberForMs`, becoming `forcePassphraseReentryHours`)
+* 2026-10-14: the unlock window (`forcePassphraseReentryHours`, `rememberForMs` until 2026-10-15)
   is chosen by the app at each `openVault`, so two devices on one vault may hold different
   windows. It is client-side politeness, not a vault-wide synced policy: nothing stored enforces
   it across devices, and a modified client could choose any window it likes. The real bounds
