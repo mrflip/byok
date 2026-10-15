@@ -155,6 +155,8 @@ const browserFor = (route: (request: Request) => Promise<Response>, userId: stri
   })
 )
 
+TH.bootDatabaseFirst()
+
 TH.describeVaultDB('the README route recipe, over postgresVaultDB', async () => {
   const route = await routeOver()
   return TH.perUser((userId) => browserFor(route, userId))

@@ -1,10 +1,12 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
-import { PGlite } from '@electric-sql/pglite'
+import type { PGlite } from '@electric-sql/pglite'
 import type { Client, Pool, PoolClient } from 'pg'
 import { VaultError, memoryDeviceDB, openVault } from 'safebyok'
 import * as TH from './test-helpers'
 import { VaultChangeChannel, postgresVaultDB } from '../src/index'
 import type { PostgresClient, PostgresListen, PostgresVaultDBOpts } from '../src/index'
+
+TH.bootDatabaseFirst()
 
 TH.describeVaultDB('postgresVaultDB over PGlite', async () => {
   const db = await TH.emptyDatabase()
@@ -295,10 +297,9 @@ describe("postgresVaultDB, in trouble", () => {
   })
 
   it("refuses with storage_unavailable where the tables were never made", async () => {
-    const bare = new PGlite()
-    const refusal = await TH.refusalOf(postgresVaultDB({ client: bare, userId: 'u1' }).readBundle(u1))
+    const db = await TH.emptyDatabase()
+    const refusal = await TH.refusalOf(postgresVaultDB({ client: TH.tablelessClient(db), userId: 'u1' }).readBundle(u1))
     expect(refusal.kind).to.eq('storage_unavailable')
-    await bare.close()
   })
 
   it("refuses a first lockbox write whose bundle went between the statement's read and its insert, as stale_write", async () => {

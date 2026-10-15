@@ -19,6 +19,8 @@ const describedColumns = async (db: PGlite, table: string) => {
   return rows.map((row) => [row.column_name, row.data_type])
 }
 
+TH.bootDatabaseFirst()
+
 describe("VaultTablesSql", () => {
   it("is the package's vault-tables.sql, word for word", () => {
     const shipped = readFileSync(path.join(import.meta.dirname, '..', 'vault-tables.sql'), 'utf8')
