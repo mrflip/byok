@@ -1,6 +1,6 @@
 # Sprint convex_vaultdb: progress
 
-**Status**: threads 1-3 filed (#17, #18, #19); thread 4 in review
+**Status**: done -- four threads filed: #17, #18, #19 (stacked on #18), #20 (stacked on #19)
 
 The orchestrator's document: newer than the plan wherever they disagree. Each worker's own
 account is in `thread-<N>-<label>.md` on its branch.
@@ -12,7 +12,7 @@ account is in `thread-<N>-<label>.md` on its branch.
 | 1      | convex_skills    | `20261014-convex_skills`     | origin/main        | filed [#17](https://github.com/mrflip/safebyok/pull/17) (no review: docs only) |
 | 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18), tip 0e67d7a (erase ruling in, two reviews) |
 | 3      | convex_component | `20261014-convex_component`  | #18 at 0e67d7a     | filed [#19](https://github.com/mrflip/safebyok/pull/19), tip b8145dc (review: clean) |
-| 4      | convex_client    | `20261014-convex_client`     | #19 at b8145dc     | in review (tip e030487) |
+| 4      | convex_client    | `20261014-convex_client`     | #19 at b8145dc     | filed [#20](https://github.com/mrflip/safebyok/pull/20), tip 870db58 (review: fixed) |
 
 ## What the threads have taught
 
@@ -139,3 +139,10 @@ WebSocket into `convex-test`; this cannot prove concurrency, real invalidation, 
 reconnect. **For the Coach:** (1) the tests' `ConvexReactClient` brings `react` in as a dev dependency. The Coach
 asked why; the options are keep, move that test to safebyok-react, or drop it. (2) Should a vault lock itself when
 storage refuses `not_permitted`, as after a sign-out? (3) Accept the first-emit deviation?
+
+*Review (thread 4, [#20](https://github.com/mrflip/safebyok/pull/20)):* `fixed`. Kept 0de3501: `ConvexReactClient.query`
+throws a refusal it already holds synchronously, which skipped the mapping (`refusing` now takes a thunk). Kept 40d6331:
+Convex unsubscribes count down per call, so a double close ended another watch; it now acts once, via a hand-written
+three-line flag (declared for the Coach). Both were found only because the tests run the real clients. Left: a failed
+`openVault` leaks its subscription (core); refreshes are not serialized (core); `safebyok` should be a peer of
+safebyok-convex before publishing (`instanceof VaultError`); the "never quotes a record" test is weak.
