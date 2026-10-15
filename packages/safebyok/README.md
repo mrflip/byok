@@ -20,7 +20,7 @@ adapter's next call (`holdNextCall`, `beforeNextCall`) and to count its storage 
 (`tallyWatches`), a logger that keeps what it hears (`spyLogger`), checks that a call refuses
 (`expectRefusal`) and that what it threw quotes nothing it should not (`thrownText`,
 `leafTexts`), and `describeVaultDB` and `describeDeviceDB`, the vitest suites every storage
-adapter owes.
+adapter owes, with `perUser` to run the first over an adapter made per signed-in user.
 `safebyok/utils` holds small helpers for the app around the vault, such as `mask`, which shows
 which API key a lockbox holds (`sk***...***wxyz`) without showing the key. `mask` is intended
 for plain text; calling it with arbitrary blobs may give unusual behavior. It strips every

@@ -334,8 +334,8 @@ shape of table, copy it, and keep to what makes it right:
   way the writer is only stale.
 * **Prove it with the shared suite**: `describeVaultDB` from `safebyok/testing` runs every verb,
   expectation and refusal against a fresh adapter. Its two users' vaults go through one adapter,
-  so a per-request adapter answers it with one VaultDB per user (`perUser` in
-  `tests/test-helpers.ts`).
+  so a per-request adapter answers it with one VaultDB per user, through `perUser` from
+  `safebyok/testing`.
 
 ## Developing this package
 

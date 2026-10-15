@@ -5,7 +5,6 @@ import { Client, cacheExchange } from '@urql/core'
 import { executeExchange } from '@urql/exchange-execute'
 import type { GraphQLSchema } from 'graphql'
 import type { VaultDB } from 'safebyok'
-import type { VaultDBVerbs } from 'safebyok/testing'
 import { VaultTablesSql, postgresVaultDB } from 'safebyok-postgres'
 import type { PostgresClient, PostgresListen } from 'safebyok-postgres'
 import { graphqlVaultDB } from '../src/index'
@@ -86,35 +85,6 @@ export const urqlClientFor = (schema: GraphQLSchema, userId: string | null): Cli
 
 /** The browser's VaultDB for `userId`: graphqlVaultDB over its own urql Client. */
 export const browserFor = (schema: GraphQLSchema, userId: string | null): VaultDB => graphqlVaultDB(urqlClientFor(schema, userId))
-
-/**
- * One VaultDB per user, each made for that user as a server makes one per request: the core's
- * suite reaches two users' vaults through one adapter, where a request is one user's.
- */
-export const perUser = (vaultDBFor: (userId: string) => VaultDB): VaultDBVerbs => {
-  const vaultDBs = new Map<string, VaultDB>()
-  const as = ({ user_id }: { user_id: string }): VaultDB => {
-    const known = vaultDBs.get(user_id)
-    if (known) { return known }
-    const vaultDB = vaultDBFor(user_id)
-    vaultDBs.set(user_id, vaultDB)
-    return vaultDB
-  }
-  const anyone = vaultDBFor('anyone')
-  return {
-    maxRecordBytes: anyone.maxRecordBytes,
-    maxVaultBytes:  anyone.maxVaultBytes,
-    readBundle:     (scope) => as(scope).readBundle(scope),
-    createBundle:   (bundle) => as(bundle).createBundle(bundle),
-    updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
-    readBox:        (scope, boxlabel) => as(scope).readBox(scope, boxlabel),
-    listBoxes:      (scope) => as(scope).listBoxes(scope),
-    updateBox:      (scope, lockbox, expected) => as(scope).updateBox(scope, lockbox, expected),
-    eraseBox:       (scope, boxlabel, expected) => as(scope).eraseBox(scope, boxlabel, expected),
-    eraseVault:     (scope, expected) => as(scope).eraseVault(scope, expected),
-    subscribe:      (scope, onChange) => as(scope).subscribe(scope, onChange),
-  }
-}
 
 /** A PostgresClient whose every statement rejects with `err`, as a driver does when the database is down. */
 export const failingClient = (err: Error): PostgresClient => ({

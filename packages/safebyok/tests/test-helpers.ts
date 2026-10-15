@@ -4,8 +4,9 @@
  * A cheap key deriver, a vault's options over stores in memory, shape-valid records whose
  * ciphertext is fake, a live device unlock, small timing, interception and tampering aids, a
  * logger that keeps what it hears, checks that a call refuses and that what it threw quotes
- * nothing it shouldn't, and the suites every VaultDB and DeviceDB adapter owes. For tests only,
- * and under vitest: the deriver is worthless against a brute-forcer.
+ * nothing it shouldn't, and the suites every VaultDB and DeviceDB adapter owes (the VaultDB suite
+ * runnable over an adapter made per signed-in user). For tests only, and under vitest: the
+ * deriver is worthless against a brute-forcer.
  */
 import { describe, expect, it, vi } from 'vitest'
 import { toB64, type Ciphered } from '../src/crypto'
@@ -712,6 +713,44 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
     })
   })
+}
+
+/**
+ * One adapter reaching every user's vaults, made of a VaultDB per user: for
+ * {@link describeVaultDB} over an adapter that serves only the user signed in, as a server's
+ * does when it makes one per request. The suite reaches two users' vaults through one adapter;
+ * this sends each verb to the VaultDB `vaultDBFor` made for the user its scope or bundle names,
+ * making each user's once and keeping it. Its limits are those of the one made for `anyone`.
+ *
+ * @param vaultDBFor - The VaultDB a request signed in as `userId` gets.
+ * @returns The verbs of one adapter, each sent on to its user's VaultDB.
+ *
+ * @example
+ *   describeVaultDB('postgresVaultDB', () => perUser((userId) => postgresVaultDB({ client, userId })))
+ */
+export const perUser = (vaultDBFor: (userId: string) => VaultDBVerbs): VaultDBVerbs => {
+  const vaultDBs = new Map<string, VaultDBVerbs>()
+  const as = ({ user_id }: { user_id: string }): VaultDBVerbs => {
+    const known = vaultDBs.get(user_id)
+    if (known) { return known }
+    const vaultDB = vaultDBFor(user_id)
+    vaultDBs.set(user_id, vaultDB)
+    return vaultDB
+  }
+  const anyone = as({ user_id: 'anyone' })
+  return {
+    maxRecordBytes: anyone.maxRecordBytes,
+    maxVaultBytes:  anyone.maxVaultBytes,
+    readBundle:     (scope) => as(scope).readBundle(scope),
+    createBundle:   (bundle) => as(bundle).createBundle(bundle),
+    updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
+    readBox:        (scope, boxlabel) => as(scope).readBox(scope, boxlabel),
+    listBoxes:      (scope) => as(scope).listBoxes(scope),
+    updateBox:      (scope, lockbox, expected) => as(scope).updateBox(scope, lockbox, expected),
+    eraseBox:       (scope, boxlabel, expected) => as(scope).eraseBox(scope, boxlabel, expected),
+    eraseVault:     (scope, expected) => as(scope).eraseVault(scope, expected),
+    subscribe:      (scope, onChange) => as(scope).subscribe(scope, onChange),
+  }
 }
 
 /**
