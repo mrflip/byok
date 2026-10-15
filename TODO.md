@@ -38,9 +38,6 @@ Small irritants, each a few lines, picked up by whoever is nearby.
 * The root eslint config does not ignore a root `dist/`, so a stale build from before the core
   moved (gitignored, so invisible to `git status`) fails the whole justify with thousands of
   warnings. Ignore `**/dist/` at the root; until then, `rm -rf dist` at the root clears it.
-* Make a test helpers library, `TestHelpers.ts`, star-imported as `TH`. Look for things like
-  `await new Promise((resolve) => { setTimeout(resolve, 0) })` and replace them with helpers (eg
-  `await TH.wakeupAtNextTick()`). #25's `tweakB64` would move into it.
 
 ## Roadmapped
 
