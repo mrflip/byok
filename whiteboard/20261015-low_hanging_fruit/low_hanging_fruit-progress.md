@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 11 building; 5 (second review) and 10 in review; 1 filing (#34 open); 3, 4, 9 filed. Newer than the plan wherever the two disagree.
+**Status**: 2 building; 5 (second review, re-run) and 10 in review; 11 filing; 1, 3, 4, 9 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -8,17 +8,17 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 
 | #  | Thread | Base | Status |
 | -- | ------ | ---- | ------ |
-| 1  | `vault_size_cap` | `origin/main` | filing ([#34](https://github.com/mrflip/safebyok/pull/34) open) |
-| 2  | `explicit_options` | thread 1 | pending |
+| 1  | `vault_size_cap` | `origin/main` | filed [#34](https://github.com/mrflip/safebyok/pull/34) |
+| 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | underway |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
-| 5  | `mask_utils` | `origin/main` | in second review |
+| 5  | `mask_utils` | `origin/main` | in second review (re-run) |
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | in review |
-| 11 | `label_grammar_report` | `origin/main` | underway |
+| 11 | `label_grammar_report` | `origin/main` | filing (documents only, no review) |
 
 ## What the threads have taught
 
@@ -39,6 +39,11 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
     option parsing is `parseMaxWhisperBytes`, `parseMaxLockboxes`, `ensureLimitsFit(vaultDB, ...)`;
     the provider adds `maxLockboxes` at the end of its destructure, `openOpts` and the deps.
   - `maxVaultBytes` is abstract: every third-party adapter must declare it (Coach, below).
+  *Review:* fixed -- the security note now says concurrent stores on one handle overshoot too.
+  Taken at filing: `ensureLimitsFit` refuses an undeclared `maxRecordBytes` as well; "not even
+  one lockbox fits" when none do. Left: no server-side cap (a check in the Convex component's
+  `updateBox` would close it); a full vault refreshes on every refused store. Rebased onto #29:
+  options are `number | undefined` now, and #29's lint wants module-scope test helpers.
 * *Orchestrator:* **Thread 4** found almost nothing to change outside the stored fields: the demo's
   account `created_at` and one test clock. `DeviceUnlock.expires_at` and `expiresAt` were
   already numbers. Thread 2's rename of `expiresAt` inherits a number.
@@ -94,6 +99,16 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   filing (thread 9 met two empty-arrow lint errors). [#31](https://github.com/mrflip/safebyok/pull/31)
   (thread 4) now conflicts with main in the demo's `auth.ts`; a filed branch needs a
   force-push to rebase, which workers may not do (Coach, below).
+* *Orchestrator:* **Thread 11** (report, `human/20261015-label_grammar_report.md`): all three
+  labels could take a host grammar without touching a stored record or the binding (JSON-array
+  AD escapes anything); **the colon is the one forbidden character** (the ckeys are plain
+  concatenations, and `user_id` is already free-form); the real hazard is the read path (`Label`
+  types the record schemas, so a wider host grammar reads back as `corrupt_record`). Seam: a
+  fixed `LabelFloor` for reads, `OpenVaultOpts.labelRules` per slot for writes, validate never
+  transform. No server-side grammar in Convex.
+* *Orchestrator:* **Main-checkout moves are the owner's**: thread 5's second reviewer bailed on
+  a `rebase` of `20261015-roadmap_fruit` onto origin/main in the main checkout; its owner
+  finished that rebase at 04:04:15. Ruled not the review's; the second review was re-run.
 * *Orchestrator:* **Slots count builders, not reviews** (YOLO, two-way): with 1, 5 and 9 all in
   review and nothing building, thread 10 started as a fourth agent.
 * *Orchestrator:* **The main checkout moves under reviewers.** Another agent's uncommitted work
