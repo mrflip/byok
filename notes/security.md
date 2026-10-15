@@ -9,11 +9,14 @@ security expert who knows what questions to ask.
 
 * 2026-10-15: `mask` (`safebyok/utils`) takes a whisper and returns text meant for display: its
   first and last few characters (two and four by default, at the caller's choice) and, up to
-  `maxLen`, its length; the result is never longer than `maxLen` characters. `maxLen` defaults to
-  `max(15, head + tail + 9)`, so a large `head` or `tail` lets a medium whisper's length show. It
-  strips control, bidirectional and zero-width characters first. A short whisper is shown mostly
-  or, with `minStars: 0`, entirely. It throws `bad_option` or `bad_whisper` without quoting its
-  input.
+  `maxLen` (15 by default), its length. Beyond `maxLen` the result is fixed-width
+  (`head***...***tail`), or `maxLen` stars when even that does not fit, so the length stops
+  showing; a `head` and `tail` large enough to cover a short whisper show it nearly whole, and
+  `minStars: 0` shows a short one entirely. Every result, even the stars, goes through a final
+  normalization that strips combining marks, control, format, surrogate, private-use and
+  unassigned code points, spaces, ignorable code points and bidirectional controls (strong
+  right-to-left letters stay), so it is one plain line that cannot reorder or overwrite what
+  displays beside it. It throws `bad_option` or `bad_whisper` without quoting its input.
 * 2026-10-14 (revised 2026-10-15 for the push-to-main workflow): the package is staged on npm by `.github/workflows/release.yml`, run on every push
   to main (when the Coach has merged the Version PR, and a version npm lacks is waiting),
   authenticating by npm's trusted publishing (OIDC, no stored token) from the `npm`
