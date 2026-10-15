@@ -1,5 +1,11 @@
 # safebyok
 
+## 0.2.0
+
+### Minor Changes
+
+- [#36](https://github.com/mrflip/safebyok/pull/36) [`0568faf`](https://github.com/mrflip/safebyok/commit/0568fafeca76287020a6f989ee447af07196b930) Thanks [@mrflip](https://github.com/mrflip)! - A new entry point, `safebyok/testing`, for tests only: `testDeriver` (a cheap key deriver, worthless against a brute-forcer), `fakeCiphered`, `scopeOf`, `bundleOf` and `boxOf` (shape-valid records with fake ciphertext), and `describeVaultDB`, the vitest suite every storage adapter owes. It needs vitest, now an optional peer dependency.
+
 ## 0.1.0
 
 ### Minor Changes
