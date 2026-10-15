@@ -113,11 +113,12 @@ export type Vault = {
   /**
    * Lock gently, for a hidden tab or a sign-out: no new secrets from this instant, work in hand
    * finishes, and the vaultKey is dropped `graceSeconds` from now. At once, the snapshot reads
-   * `locked`, every operation called from now on throws kind 'vault_locked', this device forgets
-   * its remembered unlock, and an `unlock()` or `changePassphrase()` still under way loses, as to
-   * `lock()`. What the grace spares is work already past its start: a `store()` retrying after
-   * another device's write, or an `erase()`, still lands. An `unlock()` within the grace ends it:
-   * the vault is unlocked again, and nothing is dropped.
+   * `locked`, every read, use, store or erase called from now on throws kind 'vault_locked', this
+   * device forgets its remembered unlock, and an `unlock()` or `changePassphrase()` still under
+   * way loses, as to `lock()`. What the grace spares is work already past its start: a `store()`
+   * retrying after another device's write, or an `erase()`, still lands. An `unlock()` or
+   * `changePassphrase()` begun within the grace ends it: the vault is unlocked again, and nothing
+   * is dropped.
    *
    * `graceSeconds` is from 0 to 60, fractions too; kind 'bad_option' otherwise. 0 is `lock()`.
    * `close()` cuts the grace short.
@@ -398,8 +399,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
 
   /**
-   * Forget the unlock, in memory and on this device. Every lock goes through here, and whatever
-   * unlock is under way when it does loses to it.
+   * Forget the unlock, in memory and on this device. Every lock goes through here but a
+   * `lockSoon()` with a grace, which does the same save that the key waits for its timer; whatever
+   * unlock is under way when either does loses to it.
    */
   const shut = async () => {
     shutsSoFar += 1
@@ -883,7 +885,7 @@ const MsPerHour = 60 * 60 * 1000
 
 /** How long `lockSoon()` lets work in hand finish, unless told otherwise, in seconds. */
 const LockSoonGraceSeconds = 5
-/** The longest grace `lockSoon()` gives, in seconds: natural expiry's own, as ruled. */
+/** The longest grace `lockSoon()` gives, in seconds: the vaultKey outlives a lock by at most this. */
 const MaxLockSoonGraceSeconds = 60
 
 /** A grace in seconds, as the host thinks of it, to whole milliseconds. Zod's number refuses NaN and Infinity. */
