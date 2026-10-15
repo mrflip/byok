@@ -1,14 +1,12 @@
 # Thread 2: dialog_wording (2026-10-15)
 
-Branch `20261015-dialog_wording`, PR [#91](https://github.com/mrflip/safebyok/pull/91), stacked on #83. Justify: green (all packages and the demo; react 55 tests, convex 268, demo 124).
+Branch `20261015-dialog_wording`, PR [#91](https://github.com/mrflip/safebyok/pull/91), stacked on #83. Justify: green (react 53 tests, core 868, convex 268, demo 124).
 
-* **Built**: `PassphraseModal`'s window line (`packages/safebyok-react/src/passphrase-modal.tsx`) reads "Locks again on this device in 7 days" through `new Intl.RelativeTimeFormat(Locale, { numeric: 'always', style: 'long' })`, with today's unit choice (whole days, else hours, else minutes, at least one minute). `ForeverMs` or longer reads "Stays unlocked on this device until you lock it." Where `'RelativeTimeFormat' in Intl` is false it falls back to the old "Stays unlocked on this device for 7 days." The window is `vault.reentryWindowMs`. Tests (`passphrase-modal.test.tsx`, `vault-provider.test.tsx`) carry the new wording plus four fallback cases that delete `Intl.RelativeTimeFormat` for the test and restore it after. The react README line and a patch changeset (`.changeset/20261015-dialog_wording.md`) say it.
+* **Built**: `PassphraseModal`'s window line (`packages/safebyok-react/src/passphrase-modal.tsx`) reads "Locks again on this device in 7 days" through `new Intl.RelativeTimeFormat(Locale, { numeric: 'always', style: 'long' })`, with today's unit choice (whole days, else hours, else minutes, at least one minute), from `vault.reentryWindowMs`. While the dialog creates the vault (state `absent`) it reads "Locks on this device in 7 days", with no "again". `ForeverMs` or longer reads "Stays unlocked on this device until you lock it." Tests cover both phrasings; the react README and a patch changeset say it.
 * **Decisions taken**:
-  * `numeric: 'always'`, so one day is "in 1 day", never "tomorrow" (the default `'always'` is also the spec default; stated for the reader).
-  * The locale is one module constant, `Locale = 'en'`, used by the relative phrase and by the fallback's `Intl.NumberFormat`: the i18n thread changes one line (and will want the sentence frames, "Locks again on this device", translated too; they are still English literals).
-  * The fallback is a feature test (`'RelativeTimeFormat' in Intl`), at render, not at module load, so a test (or a polyfill loaded late) is honoured.
-  * `windowCount` was split out of `unlockedFor` to share the unit choice between the two phrasings.
-* **Discoveries**:
-  * `Intl.RelativeTimeFormat` has no grouping option, so a window just under `ForeverMs` reads "in 288,000,000,000 minutes" where the old text had no separators. The test for that edge case now allows commas. Nobody opens a vault that way; recorded only for honesty.
-  * Spreading `Intl` into a stub loses every property (they are non-enumerable); the fallback tests delete and restore the one property instead.
-* **For the Coach**: the commit prefix is `react:` where the previous commit on this component used `client:`; say if the repository's prefix for `safebyok-react` is `client:` and I will keep to it in later threads.
+  * `numeric: 'always'`, so one day is "in 1 day", never "tomorrow".
+  * The locale is one module constant, `Locale = 'en'`, for the relative phrase; the sentence frames are still English literals for the i18n thread.
+  * No fallback where `Intl.RelativeTimeFormat` is missing (dropped on review): every engine that has `Intl.NumberFormat` unit style also has RTF, and the es2022 build runs only where both exist. The first version's fallback and its `counted()` helper are gone.
+  * `windowCount` splits the unit choice out of `unlockedFor`.
+* **Discoveries**: `Intl.RelativeTimeFormat` has no grouping option, so a window just under `ForeverMs` reads "in 288,000,000,000 minutes" with separators; the edge-case test allows commas. Recorded for honesty only.
+* **For the Coach**: nothing; commits use the `client:` prefix PROCESS.md names for `safebyok-react` (the first commit's `react:` stands, since it was pushed).

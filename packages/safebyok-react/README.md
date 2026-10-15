@@ -12,11 +12,11 @@ otherwise write itself.
   `retryOpen()` for an open that failed (below).
 * `useVaultSnapshot()` -- the live snapshot via `useSyncExternalStore`.
 * `PassphraseModal` -- the default dialog: unstyled markup under `modal-scrim` / `modal` class
-  names for the host's stylesheet to dress. It says how long an unlock lasts on the device -- "Locks
-  again on this device in 7 days", "in 15 minutes", "Stays unlocked ... until you lock it" -- read from the vault itself (its
-  `reentryWindowMs`, the `forcePassphraseReentryHours` it was opened with). A wrong
-  passphrase, or any other condition the unlock meets (storage out of reach), shows in the dialog
-  in place; misuse is thrown while rendering, to your error boundary.
+  names for the host's stylesheet to dress. It says how long an unlock lasts on the device --
+  "Locks again on this device in 7 days", "in 15 minutes", "Stays unlocked ... until you lock it"
+  -- read from the vault itself (its `reentryWindowMs`, the `forcePassphraseReentryHours` it was
+  opened with). A wrong passphrase, or any other condition the unlock meets (storage out of
+  reach), shows in the dialog in place; misuse is thrown while rendering, to your error boundary.
 
 ## Install
 
