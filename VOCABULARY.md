@@ -66,7 +66,7 @@ wrong or has been tampered with, decryption fails.
 | **cipherAdditionalData** | The context an encryption is bound to: which app, user and vault, which lockbox and revision, and for what purpose. It is rebuilt rather than stored, so ciphertext copied anywhere else will not open. | associated data (AAD) |
 | **ciphertext**           | The encrypted bytes, with their authentication tag on the end.                                                                                                       | ciphertext           |
 | **vaultId**              | A random id minted when the vault is made, and never changed; part of every cipherAdditionalData.                                                                   | --                   |
-| **revisionId**           | A fresh id for each write of a lockbox. It is part of the cipherAdditionalData, and lets storage refuse a write made from a stale read.                              | version, CAS token   |
+| **revisionId**           | A fresh id for each write of a lockbox. It is part of the cipherAdditionalData; storage refuses (`stale_write`) a write made from a stale read.                     | version, CAS token   |
 | **passphraseEpoch**      | A counter that goes up whenever the passphrase changes, so other devices and remembered unlocks know to ask for it again.                                            | key epoch            |
 | **whisperSchemaVersion** | Your own version number for the shape of a whisper, so you can migrate old ones after reading them.                                                                  | --                   |
 

@@ -59,7 +59,8 @@ export const Whisper: Z.ZodType<Whisper> = Z.union([
 /**
  * A freely chosen identifier (STYLE.md tag glossary): lowercase words of letters and digits
  * joined by single underscores, starting with a letter, two to forty characters. Shared by every
- * label in the package: `applabel`, `vaultlabel`, `boxlabel`, `userlabel`.
+ * label in the package: `applabel`, `vaultlabel`, `boxlabel`. (A scope's `user_id` is the host's
+ * auth identity, deliberately not a Label.)
  *
  * @example Label.parse('anthropic_api_key')
  * @example Label.safeParse('ANTHROPIC_API_KEY').success  // false: lowercase only
