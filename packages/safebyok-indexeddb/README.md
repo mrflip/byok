@@ -1,0 +1,136 @@
+# safebyok-indexeddb
+
+safebyok's storage in this browser's [IndexedDB](https://developer.mozilla.org/docs/Web/API/IndexedDB_API):
+**`idbVaultDB`**, the VaultDB for an app with no backend. Everything a synced backend would hold
+is kept on this device instead, so the app's whispers are encrypted at rest all the same: the rows
+are ciphertext and a few public fields, and nothing in them opens a vault without its passphrase.
+
+It is also the example of a key-value backend: to store vaults in another key-value store, copy
+this package and type in the three places *Writing an adapter of your own* names.
+
+## Install
+
+```sh
+pnpm add safebyok safebyok-indexeddb
+```
+
+`safebyok` (and `zod`, its peer) are peer dependencies: your app installs them, so the adapter
+and your app share one copy, and a `VaultError` from one is a `VaultError` to the other. Its one
+dependency is [`idb-keyval`](https://github.com/jakearchibald/idb-keyval), which `safebyok`
+already brings for its device store.
+
+## Use
+
+```ts
+import { openVault } from 'safebyok'
+import { browserOpts } from 'safebyok/browser'
+import { idbVaultDB } from 'safebyok-indexeddb'
+
+const vault = await openVault({
+  applabel:   'acme',
+  userId:     session.userId,
+  vaultlabel: 'main',
+  vaultDB:    idbVaultDB({ dbName: 'acme' }),
+  ...browserOpts({ dbName: 'acme' }),   // the key deriver, and the device store beside the vault
+})
+```
+
+* **`dbName`** names the IndexedDB databases the records go in, default `'safebyok'`: the vault's
+  rows in `<dbName>:vault_db`, and, through `browserOpts`, the remembered unlock in
+  `<dbName>:device_db`. Anything but non-empty text refuses with kind `bad_option`.
+* **Every verb is one IndexedDB transaction.** IndexedDB runs readwrite transactions over one
+  store one after another, across every tab of the origin, so a write lands only while what it
+  expects still stands, and refuses with kind `stale_write` otherwise. Two tabs creating a vault
+  at once settle on one; erasing a vault takes its every lockbox with it, or none of them.
+* **Other tabs' writes** ring `subscribe`, over a BroadcastChannel, so a vault open in two tabs
+  stays current in both. The bell says only that something changed; the vault reads again.
+* **No limits of its own.** IndexedDB sets none per record or per vault, so `maxRecordBytes` and
+  `maxVaultBytes` are `Infinity`: the origin's storage quota bounds the whole database, and a
+  write past it refuses with kind `storage_unavailable`, IndexedDB's own error as its `cause`.
+* **Best-effort storage.** The browser may evict IndexedDB under pressure, and "clear site data"
+  removes it: the vault goes with it, and there is no other copy. Call
+  `navigator.storage.persist()`, and tell your users plainly that the vault lives only in this
+  browser.
+
+It runs anywhere with an `indexedDB` global: every browser, and Node or Bun with
+[`fake-indexeddb`](https://github.com/dumbmatter/fakeIndexedDB), which is how its tests run.
+
+## What is stored
+
+One IndexedDB database per `dbName`, `<dbName>:vault_db`, holding one object store, `records`:
+**a row per record, each the record itself**, as safebyok wrote it, kept by structured clone
+field by field. Nothing is serialized, normalized or repaired.
+
+| ckey                                               | Row                       |
+| -------------------------------------------------- | ------------------------- |
+| `vault:<applabel>:<user_id>:<vaultlabel>`          | the vault's `VaultBundle` |
+| `box:<applabel>:<user_id>:<vaultlabel>:<boxlabel>` | one `Lockbox`             |
+
+* **Encrypted**: each whisper (`whisper_ciphered`), each lockbox's lockboxKey
+  (`lockbox_key_wrapped`), and, inside the bundle, the vaultKey, wrapped under each passphrase.
+* **In the open**: the scope, each `boxlabel` and `note`, the `vault_id`, `passphrase_epoch`,
+  `revision_id`s, how each passphrase was made into a key (its key deriver's label and salt),
+  when each vault and lockbox was first stored and each whisper last changed (epoch
+  milliseconds), and the length of every ciphertext.
+* **Never**: a whisper, a passphrase, any key in usable form. The remembered unlock lives in the
+  device store's database, not here.
+
+The ckeys and the database name are the ones `safebyok/idb` used when it held this store, so a
+vault written there reads here unchanged.
+
+### Looking at the rows
+
+`inspectIdbVaultDB({ dbName })` is a raw window onto the rows, for a debug panel or a demo's
+"what the backend sees": `rows()` lists every stored row with its ckey, `subscribe(listener)`
+hears every write, and `wipe()` removes every row, every user's vault in that database. It asks
+no vault's opinion: what it shows is what is stored.
+
+## Writing an adapter of your own
+
+This package is the example of a key-value backend, as `safebyok-postgres` is of a SQL one and
+`safebyok-convex` of a hosted one. To keep vaults in another key-value store -- a different
+browser store, a native one in an app shell, a key-value service -- copy it, and type in three
+places:
+
+1. **`src/ckeys.ts`: where each record lives.** A ckey per record, built from its scope, so a
+   read is one lookup and a vault's lockboxes are the rows under its prefix. A `user_id` may hold
+   the separator, so a listing takes only the rows whose remainder is a bare boxlabel
+   (`isBoxCkeyOf`). If your store has columns or namespaces, use them instead.
+2. **`src/idb-vault-db.ts`: each verb, in one transaction of your store.** Extend `VaultDB` and
+   write its `do*` methods, never its public verbs: the base class checks labels, scope, records
+   and expectations on the way in, validates every record on the way out, and turns a `false`
+   into `stale_write` and anything you throw into `storage_unavailable`. A write reads what
+   stands, compares, and writes, all in one transaction (`src/shelf.ts`'s `inOneTransaction`);
+   a store with no transactions needs a conditional write instead (compare-and-set on the
+   ckey), or it cannot keep the promise.
+3. **`src/bell.ts`: how your store tells listeners of a write.** Here, this tab's listeners and
+   a BroadcastChannel to the others. A store with push of its own -- a live query, a socket --
+   rings from that, and one with none leaves `doSubscribe` out: the vault refreshes after its own
+   writes regardless.
+
+And keep, as they are:
+
+* **`src/expectations.ts`**: the comparisons each write makes before it lands. An adapter
+  compares only the scope, `boxlabel`, `vault_id`, `passphrase_epoch` and `revision_id`, and a
+  standing row too damaged to show one of them fails the comparison.
+* **Store each record as itself, field by field**, exactly as handed to you, and return it
+  exactly as stored, or null for none. Never look inside a ciphered field, never repair a
+  damaged row: safebyok validates everything it reads back.
+* **Prove it with the shared suite**: `describeVaultDB` from `safebyok/testing` runs every verb,
+  expectation and refusal against a fresh adapter, in one line
+  (`tests/idb-vault-db.test.ts`). The tests beside it race two writes against each other, which
+  is what one transaction per verb is for.
+
+The packaging is the template too: `package.json` (`safebyok` and `zod` as peers, ESM and
+CommonJS through `exports`), `tsdown.config.ts`, `vitest.config.ts`, `tsconfig.json`, and an
+`eslint.config.mjs` cut from the core's, which differs from it in nothing but its names. Rename
+the package, its rules' names and its entry points, and add it to the `fixed` group in
+`.changeset/config.json`.
+
+## Developing this package
+
+`pnpm justify` here runs its lint, typecheck, tests and build, with publint and
+arethetypeswrong. The tests run under Node against fake-indexeddb: IndexedDB's own semantics,
+transactions and structured clone included, with no browser. They build the core first
+(`pnpm build:deps`) and read it through its `dist/`, as a consumer would; the typecheck and lint
+read it from source.
