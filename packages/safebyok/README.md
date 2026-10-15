@@ -10,7 +10,8 @@ Bring Your Own Key (BYOK) Browser Vault using E2EE (End-to-end Encryption) and p
 * Accessing a vault is prohibitively difficult -- even given the application's database, code and environment.
 
 It is react-friendly (`safebyok-react`) and database agnostic: storage adapters implement a small
-abstract seam, IndexedDB adapters ship in `safebyok/idb`, and a Convex adapter is planned.
+abstract seam, and ship as packages of their own -- `safebyok-indexeddb` for a vault kept in this
+browser, `safebyok-convex` for Convex. The IndexedDB device store ships in `safebyok/idb`.
 `safebyok/testing` is for tests only, star-imported as `TH`: a cheap key deriver, shape-valid
 records with fake ciphertext, a live device unlock, small timing and tampering aids, a logger
 that keeps what it hears (`spyLogger`), and `describeVaultDB`, the vitest suite every storage
@@ -28,7 +29,7 @@ settles.
 ```ts
 import { openVault } from 'safebyok'
 import { browserOpts } from 'safebyok/browser'
-import { idbVaultDB } from 'safebyok/idb'
+import { idbVaultDB } from 'safebyok-indexeddb'
 
 const vault = await openVault({
   applabel:   'acme',
@@ -53,7 +54,9 @@ makes for itself. Any option you pass after the spread replaces the default it n
 * `safebyok` -- `openVault` and the types, errors and stores around it.
 * `safebyok/browser` -- `browserOpts({ dbName }?)`: the pinned Argon2id key deriver
   (`argon2idWebV1Deriver`) and the IndexedDB device store (`idbDeviceDB`), as a bag of options.
-* `safebyok/idb` -- the IndexedDB adapters, `idbVaultDB` and `idbDeviceDB`.
+* `safebyok/idb` -- the IndexedDB device store, `idbDeviceDB`, and `inspectIdbDeviceDB`, a raw
+  window onto its rows for a debug panel. The IndexedDB vault store, `idbVaultDB`, is a package
+  of its own, `safebyok-indexeddb`.
 
 `openVault` takes its `keyDeriver` and `deviceDB` from you, with no default behind them. A
 default would be imported by `openVault` itself, so every app would ship it, used or not: a

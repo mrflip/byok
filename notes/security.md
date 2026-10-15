@@ -97,7 +97,8 @@ security expert who knows what questions to ask.
   destroys and makes anew in between can still lose a lockbox (`eraseBox`) or be erased whole
   (`eraseVault`). Its `eraseVault` also lists the vault's rows in one transaction and deletes
   them in another: a lockbox another tab writes in between survives the erase, orphaned without
-  a bundle. Doing these inside one IndexedDB transaction is a ruled TODO, not yet built.
+  a bundle. Doing these inside one IndexedDB transaction is a ruled TODO, not yet built. (Built
+  when the store moved to `safebyok-indexeddb`: see the entry on it below.)
 * 2026-10-14: a lockbox's ciphertext length reveals its whisper's length to the backend: there is
   no padding yet (TODO). `store()` refuses a whisper over `maxWhisperBytes` of JSON, an
   `openVault` option defaulting to `MaxWhisperBytes` (40444), checked on write only.
@@ -382,3 +383,14 @@ security expert who knows what questions to ask.
   with 1 KiB, with the fields' allowance now covering them (a test builds the heaviest row) while
   `user_id`, which nothing bounds, is at most 512 bytes; a longer one, or a note a JSON-text
   backend escapes, eats into the room the doubled whisper leaves.
+* 2026-10-15: the IndexedDB vault store moved to a package of its own, `safebyok-indexeddb`, and
+  each of its write verbs (`createBundle`, `updateBundle`, `updateBox`, `eraseBox`, `eraseVault`)
+  is now one readwrite IndexedDB transaction, which reads the standing rows, compares them with
+  the expectation, and writes; a failure anywhere in it aborts it, writing nothing. IndexedDB runs
+  readwrite transactions over one store one after another, across the origin's tabs, so the
+  windows the `idbVaultDB` entry above records are closed: no write lands over a row another tab
+  changed meanwhile, two tabs creating a vault settle on one, and no lockbox outlives an erased
+  vault. The guarantee rests on the work inside awaiting only IndexedDB's own requests (awaiting
+  anything else lets the browser commit the transaction early, and the next request throws);
+  `src/shelf.ts`'s `inOneTransaction` says so. Its rows, ckeys and database name are unchanged,
+  and its change bell, a BroadcastChannel per database, still carries no scope and no record.

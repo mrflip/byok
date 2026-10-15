@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { browserOpts } from '../src/browser'
 import { VaultError } from '../src/errors'
 import { argon2idWebV1Deriver } from '../src/key-deriver'
-import { inspectIdb } from '../src/idb'
+import { inspectIdbDeviceDB } from '../src/idb'
 import { memoryStore } from '../src/string-store'
 import { localVaultDB } from '../src/vault-db'
 import { openVault } from '../src/vault'
@@ -27,7 +27,7 @@ describe("browserOpts", () => {
   it("keeps the device store's records in the database it names", async () => {
     const dbName = freshDbName()
     await browserOpts({ dbName }).deviceDB.writeUnlock(await TH.unlockOf('u1'))
-    const rows = await inspectIdb({ dbName, shelf: 'device_db' }).rows()
+    const rows = await inspectIdbDeviceDB({ dbName }).rows()
     expect(rows.map((row) => row.ckey)).to.deep.equal(['unlock:acme:u1:main'])
     expect(await browserOpts().deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
   })
