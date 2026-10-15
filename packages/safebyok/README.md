@@ -335,8 +335,7 @@ record naming another boxlabel than the one it is stored under, or one from a ne
 is listed in the snapshot as damaged, `{ boxlabel, damaged: true }`, sorted among the sound
 ones, which carry `damaged: false`. The rest of the vault opens and works as ever. `read()` and
 `use()` refuse a damaged lockbox with `corrupt_record`; `erase()` removes it, and `store()`
-writes a fresh lockbox over it, carrying nothing from the old record (neither its note nor
-when it was first stored). Show it as removable:
+writes a fresh lockbox over it. Show it as removable:
 
 ```ts
 for (const box of vault.getSnapshot().boxes) {
@@ -345,9 +344,13 @@ for (const box of vault.getSnapshot().boxes) {
 }
 ```
 
-Damage the listing cannot see -- altered ciphertext, a missing whisper -- shows only when the
-lockbox is read: it lists as sound, `read()` refuses it with `corrupt_record`, and `erase()` and
-`store()` remedy it the same way. A storage adapter's `doListBoxes` hands up each lockbox as a
+Damage the listing cannot see -- altered ciphertext, a missing or malformed ciphered field --
+shows only when the lockbox is read: it lists as sound, `read()` refuses it with
+`corrupt_record`, and `erase()` removes it. `store()` starts afresh over any record it cannot
+read as a lockbox -- every one the snapshot lists as damaged, and one missing or mangling a
+ciphered field -- carrying nothing from it, neither its note nor when it was first stored. A
+record that reads but will not decipher, its ciphertext altered, is replaced as any other, its
+note and first-stored time kept. A storage adapter's `doListBoxes` hands up each lockbox as a
 `StoredLockbox`, the boxlabel it is stored under beside its record exactly as stored, so a record
 too damaged to name itself is still listed under the boxlabel that reaches it.
 
