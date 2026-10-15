@@ -11,6 +11,35 @@ tests, explicit options with a `safebyok/browser` defaults export, the provider 
 failed open, `mask` in `safebyok/utils`, the boundary audit, `stale_write` retry, a size budget in CI, a
 docs sweep, the label-grammar report).
 
+## Sand in the sandals
+
+Small irritants, each a few lines, picked up by whoever is nearby.
+
+* The root scripts chain with `&&`, so a root-level failure hides package failures until it is
+  fixed.
+* The react and demo pre-scripts rebuild the core several times, and `workspaceConcurrency: 1`
+  serialises `pnpm -r` for lint and typecheck as well. The whole justify takes ~29 s locally and
+  longer in the cloud.
+* Convex's `--no-error-on-unmatched-pattern` should go when it gets its own configs.
+* The demo's coverage has no `include`.
+* **Flaky tamper tests** (low_hanging_fruit thread 1). Two tests alter ciphertext by writing `A`
+  over its first base64url character; one run in sixty-four that character already is `A`,
+  nothing changes, and the test fails. [#25](https://github.com/mrflip/safebyok/pull/25) fixes
+  `packages/safebyok/tests/crypto.test.ts`; the same pattern remains in
+  `packages/safebyok/tests/vault.test.ts` ("a lockbox with altered ciphertext refuses to open"),
+  which should use the same helper.
+* **Dependabot after the move.** `.github/dependabot.yml` still says `directory: /`, which should
+  cover a pnpm workspace from its root lockfile, but nobody has seen it update a dependency under
+  `packages/` or `demos/` since the core moved there. Check its next weekly run; if it skips them,
+  replace `directory: /` with `directories: ['/', '/packages/*', '/demos/*']`.
+* **Click through the demo's passphrase dialog.** No agent has a browser, so the dialog in
+  `demos/safebyok-demo-react` has never been exercised by hand since `safebyok-react` became a
+  built package. `pnpm --filter safebyok-demo-react dev`, then set, enter, mistype and dismiss a
+  passphrase; anything odd becomes a TODO.
+* Make a test helpers library, `TestHelpers.ts`, star-imported as `TH`. Look for things like
+  `await new Promise((resolve) => { setTimeout(resolve, 0) })` and replace them with helpers (eg
+  `await TH.wakeupAtNextTick()`). #25's `tweakB64` would move into it.
+
 ## Roadmapped
 
 In order. A later item that depends on an earlier one says so.
@@ -18,9 +47,9 @@ In order. A later item that depends on an earlier one says so.
 ### 1. Releases: version, bump, publish all work -- in flight
 
 Sprint **pr_releases** (`whiteboard/20261014-pr_releases/`): `safebyok-react` publishable
-([#15](https://github.com/mrflip/safebyok/pull/15)), the core under `packages/safebyok`
-([#16](https://github.com/mrflip/safebyok/pull/16)), then changesets, the release script and the
-rewritten `release.yml` (`20261014-changeset_releases`, in review). Done when a changeset merged
+([#15](https://github.com/mrflip/safebyok/pull/15), merged), the core under `packages/safebyok`
+([#16](https://github.com/mrflip/safebyok/pull/16), merged), then changesets, the release script
+and the rewritten `release.yml` ([#22](https://github.com/mrflip/safebyok/pull/22), in review). Done when a changeset merged
 to `main` produces a Version PR, and merging that PR stages every public package on npm for the
 Coach's approval. Left after the sprint, for the first real release to answer:
 
@@ -277,6 +306,11 @@ thread 6) has been used in anger.
 
 In flight as thread 1 of the convex sprint; stays here until it lands. Add the Convex skill
 **scoped** to `packages/safebyok-convex/` only, with only the files likely to be relevant.
+
+### Others
+
+* Style guide audit
+  - A few comment lines exceed 100 columns.
 
 ## NOT YET
 
