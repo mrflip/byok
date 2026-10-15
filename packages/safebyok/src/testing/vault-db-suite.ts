@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { VaultDB } from '../src/vault-db'
-import { boxOf, bundleOf, scopeOf } from './helpers'
+import type { VaultDB } from '../vault-db'
+import { boxOf, bundleOf, scopeOf } from './fixtures'
 
 /**
  * A VaultDB as the suite sees it: its public verbs only. Structural, so an adapter extending
@@ -16,9 +16,8 @@ export type VaultDBVerbs = Pick<VaultDB,
  * aimed at a vault since destroyed and made anew refusing. Run it against an adapter with a
  * factory making a fresh, empty one per test.
  *
- * Not public surface: other workspace packages import it by relative path, as the in-tree
- * adapters' tests do. It needs nothing from `src/` at runtime, and checks refusals by `kind`
- * rather than by class, so an adapter built on the published package passes the same way.
+ * For an adapter's own tests, from `safebyok/testing`; it runs under vitest. It checks refusals
+ * by `kind` rather than by class, so an adapter passes whichever copy of the package it extends.
  *
  * @param adapterTitle - The adapter under test, as the suite's titles name it.
  * @param makeVaultDB - A fresh, empty adapter: no record in it, and none shared with another call.

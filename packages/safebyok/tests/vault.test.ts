@@ -5,7 +5,7 @@ import { memoryDeviceDB } from '../src/device-db'
 import { localVaultDB } from '../src/vault-db'
 import { memoryStore, type StringStore } from '../src/string-store'
 import { openVault, type OpenVaultOpts } from '../src/vault'
-import { testDeriver } from './helpers'
+import { testDeriver } from '../src/testing'
 
 /**
  * A fresh in-memory world: the store behind the vaultDB, both adapters, a steerable clock, and an

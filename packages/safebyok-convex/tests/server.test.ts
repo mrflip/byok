@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { ConvexError } from 'convex/values'
 import type { SafebyokErrorData } from '../src/server'
-import { boxOf, bundleOf, bySubject, hostWith, scopeOf } from './helpers'
+import { boxOf, bundleOf, scopeOf } from 'safebyok/testing'
+import { bySubject, hostWith } from './helpers'
 
 const { api, createTest } = hostWith(bySubject)
 

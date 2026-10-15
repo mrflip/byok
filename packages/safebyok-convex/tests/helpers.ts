@@ -1,17 +1,13 @@
 import { anyApi, defineSchema } from 'convex/server'
-import type { Infer } from 'convex/values'
 import { convexTest, defineTestApp } from 'convex-test'
 import { Lockbox, VaultBundle, localVaultDB, memoryDeviceDB, memoryStore, openVault } from 'safebyok'
-import type { StringStore, VaultScope, Whisper } from 'safebyok'
+import type { StringStore, Whisper } from 'safebyok'
+import { testDeriver } from 'safebyok/testing'
 import type { ComponentApi } from '../src/component-api'
-import type { Lockbox as LockboxRecord } from '../src/component/validators'
 import { toConvexLockbox } from '../src/convex-vault-db'
 import { SafebyokComponent } from '../src/server'
 import type { GetUserId } from '../src/server'
 import { modules, register, schema } from '../src/test'
-// The core's cheap test deriver, by relative path (it is test-only, not public): one SHA-256 in
-// place of Argon2id.
-import { testDeriver } from '../../safebyok/tests/helpers'
 
 /** The component's functions, called directly as a root app's: no host wrapper, no auth. */
 export const vaults = anyApi['vaults'] as unknown as ComponentApi['vaults']
@@ -36,42 +32,6 @@ export const bySubject: GetUserId = async (ctx) => {
   const identity = await ctx.auth.getUserIdentity()
   return identity?.subject ?? null
 }
-
-export const scopeOf = (userId: string, vaultlabel = 'main'): VaultScope => ({ applabel: 'acme', user_id: userId, vaultlabel })
-
-/** A shape-valid ciphered value that opens nothing: for tests that never decrypt. */
-export const fakeCiphered = (tag: string) => ({ cipher_iv_b64: `iv-${tag}`, ciphertext_b64: `ct-${tag}` })
-
-/** A shape-valid VaultBundle whose envelope is fake. */
-export const bundleOf = (userId: string, overrides: Partial<VaultBundle> = {}): VaultBundle => ({
-  format:              'safebyok-vault-v1',
-  ...scopeOf(userId),
-  vault_id:            `vault-id-${userId}`,
-  passphrase_epoch:    1,
-  key_deriver_label:   'test_digest_v0',
-  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- base64 of the literal text 'salt-for-tests': a fake salt (which is public material anyway), not a credential
-  passphrase_salt_b64: 'c2FsdC1mb3ItdGVzdHM',
-  vault_key_passphrase_wrapped: fakeCiphered(`bundle-${userId}`),
-  created_at:          '2026-10-15T00:00:00.000Z',
-  updated_at:          '2026-10-15T00:00:00.000Z',
-  ...overrides,
-})
-
-/**
- * A shape-valid Lockbox whose ciphered fields are fake, as the component's validator types it (a
- * note or none): what the core writes, so it serves the core's VaultDB verbs too.
- */
-export const boxOf = (boxlabel: string, tag: string, overrides: Partial<Infer<typeof LockboxRecord>> = {}): Infer<typeof LockboxRecord> => ({
-  format:              'safebyok-lockbox-v1',
-  boxlabel,
-  revision_id:         `rev-${tag}`,
-  lockbox_key_wrapped: fakeCiphered(`boxkey-${tag}`),
-  whisper_ciphered:    fakeCiphered(`whisper-${tag}`),
-  note:                'a test box',
-  created_at:          '2026-10-15T00:00:00.000Z',
-  updated_at:          '2026-10-15T00:00:00.000Z',
-  ...overrides,
-})
 
 /** The whispers a real vault is made with: obvious fakes, never real keys. */
 export const RealWhispers: Record<string, { whisper: Whisper, note?: string }> = {
