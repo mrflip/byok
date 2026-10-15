@@ -8,7 +8,8 @@ import { VaultChangeChannel } from './vault-tables'
  * What this VaultDB needs of a Postgres driver: one statement, its parameters numbered `$1`, `$2`
  * and on, and the rows it returns. A `pg` Pool, Client or PoolClient is one as it stands, and so
  * is a PGlite; postgres.js takes a one-line wrapper. Every statement this VaultDB sends is one
- * statement, so each is atomic on its own: no transaction is asked of the driver.
+ * statement, so each is atomic on its own, and every write is one: no transaction is asked of the
+ * driver.
  *
  * @example new Pool({ connectionString })                                      // pg
  * @example new PGlite()                                                         // @electric-sql/pglite
@@ -82,11 +83,17 @@ const DefaultMaxLockboxes = 1000
  * * **Who may reach a vault**: only `userId`. A verb naming any other user's scope, or any at
  *   all while no one is signed in, refuses with a VaultError of kind `not_permitted` before the
  *   database is asked anything.
- * * **Every verb is one statement**, atomic as Postgres makes every statement: a write lands only
+ * * **Every write is one statement**, atomic as Postgres makes every statement: a write lands only
  *   while what it expects still stands, and a failed expectation refuses with kind `stale_write`.
  * * **A full vault**: a new lockbox in a vault already holding `maxLockboxes` refuses with kind
  *   `vault_full`, checked in the statement that inserts it, so two writes racing for the last
  *   place cannot both land. A lockbox replacing one already there is never refused for the count.
+ *   A refusal for the count costs one read more, to tell a full vault from a writer who missed a
+ *   lockbox it would replace (`stale_write`).
+ * * **Isolation**: under READ COMMITTED, Postgres's default, every write holds as said. Under
+ *   REPEATABLE READ or SERIALIZABLE, any two writes adding or removing a lockbox in one vault at
+ *   once may fail with a serialization error, as `storage_unavailable` (each moves the count on
+ *   the vault's bundle row), and the call may simply be tried again.
  * * **Other writes**: with `listen`, `subscribe` hears every write to the vault, from any server
  *   and any device, through the tables' trigger; without it, nothing is pushed.
  * * **Trouble**: anything the driver throws refuses with kind `storage_unavailable`, the driver's
@@ -158,8 +165,7 @@ const ListBoxesSql = `SELECT ${Columns.selected(ListedLockboxColumns)} FROM safe
 
 // A first lockbox under its boxlabel: inserted only beside a bundle of the expected vault_id, only
 // where no lockbox stands, and only while the vault holds fewer than $5 lockboxes. It answers one
-// row: whether it landed, and whether it was refused for the count -- not when that boxlabel is
-// already taken, as a replacement is never refused for the count, and the writer is only stale.
+// row: whether it landed, and whether the vault it locked was full.
 //
 // The count is the bundle's lockbox_count, which the tables' trigger keeps, and the bundle's row is
 // locked (FOR UPDATE) as it is read, so new lockboxes in one vault are written one at a time. Under
@@ -168,7 +174,9 @@ const ListBoxesSql = `SELECT ${Columns.selected(ListedLockboxColumns)} FROM safe
 // write's lockbox too. Under REPEATABLE READ or SERIALIZABLE, it fails with a serialization error
 // instead, which refuses as storage_unavailable. Either way, two writes racing for the last place
 // never both land. The lock also holds the bundle in place, so no erase lands between the read and
-// the insert, and the foreign key never refuses it.
+// the insert, and the foreign key never refuses it. Only the locked row is re-read: the lockboxes
+// are seen as the statement began, so whether a full vault already holds this boxlabel -- the
+// write it waited on may have stored it -- is BoxStandsSql's to say, afresh.
 const InsertBoxSql = `WITH vault AS (
     SELECT applabel, user_id, vaultlabel, vault_id, lockbox_count FROM safebyok_bundles
     WHERE ${ScopeIs} AND vault_id = $4::text
@@ -180,9 +188,11 @@ const InsertBoxSql = `WITH vault AS (
     ON CONFLICT (applabel, user_id, vaultlabel, boxlabel) DO NOTHING
     RETURNING 1
   )
-  SELECT EXISTS (SELECT 1 FROM inserted) AS landed,
-    EXISTS (SELECT 1 FROM vault WHERE lockbox_count >= $5::bigint)
-      AND NOT EXISTS (SELECT 1 FROM safebyok_lockboxes WHERE ${ScopeIs} AND boxlabel = ${Columns.placeholderOf(LockboxColumns, 'boxlabel', LockboxParamsFrom + 2)}) AS full`
+  SELECT EXISTS (SELECT 1 FROM inserted) AS landed, EXISTS (SELECT 1 FROM vault WHERE lockbox_count >= $5::bigint) AS full`
+
+// Whether a lockbox stands under the boxlabel in the vault of that vault_id: asked, as a statement
+// of its own and so as things stand now, only after a first write found the vault full.
+const BoxStandsSql = `SELECT 1 FROM safebyok_lockboxes WHERE ${ScopeIs} AND boxlabel = $4::text AND vault_id = $5::text`
 
 // A lockbox over the revision read. Its vault_id column is its bundle's (the foreign key holds
 // them together), so matching it is matching the bundle that stands.
@@ -207,7 +217,7 @@ const EraseVaultSql = `DELETE FROM safebyok_bundles WHERE ${ScopeIs} AND vault_i
 
 // ------------------------------------------------------------------------------------ the adapter
 
-/** Each verb one statement, first checking the scope is the signed-in user's own. */
+/** Each write one statement, first checking the scope is the signed-in user's own. */
 class TablesVaultDB extends VaultDB implements PostgresVaultDB {
   // Postgres holds far more in one row; a mebibyte is what this adapter promises, as the other
   // in-tree adapters do, and more than most servers accept in one request.
@@ -267,10 +277,12 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
     }
     const { rows } = await this.client.query(InsertBoxSql, [...scopeParams(scope), expected.vault_id, this.maxLockboxes, ...boxParams])
     const outcome = rows[0] as { landed: boolean, full: boolean }
-    if (outcome.full) {
-      throw new VaultError('vault_full', `This vault already holds the ${String(this.maxLockboxes)} lockboxes its storage keeps in one vault: erase one before storing another.`)
-    }
-    return outcome.landed
+    if (! outcome.full) { return outcome.landed }
+    // A full vault that holds this boxlabel after all: the writer missed a lockbox it would
+    // replace, which is never refused for the count, and is only stale.
+    const { rows: standing } = await this.client.query(BoxStandsSql, [...scopeParams(scope), lockbox.boxlabel, expected.vault_id])
+    if (standing.length > 0) { return false }
+    throw new VaultError('vault_full', `This vault already holds the ${String(this.maxLockboxes)} lockboxes its storage keeps in one vault: erase one before storing another.`)
   }
 
   protected async doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
