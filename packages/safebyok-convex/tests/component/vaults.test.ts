@@ -532,8 +532,8 @@ describe("a vault's weight limit", () => {
 const wholeDocumentBundle = () => {
   const bundle = TH.bundleOf('u1')
   const padding = 'a'.repeat(1_048_576 - getDocumentSize(bundle) - 64)
-  const [envelope] = bundle.unlocks
-  return TH.bundleOf('u1', { unlocks: [{ ...envelope!, salt_b64: envelope!.salt_b64 + padding }] })
+  const envelope = TH.envelopeOf('passphrase', { vault_key_wrapped: TH.fakeCiphered('bundle-u1') })
+  return TH.bundleOf('u1', { unlocks: [{ ...envelope, salt_b64: envelope.salt_b64 + padding }] })
 }
 
 /**

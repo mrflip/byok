@@ -54,15 +54,32 @@ export const PassphraseEnvelope = v.object({
 })
 
 /**
- * One way into a vault, told apart by its `method`: today only a {@link PassphraseEnvelope}. A new
- * method widens this union, an additive deploy shipped with this package.
+ * A passkey's way into a vault: its `unlock_id` and `unlocklabel`, which WebAuthn credential to ask
+ * (`credential_id`) and the salt to ask its PRF with (`prf_salt_b64`), and the vaultKey wrapped
+ * under the key that answer makes.
+ *
+ * @example { method: 'passkey', unlock_id: '7c2e...', unlocklabel: 'laptop', credential_id: 'AXk3...', prf_salt_b64: 'q83v...', vault_key_wrapped: { cipher_iv_b64, ciphertext_b64 } }
  */
-export const UnlockEnvelope = v.union(PassphraseEnvelope)
+export const PasskeyEnvelope = v.object({
+  method:            v.literal('passkey'),
+  unlock_id:         v.string(),
+  unlocklabel:       v.string(),
+  credential_id:     v.string(),
+  prf_salt_b64:      v.string(),
+  vault_key_wrapped: Ciphered,
+})
+
+/**
+ * One way into a vault, told apart by its `method`: a {@link PassphraseEnvelope} or a
+ * {@link PasskeyEnvelope}. A new method widens this union, an additive deploy shipped with this
+ * package.
+ */
+export const UnlockEnvelope = v.union(PassphraseEnvelope, PasskeyEnvelope)
 
 /**
  * A vault's bundle: its scope, `vault_id`, `passphrase_epoch`, its ways in (`unlocks`, each the
  * vaultKey wrapped under a key one method makes), and when it was made (`registered_at`, epoch
- * milliseconds). Nothing in it opens without a passphrase. How many ways in, and that no two
+ * milliseconds). Nothing in it opens without a passphrase or passkey. How many ways in, and that no two
  * share an id or label, are the client's rules.
  */
 export const VaultBundle = v.object({
