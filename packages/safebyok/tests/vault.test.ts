@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { ForcePassphraseReentryHours, FarFuture, FarPast, Lockbox, LockboxNote, MaxLockboxes, MaxUserIdChars, MaxWhisperBytes, VaultScope, type DeviceUnlock, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, Lockbox, LockboxNote, MaxLockboxes, MaxUserIdChars, MaxWhisperBytes, VaultScope, type DeviceUnlock, type Whisper } from '../src/types'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
@@ -580,6 +580,52 @@ const SpoiledUnlocks = [
   [(row: Record<string, unknown>) => ({ ...row, applabel: 'other_app' }),                     "a record naming another app's vault"],
   [(row: Record<string, unknown>) => ({ ...row, vaultlabel: 'spare' }),                       'a record naming another of the same user\'s vaults'],
 ] as const
+
+/** How long an unlock of `vault` lasts, as `Vault.reentryWindowMs`'s example says it. */
+const windowSaidBy = (vault: Vault): string => (
+  vault.reentryWindowMs === ForeverMs ? 'until you lock it' : `for ${String(Math.round(vault.reentryWindowMs / 60_000))} minutes`
+)
+
+const ReentryWindowCases = [
+  // regular usage:
+  [undefined,  SevenDaysMs,      'the default, seven days'],
+  [12,         12 * HourMs,      'the hours the host chose'],
+  [0.25,       15 * 60 * 1000,   'a fraction of an hour'],
+  [Infinity,   ForeverMs,        'Infinity, as ForeverMs'],
+  // edge cases:
+  [1e9,        ForeverMs,        'a window longer than the vault can count, as ForeverMs'],
+  [1 / 7,      514_286,          'a window that is no whole number of milliseconds, rounded to one'],
+] as const
+
+describe("the vault's reentryWindowMs", () => {
+  for (const [hours, expected, blurb] of ReentryWindowCases) {
+    it(`reports ${blurb}`, async () => {
+      const world = makeWorld()
+      const vault = await world.open({ forcePassphraseReentryHours: hours })
+      expect(vault.reentryWindowMs).to.eq(expected)
+    })
+  }
+
+  it("is the window an unlock lasts: askPassphraseAt is the unlock's time plus it", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw one', { forcePassphraseReentryHours: 0.25 })
+    expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + vault.reentryWindowMs)
+  })
+
+  it("stays the same for the handle's life, through unlock and lock", async () => {
+    const world = makeWorld()
+    const vault = await world.open({ forcePassphraseReentryHours: 12 })
+    await vault.unlock('pw one')
+    await vault.lock()
+    expect(vault.reentryWindowMs).to.eq(12 * HourMs)
+  })
+
+  it("lets a UI say how long an unlock lasts, as its example shows", async () => {
+    const world = makeWorld()
+    expect(windowSaidBy(await world.open({ forcePassphraseReentryHours: Infinity }))).to.eq('until you lock it')
+    expect(windowSaidBy(await world.open({ forcePassphraseReentryHours: 0.25 }))).to.eq('for 15 minutes')
+  })
+})
 
 describe("the remembered unlock, from a host's own DeviceDB", () => {
   it("is checked by the vault: a sound record spares the passphrase", async () => {
