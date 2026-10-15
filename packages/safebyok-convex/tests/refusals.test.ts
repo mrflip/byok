@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { VaultErrorKindVals } from 'safebyok'
 import { SafebyokErrorKindVals, isSafebyokErrorData } from '../src/refusals'
 
 const ErrorDataCases = [
@@ -22,5 +23,11 @@ describe("isSafebyokErrorData", () => {
 
   it("knows exactly the kinds the functions throw", () => {
     expect(SafebyokErrorKindVals).to.deep.equal(['not_permitted', 'vault_full'])
+  })
+})
+
+describe("SafebyokErrorKindVals", () => {
+  it("names only kinds the core's VaultErrorKindVals lists", () => {
+    for (const kind of SafebyokErrorKindVals) { expect(VaultErrorKindVals).to.include(kind) }
   })
 })
