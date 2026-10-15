@@ -148,12 +148,32 @@ describe("PassphraseModal, for a vault with a passkey", () => {
     const [credentialId = ''] = authenticator.credentialIds()
     const closed = new VaultError('vault_closed', 'This vault handle was closed.')
     const { reported } = TH.renderReporting(<PassphraseModal vault={vaultRefusing(closed, credentialId)} onDone={noop} />)
+    screen.getByText('Use a passkey').focus()
     fireEvent.click(screen.getByText('Use a passkey'))
-    expect(await screen.findByText(PasskeyTrouble)).to.not.be.null
+    const said = await screen.findByRole('alert')
+    expect(said.textContent).to.eq(PasskeyTrouble)
     expect(screen.queryByText('Use a passkey')).to.be.null
-    expect(screen.queryByPlaceholderText('vault passphrase')).to.not.be.null
+    expect(document.activeElement).to.equal(screen.getByPlaceholderText('vault passphrase'))
     expect(screen.queryByText('Something went wrong')).to.be.null
     expect(reported).to.deep.equal([closed])
+  })
+
+  it("keeps the passkey's word while the user types the passphrase, until they submit", async () => {
+    const { authenticator } = await lockedVaultWithPasskey()
+    const [credentialId = ''] = authenticator.credentialIds()
+    const unlocked: string[] = []
+    const misused = { ...vaultRefusing(new VaultError('vault_closed', 'This vault handle was closed.'), credentialId), unlock: (proof: unknown) => {
+      if (typeof proof === 'string') { unlocked.push(proof); return Promise.resolve() }
+      return Promise.reject(new VaultError('vault_closed', 'This vault handle was closed.'))
+    } } as unknown as Vault
+    TH.renderReporting(<PassphraseModal vault={misused} onDone={noop} />)
+    fireEvent.click(screen.getByText('Use a passkey'))
+    await screen.findByText(PasskeyTrouble)
+    fireEvent.change(screen.getByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+    expect(screen.queryByText(PasskeyTrouble)).to.not.be.null
+    fireEvent.click(screen.getByText('Unlock'))
+    expect(screen.queryByText(PasskeyTrouble)).to.be.null
+    await waitFor(() => { expect(unlocked).to.deep.equal(['pw']) })
   })
 
   it("offers no passkey to a user choosing the vault's first passphrase", () => {
