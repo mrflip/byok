@@ -15,7 +15,9 @@ abstract seam, IndexedDB adapters ship in `safebyok/idb`, and a Convex adapter i
 ciphertext, and `describeVaultDB`, the vitest suite every storage adapter owes.
 `safebyok/utils` holds small helpers for the app around the vault, such as `mask`, which shows
 which API key a lockbox holds (`sk***...***wxyz`) without showing the key. `mask` is intended
-for plain text; calling it with arbitrary blobs may give unusual behavior.
+for plain text; calling it with arbitrary blobs may give unusual behavior. It strips every
+combining mark, so a script that writes its vowels as marks loses them (Hindi `नमस्ते` comes out as
+`नमसत`); an API key is ASCII, and is untouched.
 `whiteboard/20261013-relic/proposed-README.md` drafts the full README for when the surface
 settles.
 

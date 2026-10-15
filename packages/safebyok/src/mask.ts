@@ -87,6 +87,9 @@ const butcher = (chars: readonly string[], { head, tail, minStars, maxLen }: Rec
  * does -- it gives away the whisper's ends, and (up to `maxLen`) its length.
  *
  * `mask` is intended for plain text. Calling it with arbitrary blobs may give unusual behavior.
+ * Every combining mark is stripped, so a script that writes its vowels as marks loses them:
+ * Hindi `नमस्ते` comes out as `नमसत`, and Thai, Tamil, Bengali and Khmer fare alike. An API key is
+ * ASCII, and is untouched.
  *
  * It works in three stages. First it makes the whisper safe to butcher: the whole input is
  * composed and stripped of combining marks (so, the accents of scripts that rely on them),

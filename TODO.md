@@ -353,6 +353,12 @@ implementation.
   field as a tiebreaker for ordering writes within one millisecond. No reservation needed: a
   tiebreaker an attacker strips gains nothing, so it may be bound only where present (and with
   whole-header binding, roadmap 3, it is bound automatically the day it appears).
+* **`maskCarefully`.** A variant of `mask` for whispers in scripts that write vowels and syllable
+  parts as combining marks (Devanagari, Thai, Tamil, Bengali, Khmer), which `mask` strips whole
+  ([#37](https://github.com/mrflip/safebyok/pull/37)). It would keep marks, but at most one or
+  two per base character, which keeps the vowels while still blocking stacked "Zalgo" marks. Its
+  final scan would also have to drop a mark left orphaned at a cut edge. API keys are ASCII, so
+  nothing asks for it yet.
 * **A PBKDF2 key deriver.** Native in WebCrypto and fast, but not memory-hard; shipping it is not
   a favor. A host that needs it can write one against the `KeyDeriver` seam. If it is ever
   packaged, it is its own package with the iteration count in the label.
