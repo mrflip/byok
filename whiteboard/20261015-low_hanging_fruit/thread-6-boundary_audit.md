@@ -1,9 +1,9 @@
 # Thread 6: boundary_audit (2026-10-15)
 
-Branch `20261015-boundary_audit`, PR not yet filed, stacked on
+Branch `20261015-boundary_audit`, PR [#43](https://github.com/mrflip/safebyok/pull/43), stacked on
 [#40](https://github.com/mrflip/safebyok/pull/40) at 868ce73 (moved there from ea3dc98 after the
 Coach's restack; a clean rebase). Reviewed: clean. Justify: green (safebyok 312, safebyok-convex
-219, safebyok-react 8, demo 24, root 72). No sprint-doc tab (Docs tools disconnected).
+219, safebyok-react 8, demo 24, root 91). No sprint-doc tab (Docs tools disconnected).
 
 ## The audit
 
