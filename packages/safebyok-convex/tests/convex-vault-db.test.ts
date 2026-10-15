@@ -150,6 +150,18 @@ describe("convexVaultDB, refusing", () => {
     expect(await owner.listBoxes(u1)).to.deep.equal([])
   })
 
+  it("refuses as not_permitted over a ConvexReactClient that already holds the query's refusal", async () => {
+    const deployment = deploy()
+    const reactClient = deployment.reactClient(null)
+    // The app's own watch of the same query, signed out: the client keeps its refusal, and
+    // answers a one-shot query of it from there, synchronously.
+    const watched = vi.fn()
+    reactClient.watchQuery(deployment.api.safebyok.getBundle, { scope: u1 }).onUpdate(watched)
+    await vi.waitFor(() => { expect(watched).toHaveBeenCalled() })
+    const refusal = await refusalOf(convexVaultDB(reactClient, deployment.api.safebyok).readBundle(u1))
+    expect(refusal.kind).to.eq('not_permitted')
+  })
+
   it("makes any other failure storage_unavailable, keeping Convex's error as the cause", async () => {
     const deployment = deploy(() => { throw new Error('the auth provider is down') })
     const refusal = await refusalOf(convexVaultDB(deployment.client('u1'), deployment.api.safebyok).readBundle(u1))

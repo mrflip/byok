@@ -79,35 +79,35 @@ class ConvexVaultDB extends VaultDB {
   constructor(private readonly client: ConvexVaultClient, private readonly api: SafebyokApi) { super() }
 
   protected doReadBundle(scope: VaultScope): Promise<unknown> {
-    return refusing(this.client.query(this.api.getBundle, { scope }))
+    return refusing(() => this.client.query(this.api.getBundle, { scope }))
   }
 
   protected doCreateBundle(bundle: VaultBundle): Promise<unknown> {
-    return refusing(this.client.mutation(this.api.createBundle, { bundle }))
+    return refusing(() => this.client.mutation(this.api.createBundle, { bundle }))
   }
 
   protected doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean> {
-    return refusing(this.client.mutation(this.api.updateBundle, { bundle, expected }))
+    return refusing(() => this.client.mutation(this.api.updateBundle, { bundle, expected }))
   }
 
   protected doReadBox(scope: VaultScope, boxlabel: string): Promise<unknown> {
-    return refusing(this.client.query(this.api.getBox, { scope, boxlabel }))
+    return refusing(() => this.client.query(this.api.getBox, { scope, boxlabel }))
   }
 
   protected doListBoxes(scope: VaultScope): Promise<unknown[]> {
-    return refusing(this.client.query(this.api.listBoxSummaries, { scope }))
+    return refusing(() => this.client.query(this.api.listBoxSummaries, { scope }))
   }
 
   protected doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
-    return refusing(this.client.mutation(this.api.updateBox, { scope, lockbox, expected }))
+    return refusing(() => this.client.mutation(this.api.updateBox, { scope, lockbox, expected }))
   }
 
   protected doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
-    return refusing(this.client.mutation(this.api.eraseBox, { scope, boxlabel, expected }))
+    return refusing(() => this.client.mutation(this.api.eraseBox, { scope, boxlabel, expected }))
   }
 
   protected doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
-    return refusing(this.client.mutation(this.api.eraseVault, { scope, expected }))
+    return refusing(() => this.client.mutation(this.api.eraseVault, { scope, expected }))
   }
 
   // Every result `watchVault` delivers calls `onChange`, the first included. The vault subscribes
@@ -134,11 +134,12 @@ const ignoreTrouble = (): void => undefined
 /**
  * `call`, with a refusal from safebyok's functions -- a `ConvexError` carrying one of its kinds --
  * turned into the VaultError of that kind. Anything else rejects as it came, and the base class
- * makes it `storage_unavailable`.
+ * makes it `storage_unavailable`. A thunk, since a client may throw before it hands back a promise:
+ * `ConvexReactClient.query` throws at once a refusal it already holds for that query.
  */
-const refusing = async <ValT>(call: Promise<ValT>): Promise<ValT> => {
+const refusing = async <ValT>(call: () => Promise<ValT>): Promise<ValT> => {
   try {
-    return await call
+    return await call()
   } catch (err) {
     if (err instanceof ConvexError && isSafebyokErrorData(err.data)) {
       throw new VaultError(err.data.kind, err.data.message, { cause: err })
