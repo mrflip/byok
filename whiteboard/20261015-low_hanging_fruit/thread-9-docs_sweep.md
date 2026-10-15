@@ -41,5 +41,17 @@ Branch `20261015-docs_sweep`, PR not yet filed, cut from `origin/main` (eb75330)
     volumes, which is the cost the Coach should weigh at rebuild.
   - The dialog's unlock copy is covered only by the new modal test.
 
+* **Review (fixed)**: 19a6e60 -- *Locking* now says `lock()` also erases this device's remembered
+  unlock, so the recipe asks for the passphrase on each return; d82a25f -- `domStore`'s doc block.
+  Then at filing: the recipe is a function returning its own unsubscribe and catching a `lock()`
+  after `close()`; `notes/security.md` gains a 2026-10-15 bullet on the release App's private key
+  and marks the release bullet "(revised 2026-10-15)".
+
 * **For the Coach**: the `.devcontainer` volume names above. The *Locking* recipe is the host
   line the rulings asked for; the React `lockWhenHidden` prop stays ruled-but-not-yet.
+  Two open questions: (1) **the ruled screen-lock recipe defeats the seven-day remembered
+  unlock**: `lock()` erases the device's remembered unlock, so a host following the recipe asks for
+  the passphrase every time the tab is hidden and shown. Is that the intent, or should the recipe
+  wait for `lockSoon()` or a lock that keeps the remembered unlock? (2) **`unlock()` / `lock()`
+  race in `vault.ts`**: a `lock()` landing while an `unlock()` is in flight can leave the vault
+  unlocked after it; the recipe makes that likelier. Not fixed here.
