@@ -162,7 +162,7 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
     fireEvent.click(screen.getByText('put'))
     await screen.findByPlaceholderText('vault passphrase')
-    expect(screen.queryByText('Stays unlocked on this device for 15 minutes.')).to.not.be.null
+    expect(screen.queryByText('Locks again on this device in 15 minutes.')).to.not.be.null
   })
 
   it("the dialog promises seven days when the vault was opened with the default window", async () => {
@@ -171,7 +171,7 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
     fireEvent.click(screen.getByText('put'))
     await screen.findByPlaceholderText('vault passphrase')
-    expect(screen.queryByText('Stays unlocked on this device for 7 days.')).to.not.be.null
+    expect(screen.queryByText('Locks again on this device in 7 days.')).to.not.be.null
   })
 
   it("once unlocked, further actions run without the dialog", async () => {
