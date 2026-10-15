@@ -1,6 +1,6 @@
 {
   "name": "safebyok-convex",
-  "private": true,
+  "private": false,
   "version": "0.0.0",
   "description": "Convex storage for safebyok: a Convex component holding vault bundles and lockboxes as ciphertext, and the VaultDB adapter that speaks to it. Source-exported workspace package while the interface settles; not yet built or published.",
   "type": "module",
@@ -21,7 +21,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "pretest:coverage": "pnpm build:deps",
-    "justify": "pnpm lint && pnpm typecheck && pnpm test"
+    "justify": "pnpm install && pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
     "safebyok": "workspace:*"
