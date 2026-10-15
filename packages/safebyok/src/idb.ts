@@ -188,7 +188,9 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
   const sweepStrays = async () => {
     const ckeys = await keys(shelf())
     const strays = ckeys.filter((ckey) => ! Ckeys.isUnlock(ckey))
-    if (strays.length > 0) { await delMany(strays, shelf()) }
+    if (strays.length === 0) { return }
+    await delMany(strays, shelf())
+    ring()
   }
 
   return {
