@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 12 building; 1-11 and 14 filed (#31, #32, #33, #34, #35, #40, #43, #44 merged); 13 waits on 12. Newer than the plan wherever the two disagree.
+**Status**: 13 building; 1-12 and 14 filed (#31, #32, #33, #34, #35, #40, #43, #44 merged; #41, outside the sprint, too); of the open ones only #37 conflicts with main. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker. *Orchestrator:* **the Docs tools disconnected at about 04:50 UTC**, after the session was interrupted; the doc stands as of then (threads 1-5 and 9-11 mirrored). The repo files are the record from here on; threads 6, 7 and 8 have no tab content.
 
@@ -17,9 +17,9 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 7  | `stale_write_retry` | thread 6 (#43, ac8eb27) | merged [#44](https://github.com/mrflip/safebyok/pull/44) |
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
 | 9  | `docs_sweep` | `origin/main` | merged [#33](https://github.com/mrflip/safebyok/pull/33) |
-| 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36); conflicts with main since the merges |
-| 12 | `convex_server_cap` | thread 7 (#44, a9b91f1) | underway |
-| 13 | `error_kinds` | thread 12 | pending (the Coach's answer) |
+| 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
+| 12 | `convex_server_cap` | thread 7 (#44, a9b91f1), moved onto main (7510af7) | filed [#46](https://github.com/mrflip/safebyok/pull/46), reviewed (medium; 1 fix, 9 minor left) |
+| 13 | `error_kinds` | thread 12 (#46, c519073) | underway |
 | 14 | `store_backoff` | thread 7 (#44, a9b91f1), moved onto main | filed [#45](https://github.com/mrflip/safebyok/pull/45) (no separate review: the Coach's direct follow-up) |
 | 11 | `label_grammar_report` | `origin/main` | merged [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
