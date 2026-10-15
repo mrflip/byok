@@ -1,7 +1,12 @@
 # Thread 1: kdf_configs (2026-10-15)
 
-Branch `20261015-kdf_configs`, PR not yet filed, stacked on #66. Justify: green -- core 749
-tests (18 files), convex 265, react 28, demo 61, root 105; `pnpm size` within every budget.
+Branch `20261015-kdf_configs`, PR #68, stacked on #66 (rebased onto its tip `5fefc90`).
+Justify: green -- core 750 tests (18 files), convex 265, react 28, demo 61, root 105; `pnpm size`
+within every budget.
+
+Review: `fixed`. The reviewer's commit names the 2^32 ceiling in the `iterations` refusal; a
+follow-up commit has the supplied-label refusal tell a stand-in's author to test its bytes. The
+review's other findings are open questions on #68, also listed under *For the Coach* below.
 
 * **Built**:
   - `packages/safebyok/src/key-deriver-spec.ts` (new): the general `KeyDeriverSpec` type (was
@@ -59,3 +64,12 @@ tests (18 files), convex 265, react 28, demo 61, root 105; `pnpm size` within ev
     namespace (refusing host labels like `argon2id_web_*` so a future supplied spec can't collide)
     would be cheap; not done, as nobody asked.
   - Whether to add RFC 9106's second recommended option as a second supplied spec.
+  - From the review, also on #68: a deriver under a host's own label declaring
+    `algorithm: 'argon2id'` gets only the generic 1..65536 salt check at openVault, so an
+    unrunnable hand-built spec fails at `unlock()` as noble's plain Error, with no kind (a
+    follow-up could run the Argon2id schema from `key-deriver-spec.ts` whenever
+    `algorithm === 'argon2id'`, if the size budget allows); `KeyDeriver`'s `Partial<KeyDeriverSpec>`
+    gives every deriver Argon2id's optional fields (surface, before 1.0); passphraseKey bytes
+    are not zeroed (predates); bounds are repeated as literals in the messages and doc block, and
+    an oversized parallelism is reported under `memory_kib`; the 32-byte check takes any
+    ArrayBufferView.
