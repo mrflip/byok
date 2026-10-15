@@ -150,13 +150,13 @@ security expert who knows what questions to ask.
   find-or-insert in one mutation; the indexes are not unique, and a second bundle row for one
   scope would make every later call on that vault fail (`.unique()` throws) rather than pick one.
 * 2026-10-15: the Convex component's refusals carry `ConvexError` data of a fixed `kind`
-  (`not_permitted`) and a fixed message; neither names the user or quotes a record. Its functions
+  (`not_permitted`, `vault_full`) and a fixed message; neither names the user or quotes a record. Its functions
   log nothing.
 * 2026-10-15: Convex's own argument and return validation errors quote the value they refused.
   A malformed call to one of the Convex component's functions therefore writes its arguments --
   `user_id`, scope, notes, ciphertext, never plaintext or keys -- into the host's Convex logs,
   and on a dev deployment back to the calling client as well. safebyok's own refusals
-  (`not_permitted`) quote nothing.
+  (`not_permitted`, `vault_full`) quote nothing.
 * 2026-10-15: `convexVaultDB`, the Convex client adapter, turns a `ConvexError` whose data has a
   safebyok `kind` and a string `message` into a `VaultError` of that kind carrying that message as
   sent by the server (the component's own are fixed text). Any other error becomes
@@ -169,13 +169,26 @@ security expert who knows what questions to ask.
   are refused `not_permitted` from then on, and its failing `watchVault` subscription is ignored,
   but the unlocked vaultKey stays in memory until the vault locks, expires or is closed. The
   README tells apps to close the vault on sign-out; nothing enforces it.
-* 2026-10-15: a vault's lockbox count is capped on the client only (`maxLockboxes`, `store()`
+* 2026-10-15: a vault's lockbox count is capped on the client (`maxLockboxes`, `store()`
   refusing `vault_full`), counted from the handle's last look at storage, so stores of new
   lockboxes running at once -- on several devices, or on one handle, since nothing serializes
-  them -- can overshoot it. Neither in-tree backend enforces a count or a size per vault. On
-  Convex, where `destroy()` erases the vault in one transaction under a 16 MiB read budget, a
-  vault grown past what the cap admits (by a modified client, or many overshoots) may become
-  impossible to erase whole: the vault half of deleting an account.
+  them -- can overshoot it. Neither local backend (`idbVaultDB`, `localVaultDB`) enforces a count
+  or a size per vault; the Convex component does (next entry).
+* 2026-10-15: the Convex component holds every vault to 8,000 lockboxes and 7 MiB less 1 KiB of
+  lockbox rows (as `getDocumentSize` from `convex/values` weighs them), constants in
+  `src/component/tallies.ts` derived from Convex's per-transaction limits so that `eraseVault`
+  (reading every row twice, beside a bundle of up to one 1 MiB document) always fits; neither the
+  client nor the host can change them. `updateBox` checks them against a per-vault tally row
+  (`safebyok_vault_tallies`, keyed by the bundle's row `_id`) updated in the same transaction as
+  each lockbox write and erase, and refuses, writing nothing, a write that leaves the vault over a
+  limit and larger than before, with `ConvexError` kind `vault_full` and fixed text. Replacements
+  no heavier and all erases are never refused. A vault with no tally (written before tallies) is
+  counted at its next `updateBox`, reading its rows only until a limit is passed; an over-limit
+  vault keeps no tally and refuses all growth until erases bring it back. The tally is trusted as
+  kept: a rollback to a component version without tallies, followed by a roll forward, leaves
+  tallies stale for vaults written meanwhile (deleting the table's rows makes every vault
+  recount). Before this, a vault grown past the client's cap (by a modified client, or many
+  overshoots) could become impossible to erase whole: the vault half of deleting an account.
 * 2026-10-15: records crossing into the core are checked where they cross, and trusted past it.
   A host's `store()` note is checked against the stored lockbox's own schema before anything is
   written (an unchecked over-long note once made every later `openVault` refuse the vault as
