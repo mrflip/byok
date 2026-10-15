@@ -349,6 +349,17 @@ const openOver = (client: ConvexVaultClient, api: SafebyokApi) => openVault({
   applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: convexVaultDB(client, api), deviceDB: memoryDeviceDB(), keyDeriver: testDeriver,
 })
 
+describe("a vault over convexVaultDB, opened before sign-in", () => {
+  for (const [clientTitle, connect] of ClientCases) {
+    it(`is refused as not_permitted over a ${clientTitle}, leaving no watch live on the deployment`, async () => {
+      const deployment = deploy()
+      const refusal = await refusalOf(openOver(connect(deployment, null), deployment.api.safebyok))
+      expect(refusal.kind).to.eq('not_permitted')
+      await vi.waitFor(() => { expect(deployment.watching()).to.deep.equal([]) })
+    })
+  }
+})
+
 describe("a vault over convexVaultDB, on two devices", () => {
   const NewPassphrase = 'a different staple, entirely'
   // Obvious fakes, never real keys.
