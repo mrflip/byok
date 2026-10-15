@@ -1,6 +1,6 @@
 # Sprint convex_vaultdb: progress
 
-**Status**: thread 1 filed (#17); thread 2 (#18) erase commits in review; thread 3 ready, awaiting restack
+**Status**: threads 1, 2 filed (#17, #18); thread 3 restacking
 
 The orchestrator's document: newer than the plan wherever they disagree. Each worker's own
 account is in `thread-<N>-<label>.md` on its branch.
@@ -10,8 +10,8 @@ account is in `thread-<N>-<label>.md` on its branch.
 | Thread | Label            | Branch                       | Base               | Status   |
 | ------ | ---------------- | ---------------------------- | ------------------ | -------- |
 | 1      | convex_skills    | `20261014-convex_skills`     | origin/main        | filed [#17](https://github.com/mrflip/safebyok/pull/17) (no review: docs only) |
-| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18); erase commits (4359130) in second review |
-| 3      | convex_component | `20261014-convex_component`  | #18 at d3c0961     | ready; awaiting restack onto #18's new tip, then review |
+| 2      | storage_verbs    | `20261014-storage_verbs`     | origin/main        | filed [#18](https://github.com/mrflip/safebyok/pull/18), tip 0e67d7a (erase ruling in, two reviews) |
+| 3      | convex_component | `20261014-convex_component`  | #18 at 0e67d7a     | restacking onto #18's tip |
 | 4      | convex_client    | `20261014-convex_client`     | thread 3, on filing | pending  |
 
 ## What the threads have taught
@@ -86,6 +86,13 @@ protected `do*` method the adapter writes:
   quietly; no revision expectation. Thread 2 adds it to #18 as new commits on d3c0961 (worktree
   `/workspace/byok-storage_verbs_erase`); thread 3 builds its mutations to it and is restacked onto the new tip
   (`git rebase --onto <tip> d3c0961`) before it files.
+
+*Review (thread 2's erase commits, second review):* `fixed`. Kept 37ec7ed: `destroy()` read the bundle after its
+first await, so a background refresh could swap in a reborn vault and the stale destroy would erase it; it now
+captures the bundle first (test reproduces it). 8d69b44 adds a test for destroying a vault already destroyed
+elsewhere. For the Coach, in #18's Open questions: `destroy()` on a handle that never saw a bundle resolves without
+erasing, even if a vault has since appeared, so "delete account" can report success while a vault stands; and an
+app's automatic retry after a refused `destroy()` would take the reborn vault, since the handle has caught up.
 
 ## What thread 4 builds on, from thread 3
 
