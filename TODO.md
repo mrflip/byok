@@ -85,7 +85,6 @@ stored and how big a vault can be. CI covers the package (`pnpm -r`). What is le
   bundle resolving without erasing, and a retry after a refused `destroy()` taking the reborn
   vault; whether the label grammar is enforced server-side; the tests' `react` dev dependency
   (keep, recommended); the first-emit deviation of `watchVault` (accept; design.md records it).
-  A failed `openVault` leaking its subscription is in flight as `20261015-open_vault_unsubscribe`.
 
 ### 3. Reservations before the first release: the stored format and the public surface
 
@@ -314,13 +313,6 @@ and 8192 bits); the cap and half of each adapter's `maxRecordBytes` are bucket w
 **A non-JSON stringifier (identity) does need a stored stringifier label**, since a reader must
 know not to `JSON.parse`: that is `whisper_codec`, reserved in roadmap 3, so this thread adds
 no field. The security note on ciphertext length stays until this lands.
-
-### Error families: misuse versus conditions
-
-Done in low-hanging-fruit thread 13 (`error_kinds`): every kind has one family, in `errors.ts`'s
-doc block and the core README's *Errors* tables. Still open: `VaultProvider` throws any
-`openVault` rejection to the error boundary, conditions (`storage_unavailable`, `not_permitted`)
-included; whether it should hand those to the context instead is undecided.
 
 ### Pluggable label validator
 

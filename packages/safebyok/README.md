@@ -149,8 +149,8 @@ The kinds fall into two families, told apart by who must act.
 ### Misuse: fix the code
 
 A programming error. Do not show it to the user and do not retry; let it reach an error boundary
-or the dev overlay (in React, `VaultProvider` rethrows a failed `openVault` during render for
-that).
+or the dev overlay (in React, `VaultProvider` rethrows an `openVault` that fails on misuse during
+render for that, and hands a condition down as `openError`).
 
 | Kind                  | What happened                                                    | What to do                                              |
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
@@ -179,4 +179,9 @@ Part of normal operation. Each can reach the user; the app decides how.
 
 `openVault` itself can refuse with `bad_option`, `bad_label`, and, as it reads the vault from
 storage, `storage_unavailable`, `not_permitted` or `corrupt_record`: the last three are
-conditions, though they surface at open.
+conditions, though they surface at open. A refused open leaves nothing running behind it, so the
+host simply opens again.
+
+In code, `VaultErrorFamilyForKind` gives each kind's family (`VaultErrorFamilyVals`: `misuse`,
+`condition`), and `isVaultCondition(err)` is true for a `VaultError` of the condition family:
+show or retry those, and let anything else reach an error boundary.
