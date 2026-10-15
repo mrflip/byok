@@ -18,6 +18,8 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 8  | `size_budget` | thread 2 (#40, ea3dc98) | filed [#42](https://github.com/mrflip/safebyok/pull/42), stacked on #40 |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | filed [#36](https://github.com/mrflip/safebyok/pull/36) |
+| 12 | `convex_server_cap` | thread 7 | pending (the Coach's answer) |
+| 13 | `error_kinds` | thread 12 | pending (the Coach's answer) |
 | 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
 ## For the Coach
@@ -46,10 +48,8 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 * **A race in `unlock()`** (thread 9's review, `vault.ts`, outside every thread): a `lock()` that
   lands during unlock's KDF or `rememberDevice` awaits is overwritten, leaving the vault unlocked
   and remembered. No thread in this sprint touches `unlock()`: a candidate for its own thread.
-* **Thread 1's fit check departs from the preplan**: stronger, measured, and the defaults still
-  fit. `maxVaultBytes` is abstract, so third-party adapters must declare it; a default of
-  `Infinity` would be gentler but lets a limited backend forget. `vault_full` should join
-  TODO.md's *Error families* as a condition (#26 owns TODO.md).
+* ~~Thread 1's open questions~~ -- *answered by the Coach*: `maxVaultBytes` stays abstract;
+  error kinds listed in the core package (thread 13); a server-side cap in Convex (thread 12).
 * **`storage_unavailable` in the React provider** (thread 3): thrown to the boundary as the
   preplan said; its own message says "try again shortly". Worth a look when the
   misuse-versus-condition split comes up.

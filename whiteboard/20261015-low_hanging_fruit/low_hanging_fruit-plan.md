@@ -110,6 +110,12 @@ Start: 1, 3, 4. Then the lowest-numbered thread whose base exists, as slots free
     `maxLen` too small for head + `***...***` + tail does not throw: it gives `maxLen` stars, no
     ellipsis, no head, no tail.
 
+12. **The Coach's answers to #34's questions** (in chat): `maxVaultBytes` stays abstract, no
+    default; every error kind (`vault_full`, `whisper_too_large`, the rest) is listed with its
+    family in the core package, and the scattered lists are cleaned up (thread 13); the Convex
+    component's `updateBox` enforces a cap server-side (thread 12). Both are new threads stacked
+    at the end of the chain, so #34's stack stays valid.
+
 ## The threads
 
 ### 1. `vault_size_cap`
@@ -421,6 +427,41 @@ pluggable validator itself is a *Soonish* item that waits on this. Model: Sonnet
 * **Model**: Sonnet. **Base**: `origin/main`.
 * **Look-ahead**: documents only, so no review. The pluggable validator's seam is what a later
   *Soonish* thread builds; name it concretely enough that the thread can start from it.
+
+### 12. `convex_server_cap` (added by the Coach's answer, 2026-10-15)
+
+*The Coach's words:* "yes -- Should the Convex component's updateBox enforce a cap server-side?"
+
+*Orchestrator's gloss:*
+
+* **Touches**: `packages/safebyok-convex/src/component/` (the tables, `vaults.ts`'s `updateBox`,
+  validators), the host's authenticating wrappers if a limit is configured there,
+  `convexVaultDB`, the Convex README, `notes/security.md`, and their tests.
+* **Model**: Opus. **Base**: thread 7's branch, once filed (stacked at the end of the chain).
+* **Look-ahead**: today the cap is enforced only on the client (thread 1), so a modified client
+  can grow a Convex vault past what `destroy()` can erase. The server cannot trust a limit the
+  client sends, and must not read the whole vault on every write (the read budget is the very
+  problem). Design the enforcement to be cheap per write (for example a running count or byte
+  total kept on the vault's own row, updated in the same transaction), bounded by
+  `maxVaultBytes`'s 8 MiB or a component-configured count, and refusing with a condition the
+  client maps to `vault_full`. A stored-shape change to the component's tables must still read
+  every vault already written (CLAUDE.md), and says how it backfills. Erase and destroy must
+  stay possible for a vault already over the limit.
+
+### 13. `error_kinds` (added by the Coach's answer, 2026-10-15)
+
+*The Coach's words:* "add vault_full , whisper_too_large; other errors to the core package,
+clean up elsewhere"
+
+*Orchestrator's gloss* (the orchestrator's reading, given to the Coach to correct):
+
+* Every `VaultError` kind is listed, with its family (misuse vs. condition, TODO.md's *Error
+  families*) and what a host does about it, in the core package: `src/errors.ts`'s doc block for
+  the kind union, and the core README's errors section. Lists elsewhere (TODO.md's *Error
+  families*, the React and Convex READMEs, VOCABULARY.md if it has one) shrink to a pointer.
+* **Model**: Sonnet. **Base**: thread 12's branch, once filed, so it lists any kind 12 adds.
+* **Look-ahead**: documentation and doc blocks; no kind is renamed or removed. `mask`'s kinds
+  (#37) and the convex adapter's mapping are included once their PRs are in the base, or noted.
 
 ## For the Coach
 
