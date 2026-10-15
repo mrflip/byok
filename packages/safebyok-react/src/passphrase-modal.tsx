@@ -32,7 +32,7 @@ const unlockedFor = (reentryWindowMs: number, creating: boolean): string => {
   // numeric 'always', so that one day reads 'in 1 day' and never 'tomorrow'.
   const relativeTime = new Intl.RelativeTimeFormat(Locale, { numeric: 'always', style: 'long' })
   const relative = relativeTime.format(count, unit)
-  return `Locks ${creating ? '' : 'again '}on this device ${relative}.`
+  return creating ? `Locks on this device ${relative}.` : `Locks again on this device ${relative}.`
 }
 
 /**
