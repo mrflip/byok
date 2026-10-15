@@ -58,6 +58,14 @@ tests and doc blocks, which STYLE.md requires. Largest single drop: `vault.test.
   - **eslint**: `vitest/expect-expect`'s `assertFunctionNames` is now `['expect*', 'TH.expect*']`
     in all five configs, so a test helper named `expect...` counts as the test's assertion.
 
+* **Review** (`fixed`): d2ff093, Convex "hears nothing once unsubscribed" counts after its
+  `unsubscribe()` again (`settledWatch` had moved the count earlier); f7e2447, the changeset
+  names `AsyncVerbOf`, also exported. Then, by the worker: 9e1b457 freezes `noBoxYet` and
+  `thisVault`. Left as PR open questions: `tallyWatches` counts every unsubscribe call, so a
+  double close can hide a leaked watch; `beforeNextCall` on a verb already spied records a call
+  twice; `convexRefusalOf` and `tallyWatches`' refused-open example have no test of their own;
+  `stateOnOpen` leaves its vault open (as the inline code did).
+
 * **Decisions taken**:
   - **Published or local.** Published: what a host or adapter author would want (memory options,
     the DeviceDB suite, interception, watch tally, fresh IndexedDB name, the `u1` expectations).
