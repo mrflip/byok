@@ -14,7 +14,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in its
 | 5 | docs_refresh       | #66 tip `5fefc90`     | filed [#69](https://github.com/mrflip/safebyok/pull/69) (no review: documents only) |
 | 6 | thin_tests         | #70 tip `d874db3`     | filed [#75](https://github.com/mrflip/safebyok/pull/75) |
 | 7 | test_helpers       | #75 tip `c7e2da9`     | filed [#80](https://github.com/mrflip/safebyok/pull/80) |
-| 8 | comment_width      | #66 tip `5fefc90`     | filing |
+| 8 | comment_width      | #66 tip `5fefc90`     | filed [#81](https://github.com/mrflip/safebyok/pull/81) |
 
 ## What the threads have taught
 
@@ -163,3 +163,14 @@ and a `tallyWatches` example lack tests; `stateOnOpen` leaves its vault open; th
 convention; the runtime imports in `safebyok/testing`; the `as unknown as` cast. **Leftover:**
 `/workspace/byok-test_helpers` (~21 MB, unregistered, everything pushed) remains on disk; the
 worker's `rm -rf` was refused by the permission check, so it waits for the Coach.
+
+*Orchestrator:* thread 8 filed as [#81](https://github.com/mrflip/safebyok/pull/81) -- **merge it
+last**; redo the reflow from its recipe rather than resolving conflicts. *Review:* `fixed` -- the
+reflow had split `{@link FarFuture}` in `vault.ts`; rewrapped whole. The worker then fixed the
+recipe (`reflow-ex.mjs` null check, `verify.mjs` rewritten on TypeScript's scanner, a new
+`inline-tags.mjs` step). Left, as open questions: a long `// @ts-expect-error` line is flagged;
+STYLE.md's "two more spaces" against four columns in use; trailing comments are not caught.
+**Leftover:** `/workspace/byok-comment_width` remains on disk (unregistered, everything pushed).
+
+*Orchestrator:* **the sprint is done**: eight threads, eight PRs. See
+`human/20261015-sprint_gripe_fixes_done.md` for the merge order and the open questions.
