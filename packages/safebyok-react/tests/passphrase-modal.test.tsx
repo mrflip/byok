@@ -144,7 +144,8 @@ describe("PassphraseModal", () => {
       [1e9,               "Stays unlocked on this device until you lock it.",  'a window longer than the vault can count means until locked'],
     ] as const
 
-    // A real vault that has not been created reads 'Locks on', no 'again'. Each from a vault opened with the hours given, so the dialog reads what openVault made of them.
+    // A real vault that has not been created reads 'Locks on', no 'again'. Each is from a vault
+    // opened with the hours given, so the dialog reads what openVault made of them.
     for (const [hours, expected, blurb] of WindowCases) {
       it(blurb, async () => {
         const vault = await openVault(TH.memoryVaultOpts({ forcePassphraseReentryHours: hours }))
