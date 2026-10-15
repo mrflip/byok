@@ -61,8 +61,10 @@ export const isBoxIn = (scope: VaultScope): ((ckey: unknown) => ckey is string) 
 }
 
 /**
- * True for a ckey {@link unlock} gives, for any scope, and false for anything else: on a device
- * shelf that holds only remembered unlocks, any other row is one this version did not write.
+ * True for each ckey {@link unlock} gives, for any scope, false for any other ckey safebyok writes
+ * or wrote before, and false for anything that is not text. It tests the prefix `["unlock",`
+ * alone, not the rest of the tuple. On a device shelf that holds only remembered unlocks, a row
+ * it refuses is one this version did not write.
  *
  * @example isUnlock(unlock(scope))        // true
  * @example isUnlock('unlock:acme:u1:main')  // false: an earlier version's ckey
