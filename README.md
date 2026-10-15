@@ -12,6 +12,8 @@ This repository is a pnpm workspace. Its packages:
   and a guard that asks for the passphrase on demand.
 * [`safebyok-convex`](packages/safebyok-convex) -- Convex storage: a Convex component, and the
   `VaultDB` adapter that speaks to it.
+* [`safebyok-argon2-wasm`](packages/safebyok-argon2-wasm) -- Argon2id through WebAssembly: a
+  key deriver several times faster than the core's, deriving the same bytes under the same specs.
 * [`safebyok-demo-react`](demos/safebyok-demo-react) -- a playground app; never published.
 
 `pnpm install`, then `pnpm justify` lints, typechecks, tests and builds every package.

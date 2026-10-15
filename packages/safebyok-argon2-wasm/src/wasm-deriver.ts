@@ -1,0 +1,79 @@
+import { argon2id } from 'hash-wasm'
+import { Argon2idWebV1, VaultError, parseKeyDeriverSpec, type KeyDeriver, type KeyDeriverSpec } from 'safebyok'
+
+/** A frozen deriver of a spec already checked: Argon2idWebV1, or one parseKeyDeriverSpec passed. */
+const deriverOf = (spec: KeyDeriverSpec): KeyDeriver & KeyDeriverSpec => Object.freeze({
+  ...spec,
+  deriveKeyBytes: (passphrase: string, saltBytes: Uint8Array) => deriveWithWasm(spec, passphrase, saltBytes),
+})
+
+/**
+ * A KeyDeriver running Argon2id at `spec` through hash-wasm's WebAssembly, carrying the spec
+ * beside its function: the WebAssembly twin of safebyok's `argon2idDeriver`, deriving the same
+ * bytes from the same spec, passphrase and salt, several times faster. A vault made under one
+ * opens under the other, so each device may use whichever it runs best.
+ *
+ * It checks `spec` exactly as `argon2idDeriver` does, and refuses (kind 'bad_option') what that
+ * refuses: a spec Argon2id cannot run, and one wearing a supplied spec's label without its
+ * parameters. Choose a label of your own, and never change its parameters once a vault is made
+ * under it.
+ *
+ * It needs WebAssembly, which React Native's Hermes lacks, and a page whose
+ * Content-Security-Policy allows `'wasm-unsafe-eval'`; where either is missing, `deriveKeyBytes`
+ * refuses with kind 'bad_option'. It refuses an empty passphrase too (kind 'wrong_passphrase'), as
+ * `unlock()` does before it ever reaches a deriver. Each derivation holds the thread it runs on
+ * until it is done.
+ *
+ * @param spec - The whole Argon2id parameter set, and the label vaults made under it record.
+ * @returns A frozen KeyDeriver: the spec's fields and `deriveKeyBytes`.
+ *
+ * @example
+ *   const keyDeriver = argon2idWasmDeriver({
+ *     ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', memory_kib: 131_072,
+ *   })
+ * @example
+ *   argon2idWasmDeriver({ ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', salt_bytes: 4 })
+ *   // throws 'bad_option': Argon2id takes no salt under 8 bytes
+ * @example
+ *   argon2idWasmDeriver({ ...Argon2idWebV1, iterations: 4 })
+ *   // throws 'bad_option': argon2id_web_v1 always means 3 passes
+ */
+export const argon2idWasmDeriver = (spec: KeyDeriverSpec): KeyDeriver & KeyDeriverSpec => deriverOf(parseKeyDeriverSpec(spec))
+
+/**
+ * Argon2id at the supplied `Argon2idWebV1` spec, through WebAssembly: a stand-in for safebyok's
+ * `argon2idWebV1Deriver`, wearing its label and deriving its bytes. Pass it as `keyDeriver`, after
+ * any `browserOpts()` spread, so it wins.
+ *
+ * @example
+ *   const vault = await openVault({ ...browserOpts(), keyDeriver: argon2idWasmWebV1Deriver, applabel: 'acme', userId, vaultlabel: 'main', vaultDB })
+ * @example
+ *   const keyBytes = await argon2idWasmWebV1Deriver.deriveKeyBytes('correct horse battery staple', passphraseSalt)
+ *   keyBytes.length  // 32
+ */
+export const argon2idWasmWebV1Deriver = /* @__PURE__ */ deriverOf(Argon2idWebV1)
+
+/** 32 key bytes from hash-wasm's Argon2id at `spec`; its failures to run come back as VaultErrors. */
+const deriveWithWasm = async (spec: KeyDeriverSpec, passphrase: string, saltBytes: Uint8Array): Promise<Uint8Array> => {
+  if (typeof WebAssembly === 'undefined') {
+    throw new VaultError('bad_option', "This platform has no WebAssembly (React Native's Hermes has none), so the WebAssembly key deriver cannot run here: use argon2idWebV1Deriver, or argon2idDeriver, from safebyok.")
+  }
+  // hash-wasm refuses an empty password with a plain Error; openVault never hands one over.
+  if (passphrase === '') { throw new VaultError('wrong_passphrase', "A passphrase can't be empty.") }
+  try {
+    return await argon2id({
+      password:    passphrase,
+      salt:        saltBytes,
+      iterations:  spec.iterations,
+      parallelism: spec.parallelism,
+      memorySize:  spec.memory_kib,
+      hashLength:  spec.output_bytes,
+      outputType:  'binary',
+    })
+  } catch (err) {
+    if (err instanceof WebAssembly.CompileError) {
+      throw new VaultError('bad_option', "WebAssembly would not compile here, so Argon2id cannot run through it: a page's Content-Security-Policy must allow 'wasm-unsafe-eval' in script-src. Allow it, or use argon2idWebV1Deriver from safebyok.", { cause: err })
+    }
+    throw err
+  }
+}

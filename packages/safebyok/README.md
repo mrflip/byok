@@ -82,9 +82,11 @@ vaults made on one device stop opening on another. There are three ways to choos
   It refuses (`bad_option`) what Argon2id cannot run -- a salt under 8 bytes or over 65536,
   memory under 8 KiB a lane or over 1 GiB, no passes or lanes, a key other than 32 bytes -- and
   allows weak parameters that run: those are yours to judge.
-* **Another implementation of a spec** (WebAssembly, or native to your platform): spread the spec
-  into your deriver, `{ ...Argon2idWebV1, deriveKeyBytes }`, keeping its label, and test that it
-  derives the same bytes as ours. `openVault` refuses a deriver that wears a supplied spec's label
+* **Another implementation of a spec**: `safebyok-argon2-wasm` runs any of them through
+  WebAssembly, several times faster, deriving the same bytes. For one native to your platform,
+  spread the spec into your deriver, `{ ...Argon2idWebV1, deriveKeyBytes }`, keeping its label,
+  and test that it derives the same bytes as ours; `parseKeyDeriverSpec(spec)` checks a host's
+  spec exactly as `argon2idDeriver` does. `openVault` refuses a deriver that wears a supplied spec's label
   without carrying exactly its parameters; it cannot check the bytes, so that test is yours.
 
 Any `keyDeriver` needs a `salt_bytes` from 1 to 65536 (the most `crypto.getRandomValues` hands out
