@@ -1,19 +1,20 @@
 # Thread 1: damaged_boxes (2026-10-15)
 
 Branch `20261015-damaged_boxes`, PR [#93](https://github.com/mrflip/safebyok/pull/93), stacked on
-#83 (cut at 30502e3). Justify: green -- core 900, react 51, convex 269, demo 128, root 123. Size:
-`openVault` 16.71 of 17 kB (16.63 before), `everything` 24.45 of 24.5 kB (24.31 before).
+[#95](https://github.com/mrflip/safebyok/pull/95) since the restack (first cut from #83 at
+30502e3). Justify: green -- core 1006, react 52, convex 275, demo 131, root 123. Size:
+`everything` 25.56 of 26 kB (budget raised from 25.5), `openVault` 17.48 of 17.5 kB.
 
 * **Built**:
   - **The listing marks, never refuses** (`vault-db.ts`): `listBoxes` returns
     `(LockboxSummary | DamagedLockbox)[]`. A record that fails `ListedLockbox`, or names another
     boxlabel than the one it is stored under, lists as `{ boxlabel, damaged: true }`; a sound one
-    carries `damaged: false` (`LockboxSummary` defaults it). An entry stored under something that is
-    not a `Label` is left out: no verb could reach it. `refresh()`, so `openVault`, no longer throws
-    for a damaged lockbox; only a damaged bundle still stops an open.
+    carries `damaged: false` (`LockboxSummary` defaults it). An entry with no text boxlabel is
+    left out (see *Restack*). `refresh()`, so `openVault`, no longer throws for a damaged
+    lockbox; only a damaged bundle still stops an open.
   - **The adapter contract** (`vault-db.ts`, `idb.ts`, `safebyok-convex`): `doListBoxes` resolves
     to `StoredLockbox[]`, `{ boxlabel, lockbox }`, the boxlabel being where the row is stored. The
-    string store and IndexedDB read it from the ckey (new `boxlabelOfCkey`, beside `isBoxCkeyOf`);
+    string store and IndexedDB read it from the ckey (`Ckeys.boxlabelOf`, since the restack);
     the string store hands up a not-JSON row as its text (`jsonOrText`) instead of throwing;
     Convex maps its `boxlabel` column.
   - **`store()` over a damaged box** (`vault.ts`): `readBoxOrDamaged` reads a box as a lockbox,
@@ -56,20 +57,30 @@ Branch `20261015-damaged_boxes`, PR [#93](https://github.com/mrflip/safebyok/pul
   - Damage the listing cannot see (altered ciphertext, a missing whisper) still lists as sound
     and shows only at `read()`; `store()` and `erase()` remedy it the same way.
   - Before this, a record moved under another ckey listed twice under the label it claimed.
-  - **For thread 3 (tuple_ckeys) at the restack**: `boxlabelOfCkey` (`vault-db.ts`, below
-    `isBoxCkeyOf`) slices the boxlabel off the `:` ckey via `boxCkey(scope, '')`; with tuple ckeys
-    it becomes the tuple's last element. The two listings (`StringStoreVaultDB.doListBoxes`,
-    `idbVaultDB.doListBoxes`) filter with `isBoxCkeyOf` and then map through it.
-  - **For thread 4 (replaceable_validators)**: `NameableLockbox` (`vault-db.ts`) checks the
-    stored-under boxlabel with `Label`; it should take the host's boxlabel validator too, as
-    should `listedOrDamaged`'s `ListedLockbox` check for the note.
 * **Review** (`fixed`): the demo's Enter key now shares the knock button's gate (f938aba); the
   security note names the two store-over-damaged races (1cbb502); and the docs now say `store()`
   starts afresh over any record `readBox` refuses, which includes a box listed as sound with a
   missing or malformed ciphered field. Left open in the PR: closing those races needs an erase
   guarded by revision in the adapter contract, and a JS adapter still on the old `doListBoxes`
   contract lists every box as damaged.
+* **Restack** onto #95 (thread 4, on #92's tuple ckeys), tagged `20261015-damaged_boxes-prerestack`:
+  - Thread 3: the listings filter with `Ckeys.isBoxIn` and name each row by the new public
+    `Ckeys.boxlabelOf(ckey)` (the tuple's last element; null for a malformed one, left out).
+    `boxlabelOfCkey` is gone.
+  - Thread 4: `listedOrDamaged(rules, stored)` replaces `checkStoredBox` in `listBoxes`, checking
+    the boxlabel and note through `Names.admits`. The vault passes `rules` to every verb. Thread 4's
+    three tests that expected a narrowed-out box to make the listing throw now expect it damaged.
+    `ensureRoomFor` weighs a damaged box by its boxlabel alone.
+  - Folded in (orchestrator's call under "mark a bad lockbox as removeable"): a box stored under a
+    boxlabel or note today's validators refuse lists as damaged. `erase()` and `store()` reach it by
+    its stored name: `checkStandingBoxlabel` admits any text for a box that stands, and the verbs
+    get `standingRules` (any-text boxlabel). A new box under a refused name is still `bad_label`.
+    `isNameable` now asks only for a text boxlabel. Deviation from the restack brief: it said
+    `NameableLockbox` should check through `Names.admits`, which would have left those boxes out of
+    the listing instead of listing them damaged.
+  - Left open: storing over a box under a refused name writes it, but it still lists as damaged,
+    and `read()` refuses it as `bad_label`, not `corrupt_record`.
 * **For the Coach**:
   - Breaking for hosts (pre-1.0 minor): a host reading `snapshot.boxes[i].note` must check
     `damaged` first; a host's own `VaultDB` maps its listing to `{ boxlabel, lockbox }`.
-  - The size budget is nearly spent: `everything` at 24.45 of 24.5 kB; thread 4 expects a bump.
+  - Size: `everything` raised to 26 kB (25.56); `openVault` is at 17.48 of 17.5 kB.
