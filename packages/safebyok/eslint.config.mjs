@@ -184,6 +184,8 @@ export default defineConfig([
   // == [3b. A library that holds secrets] ==
   // A library writes nothing to the console: what it has to say goes back to its caller, who
   // decides what may be logged. A stray debug line is how a key ends up in someone's log drain.
+  // The one exception is src/console-logger.ts, the fallback when a host passes no logger, which
+  // disables no-console for itself alone.
   // Randomness is the platform's CSPRNG (`crypto.getRandomValues`), never Math.random.
   {
     name: 'safebyok/secret-keeping',
