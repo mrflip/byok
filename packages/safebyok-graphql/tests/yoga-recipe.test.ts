@@ -13,6 +13,8 @@ import * as TH from './test-helpers'
 import { graphqlVaultDB } from '../src/index'
 import { VaultSchemaSdl, vaultResolvers } from '../src/server'
 
+TH.bootDatabaseFirst()
+
 // ------------------------------------------------------------------------- the server half
 
 /** What each request's resolvers know of it: the user your own auth signed in, or null. */

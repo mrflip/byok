@@ -8,6 +8,8 @@ import * as TH from './test-helpers'
 import { graphqlVaultDB } from '../src/index'
 import type { GraphqlVaultClient } from '../src/index'
 
+TH.bootDatabaseFirst()
+
 TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB over PGlite', async () => {
   const schema = TH.schemaOver(await TH.emptyDatabase())
   return TH.perUser((userId) => TH.browserFor(schema, userId))

@@ -1,3 +1,4 @@
+import { beforeAll } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
 import { makeExecutableSchema } from '@graphql-tools/schema'
 import { Client, cacheExchange } from '@urql/core'
@@ -29,6 +30,23 @@ const madeDatabase = async (): Promise<PGlite> => {
   const db = new PGlite()
   await db.exec(VaultTablesSql)
   return db
+}
+
+/**
+ * The most a file's PGlite may take to boot, in milliseconds. Its WebAssembly compiles cold on a
+ * CI runner in eight seconds or more, past any test's timeout, so the boot is paid in a hook.
+ */
+export const BootMs = 60_000
+
+/**
+ * Boots this file's database before its first test, under {@link BootMs}, so no test is charged
+ * for the boot and every test's own timeout still catches a real hang. Call it at the top of
+ * every test file that touches the database.
+ *
+ * @example TH.bootDatabaseFirst()
+ */
+export const bootDatabaseFirst = (): void => {
+  beforeAll(async () => { await database() }, BootMs)
 }
 
 /** This file's database, its tables emptied. */

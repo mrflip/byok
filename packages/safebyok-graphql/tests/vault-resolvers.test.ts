@@ -9,6 +9,8 @@ import { VaultSchemaSdl, vaultResolvers } from '../src/server'
 import type { ServedVaultDB, VaultResolversOpts } from '../src/server'
 import { VaultOperations } from '../src/graphql-vault-db'
 
+TH.bootDatabaseFirst()
+
 const u1 = TH.scopeOf('u1')
 
 /** `document` run against `schema` as a request signed in as u1. */
