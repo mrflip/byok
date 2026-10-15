@@ -1,13 +1,26 @@
 # Thread 1: kdf_configs (2026-10-15)
 
-Branch `20261015-kdf_configs`, PR #68, stacked on #66 (rebased onto its tip `5fefc90`).
-Justify: green -- core 750 tests (18 files), convex 265, react 28, demo 61, root 105; `pnpm size`
-within every budget.
+Branch `20261015-kdf_configs`, PR #68, stacked on #80 (the line #66 → #70 → #75 → #80 → #68).
+Justify: green -- core 838 tests, convex 268, react 28, demo 124, root 109; `pnpm size` green
+after the budget bump below.
 
 Review: `fixed`. The reviewer's commit names the 2^32 ceiling in the `iterations` refusal; a
 follow-up commit has the supplied-label refusal tell a stand-in's author to test its bytes. The
 review's other findings are open questions on #68, also listed under *For the Coach* below.
 
+* **Restacked** (2026-10-16, at the Coach's word, so the gripe_fixes PRs merge as one line):
+  rebased from #66's tip `5fefc90` onto #80's tip `98c67d1`; the old tip is tagged
+  `20261015-kdf_configs-prerestack` (local). Conflicts, all additive, both sides kept:
+  `notes/security.md` (#70's VaultDB-write entry and this thread's, one after the other); the
+  README errors table and `errors.ts`'s `bad_option` comment (#70's wider wording, with
+  `argon2idDeriver`'s spec added to it). `vault.ts` merged cleanly. `vault.test.ts` merged but
+  used the local `expectRefusal` #75 removed: now `TH.expectRefusal`, and two open-then-unlock
+  pairs use the world's `openUnlocked`. `key-deriver.test.ts` keeps its own synchronous
+  `refusalOf`: TH has no synchronous refusal check, and wrapping the factory in a promise to
+  borrow `TH.expectRefusal` met three lint rules. **Size budget** raised, as the Coach approved:
+  everything 24 → 24.5 kB (23.48 on #80, 24.24 now), openVault 16.5 → 17 kB (16.27 → 16.61);
+  nothing else moved. **TODO**: Soonish now holds "built-as-a-whole recommended KDFs and
+  functions to roll your own", replacing the RFC 9106 second-option question.
 * **Built**:
   - `packages/safebyok/src/key-deriver-spec.ts` (new): the general `KeyDeriverSpec` type (was
     `typeof Argon2idWebV1`), `Argon2idWebV1` (moved here, unchanged), the internal list of
