@@ -58,17 +58,20 @@ security expert who knows what questions to ask.
   was sealed for and the `revision_id` it read (or null for none), and lands only while the
   scope's standing bundle has that `vault_id` and the standing lockbox that `revision_id` (or
   there is none); a scope with no bundle refuses. A failed expectation refuses with kind
-  `stale_write`, writes nothing, and `store()` / `changePassphrase()` surface it on the first
-  failure, with no retry. Erases (`eraseBox`, `eraseVault`) carry no expectation: an erase wins
-  over a concurrent update. The atomicity of check-and-write is each adapter's: `localVaultDB`
-  checks and saves in one synchronous step; the Convex adapter is planned to check inside its
-  mutation's transaction.
-* 2026-10-15: `idbVaultDB` performs its versioned updates (and `createBundle`) as a read, then a
-  separate write, in two IndexedDB transactions: another tab writing in between can still be
-  buried, or two tabs can each create a bundle. Its `eraseVault` likewise lists the vault's rows
-  in one transaction and deletes them in another: a lockbox another tab writes in between
-  survives the erase, orphaned without a bundle. Doing these inside one IndexedDB transaction is
-  a ruled TODO, not yet built.
+  `stale_write`, writes nothing, and `store()` / `changePassphrase()` / `erase()` / `destroy()`
+  surface it on the first failure, with no retry. Erases (`eraseBox`, `eraseVault`) carry a
+  `vault_id`-only expectation (the Coach's ruling): they land only while the scope's standing
+  bundle has that `vault_id`, refuse where no bundle stands, and expect no revision, so within
+  its vault an erase wins over a concurrent update; erasing an absent lockbox is quiet. The
+  atomicity of check-and-write is each adapter's: `localVaultDB` checks and saves in one
+  synchronous step; the Convex adapter is planned to check inside its mutation's transaction.
+* 2026-10-15: `idbVaultDB` performs its versioned updates, its erases and `createBundle` as a
+  read, then a separate write, in separate IndexedDB transactions: another tab writing in
+  between can still be buried, two tabs can each create a bundle, and a vault another tab
+  destroys and makes anew in between can still lose a lockbox (`eraseBox`) or be erased whole
+  (`eraseVault`). Its `eraseVault` also lists the vault's rows in one transaction and deletes
+  them in another: a lockbox another tab writes in between survives the erase, orphaned without
+  a bundle. Doing these inside one IndexedDB transaction is a ruled TODO, not yet built.
 * 2026-10-14: a lockbox's ciphertext length reveals its whisper's length to the backend: there is
   no padding yet (TODO). `store()` refuses a whisper over `maxWhisperBytes` of JSON, an
   `openVault` option defaulting to `MaxWhisperBytes` (40444), checked on write only.
@@ -80,14 +83,16 @@ security expert who knows what questions to ask.
 * 2026-10-14: `pnpm-workspace.yaml` denies `esbuild`'s install script (`esbuild: false`); esbuild
   arrives with `convex` and vite, and runs from its platform binary package without it.
 * 2026-10-15: a session holding keys for a vault since destroyed or recreated elsewhere cannot
-  write a lockbox into the successor: `store()` no longer looks at the bundle first, and relies
-  on `updateBox`'s `vault_id` expectation, checked by the backend, to refuse it. `erase()`
-  carries no expectation, so it still re-reads the bundle first and relocks on a changed
-  `vault_id` or `passphrase_epoch`: check-then-erase, with a window in which a stale session can
-  erase a same-labelled box from a vault reborn in between. `changePassphrase()` and `unlock()`
-  re-read the bundle first, as they must to prove the passphrase against it. A passphrase
-  changed elsewhere no longer stops a stale session's `store()` before it writes (the lockbox
-  expectation carries no epoch); the session relocks on its next look at the bundle.
+  write a lockbox into the successor, erase one of its lockboxes, or destroy it: `store()`,
+  `erase()` and `destroy()` no longer look at the bundle first, and rely on the `vault_id`
+  expectation, checked by the backend, to refuse. A refused `destroy()` has already forgotten
+  this device's remembered unlock; a second `destroy()`, now holding the successor's `vault_id`,
+  erases the successor. On a vault the handle has never seen created, `destroy()` erases only
+  the device-local record: lockboxes orphaned without a bundle are not reached.
+  `changePassphrase()` and `unlock()` re-read the bundle first, as they must to prove the
+  passphrase against it. A passphrase changed elsewhere does not stop a stale session's
+  `store()` or `erase()` (their expectations carry no epoch); the session relocks on its next
+  look at the bundle.
 * 2026-10-14: the unlock window (today `rememberForMs`, becoming `forcePassphraseReentryHours`)
   is chosen by the app at each `openVault`, so two devices on one vault may hold different
   windows. It is client-side politeness, not a vault-wide synced policy: nothing stored enforces
