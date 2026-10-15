@@ -38,6 +38,19 @@ describe("the change bell", () => {
     stopTwo()
   })
 
+  it("calls no listener unsubscribed after the ring but before its turn came", async () => {
+    const dbName = TH.freshDbName()
+    const heard: string[] = []
+    const stopOne = onBell(dbName, () => { heard.push('one') })
+    const stopTwo = onBell(dbName, () => { heard.push('two') })
+    ringBell(dbName)
+    stopOne()
+    await vi.waitFor(() => { expect(heard).to.deep.equal(['two']) })
+    await TH.wakeupAtNextTick()
+    expect(heard).to.deep.equal(['two'])
+    stopTwo()
+  })
+
   it("carries a ring between two tabs' channels, never back to the tab that rang", async () => {
     const dbName = TH.freshDbName()
     const otherTab = new BroadcastChannel(`safebyok-idb:${dbName}:vault_db`)

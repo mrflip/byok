@@ -231,21 +231,27 @@ describe("idbVaultDB's subscribe", () => {
     let heardCount = 0
     vaultDB.subscribe(TH.scopeOf('u1'), throwing)
     vaultDB.subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
-    // The platform would report the throwing listener's error as uncaught: held here instead, to
-    // be run by hand.
-    const held: VoidFunction[] = []
+    // The platform would report the throwing listener's error as uncaught: caught here instead,
+    // to be looked at.
+    const caught: unknown[] = []
     const queueMicrotask = globalThis.queueMicrotask.bind(globalThis)
-    const holding = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => {
-      if (task === throwing) { held.push(task) } else { queueMicrotask(task) }
+    const catching = vi.spyOn(globalThis, 'queueMicrotask').mockImplementation((task) => {
+      queueMicrotask(() => {
+        try {
+          task()
+        } catch (err) {
+          caught.push(err)
+        }
+      })
     })
     try {
       await vaultDB.createBundle(TH.bundleOf('u1'))
       await vi.waitFor(() => { expect(heardCount).to.eq(1) })
+      await vi.waitFor(() => { expect(caught).to.have.lengthOf(1) })
     } finally {
-      holding.mockRestore()
+      catching.mockRestore()
     }
     expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
-    expect(held).to.have.lengthOf(1)
-    expect(() => { held[0]?.() }).to.throw('a listener of the host')
+    expect(caught[0]).to.be.instanceOf(Error).with.property('message', 'a listener of the host')
   })
 })
