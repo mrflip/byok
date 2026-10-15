@@ -157,3 +157,9 @@ security expert who knows what questions to ask.
   `scripts/release.ts` refuses a tarball whose `package.json` still holds a `workspace:` range,
   and quotes only npm's error code and summary, never the rest of what npm printed. No release
   job caches dependencies or persists git credentials.
+* 2026-10-15: the release workflow's `version` job opens and updates the Version PR with an
+  installation token from a GitHub App, minted by `actions/create-github-app-token` from a
+  private key held as a secret of the `releasing` environment, which only `main` may deploy to.
+  The token is narrowed to contents and pull requests (write) on this repository; the job's own
+  GITHUB_TOKEN reads only. Its commits go through the GitHub API, signed by GitHub and attributed
+  to the App.
