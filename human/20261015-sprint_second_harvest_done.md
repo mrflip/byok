@@ -1,4 +1,4 @@
-# 2026-10-15: Sprint second_harvest done -- one merge lands fourteen PRs; a handful of questions for you
+# 2026-10-15: Sprint second_harvest done -- one merge lands the rest; the open questions are in TODO.md
 
 The sprint took the low_hanging_fruit sprint's leftovers and the rulings you made along the way:
 - the core's validation moved to `zod/mini`, cutting `openVault` from 30 kB to about 16 kB brotlied;
@@ -12,7 +12,8 @@ The sprint took the low_hanging_fruit sprint's leftovers and the rulings you mad
 Every ready PR now forms one **merge stack**. Each branch sits on the one below, and every PR's base is `main`.
 Merging the top PR with a merge commit (not a squash) marks all the others merged.
 
-**The stack, bottom to top** (each "Stacked on" the one before):
+**The stack, bottom to top** (each "Stacked on" the one before). You merged #51, so 1-9 are in main; merging the
+top (#63) lands the rest:
 
 1. [#45](https://github.com/mrflip/safebyok/pull/45): store backoff (low_hanging_fruit).
 2. [#37](https://github.com/mrflip/safebyok/pull/37): `mask` and `safebyok/utils`, squashed to four commits.
@@ -27,7 +28,15 @@ Merging the top PR with a merge commit (not a squash) marks all the others merge
 11. [#52](https://github.com/mrflip/safebyok/pull/52): test helpers as `TH`, published as `safebyok/testing` (another session's work, restacked here).
 12. [#64](https://github.com/mrflip/safebyok/pull/64): thread 6, clean_times. Stored times, the clock check, and `Infinity` coerced at the door.
 13. [#65](https://github.com/mrflip/safebyok/pull/65): thread 7, pluggable_logger.
-14. This sprint's documents PR, on top: **merge it, and the other thirteen go purple.**
+14. [#66](https://github.com/mrflip/safebyok/pull/66): this sprint's documents, CLAUDE.md's console line, and
+    TODO's open questions.
+15. [#49](https://github.com/mrflip/safebyok/pull/49): a thread's PR is a draft while underway (another session's).
+16. [#63](https://github.com/mrflip/safebyok/pull/63): the Version PR opens as a draft (another session's). **Merge
+    it, and everything below goes purple.**
+
+**Answered at closeout:** #49 and #63 go on the stack; CLAUDE.md's console line now names the fallback logger; a
+logger everywhere is ready to start (TODO.md); the older questions below moved to TODO.md for tomorrow;
+[#38](https://github.com/mrflip/safebyok/pull/38) is yours to close.
 
 **Your rulings this sprint:**
 - no backward compatibility until 1.0.0;

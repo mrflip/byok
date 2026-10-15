@@ -12,6 +12,49 @@ open, epoch milliseconds everywhere, `mask` in `safebyok/utils`, the boundary au
 `stale_write` retry, a size budget in CI, the sand below, a docs sweep, the label-grammar
 report).
 
+## Open from second_harvest (the Coach, 2026-10-16)
+
+Questions the second_harvest sprint left for the Coach
+(`human/20261015-sprint_second_harvest_done.md`), each with the orchestrator's recommendation.
+
+* **[#60](https://github.com/mrflip/safebyok/pull/60)'s four `lockSoon()` calls**:
+  - the snapshot flips to locked at once, before the grace period ends (keep);
+  - an unlock during the grace beats the pending timer (keep);
+  - the grace is capped at 60 s (keep);
+  - `close()` keeps the device record and throws `vault_closed` (keep).
+* **[#55](https://github.com/mrflip/safebyok/pull/55)**: a lost `unlock()` (a lock won the race) rejects with
+  `vault_locked`. Should it be `stale_write`? Recommend `vault_locked`: it says what the user must do next.
+* **Release levels**: several changesets bump minor where patch might do. Recommend minor while pre-1.0: every one of
+  them breaks a stored shape or an exported type.
+* **Lint**: should `unicorn/prefer-iterator-to-array` be turned off while the lib target is ES2023? Recommend off
+  until the target moves; its fixes need `Iterator.prototype.toArray`.
+* **Minor findings the PRs left**:
+  - [#64](https://github.com/mrflip/safebyok/pull/64): a clock that goes bad partway through `store`, `erase` or
+    `changePassphrase` lets the write land, then throws from the closing refresh.
+  - [#65](https://github.com/mrflip/safebyok/pull/65):
+    - a storage watch that stays broken warns on every change event, with no rate limit;
+    - a failed catch-up after a stale write is logged as "a background refresh";
+    - `log` has no call site yet;
+    - a logger written inline in JSX reopens the vault on every render (the README warns about it).
+  - [#62](https://github.com/mrflip/safebyok/pull/62): `/* @__PURE__ */` on each schema would save `idbDeviceDB` about
+    0.5 kB.
+  - [#52](https://github.com/mrflip/safebyok/pull/52):
+    - the build now lays modules out under `dist/src/`;
+    - the published helpers in `tests/` get the test lint rules, not `src/`'s;
+    - `makeGate`'s `prefer-promise-with-resolvers` disable now ships.
+  - [#58](https://github.com/mrflip/safebyok/pull/58):
+    - a backward clock step erases a fresh remembered unlock;
+    - tabs opening with different settings erase each other's records.
+* **Follow-ups**:
+  - wrap deviceDB failures at open as `storage_unavailable`;
+  - move `tallyWatches` into `safebyok/testing`, if #52 did not already take it.
+
+**Ready to start, by the Coach's yes: a logger everywhere.** Every place a package swallows a failure reports it to
+the vault's logger (`VaultLogger`, #65): first the Convex adapter's failing watch (`ignoreTrouble`), through a
+`logger` option on `convexVaultDB`, so `VaultDB.subscribe` keeps its shape. Then sweep the other packages (the
+IndexedDB device store, the React binding) for any other swallowed failure. The console stays the fallback when no
+logger is given.
+
 ## Sand in the sandals
 
 Small irritants, each a few lines, picked up by whoever is nearby.
