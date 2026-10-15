@@ -159,6 +159,8 @@ between columns lets the editor align them (see *Tests*).
 ## Comments and doc blocks
 
 * `/** */` for doc blocks, `//` for a running clarification or commented-out code.
+* A comment line stays within 100 columns, and the linter says when one does not; a long `@example`
+  wraps onto lines indented two more spaces. (A comment trailing code on its line is not measured.)
 * Bulleted lists use `*` at the top level and `-` below, indented two spaces per level.
 * **Every exported function, class, constant and type gets a doc block**, written for its caller:
   what it is and how to use it, never how it came to be, what's next, or how it works inside. A

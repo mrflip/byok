@@ -108,7 +108,8 @@ export async function listWorkspace(run: Runner): Promise<WorkspacePackage[]> {
  * @param rootDir  - The workspace root.
  * @returns The public packages, in the order given.
  *
- * @example publicPackages(packages, '/repo').map((pkg) => pkg.name)  // => ['safebyok', 'safebyok-react']
+ * @example publicPackages(packages, '/repo').map((pkg) => pkg.name)
+ *     // => ['safebyok', 'safebyok-react']
  */
 export function publicPackages(packages: readonly WorkspacePackage[], rootDir: string): WorkspacePackage[] {
   return packages.filter((pkg) => ! pkg.private && ! isDemo(pkg, rootDir))
@@ -217,7 +218,8 @@ export interface VersionPrNames {
  * @param releases - The plan's releases, in its order.
  * @returns The PR title and the commit message.
  *
- * @example versionPrNames([{ name: 'safebyok', type: 'minor', newVersion: '0.2.0' }]).prTitle  // => 'Release 0.2.0: safebyok'
+ * @example versionPrNames([{ name: 'safebyok', type: 'minor', newVersion: '0.2.0' }]).prTitle
+ *     // => 'Release 0.2.0: safebyok'
  */
 export function versionPrNames(releases: readonly PlannedRelease[]): VersionPrNames {
   const bumped = releases.filter((release) => release.type !== 'none')
@@ -280,7 +282,8 @@ interface PlanFileT {
  * @param manifest - A package.json, as read from the tarball.
  * @returns `<dependency>: <range>` for each one left.
  *
- * @example workspaceRanges({ peerDependencies: { safebyok: 'workspace:^' } })  // => ['safebyok: workspace:^']
+ * @example workspaceRanges({ peerDependencies: { safebyok: 'workspace:^' } })
+ *     // => ['safebyok: workspace:^']
  */
 export function workspaceRanges(manifest: Record<string, unknown>): string[] {
   return ['dependencies', 'peerDependencies', 'optionalDependencies', 'devDependencies']
@@ -297,7 +300,8 @@ export function workspaceRanges(manifest: Record<string, unknown>): string[] {
  * @param manifest - A package.json, as read from the tarball.
  * @returns `exports["<entry>"]: @safebyok/source` for each one left.
  *
- * @example sourceConditions({ exports: { '.': { '@safebyok/source': './src/index.ts' } } })  // => ['exports["."]: @safebyok/source']
+ * @example sourceConditions({ exports: { '.': { '@safebyok/source': './src/index.ts' } } })
+ *     // => ['exports["."]: @safebyok/source']
  */
 export function sourceConditions(manifest: Record<string, unknown>): string[] {
   return Object.entries((manifest['exports'] ?? {}) as Record<string, unknown>)
@@ -355,7 +359,10 @@ export async function stage(releases: readonly Release[], opts: StageOpts): Prom
   return outcomes
 }
 
-/** A release that stopped on a failure of ours (git, tar) rather than on npm's answer: reported failed, and the next is still tried */
+/**
+ * A release that stopped on a failure of ours (git, tar) rather than on npm's answer: reported
+ * failed, and the next is still tried
+ */
 function unexpectedFailure(release: Release, err: unknown): StageOutcome {
   const reason = err instanceof Error ? firstLine(err.message) : 'something unexpected'
   return { release, kind: 'failed', detail: `could not tell whether to stage it: ${reason}` }
@@ -398,7 +405,10 @@ async function stageTarball(release: Release, opts: StageOpts): Promise<StageOut
   return { release, kind: 'failed', detail: `npm ${npmError.code}: ${npmError.summary}` }
 }
 
-/** The commit a tag on origin names, peeled through an annotated tag; undefined when there is no such tag */
+/**
+ * The commit a tag on origin names, peeled through an annotated tag; undefined when there is no
+ * such tag
+ */
 async function tagCommit(run: Runner, tag: string): Promise<string | undefined> {
   const listing = await runGit(run, ['ls-remote', '--tags', 'origin', `refs/tags/${tag}`, `refs/tags/${tag}^{}`])
   const refs = new Map(listing.split('\n').filter(Boolean).map((line) => {
@@ -440,7 +450,8 @@ function firstLine(str: string): string {
  * @param dryRun  - Whether it was a dry run.
  * @returns The line, without a newline.
  *
- * @example describeOutcome(outcome, false)  // => 'safebyok@0.1.0: staged (stage id 42); tag safebyok@0.1.0 to push'
+ * @example describeOutcome(outcome, false)
+ *     // => 'safebyok@0.1.0: staged (stage id 42); tag safebyok@0.1.0 to push'
  */
 export function describeOutcome(outcome: StageOutcome, dryRun: boolean): string {
   const prefix = dryRun ? '(dry run) ' : ''

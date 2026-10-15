@@ -17,7 +17,9 @@ export type VaultContextShape = {
    * here: the provider throws it to the nearest error boundary.
    *
    * @example
-   *   if (openError !== null) { return <p>{"Can't reach your vault."} <button onClick={retryOpen}>Retry</button></p> }
+   *   if (openError !== null) {
+   *     return <p>{"Can't reach your vault."} <button onClick={retryOpen}>Retry</button></p>
+   *   }
    */
   openError: VaultError | null
   /**
@@ -56,7 +58,9 @@ const getEmptySnapshot = () => emptySnapshot
 const unsubscribeFromNothing = () => { /* nothing was heard */ }
 const subscribeToNothing = () => unsubscribeFromNothing
 
-/** The vault's live snapshot: lockbox summaries, lock state, when it next asks for the passphrase. */
+/**
+ * The vault's live snapshot: lockbox summaries, lock state, when it next asks for the passphrase.
+ */
 export const useVaultSnapshot = (): VaultSnapshot => {
   const { vault } = useVault()
   return useSyncExternalStore(
@@ -79,8 +83,8 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
 /**
  * Opens the vault for the signed-in user and keeps it matched to that identity: a null userId
  * closes the handle, a different userId opens a different vault. Renders the passphrase dialog
- * when an action run through withUnlockedVault finds the vault locked. The dialog is unstyled markup under the
- * `modal-scrim` / `modal` class names; the host's stylesheet dresses it.
+ * when an action run through withUnlockedVault finds the vault locked. The dialog is unstyled
+ * markup under the `modal-scrim` / `modal` class names; the host's stylesheet dresses it.
  *
  * If openVault rejects with a condition (`isVaultCondition` from safebyok) -- storage that
  * cannot be reached, a signed-out user, a damaged record -- the provider hands it down as
@@ -89,7 +93,8 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
  * all -- the provider throws while rendering, for the nearest error boundary to catch.
  *
  * @example
- *   <VaultProvider {...browserOpts()} applabel="acme" vaultlabel="main" userId={session?.userId ?? null}
+ *   <VaultProvider {...browserOpts()} applabel="acme" vaultlabel="main"
+ *     userId={session?.userId ?? null}
  *     vaultDB={vaultDB}>
  *     <App />
  *   </VaultProvider>

@@ -1,7 +1,9 @@
 import * as Z from 'zod/mini'
 import { VaultError } from './errors'
 
-/** How `mask` shows a whisper: how many characters to reveal, and how many stars to hide it behind. */
+/**
+ * How `mask` shows a whisper: how many characters to reveal, and how many stars to hide it behind.
+ */
 export interface MaskOpts {
   /** Characters kept from the start of the whisper. Default 2. */
   head?: number | undefined
@@ -11,7 +13,8 @@ export interface MaskOpts {
   minStars?: number | undefined
   /**
    * Longest result, in characters (code points). A longer one collapses to `head`, `***...***`,
-   * `tail`; if even that is too long, to `maxLen` stars alone. Default 15. `Infinity` never collapses.
+   * `tail`; if even that is too long, to `maxLen` stars alone. Default 15. `Infinity` never
+   * collapses.
    */
   maxLen?: number | undefined
 }
@@ -74,7 +77,8 @@ const butcher = (chars: readonly string[], { head, tail, minStars, maxLen }: Rec
 
   const headChars = chars.slice(0, headShown).join('')
   const tailChars = tailShown > 0 ? chars.slice(-tailShown).join('') : ''
-  // Lengths are compared before anything is built, so a vast minStars costs nothing it would discard.
+  // Lengths are compared before anything is built, so a vast minStars costs nothing it would
+  // discard.
   if (headShown + stars + tailShown <= maxLen) { return headChars + '*'.repeat(stars) + tailChars }
   if (headShown + Collapsed.length + tailShown <= maxLen) { return headChars + Collapsed + tailChars }
   return '*'.repeat(maxLen)
@@ -119,8 +123,8 @@ const butcher = (chars: readonly string[], { head, tail, minStars, maxLen }: Rec
  * @param whisper - Text to mask: an API key, say.
  * @param opts - How much to keep and hide; see {@link MaskOpts}.
  * @returns The masked text. Throws a VaultError of kind 'bad_option' for an option that is not a
- *   whole number of at least zero (`head`, `tail` and `minStars` at most 1000), or 'bad_whisper' for a whisper that is not a string; neither
- *   message quotes the whisper.
+ *   whole number of at least zero (`head`, `tail` and `minStars` at most 1000), or 'bad_whisper'
+ *   for a whisper that is not a string; neither message quotes the whisper.
  *
  * @example mask('sk-ant-api03-abcdefghijklmnopqrstuvwxyz')  // 'sk***...***wxyz'
  * @example mask('sk-ant-abcd1234')                          // 'sk*********1234'

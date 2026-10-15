@@ -111,10 +111,18 @@ export default defineConfig([
       // TypeScript's postfix non-null assertion (`arr[0]!`), which it cannot distinguish
       // from the negation operator the rule is aimed at.
 
+      // A comment keeps to 100 columns (STYLE.md); code length stays the formatter's business, so
+      // `code` is set past reach. The rule measures a comment on a line of its own, not one
+      // trailing code. It ignores a line holding a URL, and an `eslint-disable` directive, which
+      // cannot wrap.
+      '@stylistic/max-len':                        ['error', {
+        code: 1e5, comments: 100, ignoreUrls: true,
+        ignorePattern: String.raw`^\s*(//|/\*)\s*eslint-(disable|enable)`,
+      }],
+
       // Off because we align values into columns, and quote style is a
       // by-hand convention (STYLE.md).
       '@stylistic/key-spacing':                    'off',
-      '@stylistic/max-len':                        'off',
       '@stylistic/multiline-ternary':              'off',
       '@stylistic/newline-per-chained-call':       'off',
       '@stylistic/no-multi-spaces':                'off',
@@ -204,7 +212,8 @@ export default defineConfig([
 
   // == [3c. Runs everywhere the host app does] ==
   // src/ is platform-neutral: no Node module, and none of Node's globals. The tests and configs run
-  // under Node, so the TS project types Node's globals for them, and only this rule keeps src/ clean.
+  // under Node, so the TS project types Node's globals for them, and only this rule keeps src/
+  // clean.
   {
     name: 'safebyok/platform-neutral',
     files: ['src/**/*.ts'],
@@ -241,7 +250,8 @@ export default defineConfig([
     name: 'safebyok/house-overrides',
     files: SourceFiles,
     rules: {
-      // STYLE.md sanctions the one-line doc block: `/** Brief statement, if that's truly enough */`.
+      // STYLE.md sanctions the one-line doc block:
+      // `/** Brief statement, if that's truly enough */`.
       'unicorn/single-line-block-comment-style': 'off',
       // STYLE.md's doc blocks are TSDoc's, each line led by ` * `, as every editor folds and
       // renders them.

@@ -159,7 +159,8 @@ describe("localVaultDB", () => {
 
   it("keeps a user whose user_id holds a colon out of another user's listing and erasure", async () => {
     const vaultDB = localVaultDB(memoryStore())
-    // User 'u1:main' with vault 'other' stores its rows under the prefix of user 'u1', vault 'main'.
+    // User 'u1:main' with vault 'other' stores its rows under the prefix of user 'u1', vault
+    // 'main'.
     const colonScope = { applabel: 'acme', user_id: 'u1:main', vaultlabel: 'other' }
     await vaultDB.createBundle({ ...TH.bundleOf('u1'), ...colonScope, vault_id: 'vault-id-colon' })
     await vaultDB.updateBox(colonScope, TH.boxOf('anthropic', 'colon'), { vault_id: 'vault-id-colon', revision_id: null })

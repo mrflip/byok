@@ -17,7 +17,10 @@ export type ConvexCalls = {
   mutation<MutationRef extends FunctionReference<'mutation'>>(mutationRef: MutationRef, args: FunctionArgs<MutationRef>): Promise<FunctionReturnType<MutationRef>>
 }
 
-/** What {@link convexVaultDB} uses of a `ConvexClient` (from `convex/browser`): its calls, and `onUpdate`. */
+/**
+ * What {@link convexVaultDB} uses of a `ConvexClient` (from `convex/browser`): its calls, and
+ * `onUpdate`.
+ */
 export type ConvexWatchingClient = ConvexCalls & {
   onUpdate<QueryRef extends FunctionReference<'query'>>(
     queryRef: QueryRef,
@@ -27,7 +30,10 @@ export type ConvexWatchingClient = ConvexCalls & {
   ): () => void
 }
 
-/** What {@link convexVaultDB} uses of a `ConvexReactClient` (from `convex/react`): its calls, and `watchQuery`. */
+/**
+ * What {@link convexVaultDB} uses of a `ConvexReactClient` (from `convex/react`): its calls, and
+ * `watchQuery`.
+ */
 export type ConvexReactWatchingClient = ConvexCalls & {
   watchQuery<QueryRef extends FunctionReference<'query'>>(queryRef: QueryRef, args: FunctionArgs<QueryRef>): {
     onUpdate(callback: () => void): () => void
@@ -66,7 +72,8 @@ export type ConvexVaultClient = ConvexWatchingClient | ConvexReactWatchingClient
  * @example
  *   import { api } from '../convex/_generated/api'
  *   const vaultDB = convexVaultDB(convex, api.safebyok)
- *   const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB, ...browserOpts() })
+ *   const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB,
+ *     ...browserOpts() })
  */
 export const convexVaultDB = (client: ConvexVaultClient, api: SafebyokApi): VaultDB => {
   if (! isConvexClient(client)) {

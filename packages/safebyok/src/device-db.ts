@@ -13,7 +13,9 @@ import { DeviceUnlock, type VaultScope } from './types'
  * not pass, so an adapter that returns a record exactly as it stored it is never trusted blindly.
  */
 export interface DeviceDB {
-  /** The remembered unlock for one vault, or null when there is none. Expiry is the vault's call. */
+  /**
+   * The remembered unlock for one vault, or null when there is none. Expiry is the vault's call.
+   */
   readUnlock(scope: VaultScope): Promise<DeviceUnlock | null>
   writeUnlock(unlock: DeviceUnlock): Promise<void>
   eraseUnlock(scope: VaultScope): Promise<void>
@@ -38,7 +40,8 @@ export const memoryDeviceDB = (): DeviceDB => {
       const kept = unlocks.get(unlockCkey(scope))
       if (kept === undefined) { return Promise.resolve(null) }
       const checked = DeviceUnlock.safeParse(kept)
-      // A malformed record reads as "no remembered unlock": losing the convenience is the safe failure.
+      // A malformed record reads as "no remembered unlock": losing the convenience is the safe
+      // failure.
       if (! checked.success) {
         unlocks.delete(unlockCkey(scope))
         return Promise.resolve(null)

@@ -52,7 +52,8 @@ export type KeyDeriver = {
  * `safebyok/browser`, hands it to openVault; outside a browser, pass it as `keyDeriver` yourself.
  *
  * @example
- *   const keyBytes = await argon2idWebV1Deriver.deriveKeyBytes('correct horse battery staple', passphraseSalt)
+ *   const keyBytes = await argon2idWebV1Deriver.deriveKeyBytes('correct horse battery staple',
+ *     passphraseSalt)
  *   keyBytes.length  // 32
  */
 export const argon2idWebV1Deriver: KeyDeriver = {

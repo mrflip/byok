@@ -3,7 +3,10 @@ import { isVaultError, localVaultDB, memoryStore } from 'safebyok'
 import * as TH from 'safebyok/testing'
 import { OutageVaultDB, makeOutage } from '../../src/lib/outage'
 
-/** The kind of VaultError `operation` rejected with, or null for anything else; fails the test if it resolved. */
+/**
+ * The kind of VaultError `operation` rejected with, or null for anything else; fails the test if it
+ * resolved.
+ */
 const refusalKind = async (operation: Promise<unknown>): Promise<string | null> => {
   try {
     await operation

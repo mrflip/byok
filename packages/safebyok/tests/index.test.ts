@@ -19,7 +19,9 @@ describe("the package's entry point", () => {
 
 const entrySource = fileURLToPath(new URL('../src/index.ts', import.meta.url))
 
-/** The minified JavaScript a bundler ships for an app whose only import from safebyok is `imports`. */
+/**
+ * The minified JavaScript a bundler ships for an app whose only import from safebyok is `imports`.
+ */
 const bundleOf = async (imports: string): Promise<string> => {
   const appModule = `export { ${imports} } from ${JSON.stringify(entrySource)}`
   const built = await Rolldown.build({

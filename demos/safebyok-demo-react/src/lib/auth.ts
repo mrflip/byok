@@ -26,7 +26,10 @@ export type Auth = {
   signIn(userlabel: string): Promise<Session>
   /** End the session on this device. Touches no server-side data. */
   signOut(): void
-  /** Delete the signed-in account's row and end the session. Vault rows are the caller's to clean up first. */
+  /**
+   * Delete the signed-in account's row and end the session. Vault rows are the caller's to clean up
+   * first.
+   */
   deleteAccount(): Promise<void>
 }
 

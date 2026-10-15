@@ -18,7 +18,9 @@ export type IdbInspector = {
   wipe(): Promise<void>
 }
 
-/** Encrypted fields announce themselves by VOCABULARY's suffixes: Wrapped keys, Ciphered whispers. */
+/**
+ * Encrypted fields announce themselves by VOCABULARY's suffixes: Wrapped keys, Ciphered whispers.
+ */
 const rowFlavor = (text: string): StoreRow['flavor'] => {
   if (text.includes('«CryptoKey')) { return 'keyhandle' }
   if (text.includes('_wrapped') || text.includes('_ciphered')) { return 'ciphered' }

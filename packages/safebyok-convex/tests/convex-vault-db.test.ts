@@ -22,7 +22,9 @@ afterEach(async () => {
 
 type Deployment = ReturnType<typeof fakeDeployment>
 
-/** Both clients convexVaultDB accepts, each connected to `deployment` and signed in as `subject`. */
+/**
+ * Both clients convexVaultDB accepts, each connected to `deployment` and signed in as `subject`.
+ */
 const ClientCases: [string, (deployment: Deployment, subject: string | null) => ConvexVaultClient][] = [
   ['ConvexClient',      (deployment, subject) => deployment.client(subject)],
   ['ConvexReactClient', (deployment, subject) => deployment.reactClient(subject)],
@@ -129,7 +131,10 @@ describe("convexVaultDB, as it is made", () => {
   })
 })
 
-/** `vaultDB`'s `u1` vault, made and filled with eight lockboxes of 900,000 bytes: a little under the component's limit. */
+/**
+ * `vaultDB`'s `u1` vault, made and filled with eight lockboxes of 900,000 bytes: a little under the
+ * component's limit.
+ */
 const nearlyFull = async (vaultDB: ReturnType<typeof convexVaultDB>) => {
   await vaultDB.createBundle(TH.bundleOf('u1'))
   for (let ii = 0; ii < 8; ii++) {
@@ -248,7 +253,10 @@ describe("convexVaultDB, refusing", () => {
   })
 })
 
-/** Resolves once every message already sent to `vaultDB`'s client has arrived: one round trip behind them. */
+/**
+ * Resolves once every message already sent to `vaultDB`'s client has arrived: one round trip behind
+ * them.
+ */
 const caughtUp = async (vaultDB: ReturnType<typeof convexVaultDB>) => { await vaultDB.readBundle(u1) }
 
 describe("convexVaultDB.subscribe", () => {

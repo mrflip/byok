@@ -15,7 +15,8 @@
  * @returns The refusal to print, or null to go on.
  *
  * @example pnpmRefusal('pnpm/12.4.2 npm/? node/v24.21.0 linux x64')  // => null
- * @example pnpmRefusal('npm/11.19.0 node/v24.21.0 linux x64')        // => 'Publish this package with pnpm ...'
+ * @example pnpmRefusal('npm/11.19.0 node/v24.21.0 linux x64')
+ *     // => 'Publish this package with pnpm ...'
  */
 export function pnpmRefusal(userAgent: string | undefined): string | null {
   if (userAgent?.startsWith('pnpm/')) { return null }

@@ -323,7 +323,8 @@ describe("a real vault's records", () => {
     }
     const vault = await TH.openOver(memoryStoreHolding(real))
     const listed = await t.query(TH.vaults.listBoxSummaries, { scope: u1 })
-    // The core's summary strips `format` and nulls a missing note; the listing itself holds neither.
+    // The core's summary strips `format` and nulls a missing note; the listing itself holds
+    // neither.
     expect(listed.map((row) => LockboxSummary.parse(row))).to.deep.equal(vault.getSnapshot().boxes)
     vault.close()
   })
@@ -348,7 +349,9 @@ const keptTally = (t: ReturnType<typeof TH.componentTest>, scope = u1) => t.run(
   return kept && { lockbox_count: kept.lockbox_count, lockbox_bytes: kept.lockbox_bytes }
 })
 
-/** What `scope`'s vault really holds: its lockbox rows, counted, and weighed as Convex reads them. */
+/**
+ * What `scope`'s vault really holds: its lockbox rows, counted, and weighed as Convex reads them.
+ */
 const weighedTally = (t: ReturnType<typeof TH.componentTest>, scope = u1) => t.run(async (ctx) => {
   const rows = await ctx.db.query('safebyok_lockboxes')
     .withIndex('by_box', (idx) => idx.eq('user_id', scope.user_id).eq('applabel', scope.applabel).eq('vaultlabel', scope.vaultlabel))
@@ -500,7 +503,8 @@ describe("a vault's weight limit", () => {
   it("refuses a vault past it nothing that shrinks it, and lets it be erased a lockbox at a time", async () => {
     const t = TH.componentTest(true)
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1') })
-    // Nine of 900,000 bytes, written before tallies were kept: past the limit, still readable whole.
+    // Nine of 900,000 bytes, written before tallies were kept: past the limit, still readable
+    // whole.
     await writeUntallied(t, Array.from({ length: 9 }, (_, ii) => TH.heavyBox(`heavy_${String(ii)}`, 900_000)))
     expect(await refusedWrite(t, TH.boxOf('anthropic_api_key', 'a1'), noBoxYet)).to.deep.equal(VaultFull)
     const overgrown = TH.heavyBox('heavy_0', 900_001, 'grown_0')
@@ -516,7 +520,8 @@ describe("a vault's weight limit", () => {
   it("keeps a vault already too large to read whole erasable, a lockbox at a time, its writes refused as full", async () => {
     const t = TH.componentTest(true)
     await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1') })
-    // Twenty of 900,000 bytes, more than one transaction may read: four writes, each within its limits.
+    // Twenty of 900,000 bytes, more than one transaction may read: four writes, each within its
+    // limits.
     for (let batch = 0; batch < 4; batch++) {
       await writeUntallied(t, Array.from({ length: 5 }, (_, ii) => TH.heavyBox(`heavy_${String((batch * 5) + ii)}`, 900_000)))
     }
@@ -541,7 +546,10 @@ describe("a vault's weight limit", () => {
 // and at most 1365 of 2 KiB whispers. The tests below fill a vault to each of those, and to each
 // of the component's own limits, with the longest labels and notes, and erase it.
 
-/** A bundle as heavy as a Convex document may be, near enough: the most an erase reads beside the lockboxes. */
+/**
+ * A bundle as heavy as a Convex document may be, near enough: the most an erase reads beside the
+ * lockboxes.
+ */
 const wholeDocumentBundle = () => {
   const bundle = TH.bundleOf('u1')
   const padding = 'a'.repeat(1_048_576 - getDocumentSize(bundle) - 64)
@@ -567,7 +575,9 @@ const fillVault = async (count: number, whisperBytes: number, bundle = TH.bundle
   return { t, filledCount: count }
 }
 
-/** True when `lockbox` lands in `u1`'s vault as a new box, false when the vault refuses it as full. */
+/**
+ * True when `lockbox` lands in `u1`'s vault as a new box, false when the vault refuses it as full.
+ */
 const landsOrIsFull = async (t: ReturnType<typeof TH.componentTest>, lockbox: ReturnType<typeof TH.boxOf>) => {
   try {
     return await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox, expected: noBoxYet })
