@@ -95,7 +95,8 @@ the core's own records, scopes and expectations.
 ## Testing your own functions
 
 `safebyok-convex/test` installs the component into a [`convex-test`](https://docs.convex.dev/testing/convex-test)
-instance:
+instance. It assumes vitest, or another runner on Vite: it loads the component's modules with
+`import.meta.glob`.
 
 ```ts
 import { register } from 'safebyok-convex/test'

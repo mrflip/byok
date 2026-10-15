@@ -132,3 +132,8 @@ security expert who knows what questions to ask.
 * 2026-10-15: the Convex component's refusals carry `ConvexError` data of a fixed `kind`
   (`not_permitted`) and a fixed message; neither names the user or quotes a record. Its functions
   log nothing.
+* 2026-10-15: Convex's own argument and return validation errors quote the value they refused.
+  A malformed call to one of the Convex component's functions therefore writes its arguments --
+  `user_id`, scope, notes, ciphertext, never plaintext or keys -- into the host's Convex logs,
+  and on a dev deployment back to the calling client as well. safebyok's own refusals
+  (`not_permitted`) quote nothing.
