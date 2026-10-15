@@ -6,7 +6,8 @@ bundle and lockboxes, ciphertext and public fields only, in tables of its own, a
 whisper, a passphrase, or any key that opens one.
 
 A workspace package, source-exported (`exports` points at `src/`) while the interface settles;
-not yet built or published. `convex` is a peer dependency.
+not yet built or published. `convex` and `safebyok` are peer dependencies (a second copy of
+`safebyok` would break `instanceof VaultError`).
 
 ## What your app adds to its `convex/` directory
 
