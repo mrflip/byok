@@ -8,7 +8,8 @@ import { inspectIdb } from '../src/idb'
 import { memoryStore } from '../src/string-store'
 import { localVaultDB } from '../src/vault-db'
 import { openVault } from '../src/vault'
-import { scopeOf, unlockOf } from './helpers'
+import { scopeOf } from '../src/testing'
+import { unlockOf } from './helpers'
 
 const freshDbName = () => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
 
