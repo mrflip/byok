@@ -1,80 +1,304 @@
 # TODO
 
+Four shelves. **Roadmapped**: the order we build in, in flight or next, each a sprint or a thread.
+**Side quests**: straightforward, likely to be done, not needed yet; pick one up when the roadmap
+is blocked. **Soonish**: wanted, but a design question stands in the way; the note says which.
+**Not yet**: reasonable, deferred; do not anticipate them in your implementation.
+
+The scattered small tasks have their own preplan:
+`whiteboard/20261014-low_hanging_fruit/20261014-low_hanging_fruit-preplan.md` (flaky tamper
+tests, explicit options with a `safebyok/browser` defaults export, the provider surfacing a
+failed open, `mask` in `safebyok/utils`, the boundary audit, `stale_write` retry, a size budget in CI, a
+docs sweep, the label-grammar report).
+
+## Roadmapped
+
+In order. A later item that depends on an earlier one says so.
+
+### 1. Releases: version, bump, publish all work -- in flight
+
+Sprint **pr_releases** (`whiteboard/20261014-pr_releases/`): `safebyok-react` publishable
+([#15](https://github.com/mrflip/safebyok/pull/15)), the core under `packages/safebyok`
+([#16](https://github.com/mrflip/safebyok/pull/16)), then changesets, the release script and the
+rewritten `release.yml` (`20261014-changeset_releases`, in review). Done when a changeset merged
+to `main` produces a Version PR, and merging that PR stages every public package on npm for the
+Coach's approval. Left after the sprint, for the first real release to answer:
+
+* The npm staging questions: does a staged version keep the `--tag` it was staged with when
+  approved? Is the provenance statement still attached after approval? Does a rejected stage use
+  up its version number? The trusted publisher's dist-tag permission is on but unused (the
+  workflow installs npm 12.2.0, which can). Details in `human/20261014-staged_publish.md`.
+* The Coach's switches before the first release (the sprint's progress file lists them): allow
+  Actions to create PRs, the first changeset, the tag ruleset, a token for the Version PR's CI.
+* Deprecate `safebyok@0.0.0` once a real version is live.
+
+### 2. Convex backend, documented well enough to test from another app -- in flight
+
+Sprint **convex_vaultdb** (`whiteboard/20261014-convex_vaultdb/`): the Convex agent skills,
+the core's storage verbs with `versionedUpdate` and `stale_write` (`20261014-storage_verbs`),
+the Convex component, then `convexVaultDB(client, api)`. Done when the sprint's whole-vault test
+passes over the adapter. What the sprint leaves for after it, in this order:
+
+* **The package README as an install guide**: `npm install safebyok safebyok-convex`, the
+  `convex.config` line, `getUserId`, the client, what is stored and what is not, every error
+  kind the adapter raises. Written so the Coach can follow it cold in the other app; that walk
+  is the acceptance test.
+* **A demo over Convex** (the React demo gains a Convex store beside IndexedDB), so a second
+  device seeing a write is something a person can click through.
+* **CI for `safebyok-convex`** (the Coach wires it after #15 lands).
+* **Component packaging**: how `convex.config` and the generated types ship in the build
+  (design.md's open question; the component thread answers it or reports).
+
+### 3. Reservations before the first release: the stored format and the public surface
+
+Nothing is published but `0.0.0`, and every vault that exists is a development one, so a change
+to the stored shape costs nothing today and a passphrase-gated migration later (the `format` tag
+is bound into every encryption, so a reshaped record cannot be upgraded in place: it is
+re-wrapped at the next unlock). One thread, cut from `main` once storage_verbs lands, before the
+first release; the Convex sprint's component thread puts the same columns in its tables now.
+
+* **The bundle holds a list of unlock envelopes, not one.** Today: `key_deriver_label`,
+  `passphrase_salt_b64`, `vault_key_passphrase_wrapped`. Reserved: `unlocks`, a list of
+  `{ method: 'passphrase', key_deriver_label, salt_b64, vault_key_wrapped }`, where a passkey
+  envelope later adds `credential_id` and a recovery envelope its own method. The binding's
+  purpose string already names the method (`vault_key_passphrase_wrapped`), so each method gets
+  its own purpose and nothing already bound changes. `passphrase_epoch` stays bundle-wide (it is
+  the `versionedUpdate` expectation) and bumps when any envelope changes; whether it is renamed
+  `unlock_epoch` is the thread's call. This is what makes fingerprint unlock (8) and recovery
+  keys (*Not yet*) additive.
+* **The lockbox names its whisper codec and schema version.** `whisper_codec` (default
+  `json_v1`, the stringifier label a pluggable stringifier will later vary) and
+  `whisper_schema_version` (default 1, ruled). Both go into the lockbox's cipher binding now, so
+  a swapped label is a tamper the AEAD refuses; adding them to the binding later would be a
+  re-encryption of every lockbox. (This moves the schema-version half of low-hanging-fruit
+  thread 5 here.)
+* **Every field the library writes is in the binding** (ruled: if we provide it, it is our
+  name on the delivery truck). Additional data is already the queryable-but-tamper-proof
+  design: stored outside the ciphertext, rebuilt on read, refused by the tag if altered. Today
+  it is a positional array (format, scope, vault id, boxlabel, revision id, purpose). The
+  thread's first decision: bind **the whole public header** instead, every stored field but the
+  ciphertexts, canonically serialized (`stableJsonify`) as written, before zod fills any default.
+  Then every future field is authenticated the day it appears, stripping one is detected, and
+  nothing below needs reserving for the binding's sake (the envelope list still does, for its
+  shape). If the positional array stays, the fields below are added to it now. Either way a
+  backend must store strings as-is, no unicode normalization: the adapter README says so. An adapter's own columns
+  (Convex's creation time, a Postgres default, response times) are never in the record or the
+  binding; the Convex design already strips them on read, and surfacing them to a host is a
+  later additive field on the listing. What no tag gives is verification while locked: a signed
+  listing would need a vault signing keypair, and it is additive later, so it is not reserved.
+* **Timestamps named for the event, as epoch-millisecond integers, and only three.** Lockbox
+  `registered_at` (first stored through the library; carried forward) and `changed_at` (ruled
+  the stronger contract: it moves only when the serialized whisper differs; `store()` decrypts
+  the previous whisper, which it already fetches, compares the serialized forms, and carries
+  `changed_at` forward when they match while still writing a new revision; a previous record
+  that will not decrypt is clobbered and counts as changed; `notes/security.md` records that a
+  `changed_at` standing still across a write tells the backend two consecutive payloads were
+  equal, one bit, only when a host re-stores identical content); bundle `registered_at`. Today's `created_at`/`updated_at` go: `updated_at` bumps on every
+  store whether or not the contents changed, so it is a row fact under a content name, and the
+  bundle's is redundant with the passphrase epoch. The lockbox's ISO strings and the device
+  record's epoch numbers become one convention (integers, which the clock seam already yields
+  and any index sorts).
+* **`note` goes; a bound `public` bag is reserved in its place** (recommended, awaiting the
+  Coach's word: a library-named note is slop, since the boxlabel already names the box for the
+  locked listing; the alternative is to carry nothing public but the label, and let hosts keep
+  their own table keyed by boxlabel). The demand behind it (the demo wanted `service` and
+  `hint`) becomes one bag the library never interprets: any JSON, stored stable-serialized
+  (`stableJsonify`) and unpadded, default `{}`, in the binding, with the same "never secret
+  material here" warning. No cap of its own (ruled): `maxWhisperBytes` measures the serialized
+  whisper plus the serialized bag together, both unpadded, since both share the record; padding
+  then applies to the whisper alone, inside the encryption. Reserved now because a bound field
+  cannot be added later without re-encrypting every lockbox. The demo moves its note into the
+  bag; the Convex table omits an empty bag as it did an absent note.
+* **The device record's deadline is named for its consequence**: `expires_at` becomes
+  `ask_passphrase_at` (see 4). Local-only, so this one is cheap at any time.
+* **Surface names that are breaking after `0.1.0` and free before it**: `keyDeriver` required
+  (low-hanging-fruit thread 2); `rememberForMs` -> `forcePassphraseReentryHours` and the
+  snapshot's `expiresAt` -> `askPassphraseAt` (the field names ship now even if the shut timer
+  comes with 4); and a decision on `safebyok/idb`: if `idbVaultDB` is to move to its own package
+  (*Side quests*), either it moves before the release or `safebyok/idb` keeps re-exporting it
+  forever. `store()` and `openVault` already take bags, and error kinds are additive, so those
+  need nothing.
+
+### 4. Coherent documentation
+
+So the Coach can tell other people about this. One thread, after 1, 2 and 3 land, since all
+three change what the documents say:
+
+* **Promote the README**: `whiteboard/20261013-relic/proposed-README.md` becomes
+  `packages/safebyok/README.md` (the npm page), corrected to the surface as built: the storage
+  verbs, the error table with `whisper_too_large`, `bad_option`, `stale_write` and the adapter
+  kinds, zod as a peer, `safebyok/browser` for the defaults, the screen-lock recipe, the
+  no-recovery warning. The root README is the front page: what it is, the package table
+  (core, react, convex), where to start.
+* **An adapter author's guide** (in the core README or beside it): the `VaultDB` verbs, which
+  two vary by store family (listing boxes: a prefix scan, an index, a WHERE; change
+  notification: reactive query, LISTEN/NOTIFY, polling), the shared adapter test suite and how
+  to run it against a new backend, `maxRecordBytes`, what an adapter must never log.
+* **`notes/security.md` refresh**: entries that are mid-rename or pre-release (the release
+  trigger, `rememberForMs`), plus the ones the sprints owe (versionedUpdate atomicity per
+  adapter, the Convex tables).
+* **VOCABULARY.md** checked line by line against the exports.
+
+### 5. Expiry and the unlock window (ruled, not yet built)
+
+Not on the Coach's lists, but ruled in `whiteboard/20261014-crypto/rulings.md` (*The unlock
+window*, *Expiry*) and placed here because fingerprint unlock (8) reworks the same unlock path
+and should build on the settled model. The rulings call the two timestamps `staleVaultTS` and
+`shutVaultTS`; the Coach has since asked that each be named for its consequence, an action on a
+noun at a time: **`askPassphraseAt`** (fixed at unlock as now plus `forcePassphraseReentryHours`;
+after it no new operation starts until the user is asked again, and a remembered device unlock
+past it re-asks too) and **`shutVaultAt`** (`askPassphraseAt` plus a 60-second library-constant
+grace, or `lockSoon(graceSeconds = 5.0)`'s now plus grace; when it passes the key is nulled, the
+device-remember record erased, the snapshot flips). In-flight work is never clawed back.
+The names ship with 3; this thread builds the timer, `lockSoon`, and the shut-forgets-both rule.
+Public surface change; a `notes/security.md` entry.
+
+### 6. hash-wasm as a pluggable KDF
+
+Depends on low-hanging-fruit thread 2 (`keyDeriver` required, so noble tree-shakes out when
+another deriver is passed). A package (`safebyok-argon2-wasm` or so) exporting one KeyDeriver
+over hash-wasm's Argon2id, with hash-wasm as its dependency and safebyok as a peer; the core
+keeps noble as the default in `safebyok/browser`, since it runs everywhere with no setup.
+Caveats:
+- It carries the same label, `argon2id_web_v1`, and hardcodes the same parameters from
+  `Argon2idWebV1`; the label is the whole contract and the parameters are never host-configurable,
+  or vaults written on one device stop opening on another.
+- A test derives one fixed passphrase and salt through both implementations and compares bytes.
+  That test is what makes "same spec" a fact.
+- Hermes has no WebAssembly, so this package does not serve React Native; that needs a native
+  Argon2 binding behind the same label.
+
+### 7. zod/mini and a tree-shaking audit
+
+Depends on low-hanging-fruit thread 7 (the size budget is the before-and-after). Measured
+before: zod classic is about three quarters of every bundle (183 KB raw), and it does not
+tree-shake because the schemas are built at module top level in a shared chunk; even a bare
+`stableJsonify` import drags all schemas. The thread: move the core's schemas to `zod/mini`
+(same runtime core, interoperable with classic; chained authoring becomes `Z.string().check(...)`
+and error strings become per-check params), then audit: `sideEffects: false` is true, nothing
+runs at module top level, each entry pulls only what it uses, and the budget limits drop to match.
+Report what zod/mini cost in authoring clarity; if it is more than the bytes are worth, say so.
+
+### 8. Fingerprint unlock (passkeys, hardware keys)
+
+The WebAuthn PRF extension yields 32 bytes per credential; `importWrappingKeyBytes` turns them
+into a wrapping key. With the envelope list reserved in 3, this is additive: a second envelope
+with method `passkey`, its `credential_id`, and its own binding purpose, plus a
+`notes/security.md` entry on what a credential-held key does and does not protect against. The
+WebAuthn call lives in the host or the React binding, never in the core: the core takes bytes.
+Depends on 3 and 5 (the unlock path) and on 4 (the README has to explain it).
+
+## Side quests
+
+Straightforward, likely to be done, not needed yet. Each is a thread cut from `main`.
+
+* **The IndexedDB vault store as its own package**, `safebyok-indexeddb`: the documented
+  example of a KV-store backend, "duplicate this and type here, here and here", with its own
+  tests, tsdown config and changeset, so it is the template for packaging as much as for the
+  adapter. `idbDeviceDB` stays in the core (`safebyok/idb`): the device store is a fact about the
+  device, not a backend choice. Duplicating the bell and BroadcastChannel plumbing (about forty
+  lines) is fine: a template wants to be self-contained. After the core move and storage_verbs.
+* **Postgres vault store**, `safebyok-postgres`: the example of a SQL backend; `versionedUpdate`
+  is an `UPDATE ... WHERE revision_id = $1`, listing is a `WHERE`, subscribe is `LISTEN/NOTIFY`
+  or polling. It earns Supabase nearly for free (Postgres plus row-level security as the
+  `getUserId` equivalent, PostgREST as the wire, and Supabase realtime for subscribe), as a
+  second thin package or a section of this one. The discipline question is only where the
+  functions run: Convex hosts them (the component's queries and mutations are the whole backend,
+  deployed with the app); a bare Postgres has nowhere to run them, so the host owns a route
+  layer and the package is the SQL plus the route recipe. Supabase gives Postgres that function
+  layer back, which is why it is nearly free.
+* **A REST vault store** over `fetch`, and a Next.js demo on it with Postgres behind the route
+  handlers. The vault runs client-only; the server holds ciphertext. Same route recipe as above.
+* **A blob helper**: for secrets too large to be a whisper, a lockbox holds the key and
+  safebyok's own context-bound encryption seals the blob into a separate pluggable blob store
+  (its own small interface beside VaultDB: put, get, delete by id), so no host hand-rolls
+  encryption with a key taken out of a vault. An S3 or Vercel Blob store is the first adapter.
+  Easy once the storage verbs are settled; it was *Not yet* and moved here because the core of
+  it is forty lines over primitives that exist.
+* **`safebyok-vue`**: a `shallowRef` plus `onScopeDispose` binding, about ten lines, so Nuxt
+  apps have what React apps have. After the react package is published (its shape is the model).
+* **`lockWhenHidden`** opt-in prop on `safebyok-react` (ruled, not yet): the binding may touch
+  the DOM; calls `lockSoon()` on `visibilitychange`. After 4.
+* **IndexedDB `versionedUpdate` truly atomic**, inside one IndexedDB transaction (idb-keyval's
+  `update()`, throw-to-abort mapped to `stale_write`), closing the window `notes/security.md`
+  records. After storage_verbs.
+* **A GraphQL vault store** (urql): listed because the Coach asked; it is not actually easy.
+  Subscribe and `versionedUpdate` depend on a schema we do not own, so it needs resolvers on
+  the host's GraphQL server as well as a client, and no host's existing schema has our tables.
+  Do the REST one first; GraphQL is the same recipe with more ceremony.
+
 ## Soonish
 
-### Pluggable treeshaking
+Wanted; each has a design question to settle first, named here.
 
-we have several pluggable things, and a couple more coming:
-- keyDefiner, which is selected by a bag and not an import, offering argon (via a a package) and something else
-- database: standalone packages (plus the indexedDB one) (which maybe we publish as a package that just re-exports safebyok/idb ?)
-- stringifier (soonish) -- offering JSON.stringify, stable stringify (via a package), and padme-padded versions of each
-- label validator: pluggable, so a host can choose its own label grammar. First, investigate whether anything
-  depends on the current strictness (storage ckeys, the cipher binding, the react package), and report before loosening.
+### Pluggable stringifier, and padding
 
+How a whisper becomes bytes and back (today `stableJsonify` and `JSON.parse`), pluggable so a
+host can store values JSON cannot carry, offering `JSON.stringify`, stable stringify, an identity
+stringifier (bytes in, bytes out, the S3 case), and padded versions of each. Settled: padding is
+trailing whitespace on the serialized JSON, inside the encryption, by a published scheme (PADME
+from the PURBs paper, or power-of-two buckets), 64-byte minimum; every existing reader already
+ignores trailing whitespace, so it needs no stored-format change and no codec label. Still open:
+does `maxWhisperBytes` measure the padded or the unpadded size (the recommendation: unpadded, so
+the top bucket ends at the cap and padding never pushes a passing whisper over it)? Survey where
+standard payloads land so no common kind sits alone in a size that names it: API keys, OAuth
+tokens, service-account JSON, RSA keys (PKCS#8 PEM is 1704, 3272 and 6392 bytes at 2048, 4096
+and 8192 bits); the cap and half of each adapter's `maxRecordBytes` are bucket watermarks.
+**A non-JSON stringifier (identity) does need a stored stringifier label**, since a reader must
+know not to `JSON.parse`: that is `whisper_codec`, reserved in roadmap 3, so this thread adds
+no field. The security note on ciphertext length stays until this lands.
 
-### Convex skills in the convex sub-package
-
-Add the convex skill to the appropriate place, **scoped** to only that directory
-(`packages/safebyok-convex/`), and with only the files likely to be relevant.
-
-### Pad stored values
-
-A pad/unpad helper, so a lockbox's ciphertext length stops telling the backend what kind of
-whisper it holds (an API key from a PEM). Padding goes inside the encryption, by a published
-scheme (PADMÉ, from the PURBs paper, or power-of-two buckets), not one of our own, with a 64-byte
-minimum. Above that minimum, check where the lengths of standard payloads land, so that no common
-kind sits alone in a size that names it: API keys, OAuth tokens, service-account JSON, RSA keys
-(PKCS#8 PEM is 1704, 3272 and 6392 bytes at 2048, 4096 and 8192 bits). The size limits are
-bucket watermarks too: `MaxWhisperBytes` (40_444, a vault's `maxWhisperBytes`) and half of each
-adapter's `maxRecordBytes`. The top bucket ends at the vault's limit, so padding never pushes a
-whisper that passed the cap over it. To decide: does the cap measure the padded size or the
-unpadded one? And does padding need a stored-format change, or can it be trailing JSON
-whitespace, which every existing reader already ignores?
-
-A pluggable stringifier: how a whisper becomes bytes and back (today `stableJsonify` and
-`JSON.parse`), so a host can store values JSON cannot carry.
-**when this is added we must also store the stringifier label -- it's fine now if it's always JSON decodeable but others could need their own thing**
-
-Tree-shakability: an app that imports one thing from safebyok bundles only what that thing uses.
-`sideEffects: false`, no work at module top level, and a check in CI that keeps it so.
-
-Use stable jsonify
-
-### Error families: Incorrect operations (the code is not working as expected) vs Unable to conditions (the code is working and cannot succeed)
+### Error families: misuse versus conditions
 
 Two families of VaultError, told apart by kind, so each reaches the right person. **Misuse** is
 the developer's to fix and should be loud: `bad_option`, `bad_whisper`, `vault_closed`,
 `unknown_key_deriver`, and `bad_label` for the labels the app chooses. safebyok-react rethrows it
-during render, so an error boundary and the dev overlay show it (today `VaultProvider` drops an
-`openVault` rejection on the floor). **Conditions** are the app's to handle and may reach the user:
-`vault_locked`, `wrong_passphrase`, `absent_box`, `stale_write`, storage trouble, and
-`whisper_too_large` or `bad_label` when the value came from the user; the provider hands these
-over through the context. `errors.ts` exports the split. To decide: kinds that are misuse in one
-caller and a condition in another (a boxlabel the user typed).
+during render, so an error boundary and the dev overlay show it (low-hanging-fruit thread 3 does
+the one silent case today). **Conditions** are the app's to handle and may reach the user:
+`vault_locked`, `wrong_passphrase`, `absent_box`, `stale_write`, `not_permitted`,
+`storage_unavailable`, and `whisper_too_large` or `bad_label` when the value came from the user;
+the provider hands these over through the context. `errors.ts` exports the split. To decide:
+kinds that are misuse in one caller and a condition in another (a boxlabel the user typed).
 
-### Masking helper
+### Pluggable label validator
 
-export a treeshakeable safebyok/utils, with a function
-`mask(whisper, { head = 2, tail = 4, minStars: 6, maxLen: 15 })`: it replaces all but the first `actualHead` and last `actualTail` characters with '*'; if length is less than minStars + tail + head, remove stars (first from head, then from tail). above maxLen, it will insert `'***...***'` between head and tail. Decide if the interface should be maxLen or maxStars. mask should, first, remove all control characters (including newline, cr or tab)
+A host chooses its own label grammar. Waits on the low-hanging-fruit report of what depends on
+the current strictness (storage ckeys, the cipher binding, the Convex tables, the React package);
+the seam is likely an `openVault` option with the current `parseLabel` as the default.
 
-### NPM Publishing
+### A conflict-handler hook
 
-Understand npm publishing better, on the first real release: does a staged version keep the `--tag`
-it was staged with when you approve it? Is the provenance statement still attached after approval?
-The trusted publisher's dist-tag permission is on, but nothing uses it (the release workflow now
-installs npm 12.2.0, which can). Does a rejected stage use up its version number? Details in
-`human/20261014-staged_publish.md`.
+Ruled "with the retry work": a way for a host to hear about an erase-versus-update collision
+after the retry limit, rather than only a `stale_write`. API design: is it an `openVault` option,
+a snapshot field, or an error the provider surfaces? Decide after the retry (low-hanging-fruit
+thread 6) has been used in anger.
+
+### Convex skills in the convex sub-package
+
+In flight as thread 1 of the convex sprint; stays here until it lands. Add the Convex skill
+**scoped** to `packages/safebyok-convex/` only, with only the files likely to be relevant.
 
 ## NOT YET
-Reasonable tasks that we do not plan to do in the near term. Do not anticipate them in your implementation.
 
-* Recovery keys
-* Refactor for React Native compatibility: a WebCrypto shim (react-native-quick-crypto or similar) for
-  `crypto.subtle` AES-GCM wrap/unwrap, `getRandomValues` and `randomUUID`; a DeviceDB over the secure
-  store or keychain, holding the localUnlockKey as bytes and importing it non-extractable on load (a
-  different security posture, for notes/security.md); and a check that no core path needs IndexedDB,
-  BroadcastChannel or TextDecoder where Hermes lacks them.
-* A blob helper, for secrets too large to be a whisper: a lockbox holds the key, and safebyok's own
-  vetted, context-bound encryption seals the blob into a separate pluggable blob store (its own
-  interface beside VaultDB), so no host app hand-rolls encryption with a key taken out of a vault.
+Reasonable tasks that we do not plan to do in the near term. Do not anticipate them in your
+implementation.
 
+* **Recovery keys.** The same mechanism as fingerprint unlock (a second, high-entropy envelope in
+  the envelope list), which roadmap 3 reserves a slot for. What makes it not-yet is not
+  the crypto but the UX and microcontent the host must own: a screen that shows the code once,
+  a warning the user reads, a flow for using it. The library's job is the envelope; the rest is
+  the app's.
+* **Refactor for React Native compatibility**: a WebCrypto shim (react-native-quick-crypto or
+  similar) for `crypto.subtle` AES-GCM wrap/unwrap, `getRandomValues` and `randomUUID`; a
+  DeviceDB over the secure store or keychain, holding the localUnlockKey as bytes and importing
+  it non-extractable on load (a different security posture, for notes/security.md); a native
+  Argon2 binding behind the `argon2id_web_v1` label (Hermes has no WebAssembly, so hash-wasm is
+  not the answer); and a check that no core path needs IndexedDB, BroadcastChannel or
+  TextDecoder where Hermes lacks them.
+* **A sub-millisecond extension beside each timestamp**: a monotonic or random "nanosecond"
+  field as a tiebreaker for ordering writes within one millisecond. No reservation needed: a
+  tiebreaker an attacker strips gains nothing, so it may be bound only where present (and with
+  whole-header binding, roadmap 3, it is bound automatically the day it appears).
+* **A PBKDF2 key deriver.** Native in WebCrypto and fast, but not memory-hard; shipping it is not
+  a favor. A host that needs it can write one against the `KeyDeriver` seam. If it is ever
+  packaged, it is its own package with the iteration count in the label.
