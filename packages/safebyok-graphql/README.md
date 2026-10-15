@@ -25,6 +25,11 @@ it calls only your Client), and the server's half needs `graphql` -- your GraphQ
 already -- so that its refusals are the GraphQLErrors your server knows. Neither half needs the
 other's.
 
+**The server half and your GraphQL server must share one copy of `graphql`.** With two (a
+second version installed beside your server's), every refusal is a GraphQLError your server does
+not recognize: Yoga masks it as "Unexpected error", and its kind is lost. `pnpm why graphql`
+shows how many you have.
+
 ## The recipe: Yoga on Next.js, Postgres behind
 
 The package's tests run this recipe whole (`tests/yoga-recipe.test.ts`), against the same suite
