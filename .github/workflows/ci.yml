@@ -17,7 +17,8 @@ permissions:
 
 # Within a job every check runs whatever an earlier one found, so one failure never hides another,
 # and the job fails if any did. `lint-typecheck` and `test-build` are the two the main ruleset
-# requires.
+# requires. Each step is a root script: the root's own check, then every workspace package's
+# (`pnpm -r`), so a package added under packages/ or demos/ is covered with no edit here.
 jobs:
   # Lint first, as the likelier of the two to fail for a reason worth reading, then typecheck, then
   # keep a pull request's history semi-linear (PROCESS.md): its branch may hold no merge commit.
@@ -50,8 +51,8 @@ jobs:
             exit 1
           fi
 
-  # The unit tests with coverage, then the build. Under CI the build fails on any warning, and
-  # checks the package as a consumer would see it (publint, arethetypeswrong: tsdown.config.ts).
+  # The unit tests with coverage, then the build. Under CI a build fails on any warning, and checks
+  # each package as a consumer would see it (publint, arethetypeswrong: each tsdown.config.ts).
   test-build:
     runs-on: ubuntu-latest
     steps:

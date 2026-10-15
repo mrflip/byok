@@ -1,15 +1,16 @@
 # safebyok
 
-Bring Your Own Key (BYOK) Browser Vault using E2EE (End-to-end Encryption) and pluggable remote storage
+Bring Your Own Key (BYOK) Browser Vault using E2EE (End-to-end Encryption) and pluggable remote
+storage: secrets are encrypted on the user's device, under keys that never leave it, and the
+backend only ever holds ciphertext.
 
-`safebyok` gives users a secure "Bring Your Own Key" vault. Secrets are available on their own device and nowhere else.
+This repository is a pnpm workspace. Its packages:
 
-* Secrets are always stored in encrypted form, using keys that never leave the end-user's device
-* Secrets synchronize across multiple devices using a passphrase the user controls
-* The user may change their passphrase without re-entering their information
-* Accessing a vault is prohibitively difficult -- even given the application's database, code and environment.
+* [`safebyok`](packages/safebyok) -- the vault itself, with IndexedDB adapters in `safebyok/idb`.
+* [`safebyok-react`](packages/safebyok-react) -- the React binding: a provider, snapshot hooks,
+  and a guard that asks for the passphrase on demand.
+* [`safebyok-convex`](packages/safebyok-convex) -- Convex storage, in design; not yet published.
+* [`safebyok-demo-react`](demos/safebyok-demo-react) -- a playground app; never published.
 
-It is react-friendly (`safebyok-react`) and database agnostic: storage adapters implement a small
-abstract seam, IndexedDB adapters ship in `safebyok/idb`, and a Convex adapter is planned.
-`whiteboard/20261013-relic/proposed-README.md` drafts the full README for when the surface
-settles.
+`pnpm install`, then `pnpm justify` lints, typechecks, tests and builds every package.
+[CONTRIBUTING.md](CONTRIBUTING.md) has the rest.

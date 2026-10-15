@@ -14,9 +14,14 @@
   },
   "scripts": {
     "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
+    "build:deps": "pnpm --filter 'safebyok-convex^...' build",
     "typecheck": "tsc --noEmit",
+    "pretypecheck": "pnpm build:deps",
     "test": "vitest run",
+    "pretest": "pnpm build:deps",
     "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "pretest:coverage": "pnpm build:deps",
     "justify": "pnpm lint && pnpm typecheck && pnpm test"
   },
   "dependencies": {
@@ -25,6 +30,7 @@
   "devDependencies": {
     "@edge-runtime/vm": "^5.0.0",
     "@eslint/js": "^10.0.1",
+    "@vitest/coverage-v8": "^5.0.4",
     "convex": "^1.46.0",
     "convex-test": "^0.0.61",
     "eslint": "^10.12.0",

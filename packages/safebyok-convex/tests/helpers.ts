@@ -8,7 +8,7 @@ import type { GetUserId } from '../src/server'
 import { modules, register, schema } from '../src/test'
 // The core's cheap test deriver, by relative path (it is test-only, not public): one SHA-256 in
 // place of Argon2id.
-import { testDeriver } from '../../../tests/helpers'
+import { testDeriver } from '../../safebyok/tests/helpers'
 
 /** The component's functions, called directly as a root app's: no host wrapper, no auth. */
 export const vaults = anyApi.vaults as unknown as ComponentApi['vaults']

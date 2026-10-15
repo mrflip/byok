@@ -1,6 +1,6 @@
-// The binding's own lint: the root eslint.config.mjs ignores packages/** because each companion
-// package is its own workspace package with its own dependencies and TS project. Lighter than the
-// root's (no type-aware pass), but it keeps what matters most in library-shaped code: nothing to
+// The binding's own lint: the root eslint.config.mjs ignores packages/** because each package is
+// its own workspace package with its own dependencies and TS project. Lighter than the core's
+// (packages/safebyok/eslint.config.mjs: no type-aware pass), but it keeps what matters most in library-shaped code: nothing to
 // the console, no Math.random, and the house ban on names that say nothing.
 import { defineConfig, globalIgnores } from 'eslint/config'
 import js from '@eslint/js'

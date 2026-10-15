@@ -153,8 +153,9 @@ register(t)
 ## Developing this package
 
 `pnpm justify` here runs its lint, typecheck and tests: `convex-test` under the edge runtime,
-in memory, with no deployment. The tests make real vaults with the core's own code, so build it
-first (`pnpm build` at the repository root).
+in memory, with no deployment. The tests and typecheck resolve `safebyok` through its built
+`dist/`, as a consumer's would, and make real vaults with the core's own code; each script builds
+the core first by itself (`pnpm build:deps`), so a fresh clone needs no prebuild step.
 
 The client's tests run the real `ConvexClient` and `ConvexReactClient` against
 `tests/fake-deployment.ts`: a fake WebSocket that answers the sync protocol's query and mutation
