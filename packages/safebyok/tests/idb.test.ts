@@ -79,6 +79,19 @@ describe("idbDeviceDB", () => {
     expect(rows.map((row) => row.ckey)).to.deep.equal([Ckeys.unlock(TH.scopeOf('u2'))])
   })
 
+  it("forgets the scope's own unlock at an erase even when the sweep fails", async () => {
+    const dbName = TH.freshDbName()
+    const deviceDB = idbDeviceDB({ dbName })
+    await deviceDB.writeUnlock(await TH.unlockOf('u1'))
+    vi.spyOn(IDBObjectStore.prototype, 'getAllKeys').mockImplementation(() => { throw new Error('the shelf will not list') })
+    try {
+      await expect(deviceDB.eraseUnlock(TH.scopeOf('u1'))).rejects.toThrow('the shelf will not list')
+    } finally {
+      vi.restoreAllMocks()
+    }
+    expect(await inspectIdbDeviceDB({ dbName }).rows()).to.have.lengthOf(0)
+  })
+
   it("reads an unlock filed under the colon-joined ckey of 0.2 and before as absent, and eraseAll removes it", async () => {
     const dbName = TH.freshDbName()
     const shelf = createStore(`${dbName}:device_db`, 'records')
