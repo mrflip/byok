@@ -19,10 +19,14 @@ const lockedVaultWithPasskey = async () => {
   return { authenticator, vault: await open() }
 }
 
+/** The unlock window a stub vault reports: the default seven days, in ms. */
+const SevenDaysMs = 604_800_000
+
 /** A vault that refuses every unlock with `err`, and lists one passkey. */
 const vaultRefusing = (err: Error, credentialId: string) => ({
-  getSnapshot: () => ({ state: 'locked', unlocks: [TH.passkeyEnvelopeOf('laptop', { credential_id: credentialId })] }),
-  unlock:      () => Promise.reject(err),
+  reentryWindowMs: SevenDaysMs,
+  getSnapshot:     () => ({ state: 'locked', unlocks: [TH.passkeyEnvelopeOf('laptop', { credential_id: credentialId })] }),
+  unlock:          () => Promise.reject(err),
 }) as unknown as Vault
 
 /** Catches what its children throw while rendering, and shows the message. */
@@ -55,7 +59,7 @@ describe("PasskeyUnlockButton", () => {
     render(<PasskeyUnlockButton vault={vault} onDone={noop} onGripe={noop} />)
     expect(screen.queryByRole('button')).to.be.null
     TH.installFakeAuthenticator()
-    const passphraseOnly = { getSnapshot: () => ({ state: 'locked', unlocks: [TH.envelopeOf('passphrase')] }) } as unknown as Vault
+    const passphraseOnly = { reentryWindowMs: SevenDaysMs, getSnapshot: () => ({ state: 'locked', unlocks: [TH.envelopeOf('passphrase')] }) } as unknown as Vault
     render(<PasskeyUnlockButton vault={passphraseOnly} onDone={noop} onGripe={noop} />)
     expect(screen.queryByRole('button')).to.be.null
   })
@@ -108,7 +112,7 @@ describe("PassphraseModal, for a vault with a passkey", () => {
 
   it("offers no passkey to a user choosing the vault's first passphrase", () => {
     TH.installFakeAuthenticator()
-    const absent = { getSnapshot: () => ({ state: 'absent', unlocks: [] }) } as unknown as Vault
+    const absent = { reentryWindowMs: SevenDaysMs, getSnapshot: () => ({ state: 'absent', unlocks: [] }) } as unknown as Vault
     render(<PassphraseModal vault={absent} onDone={noop} />)
     expect(screen.queryByText('Use a passkey')).to.be.null
   })
