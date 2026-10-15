@@ -1,6 +1,7 @@
 // fake-indexeddb installs a Node-side indexedDB global before the store loads: these tests
 // exercise real IndexedDB semantics (structured clone included) without a browser.
 import 'fake-indexeddb/auto'
+import { createStore, set } from 'idb-keyval'
 import { describe, expect, it, vi } from 'vitest'
 import { idbDeviceDB, inspectIdbDeviceDB, type IdbOpts } from '../src/idb'
 import * as Entry from '../src/idb'
@@ -42,6 +43,18 @@ describe("the IndexedDB device store's options", () => {
   }
 })
 
+describe("idbDeviceDB", () => {
+  it("reads an unlock filed under the colon-joined ckey of 0.2 and before as absent, and eraseAll removes it", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+    await deviceDB.eraseAll()
+    expect(await inspectIdbDeviceDB({ dbName }).rows()).to.have.lengthOf(0)
+  })
+})
+
 describe("inspectIdbDeviceDB", () => {
   it("shows the raw rows of the device shelf, hears writes, and wipes it clean", async () => {
     const dbName = TH.freshDbName()
@@ -52,7 +65,7 @@ describe("inspectIdbDeviceDB", () => {
 
     await deviceDB.writeUnlock(await TH.unlockOf('u1'))
     const rows = await inspector.rows()
-    expect(rows.map((row) => row.ckey)).to.deep.equal(['unlock:acme:u1:main'])
+    expect(rows.map((row) => row.ckey)).to.deep.equal(['["unlock","acme","u1","main"]'])
     await vi.waitFor(() => { expect(heardCount).to.be.greaterThan(0) })
 
     await inspector.wipe()

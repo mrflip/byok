@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { memoryStore } from '../src/string-store'
+import { domStore, memoryStore } from '../src/string-store'
 import { VaultError } from '../src/errors'
 
 describe("memoryStore", () => {
@@ -42,5 +42,34 @@ describe("memoryStore", () => {
     expect(() => store.subscribe('not a listener' as unknown as () => void)).to.throw(VaultError, /listener function/)
     store.write('one', '1')
     expect(store.read('one')).to.eq('1')
+  })
+})
+
+/** A DOM Storage over a Map, as localStorage behaves for what domStore asks of it. */
+const mapStorage = (): Storage => {
+  const bag = new Map<string, string>()
+  return {
+    get length() { return bag.size },
+    key:        (idx: number) => [...bag][idx]?.[0] ?? null,
+    getItem:    (ckey: string) => bag.get(ckey) ?? null,
+    setItem:    (ckey: string, text: string) => { bag.set(ckey, text) },
+    removeItem: (ckey: string) => { bag.delete(ckey) },
+    clear:      () => { bag.clear() },
+  }
+}
+
+describe("domStore", () => {
+  it("files each ckey under its prefix, and sees only its own", () => {
+    const webStorage = mapStorage()
+    const dbStore = domStore(webStorage, 'safebyok-demo:db:')
+    const deviceStore = domStore(webStorage, 'safebyok-demo:device:')
+    dbStore.write('greeting', 'hi')
+    deviceStore.write('other', 'there')
+    expect(webStorage.getItem('safebyok-demo:db:greeting')).to.eq('hi')
+    expect(dbStore.read('greeting')).to.eq('hi')
+    expect(dbStore.ckeys()).to.deep.equal(['greeting'])
+    dbStore.erase('greeting')
+    expect(webStorage.getItem('safebyok-demo:db:greeting')).to.be.null
+    expect(deviceStore.ckeys()).to.deep.equal(['other'])
   })
 })

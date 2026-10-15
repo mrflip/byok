@@ -233,6 +233,20 @@ security expert who knows what questions to ask.
   and erasing a vault now take only ckeys whose remainder after the prefix is a bare boxlabel
   (no colon); before, a prefix match alone listed a colon-holding user's lockboxes in another
   user's vault. Exact ckeys cannot collide.
+* 2026-10-15: the string-keyed adapters (`localVaultDB`, `idbVaultDB`, `idbDeviceDB`,
+  `memoryDeviceDB`) file rows under the JSON text of a tuple -- the row's kind, the applabel,
+  `user_id` and vaultlabel, and a lockbox's boxlabel -- from one module, `Ckeys`, now exported for
+  adapter authors. This replaces the colon-joined ckeys of the entry above. `JSON.stringify`
+  quotes and escapes every string, so two different tuples never share a ckey whatever their
+  names hold, and a vault's box prefix (its tuple's JSON up to the comma before the boxlabel)
+  begins no other vault's ckeys; tests cover every split of a string of separators into four names.
+  A name is encoded as given, never normalized: two Unicode spellings of one name are two vaults,
+  as they are two cipher bindings. Rows under the old ckeys are neither read, moved nor deleted:
+  a vault stored before reads as absent, and its rows stay in storage. On a device that leaves
+  an old remembered unlock (a localUnlockKey and the vaultKey wrapped under it) in IndexedDB,
+  where `lock()` no longer reaches it and no read ever expires it. `idbDeviceDB`'s `eraseAll()`
+  now clears the whole device shelf, old rows included, and the changeset tells a host how to
+  wipe it.
 * 2026-10-15: the Convex component (`packages/safebyok-convex`) authenticates in the host app,
   not inside the component (where `ctx.auth` does not exist): `SafebyokComponent.api({ getUserId })`
   builds the nine public functions the host re-exports, and each refuses unless the host's

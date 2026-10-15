@@ -2,6 +2,7 @@ import * as Z from 'zod/mini'
 import { Label, Lockbox, LockboxSummary, MaxUserIdChars, VaultBundle, VaultScope } from './types'
 import { VaultError } from './errors'
 import type { StringStore } from './string-store'
+import * as Ckeys from './ckeys'
 
 /**
  * What a bundle update was proven against: the vault and the unlock epoch of the bundle the
@@ -402,27 +403,11 @@ const lockboxMeetsExpectation = (standingBundle: unknown, standingBox: unknown, 
   return box.success && box.data.revision_id === expected.revision_id
 }
 
-// The ckeys localVaultDB stores rows under, and the device store its unlocks: a stored contract,
-// so never reshaped. safebyok-indexeddb keeps a copy of its own.
-export const scopePath = (scope: VaultScope) => `${scope.applabel}:${scope.user_id}:${scope.vaultlabel}`
-const bundleCkey = (scope: VaultScope) => `vault:${scopePath(scope)}`
-const boxCkey = (scope: VaultScope, boxlabel: string) => `box:${scopePath(scope)}:${boxlabel}`
-
-/**
- * True for the ckey of a lockbox in `scope`. A prefix alone is not enough: a user_id may hold a
- * colon, so another user's rows can share this scope's prefix -- but never with a bare boxlabel
- * (which holds no colon) after it.
- */
-const isBoxCkeyOf = (scope: VaultScope, ckey: unknown): ckey is string => {
-  const prefix = `box:${scopePath(scope)}:`
-  return typeof ckey === 'string' && ckey.startsWith(prefix) && ! ckey.slice(prefix.length).includes(':')
-}
-
 /** `fn`'s result (or failure) as a promise: a sync throw becomes a rejection, never an escape. */
 const soon = async <ValT>(fn: () => ValT | Promise<ValT>): Promise<ValT> => await fn()
 
 /**
- * VaultDB over a {@link StringStore}: rows as JSON text under scope-prefixed ckeys. A host
+ * VaultDB over a {@link StringStore}: rows as JSON text under the ckeys `Ckeys` gives. A host
  * backs one with localStorage, for a vault that lives on this device alone; tests back one with a
  * Map. Every secret field in what it stores is ciphertext; what it lacks is reach -- rows stay
  * on this device instead of syncing through a shared database.
@@ -453,34 +438,34 @@ class StringStoreVaultDB extends VaultDB {
   // reject the returned promise, never throw before the caller has one in hand. And each write
   // checks and saves in one synchronous step, so nothing else in this tab runs in between.
   protected doReadBundle(scope: VaultScope): Promise<unknown> {
-    return soon(() => readJson(this.store, bundleCkey(scope)))
+    return soon(() => readJson(this.store, Ckeys.bundle(scope)))
   }
 
   protected doCreateBundle(bundle: VaultBundle): Promise<unknown> {
     return soon(() => {
-      const standing = readJson(this.store, bundleCkey(bundle))
+      const standing = readJson(this.store, Ckeys.bundle(bundle))
       if (standing !== null) { return standing }
-      this.store.write(bundleCkey(bundle), JSON.stringify(bundle))
+      this.store.write(Ckeys.bundle(bundle), JSON.stringify(bundle))
       return bundle
     })
   }
 
   protected doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean> {
     return soon(() => {
-      if (! bundleMeetsExpectation(readJson(this.store, bundleCkey(bundle)), expected)) { return false }
-      this.store.write(bundleCkey(bundle), JSON.stringify(bundle))
+      if (! bundleMeetsExpectation(readJson(this.store, Ckeys.bundle(bundle)), expected)) { return false }
+      this.store.write(Ckeys.bundle(bundle), JSON.stringify(bundle))
       return true
     })
   }
 
   protected doReadBox(scope: VaultScope, boxlabel: string): Promise<unknown> {
-    return soon(() => readJson(this.store, boxCkey(scope, boxlabel)))
+    return soon(() => readJson(this.store, Ckeys.box(scope, boxlabel)))
   }
 
   protected doListBoxes(scope: VaultScope): Promise<unknown[]> {
     return soon(() => (
       this.store.ckeys()
-        .filter((ckey) => isBoxCkeyOf(scope, ckey))
+        .filter(Ckeys.isBoxIn(scope))
         .map((ckey) => readJson(this.store, ckey))
         .filter((raw) => raw !== null)
     ))
@@ -488,27 +473,27 @@ class StringStoreVaultDB extends VaultDB {
 
   protected doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
     return soon(() => {
-      const standingBundle = readJson(this.store, bundleCkey(scope))
-      const standingBox = readJson(this.store, boxCkey(scope, lockbox.boxlabel))
+      const standingBundle = readJson(this.store, Ckeys.bundle(scope))
+      const standingBox = readJson(this.store, Ckeys.box(scope, lockbox.boxlabel))
       if (! lockboxMeetsExpectation(standingBundle, standingBox, expected)) { return false }
-      this.store.write(boxCkey(scope, lockbox.boxlabel), JSON.stringify(lockbox))
+      this.store.write(Ckeys.box(scope, lockbox.boxlabel), JSON.stringify(lockbox))
       return true
     })
   }
 
   protected doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
     return soon(() => {
-      if (! vaultMeetsExpectation(readJson(this.store, bundleCkey(scope)), expected)) { return false }
-      this.store.erase(boxCkey(scope, boxlabel))
+      if (! vaultMeetsExpectation(readJson(this.store, Ckeys.bundle(scope)), expected)) { return false }
+      this.store.erase(Ckeys.box(scope, boxlabel))
       return true
     })
   }
 
   protected doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
     return soon(() => {
-      if (! vaultMeetsExpectation(readJson(this.store, bundleCkey(scope)), expected)) { return false }
-      const doomed = this.store.ckeys().filter((ckey) => isBoxCkeyOf(scope, ckey))
-      for (const ckey of [...doomed, bundleCkey(scope)]) { this.store.erase(ckey) }
+      if (! vaultMeetsExpectation(readJson(this.store, Ckeys.bundle(scope)), expected)) { return false }
+      const doomed = this.store.ckeys().filter(Ckeys.isBoxIn(scope))
+      for (const ckey of [...doomed, Ckeys.bundle(scope)]) { this.store.erase(ckey) }
       return true
     })
   }
