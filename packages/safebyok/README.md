@@ -67,7 +67,9 @@ An unlocked vault stays unlocked until its remembered unlock expires
 (`forcePassphraseReentryHours`, seven days by default) or `vault.lock()` is called. `Infinity` hours
 means never on this device, until `lock()`: `askPassphraseAt` then equals the exported `FarFuture`, the latest instant a
 `Date` can hold (8.64e15), so a host can show "until locked" by comparing against it, and `new Date(askPassphraseAt)` still works. `lock()` forgets the unlock in memory and on this device
-alike, so the user types their passphrase again afterwards. The core cannot watch for a locked
+alike, so the user types their passphrase again afterwards. It wins over an unlock still under
+way: that `unlock()` throws kind `vault_locked` and remembers nothing, so a vault locked while the
+passphrase was being checked stays locked. The core cannot watch for a locked
 screen or a hidden tab (it runs where there is no `document`), so locking on those signals is a
 few lines in the host app:
 

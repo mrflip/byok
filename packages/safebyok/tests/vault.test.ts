@@ -932,6 +932,200 @@ describe("changePassphrase", () => {
   })
 })
 
+/**
+ * A world whose slow waits can be held mid-flight, to land a lock inside an unlock: each `holdNext`
+ * arms a gate on the next look at the bundle, passphrase derivation, or device-record write, and
+ * hands it back. Its key deriver is its own copy of testDeriver, so a spy on it stays here.
+ */
+const makeRacingWorld = () => {
+  const world = makeWorld()
+  const keyDeriver: KeyDeriver = { ...testDeriver }
+  const open = (overrides?: Partial<OpenVaultOpts>) => world.open({ keyDeriver, ...overrides })
+  const holdNextLook = () => {
+    const gate = TH.makeGate()
+    const readBundle = world.vaultDB.readBundle.bind(world.vaultDB)
+    vi.spyOn(world.vaultDB, 'readBundle').mockImplementationOnce(async (scope) => {
+      await gate.pass()
+      return await readBundle(scope)
+    })
+    return gate
+  }
+  const holdNextDerive = () => {
+    const gate = TH.makeGate()
+    vi.spyOn(keyDeriver, 'deriveKeyBytes').mockImplementationOnce(async (passphrase, saltBytes) => {
+      await gate.pass()
+      return await testDeriver.deriveKeyBytes(passphrase, saltBytes)
+    })
+    return gate
+  }
+  const holdNextRemember = () => {
+    const gate = TH.makeGate()
+    const writeUnlock = world.deviceDB.writeUnlock.bind(world.deviceDB)
+    vi.spyOn(world.deviceDB, 'writeUnlock').mockImplementationOnce(async (unlock) => {
+      await gate.pass()
+      await writeUnlock(unlock)
+    })
+    return gate
+  }
+  const rememberedUnlock = async () => await world.deviceDB.readUnlock(scopeOf('u1'))
+  return { ...world, open, holdNextLook, holdNextDerive, holdNextRemember, rememberedUnlock }
+}
+
+describe("a lock that lands while an unlock is under way", () => {
+  afterEach(() => { vi.restoreAllMocks() })
+
+  it("during the passphrase check: the lock wins, the unlock throws 'vault_locked', and nothing is remembered", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lock()
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await vault.lock()
+    gate.release()
+    const err = await unlocking
+    expect(err.message).to.not.include('pw one')
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(vault.getSnapshot().askPassphraseAt).to.be.null
+    await expectRefusal(vault.read('anything'), 'vault_locked')
+    expect(await world.rememberedUnlock()).to.be.null
+    // Well within the seven days a remembered unlock would last: the reopen is locked all the same.
+    world.advance(HourMs)
+    const reopened = await world.open()
+    expect(reopened.getSnapshot().state).to.eq('locked')
+  })
+
+  it("an unlock begun after the lock is untouched by it", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await vault.lock()
+    gate.release()
+    await unlocking
+    await vault.unlock('pw one')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(vault.getSnapshot().askPassphraseAt).to.eq(world.clock.now() + SevenDaysMs)
+    expect(await world.rememberedUnlock()).to.not.be.null
+  })
+
+  it("on a vault already unlocked: the lock still wins, and leaves it locked", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    world.advance(HourMs)
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await vault.lock()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+  })
+
+  it("during the device record's write: the record that lands after the lock's erase is erased again", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.lock()
+    const gate = world.holdNextRemember()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await vault.lock()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+    const reopened = await world.open()
+    expect(reopened.getSnapshot().state).to.eq('locked')
+  })
+
+  it("during the look at storage: the lock wins before a first unlock makes the vault", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    const gate = world.holdNextLook()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await vault.lock()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('absent')
+    expect(world.dbStore.ckeys()).to.have.lengthOf(0)
+  })
+
+  it("during a first unlock's passphrase check: the vault is made, under that passphrase, and stays locked", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await vault.lock()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+    await vault.unlock('pw one')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("a destroy() that lands mid-unlock wins the same way, and the vault is gone", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.store('anthropic', 'sk-fake')
+    await vault.lock()
+    const gate = world.holdNextDerive()
+    const unlocking = expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    await vault.destroy()
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('absent')
+    expect(world.dbStore.ckeys()).to.have.lengthOf(0)
+    expect(await world.rememberedUnlock()).to.be.null
+  })
+
+  it("during changePassphrase(): the passphrase still changes, and the vault stays locked", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('old passphrase')
+    await vault.store('anthropic', 'sk-fake')
+    const gate = world.holdNextDerive()
+    const changing = vault.changePassphrase('old passphrase', 'new passphrase')
+    await gate.reached
+    await vault.lock()
+    gate.release()
+    await changing
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+
+    const fresh = await world.open({ deviceDB: memoryDeviceDB() })
+    await expectRefusal(fresh.unlock('old passphrase'), 'wrong_passphrase')
+    await fresh.unlock('new passphrase')
+    expect(await fresh.read('anthropic')).to.eq('sk-fake')
+  })
+
+  it("during changePassphrase()'s device record write: the record is erased again", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('old passphrase')
+    const gate = world.holdNextRemember()
+    const changing = vault.changePassphrase('old passphrase', 'new passphrase')
+    await gate.reached
+    await vault.lock()
+    gate.release()
+    await changing
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+    await vault.unlock('new passphrase')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+  })
+})
+
 describe("the key deriver seam", () => {
   it("a vault made under one deriver refuses to unlock under another, by label", async () => {
     const world = makeWorld()
