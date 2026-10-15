@@ -400,6 +400,16 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
 
 ### Others
 
+* **i18n string helpers.** Every string a user reads (the React dialog's copy, the refusal
+  messages a host may show) is English and fixed. A helper set would let a host supply its own
+  strings and a locale, with ours as the default; the dialog's `Intl.RelativeTimeFormat` call
+  takes the same locale. Decide: one messages bag on `VaultProvider`, or per-component props?
+* **Identify minimum platform support.** "Runs everywhere" (PROCESS.md, *Dependencies*) names
+  React Native, React, Next.js, Nuxt, Node and Bun, but no versions. Pin each: the oldest
+  browsers (WebCrypto, IndexedDB, BroadcastChannel, `Intl.RelativeTimeFormat`), the oldest Node
+  CI must test (22 today), Bun, and React Native's engine (Hermes' `Intl` coverage is partial).
+  Then CI checks what we promise, and the README states it.
+
 * **Provide built-as-a-whole recommended KDFs, and functions to roll your own.** Follows from
   [#68](https://github.com/mrflip/safebyok/pull/68)'s `argon2idDeriver(spec)`; replaces its open
   question of adding RFC 9106's second recommended option as a supplied spec.
@@ -420,6 +430,10 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
 Reasonable tasks that we do not plan to do in the near term. Do not anticipate them in your
 implementation.
 
+* **A pluggable conflict handler for the weird cases**, beyond *A conflict-handler hook* above:
+  for instance, "this lockbox is too damaged to know what epoch it is from, and I have a store
+  request with a healthy lockbox: what do I do?" Today the vault decides (a damaged box is
+  removable, and `store()` overwrites it); a host may one day want the say.
 * **Recovery keys.** The same mechanism as fingerprint unlock (a second, high-entropy envelope in
   the envelope list), which roadmap 3 reserves a slot for. What makes it not-yet is not
   the crypto but the UX and microcontent the host must own: a screen that shows the code once,
