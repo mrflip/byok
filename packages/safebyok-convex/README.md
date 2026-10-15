@@ -1,8 +1,9 @@
 # safebyok-convex
 
 safebyok's storage on [Convex](https://convex.dev): a Convex **component** that holds each vault's
-bundle and lockboxes, ciphertext and public fields only, in tables of its own. Your Convex
-backend never sees a whisper, a passphrase, or any key that opens one.
+bundle and lockboxes, ciphertext and public fields only, in tables of its own, and
+**`convexVaultDB`**, the client side a vault stores through. Your Convex backend never sees a
+whisper, a passphrase, or any key that opens one.
 
 A workspace package, source-exported (`exports` points at `src/`) while the interface settles;
 not yet built or published. `convex` is a peer dependency.
@@ -47,6 +48,50 @@ Run your usual Convex codegen, and your clients reach these as `api.safebyok.*`.
   and the bundle's `passphrase_epoch` or the lockbox's `revision_id` -- and checks it in the same
   transaction it writes in. When that no longer stands, it writes nothing and resolves `false`,
   which the client turns into a `stale_write`. Not an error: no `ConvexError`, nothing in your logs.
+
+## What your app does on the client
+
+`convexVaultDB(client, api.safebyok)`, from `safebyok-convex`, is a vault's storage: a `VaultDB`
+whose every call is one call to the functions above, through the Convex client your app already
+has. Hand it to `openVault`:
+
+```ts
+import { ConvexClient } from 'convex/browser'
+import { openVault } from 'safebyok'
+import { idbDeviceDB } from 'safebyok/idb'
+import { convexVaultDB } from 'safebyok-convex'
+import { api } from '../convex/_generated/api'
+
+const convex = new ConvexClient(import.meta.env.VITE_CONVEX_URL)
+convex.setAuth(fetchToken) // your auth provider's token, as for any Convex call
+
+const vault = await openVault({
+  applabel: 'acme', userId, vaultlabel: 'main',
+  vaultDB:  convexVaultDB(convex, api.safebyok),
+  deviceDB: idbDeviceDB(),
+})
+```
+
+In a React app, pass the `ConvexReactClient` you give `ConvexProvider`, so the vault shares its
+socket and its signed-in user. `safebyok-convex` itself imports nothing of React's.
+
+* **Sign in first.** `userId` is the id your `getUserId` answers for the signed-in user. Open
+  the vault once the Convex client is authenticated (in React, once `useConvexAuth()` says so):
+  a call made before then is refused with kind `not_permitted`.
+* **Close the vault when the user signs out.** Signing out of Convex does not lock it: every
+  call it makes is refused from then on, but the unlocked vaultKey stays in memory until the
+  vault locks, expires or closes.
+* **Other devices' writes arrive live.** The vault watches `watchVault` and refreshes whenever
+  it changes, so its snapshot (and a React render) follows writes from anywhere.
+* **Refusals** are `VaultError`s: `not_permitted` (signed out, or not this user's vault);
+  `stale_write` (another device changed the vault first: the vault has already caught up, so
+  read again before retrying); and `storage_unavailable` for anything else Convex reported, with
+  Convex's own error as its `cause`.
+* **Offline, a call waits** for the connection, as every Convex call does, rather than failing.
+  Convex resends a mutation when it reconnects, so a write may land after any timeout you set:
+  show progress, but don't report it failed.
+* A record holds at most 1 MiB, Convex's document limit; `openVault` keeps `maxWhisperBytes`
+  under half of it.
 
 ## What is stored
 
@@ -110,6 +155,12 @@ register(t)
 `pnpm justify` here runs its lint, typecheck and tests: `convex-test` under the edge runtime,
 in memory, with no deployment. The tests make real vaults with the core's own code, so build it
 first (`pnpm build` at the repository root).
+
+The client's tests run the real `ConvexClient` and `ConvexReactClient` against
+`tests/fake-deployment.ts`: a fake WebSocket that answers the sync protocol's query and mutation
+messages from `convex-test`. It runs one call at a time, reruns every watched query after each
+mutation, and signs each socket in as one user from the start; its doc block says what that
+cannot prove.
 
 `src/component/_generated/` holds Convex's codegen output for the component, written by the
 templates of the installed `convex` and never edited by hand. Codegen for a component needs a
