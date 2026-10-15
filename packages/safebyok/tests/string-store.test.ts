@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { memoryStore } from '../src/string-store'
+import { VaultError } from '../src/errors'
 
 describe("memoryStore", () => {
   it("reads back what was written, and null where nothing was", () => {
@@ -34,5 +35,12 @@ describe("memoryStore", () => {
     unsubscribe()
     store.write('two', '2')
     expect(heardCount).to.eq(2)
+  })
+
+  it("refuses a listener that is not a function as it subscribes, so no later write meets it", () => {
+    const store = memoryStore()
+    expect(() => store.subscribe('not a listener' as unknown as () => void)).to.throw(VaultError, /listener function/)
+    store.write('one', '1')
+    expect(store.read('one')).to.eq('1')
   })
 })

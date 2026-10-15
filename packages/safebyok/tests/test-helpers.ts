@@ -482,6 +482,18 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('Not_a_label', 'one'), noBoxYet), 'bad_label')
       await expectRefusal(vaultDB.eraseBox({ ...scopeOf('u1'), user_id: '' }, 'anthropic', thisVault), 'bad_label')
     })
+
+    it("refuses a malformed record or expectation, or a bundle under another vault_id, before storage sees it", async () => {
+      const vaultDB = await withBundle()
+      const overlong = boxOf('anthropic', 'one', { note: 'n'.repeat(257) })
+      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), overlong, noBoxYet), 'bad_option')
+      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: '' }), 'bad_option')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { passphrase_epoch: 0 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'bad_option')
+      await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { vault_id: 'vault-id-new', passphrase_epoch: 2 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }), 'bad_option')
+      await expectRefusal(vaultDB.eraseVault(scopeOf('u1'), { vault_id: '' }), 'bad_option')
+      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
+      expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
+    })
   })
 }
 

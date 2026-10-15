@@ -3,13 +3,40 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it, vi } from 'vitest'
 import { createStore, set } from 'idb-keyval'
-import { idbDeviceDB, idbVaultDB, inspectIdb } from '../src/idb'
+import { idbDeviceDB, idbVaultDB, inspectIdb, type IdbOpts } from '../src/idb'
+import { VaultError } from '../src/errors'
 import * as TH from './test-helpers'
 
 // Each world gets its own database so tests never see each other's rows.
 const freshDbName = () => `safebyok_test_${crypto.randomUUID().slice(0, 8)}`
 
 TH.describeVaultDB('idbVaultDB', () => idbVaultDB({ dbName: freshDbName() }))
+
+/** Option bags no IndexedDB adapter takes: each refused as it is made, before a database opens. */
+const BadIdbOpts = [
+  [{ dbName: "" },                             'an empty dbName'],
+  [{ dbName: 42 },                             'a dbName that is not text'],
+  [{ dbName: null },                           'a null dbName'],
+  ["acme",                                     'a dbName passed bare, not in a bag'],
+] as const
+
+describe("the IndexedDB adapters' options", () => {
+  const Makers = [
+    ['idbVaultDB',  (opts: IdbOpts) => idbVaultDB(opts)],
+    ['idbDeviceDB', (opts: IdbOpts) => idbDeviceDB(opts)],
+  ] as const
+  for (const [makerTitle, make] of Makers) {
+    for (const [opts, blurb] of BadIdbOpts) {
+      it(`${makerTitle} refuses ${blurb} with kind 'bad_option'`, () => {
+        expect(() => make(opts as unknown as IdbOpts)).to.throw(VaultError, /dbName/).with.property('kind', 'bad_option')
+      })
+    }
+    it(`${makerTitle} keeps its records in 'safebyok' given no options, or no dbName`, () => {
+      expect(() => make(undefined as unknown as IdbOpts)).to.not.throw()
+      expect(() => make({ dbName: undefined })).to.not.throw()
+    })
+  }
+})
 
 describe("idbVaultDB", () => {
   it("declares no per-record limit: IndexedDB has none", () => {
@@ -96,5 +123,18 @@ describe("inspectIdb", () => {
     expect(await inspector.rows()).to.have.lengthOf(0)
     expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
     unsubscribe()
+  })
+
+  it("refuses a shelf it does not know, or a bad dbName, with kind 'bad_option'", () => {
+    expect(() => inspectIdb({ shelf: 'vault_rows' as unknown as 'vault_db' })).to.throw(VaultError, /shelf/).with.property('kind', 'bad_option')
+    expect(() => inspectIdb({ dbName: '', shelf: 'vault_db' })).to.throw(VaultError, /dbName/).with.property('kind', 'bad_option')
+  })
+
+  it("refuses a listener that is not a function as it subscribes, so no later write meets it", async () => {
+    const dbName = freshDbName()
+    const inspector = inspectIdb({ dbName, shelf: 'vault_db' })
+    expect(() => inspector.subscribe('not a listener' as unknown as () => void)).to.throw(VaultError, /listener function/)
+    await idbVaultDB({ dbName }).createBundle(TH.bundleOf('u1'))
+    expect(await inspector.rows()).to.have.lengthOf(1)
   })
 })
