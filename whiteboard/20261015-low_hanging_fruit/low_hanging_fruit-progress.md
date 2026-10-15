@@ -8,7 +8,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 
 | #  | Thread | Base | Status |
 | -- | ------ | ---- | ------ |
-| 1  | `vault_size_cap` | `origin/main` | in review |
+| 1  | `vault_size_cap` | `origin/main` | filing |
 | 2  | `explicit_options` | thread 1 | pending |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
@@ -16,7 +16,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
-| 9  | `docs_sweep` | `origin/main` | in review |
+| 9  | `docs_sweep` | `origin/main` | filing |
 | 10 | `sandals` | `origin/main` | underway |
 | 11 | `label_grammar_report` | `origin/main` | pending |
 
@@ -74,6 +74,9 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   at the README's end, so threads 1 and 2's README edits rebase mechanically. The expiry thread
   should update the `lockSoon()` line. The demo now calls `navigator.storage.persist()` through
   a small `keepStorage` module. The devcontainer volumes stay `byok-*`: renaming orphans them.
+  *Review:* fixed -- the *Locking* section now says `lock()` also erases the device's remembered
+  unlock; `domStore`'s doc block. Sent back at filing: a clean recipe snippet (unsubscribe; no
+  unhandled `vault_closed`), and a dated `notes/security.md` bullet for the release App key.
 * *Orchestrator:* **Slots count builders, not reviews** (YOLO, two-way): with 1, 5 and 9 all in
   review and nothing building, thread 10 started as a fourth agent.
 * *Orchestrator:* **The main checkout moves under reviewers.** Another agent's uncommitted work
@@ -82,6 +85,15 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   matching a pushed branch of another agent's, is not the review's.
 
 ## For the Coach
+
+* **The ruled screen-lock recipe defeats the remembered unlock** (thread 9's review): `lock()`
+  also erases the device's seven-day unlock, so `visibilitychange` -> `lock()` asks for the
+  passphrase on every return to the tab, against the dialog's "stays unlocked for seven days".
+  Should `lockSoon()` / `lockWhenHidden` drop the in-memory key but keep the device record?
+* **A race in `unlock()`** (thread 9's review, `vault.ts`, outside every thread): a `lock()` that
+  lands during unlock's KDF or `rememberDevice` awaits is overwritten, leaving the vault unlocked
+  and remembered. The recipe makes it likely. No thread in this sprint touches `unlock()`: a
+  candidate for its own small thread.
 
 * **Thread 1's fit check departs from the preplan** (above): stronger, measured, and the
   defaults still fit. And `maxVaultBytes` is abstract, so third-party adapters must declare it;
