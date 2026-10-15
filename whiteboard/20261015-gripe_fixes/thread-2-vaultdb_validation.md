@@ -1,6 +1,7 @@
 # Thread 2: vaultdb_validation (2026-10-15)
 
-Branch `20261015-vaultdb_validation`, PR not yet filed, stacked on #66. Justify: green (root 105,
+Branch `20261015-vaultdb_validation`, PR not yet filed, stacked on #66 (rebased onto its tip
+`5fefc90`). Justify: green (root 105,
 safebyok 768, safebyok-convex 267, safebyok-react 28, demo 62; publint, attw and `pnpm size`
 clean).
 
@@ -54,6 +55,14 @@ entrypoint, what was checked, and the disposition of each gap. Read it before ad
     code units, at most 3 UTF-8 bytes each (a 4-byte character takes two). The Convex fill test
     uses 256 four-byte characters, a note the core would refuse.
 
+* **Review** (medium, `fixed`): the reviewer's 9ffb0d4 (now 9f88c6f) has `maxVaultBytes`'s doc and
+  the security note say the 2 KiB holds for a `user_id` of up to 512 bytes, and what a longer one
+  or an escaped note draws on. Its findings left are in the PR's open questions: `openVault`
+  duck-types `vaultDB`, so a hand-written object skips the base class's write checks; `updateBox`
+  with no lockbox reports `bad_label` (deliberate, pinned); small duplications (`checkOutgoing`
+  and `checkRecord`, four listener checks, `isOfScope` and `checkBundle`'s scope comparison, a
+  double parse per write); the two size constants exported from `vault.ts` for the test.
+
 * **For the Coach**:
   - The allowance: is the reframing enough, or do you want a stricter accounting (an explicit
     base64 term and a smaller backend share)? That one changes the admitted capacities: at the
@@ -62,3 +71,8 @@ entrypoint, what was checked, and the disposition of each gap. Read it before ad
     damaged box without destroying the vault?
   - `SafebyokComponent.api({ getUserId })`: check `getUserId` at module load? It needs a plain
     `Error` or the core's `VaultError` in server code.
+  - `user_id` has no length bound, so the 2 KiB covering it is an assumption (512 bytes); a
+    bound is a stored-format and API call, with the allowance question above.
+  - **`openVault`'s size budget**: #68 (thread 1) takes it to 16.19 kB, this thread to 16.27 kB,
+    each from 15.9 against 16.5. Together they likely exceed it: whichever merges second needs a
+    raised budget or a trim.
