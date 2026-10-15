@@ -1,5 +1,10 @@
 # Packaged Convex Components
 
+> **Changed for safebyok-convex** from get-convex/agent-skills at `191a5c33` (Apache-2.0; the
+> changes are listed in `../../README.md`): this package is already laid out, so the scaffolder
+> is not for it, and its build flow stops at codegen and `pnpm justify`, never `npx convex dev`
+> or a deployment. If codegen needs a Convex login or a deployment, stop and ask the Coach.
+
 Read this file when the user wants a reusable npm package or a component shared
 across multiple apps.
 
@@ -11,7 +16,6 @@ across multiple apps.
 
 ## Default Approach
 
-- Prefer starting from `npx create-convex@latest --component` when possible
 - Keep the official authoring docs as the source of truth for package layout and
   exports
 - Validate the bundled package through an example app, not just the source files
@@ -24,8 +28,11 @@ the example app tries to consume it.
 Recommended order:
 
 1. `npx convex codegen --component-dir ./path/to/component`
-2. Run the package build command
-3. Run `npx convex dev --typecheck-components` in the example app
+2. Run the package build command, and `pnpm justify` inside
+   `packages/safebyok-convex/`
+
+Upstream's third step, `npx convex dev --typecheck-components` in an example
+app, pushes to a deployment: it is the Coach's to run, not an agent's.
 
 Do not assume normal app codegen is enough for packaged component workflows.
 

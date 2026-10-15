@@ -58,6 +58,9 @@ Apache-2.0 asks that changed files say so: each changed file opens with a note p
   the Coach" for a login or a deployment; `convex-helpers` is marked as needing the Coach's yes.
 * `convex-create-component/references/advanced-patterns.md`: a handler that used `args` without
   taking it now takes it; a note says the example's read of an app-owned table is illustration only.
+* `convex-create-component/references/packaged-components.md`: the scaffolder (`npx
+  create-convex@latest --component`) and the build flow's `npx convex dev
+  --typecheck-components` are gone, with a note that that step is the Coach's.
 * `convex-expert/SKILL.md`: the self-verify rule that pushed to a deployment (and could set
   `CONVEX_AGENT_MODE=anonymous`, rebinding `.env.local`) is replaced by codegen and `pnpm
   justify`; the step steering LLM features to `@convex-dev/agent` and `@convex-dev/workflow` is
@@ -68,8 +71,7 @@ Apache-2.0 asks that changed files say so: each changed file opens with a note p
   identities reach a component (the host's `getUserId`) and that tests follow `STYLE.md`.
 * `convex-reviewer/SKILL.md`: a note maps its `ctx.auth` check onto this package's `getUserId`.
 
-`convex-test/SKILL.md`, `convex-docs/SKILL.md` and `references/packaged-components.md` are
-unchanged.
+`convex-test/SKILL.md` and `convex-docs/SKILL.md` are unchanged.
 
 ## Left out
 
