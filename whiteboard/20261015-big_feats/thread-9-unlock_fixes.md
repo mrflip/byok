@@ -2,7 +2,7 @@
 
 Branch `20261015-unlock_fixes`, PR [#88](https://github.com/mrflip/safebyok/pull/88), stacked on
 #77 (`12fc4d0`), in the line #71 → #76 → #73 → #78 → #74 → #77 → amendments; restacked onto thread
-8 at assembly. Justify: green, 1,935 tests (root 123, safebyok 916, indexeddb 104, react 71,
+8 at assembly. Justify: green, 1,936 tests (root 123, safebyok 917, indexeddb 104, react 71,
 postgres 134, convex 275, demo 124, argon2-wasm 44, graphql 144); `pnpm size` green after one
 budget rise (below).
 
@@ -12,8 +12,8 @@ budget rise (below).
     calls only after the label and room checks and the proof's derivation have passed. A refused
     proof never reaches the authenticator. Resolves the `unlock_id`, or null when the maker resolved
     null (dismissed), writing nothing. A non-function is `bad_option`; what the maker throws is
-    thrown as is. `reviseUnlocks` gained an optional `proceed(standing)` step between the proof and
-    `revise`; resolving false abandons the change. Docs, READMEs (core, react), `createPasskey`'s
+    thrown as is. `reviseUnlocks`'s `revise` may now resolve null to abandon the change once proven
+    (it then resolves false, writing nothing); `addPasskey`'s `revise` calls the maker. Docs, READMEs (core, react), `createPasskey`'s
     doc, the demo's `WaysIn` and the tests follow. The demo's own blank-passphrase guard is gone:
     the core now refuses a blank proof before asking.
   - **`safebyok-indexeddb`'s bell** (`src/bell.ts`) `unref`s its BroadcastChannel where the
@@ -35,13 +35,18 @@ budget rise (below).
     orchestrator ruled out any channel but the vault's logger. The vault's own listener never throws
     (it logs a failed refresh itself), so only a host's direct `vaultDB.subscribe` listener can, and
     reporting is that listener's job.
-  - **openVault's size budget 19 → 19.5 kB** (`.size-limit.json`): the change adds about 120 B
-    (18.95 → 19.07 kB) even after the new error message was shortened.
-* **Deviations**: none from the plan. Hunks near `passphrase_epoch` (thread 7's rename) were kept
-  apart. The new `proceed` line in `reviseUnlocks` sits one unchanged line above the epoch line.
-  The `addPasskey` doc's epoch line is untouched, with unchanged lines on both sides. The new
-  GraphQL tests name no epoch. Expect no conflict with thread 7 beyond the size-limit file if 8
-  moves it too.
+  - **openVault's size budget 19 → 19.5 kB** (`.size-limit.json`): the change adds about 70 B
+    (18.95 → 19.02 kB) even after the new error message was shortened.
+  - **`notes/security.md`** (at review): the proven vaultKey's extractable transient handle is now
+    held across the WebAuthn prompt, human time; the entry says why that is acceptable and what
+    bounds it (the prompt's `timeout`, a dismissal).
+* **Deviations**: none from the plan. The review asked for the `made` holder and its `!` to go,
+  with `proceed` handing its passkey to `revise`. Any version that passes a value to `revise`
+  changes the line beside thread 7's renamed epoch line. The simplest is no `proceed` at all:
+  `revise` calls the maker and resolves null to abandon. That costs **one known conflict with
+  thread 7** in `reviseUnlocks`, checked with `git merge-file` against
+  `origin/20261015-epoch_rename`. Resolve it as `unlock_epoch:     standing.unlock_epoch + 1,` then
+  `unlocks,`. The rest merges cleanly. The new GraphQL tests name no epoch.
 * **Discoveries**:
   - **The passkey prompt now follows async work**: a storage read and a key derivation run between
     the click and `navigator.credentials.create`. Current browsers allow it. Older Safari wanted
@@ -56,6 +61,6 @@ budget rise (below).
 * **For the Coach**:
   - `addPasskey`'s signature changed (`safebyok` minor in the changeset). Confirm the callback
     shape, and try it with a real authenticator on Safari when you test #76.
-  - One `!` non-null assertion, `made.passkey!` in `addPasskey`'s `revise` (the linter's preferred
-    spelling over `as`). `proceed` sets it before `revise` can run. The holder object exists because
-    TypeScript cannot narrow across the two callbacks.
+  - Left at review, minor: a `lock()` during the prompt still lands the passkey (the vault stays
+    locked, as for every change to the ways in); there is no retry on `stale_write`; and on a slow
+    device the click's user activation may run out before the prompt.
