@@ -6,7 +6,8 @@ import { isVaultError, type Vault } from 'safebyok'
  * under the `modal-scrim` / `modal` / `quiet` / `gripe` class names, for the host's stylesheet
  * to dress. Its two behaviors are the contract: a first-ever unlock reads as "choose a
  * passphrase" (it creates the vault), and a wrong passphrase stays in the dialog with a calm
- * message rather than failing the action.
+ * message rather than failing the action. Either way it says plainly that a forgotten passphrase
+ * cannot be recovered.
  */
 export const PassphraseModal = ({ vault, onDone }: { vault: Vault, onDone: (unlocked: boolean) => void }) => {
   const [passphrase, setPassphrase] = useState('')
@@ -31,7 +32,7 @@ export const PassphraseModal = ({ vault, onDone }: { vault: Vault, onDone: (unlo
         <p className="quiet">
           {creating
             ? "This passphrase encrypts your secrets on your device. Nobody can recover it for you -- not even us."
-            : 'Your secrets are encrypted with this passphrase; enter it to continue.'}
+            : 'Your secrets are encrypted with this passphrase; enter it to continue. A forgotten passphrase cannot be recovered -- you would start a new vault and re-enter your secrets.'}
         </p>
         <input
           type="password"
