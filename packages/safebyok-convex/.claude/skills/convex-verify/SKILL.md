@@ -35,6 +35,6 @@ A green typecheck proves the code parses; it does not prove a non-owner is actua
 - Drive the feature as multiple identities with t.withIdentity (owner, other user, unauthenticated) using the app's real subject/tokenIdentifier shape.
 - Seed both the caller's rows AND a second user's rows so cross-user access and data-scope are actually testable.
 - A vitest.config.ts with environment 'edge-runtime' + convex-test inlined is REQUIRED for convex-test to run (import.meta.glob needs it); author it, don't just author the test file.
-- Run in-process with convex-test — no deployment needed; compose with the `test` capability's setup rather than forking it.
+- Run in-process with convex-test — no deployment needed; compose with the `convex-test` skill's setup rather than forking it.
 - Never weaken an assertion to make it pass: a failing negative test is a real defect → fix the function (convex-expert), don't edit the test until it's green.
 - This drives a SPECIFIC built feature; a request to set up a test framework generally is the `convex-test` skill.
