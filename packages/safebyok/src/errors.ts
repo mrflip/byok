@@ -5,8 +5,7 @@ export const VaultErrorKindVals = [
   'absent_box',          // no lockbox under that label
   'absent_vault',        // the vault has never been created, and this call will not create it
   'bad_label',           // a label that does not meet the Label rules
-  'bad_whisper',         // a whisper JSON cannot carry (undefined, a function, a class instance), or
-                         // a non-string given to mask
+  'bad_whisper',         // a whisper JSON cannot carry (undefined, a function, a class), or a non-string
   'whisper_too_large',   // a whisper over the vault's maxWhisperBytes
   'vault_full',          // a new lockbox in a vault already holding its maxLockboxes
   'bad_option',          // an option out of its range: openVault's, mask's, or a store()'s note

@@ -4,16 +4,16 @@ import { VaultError } from './errors'
 /** How `mask` shows a whisper: how many characters to reveal, and how many stars to hide it behind. */
 export interface MaskOpts {
   /** Characters kept from the start of the whisper. Default 2. */
-  head?: number
+  head?: number | undefined
   /** Characters kept from the end of the whisper. Default 4. */
-  tail?: number
+  tail?: number | undefined
   /** Fewest stars the result may carry, however short the whisper. Default 6. */
-  minStars?: number
+  minStars?: number | undefined
   /**
    * Longest result, in characters: a longer one collapses to `head`, `***...***`, `tail`. Default
    * 15, or `head + tail + 9` when that is more. At least `head + tail + 9`; `Infinity` never collapses.
    */
-  maxLen?: number
+  maxLen?: number | undefined
 }
 
 /** The stars-and-dots a masked whisper collapses to once the result would pass `maxLen`. */
@@ -29,7 +29,7 @@ const maskOpts = Z.object({
   maxLen:   Z.union([Z.literal(Infinity), wholeCount]).optional(),
 })
 
-const parseMaskOpts = (candidate: MaskOpts | undefined): Required<MaskOpts> => {
+const parseMaskOpts = (candidate: MaskOpts | undefined): Record<keyof MaskOpts, number> => {
   const checked = maskOpts.safeParse(candidate ?? {})
   if (! checked.success) {
     throw new VaultError('bad_option', 'mask takes head, tail and minStars as whole numbers of characters, and maxLen as a whole number or Infinity, none below zero.')
