@@ -1247,6 +1247,17 @@ describe("lockSoon", () => {
     await expectRefusal(vault.store('openai', 'sk-fake-too'), 'vault_locked')
   })
 
+  it("keeps the gate closed through the grace, even if the clock steps back", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.open()
+    await vault.unlock('pw one')
+    await vault.store('anthropic', 'sk-fake')
+    await vault.lockSoon(30)
+    world.advance(-10_000)
+    await expectRefusal(vault.read('anthropic'), 'vault_locked')
+    expect(vault.getSnapshot().state).to.eq('locked')
+  })
+
   it("forgets the remembered unlock at once: a reopen within the grace asks for the passphrase", async () => {
     const world = makeRacingWorld()
     const vault = await world.open()

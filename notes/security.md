@@ -242,8 +242,9 @@ security expert who knows what questions to ask.
   being checked. Without that, the old vault's vaultKey was taken up against the new bundle, and a
   `store()` sealed boxes into the new vault that its owner could never open.
 * 2026-10-15: `lockSoon(graceSeconds = 5)`, at most 60 seconds, closes the entry gate at once
-  (`askPassphraseAt` set to now, so the snapshot reads `locked` and every operation started
-  afterwards throws `vault_locked`), erases the device record at once, and moves the shut counter
+  (`askPassphraseAt` cleared, so the snapshot reads `locked` and every operation started
+  afterwards throws `vault_locked`; cleared rather than set to now, which a wall clock stepped
+  back would reopen), erases the device record at once, and moves the shut counter
   (an unlock under way loses); a `setTimeout` drops the in-memory vaultKey after the grace. In the
   grace, `store()`'s retries and `erase()`'s second look check only that the key is still held,
   not `askPassphraseAt`, so an operation begun before the gate closed finishes; under natural
