@@ -3,7 +3,7 @@
 * **Date**: 2026-10-14. **Mode**: normal. **Review level**: `medium`. **Concurrency**: 3 allowed, but
   the three threads form one stack (below), so they run one at a time.
 * **Issued by**: flip (Coach), via `/sprint`.
-* **Status**: paused: threads 1 (#15), 2 (#16) filed; thread 3 built and reviewed, unfiled (see human/ entry).
+* **Status**: done: threads 1 (#15), 2 (#16) and 3 (#22) merged on 2026-10-15.
 
 ## Read first
 
