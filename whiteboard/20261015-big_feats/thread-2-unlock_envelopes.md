@@ -1,6 +1,6 @@
 # Thread 2: unlock_envelopes (2026-10-15)
 
-Branch `20261015-unlock_envelopes`, PR not yet filed, stacked on #63. Justify green: root 105,
+Branch `20261015-unlock_envelopes`, PR [#71](https://github.com/mrflip/safebyok/pull/71), stacked on #63 (merged; rebased onto main, same tree). Justify green: root 105,
 core 759 (was 705), Convex 269 (was 265), React 28, demo 61; `pnpm size` within the raised limits.
 
 * **Built**:
