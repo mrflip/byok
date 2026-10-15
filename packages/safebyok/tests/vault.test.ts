@@ -2785,6 +2785,18 @@ describe("the logger", () => {
     expect(world.logged.map((heard) => heard.level)).to.deep.equal(['warn'])
   })
 
+  it("says nothing of an unreadable remembered unlock that could not be erased: the open rejects instead", async () => {
+    const world = makeWorld()
+    const device = uncheckingDeviceDB()
+    const vault = await world.open({ deviceDB: device.deviceDB })
+    await vault.unlock('pw')
+    device.spoilRow((row) => ({ ...row, ask_passphrase_at: 'soon' }))
+    const jammed = new Error('the device store is closed')
+    vi.spyOn(device.deviceDB, 'eraseUnlock').mockRejectedValueOnce(jammed)
+    await expect(world.open({ deviceDB: device.deviceDB })).rejects.toBe(jammed)
+    expect(world.logged).to.have.lengthOf(0)
+  })
+
   it("says nothing of a remembered unlock that simply ran out, or that a new passphrase outdated", async () => {
     const world = makeWorld()
     const vault = await world.open()

@@ -549,9 +549,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       && checked.data.ask_passphrase_at > now
       && checked.data.ask_passphrase_at <= deadlineAfter(now, reentryMs)
     if (! fits) {
+      await deviceDB.eraseUnlock(scope)
       // Expired, or outdated by a new passphrase or a shorter setting, is routine; unreadable is worth a word.
       if (! checked.success) { forgetUnreadableUnlock() }
-      await deviceDB.eraseUnlock(scope)
       return
     }
     const remembered = checked.data
@@ -567,13 +567,14 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       askPassphraseAt = remembered.ask_passphrase_at
     } catch {
       // A record that no longer opens reads as "no remembered unlock": the safe failure.
-      forgetUnreadableUnlock()
       await deviceDB.eraseUnlock(scope)
+      forgetUnreadableUnlock()
     }
   }
 
-  // Neither the record nor the reason it failed is told: the record holds key material, and its
-  // validator's issues may quote it.
+  // Told once the record is erased, so it never claims a forgetting that failed. Neither the record
+  // nor the reason it failed is told: the record holds key material, and its validator's issues
+  // may quote it.
   const forgetUnreadableUnlock = () => {
     logger.warn("This device's remembered unlock could not be read or would not open, so it was forgotten: the vault opens locked, and asks for the passphrase again.", { call: 'openVault' })
   }
