@@ -7,7 +7,7 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
 
 | # | Thread            | Base                                   | Status                         |
 | - | ----------------- | -------------------------------------- | ------------------------------ |
-| 1 | argon2_wasm       | #68 (kdf_configs) `80ac694`            | underway                       |
+| 1 | argon2_wasm       | #68 (kdf_configs) `80ac694`            | in review                      |
 | 2 | unlock_envelopes  | #63 `ea4b93d`                          | filing                         |
 | 3 | passkey_unlock    | thread 2                               | pending                        |
 | 4 | indexeddb_package | #70 (vaultdb_validation) `d874db3`     | waiting for a slot             |
@@ -58,3 +58,9 @@ Newer than the plan wherever they disagree. Each thread's own notes are in
     second; share one per test file and truncate between tests.
   - Its README's route recipe (a POST handler plus a client VaultDB over `fetch`, tested in
     `tests/route-recipe.test.ts`) is the REST shape thread 6 parallels.
+* *Orchestrator:* **Thread 1 (argon2_wasm), ready.** hash-wasm's Argon2id derives
+  `argon2id_web_v1` in about 130 ms against noble's 580 ms (Node 24), byte for byte the same, and
+  both meet Argon2id's reference test vector. It exports `parseKeyDeriverSpec` from the core (a
+  public-surface addition awaiting the Coach's yes), so any Argon2id stand-in refuses exactly what
+  `argon2idDeriver` refuses. hash-wasm runs synchronously (it holds the thread for its ~130 ms)
+  and needs a Content-Security-Policy allowing `'wasm-unsafe-eval'`.
