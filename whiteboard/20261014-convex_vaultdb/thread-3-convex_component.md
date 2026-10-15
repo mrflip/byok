@@ -1,8 +1,8 @@
 # Thread 3: the Convex component (2026-10-15)
 
-Branch `20261014-convex_component`, PR not yet filed, stacked on #18. Justify: root green (244
-tests, build, attw, publint); `packages/safebyok-convex` green (lint, typecheck, 99 tests).
-**Rebase pending** onto thread 2's erase-expectation commits (`git rebase --onto <tip> d3c0961`).
+Branch `20261014-convex_component`, PR not yet filed, stacked on #18 (restacked onto its final
+tip, `0e67d7a`). Justify: root green (268 tests, build, attw, publint); `packages/safebyok-convex`
+green (lint, typecheck, 99 tests).
 
 * **Built**, all in `packages/safebyok-convex/`:
   - `src/component/`: `convex.config.ts` (`defineComponent('safebyok')`), `schema.ts`
@@ -55,8 +55,8 @@ tests, build, attw, publint); `packages/safebyok-convex` green (lint, typecheck,
     prettier dependency: what codegen writes before its push (same templates, same formatter). `component.ts` needs the
     server's analysis, so `ComponentApi` is derived from the functions' types instead, and the
     `./_generated/component.js` export points at it. Nothing is blocked.
-  - **Erase expectation**: I named its validator `EraseExpectation`; I'll rename it to match
-    thread 2's type at the rebase.
+  - **Erase expectation** (the Coach's ruling of 2026-10-15): `EraseExpectation`, `{ vault_id }`,
+    the core's own name and type, checked in the transaction and resolving `false` like the updates.
   - Source-exported, like safebyok-react today; no `dist/`.
   - `vite` added as a dev dependency (the types of `import.meta.glob`, which `src/test.ts`
     uses to load the component's modules).
@@ -64,8 +64,13 @@ tests, build, attw, publint); `packages/safebyok-convex` green (lint, typecheck,
 * **Deviations**:
   - Pulled forward: `SafebyokApi`, the type of a client's `api.safebyok`, for thread 4's
     `convexVaultDB(client, api)` signature.
-  - `design.md` not edited (its *Open* packaging item, the erase row): thread 2 is editing
-    beside them on #18, and the rebase should stay clean. Update after the restack.
+  - **A core change**, under the Coach's ruling that threads may shape the core (`c7ea3e5`,
+    `api:`): `safebyok` exports `VaultBundle` and `VaultScope` as Zod validators too, as it
+    already did `Lockbox` and `LockboxSummary`. It is additive public surface, and no stored
+    record changed. The core's export-list test and two new case tables in `tests/types.test.ts`
+    cover it. The package's tests now import the records from `safebyok`, not `src/`.
+  - `design.md` updated after the restack: the refusal and miss conventions, the per-vault size
+    bound under *Sizes*, and the *Open* packaging item, now settled for the workspace.
 
 * **Discoveries**:
   - **Size bound.** Listing, watching and erasing read the whole vault in one transaction
@@ -73,9 +78,8 @@ tests, build, attw, publint); `packages/safebyok-convex` green (lint, typecheck,
     150 lockboxes at the largest default whisper (about 54 KB each). Tested at 140; 160 fails.
     API-key boxes are about 1 KB.
   - Zod strips an unknown field; Convex refuses it. Tested and recorded.
-  - `safebyok` exports `VaultBundle` and `VaultScope` as types only, while `Lockbox` and
-    `LockboxSummary` are values. The tests import the core's Zod records from `src/types` by
-    relative path (`../../../src/types`, `../../../tests/helpers`), and those paths move with #16.
+  - The tests still import the core's test-only `testDeriver` by relative path
+    (`../../../tests/helpers`). That path moves with #16.
   - `convex-test`'s `defineTestApp` tests a host app with no codegen.
   - **For thread 4**: `tests/helpers.ts` has `realRecords()` (a vault made by the core) and
     `componentTest()`. A ConvexError's `data` arrives intact through `convex-test`.
@@ -89,6 +93,5 @@ tests, build, attw, publint); `packages/safebyok-convex` green (lint, typecheck,
   - **Optional codegen**, needing a deployment: from a Convex app with `CONVEX_DEPLOYMENT` set,
     `npx convex codegen --component-dir <path>/packages/safebyok-convex/src/component` writes
     the real `component.ts` and a typed `api.ts`. I have not run it, and nothing waits on it.
-  - Should `safebyok` export `VaultBundle` and `VaultScope` as Zod values, like `Lockbox`?
   - Should the component enforce the label grammar server-side too? It is structural today
     (`notes/security.md`).
