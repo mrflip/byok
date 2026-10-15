@@ -4,7 +4,7 @@ import { v } from 'convex/values'
  * Convex validators for safebyok's stored records, field for field with the core's Zod records
  * (`Lockbox`, `VaultBundle`, `Ciphered`, `VaultScope` in `safebyok`). They check what Convex can:
  * which fields, their types, which are optional, and each record's `format`. The finer rules -- the
- * label grammar, non-empty strings, a positive whole `passphrase_epoch`, a note's length, each
+ * label grammar, non-empty strings, a positive whole `unlock_epoch`, a note's length, each
  * time's bounds as epoch milliseconds -- are the client's, checked by the core's Zod records on every write and every read.
  *
  * A new record format widens its `format` union: an additive deploy, shipped with this package.
@@ -77,7 +77,7 @@ export const PasskeyEnvelope = v.object({
 export const UnlockEnvelope = v.union(PassphraseEnvelope, PasskeyEnvelope)
 
 /**
- * A vault's bundle: its scope, `vault_id`, `passphrase_epoch`, its ways in (`unlocks`, each the
+ * A vault's bundle: its scope, `vault_id`, `unlock_epoch`, its ways in (`unlocks`, each the
  * vaultKey wrapped under a key one method makes), and when it was made (`registered_at`, epoch
  * milliseconds). Nothing in it opens without a passphrase or passkey. How many ways in, and that no two
  * share an id or label, are the client's rules.
@@ -88,7 +88,7 @@ export const VaultBundle = v.object({
   user_id:          v.string(),
   vaultlabel:       v.string(),
   vault_id:         v.string(),
-  passphrase_epoch: v.number(),
+  unlock_epoch: v.number(),
   unlocks:          v.array(UnlockEnvelope),
   registered_at:    v.number(),
 })
@@ -118,13 +118,13 @@ export const ListedLockbox = Lockbox.omit('lockbox_key_wrapped', 'whisper_cipher
 
 /**
  * What a bundle update was proven against: it lands only while the standing bundle still has
- * this `vault_id` and `passphrase_epoch`.
+ * this `vault_id` and `unlock_epoch`.
  *
- * @example { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }
+ * @example { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch }
  */
 export const BundleExpectation = v.object({
   vault_id:         v.string(),
-  passphrase_epoch: v.number(),
+  unlock_epoch: v.number(),
 })
 
 /**
@@ -153,14 +153,14 @@ export const EraseExpectation = v.object({
 const BoxRevision = v.array(v.string())
 
 /**
- * The vault's change signature: its bundle's `vault_id` and `passphrase_epoch` (null while it has
+ * The vault's change signature: its bundle's `vault_id` and `unlock_epoch` (null while it has
  * no bundle) and each lockbox's `[boxlabel, revision_id]`, in boxlabel order. It changes exactly
  * when a write lands in the vault, and holds nothing a listing does not already show.
  *
- * @example { vault_id: 'b3f1...', passphrase_epoch: 2, boxes: [['anthropic_api_key', '9c4e...']] }
+ * @example { vault_id: 'b3f1...', unlock_epoch: 2, boxes: [['anthropic_api_key', '9c4e...']] }
  */
 export const VaultSignature = v.object({
   vault_id:         v.nullable(v.string()),
-  passphrase_epoch: v.nullable(v.number()),
+  unlock_epoch: v.nullable(v.number()),
   boxes:            v.array(BoxRevision),
 })

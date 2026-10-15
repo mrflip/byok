@@ -71,16 +71,16 @@ describe("idbVaultDB", () => {
 
   it("refuses a damaged bundle as corrupt_record, and leaves it as it is", async () => {
     const dbName = TH.freshDbName()
-    await set('vault:acme:u1:main', { vault_id: 'vault-id-u1', passphrase_epoch: 'one' }, rawShelf(dbName))
+    await set('vault:acme:u1:main', { vault_id: 'vault-id-u1', unlock_epoch: 'one' }, rawShelf(dbName))
     const refusal = await TH.refusalOf(idbVaultDB({ dbName }).readBundle(TH.scopeOf('u1')))
     expect(refusal.kind).to.eq('corrupt_record')
-    expect(await get('vault:acme:u1:main', rawShelf(dbName))).to.deep.equal({ vault_id: 'vault-id-u1', passphrase_epoch: 'one' })
+    expect(await get('vault:acme:u1:main', rawShelf(dbName))).to.deep.equal({ vault_id: 'vault-id-u1', unlock_epoch: 'one' })
   })
 
   it("lands no update on a damaged bundle, even one that shows the expected vault_id", async () => {
     const dbName = TH.freshDbName()
     await set('vault:acme:u1:main', { vault_id: 'vault-id-u1' }, rawShelf(dbName))
-    const refusal = await TH.refusalOf(idbVaultDB({ dbName }).updateBundle(TH.bundleOf('u1', { passphrase_epoch: 2 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }))
+    const refusal = await TH.refusalOf(idbVaultDB({ dbName }).updateBundle(TH.bundleOf('u1', { unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }))
     expect(refusal.kind).to.eq('stale_write')
   })
 
@@ -124,14 +124,14 @@ describe("idbVaultDB, every verb one transaction", () => {
   it("lands one of two bundle updates proven against the same bundle, and refuses the other", async () => {
     const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
     await vaultDB.createBundle(TH.bundleOf('u1'))
-    const expected = { vault_id: 'vault-id-u1', passphrase_epoch: 1 }
+    const expected = { vault_id: 'vault-id-u1', unlock_epoch: 1 }
     const outcomes = await Promise.allSettled([
-      vaultDB.updateBundle(TH.bundleOf('u1', { passphrase_epoch: 2 }), expected),
-      vaultDB.updateBundle(TH.bundleOf('u1', { passphrase_epoch: 3 }), expected),
+      vaultDB.updateBundle(TH.bundleOf('u1', { unlock_epoch: 2 }), expected),
+      vaultDB.updateBundle(TH.bundleOf('u1', { unlock_epoch: 3 }), expected),
     ])
     expect(outcomes.map((outcome) => outcome.status)).to.deep.equal(['fulfilled', 'rejected'])
     const standing = await vaultDB.readBundle(scope)
-    expect(standing?.passphrase_epoch).to.eq(2)
+    expect(standing?.unlock_epoch).to.eq(2)
   })
 
   it("lands one of two first writes of a lockbox, and refuses the other", async () => {
@@ -199,7 +199,7 @@ describe("idbVaultDB's subscribe", () => {
     const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
     let heardCount = 0
     vaultDB.subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
-    await TH.refusalOf(vaultDB.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', passphrase_epoch: 1 }))
+    await TH.refusalOf(vaultDB.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 1 }))
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.createBundle(TH.bundleOf('u1', { vault_id: 'too-late' }))
     await TH.wakeupAtNextTick()

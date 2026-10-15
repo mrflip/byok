@@ -171,9 +171,9 @@ describe("an envelope's binding", () => {
     await expectRefusal(Envelope.openWithPassphrase(TH.testDeriver, 'pw', TH.scopeOf('u2'), bundleWith([envelope])), 'wrong_passphrase')
   })
 
-  it("does not bind the passphrase epoch: an envelope opens at any epoch of its vault", async () => {
+  it("does not bind the unlock epoch: an envelope opens at any epoch of its vault", async () => {
     const vaultKey = await makeVaultKey()
-    const bundle = VaultBundle.parse(TH.bundleOf('u1', { passphrase_epoch: 7, unlocks: [await sealed('pw', 'passphrase', vaultKey)] }))
+    const bundle = VaultBundle.parse(TH.bundleOf('u1', { unlock_epoch: 7, unlocks: [await sealed('pw', 'passphrase', vaultKey)] }))
     const opened = await Envelope.openWithPassphrase(TH.testDeriver, 'pw', scope, bundle)
     expect(opened.unlockId).to.eq('unlock-passphrase')
   })

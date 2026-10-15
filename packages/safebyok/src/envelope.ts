@@ -13,7 +13,7 @@ import { PasskeySaltBytes, type PasskeyEnvelope, type PasskeyProof, type Passphr
  *
  * Each envelope's wrap is bound to its vault and to its own public header -- every field but the
  * wrap itself, encoded with its keys sorted -- under a purpose its method names. The bundle's
- * `passphrase_epoch` is not in it: a change to one envelope bumps the epoch, and the others, whose
+ * `unlock_epoch` is not in it: a change to one envelope bumps the epoch, and the others, whose
  * passphrases this device does not hold, must still open.
  */
 

@@ -188,7 +188,7 @@ export type Vault = {
    * passphraseSalt. The vault's other passphrases are untouched, and still open it. Lockboxes are
    * untouched too -- their lockboxKeys stay wrapped under the unchanged vaultKey -- so this is
    * cheap no matter how many there are. Every other device's unlock (remembered or in hand)
-   * lapses: the bundle's passphraseEpoch moves, and they fall back to `locked` on their next look.
+   * lapses: the bundle's unlockEpoch moves, and they fall back to `locked` on their next look.
    *
    * Works locked or unlocked, since the old passphrase is proof enough. A wrong `oldPassphrase`
    * throws kind 'wrong_passphrase' and changes nothing. It is tried against each passphrase, as
@@ -216,7 +216,7 @@ export type Vault = {
    * empty), 'wrong_passkey' or 'absent_unlock' for a passkey's answer that does not open the
    * vault, 'bad_label' for an unlocklabel that fails the label rules or is already taken, and
    * 'too_many_unlocks' when the vault already holds {@link MaxUnlocks}: remove one first. Like
-   * `changePassphrase()`, it moves the passphraseEpoch, so every other device locks; it leaves
+   * `changePassphrase()`, it moves the unlockEpoch, so every other device locks; it leaves
    * this one unlocked, and throws kind 'stale_write' when another device changed the vault's ways
    * in meanwhile.
    *
@@ -242,7 +242,7 @@ export type Vault = {
    * Refuses as `addPassphrase()` does for the proof, the label, and a vault already holding
    * {@link MaxUnlocks}; and with kind 'bad_option' for a `passkey` that is not an answer over a
    * fresh salt of {@link PasskeySaltBytes} bytes, or whose credential is already a way into
-   * this vault. Moves the passphraseEpoch, so every other device locks; leaves this one unlocked.
+   * this vault. Moves the unlockEpoch, so every other device locks; leaves this one unlocked.
    *
    * @returns The new way in's `unlock_id`.
    *
@@ -258,7 +258,7 @@ export type Vault = {
    * or another -- proves the user may. Refuses with kind 'absent_unlock' when there is no such way
    * in, and 'last_unlock' when it is the vault's last passphrase: a vault always keeps one, since
    * a passkey can be lost with its device. Like `changePassphrase()`, it moves the
-   * passphraseEpoch, so every other device locks and must unlock again with a way in still
+   * unlockEpoch, so every other device locks and must unlock again with a way in still
    * standing; it leaves this one unlocked.
    *
    * Removal is not revocation: whoever knew the removed passphrase, or holds the removed passkey,
@@ -287,7 +287,7 @@ export type Vault = {
    * seconds longer to give up. A box that stood when an attempt read it and is gone on the retry
    * was erased elsewhere, and an erase wins: nothing is written, and the call throws kind
    * 'stale_write' at once, without waiting. A retry that finds the vault destroyed or made anew
-   * elsewhere, or its passphrase changed -- or this device locked, as it may be during the wait --
+   * elsewhere, or its unlocks changed -- or this device locked, as it may be during the wait --
    * finds this device locked instead, and throws kind 'vault_locked' without writing: a stale
    * session never writes into a vault reborn under new keys.
    *
@@ -440,10 +440,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   const refresh = async () => {
     const fresh = await vaultDB.readBundle(scope)
-    // A passphrase change elsewhere (new epoch) or a deletion ends this device's unlock: the
+    // A change to the unlocks elsewhere (new epoch) or a deletion ends this device's unlock: the
     // vaultKey in hand still works on old rows, but passing as current invites confusion.
     const outlived = vaultKey !== null && bundle !== UnreadBundle && bundle !== null
-      && (fresh?.passphrase_epoch !== bundle.passphrase_epoch || fresh.vault_id !== bundle.vault_id)
+      && (fresh?.unlock_epoch !== bundle.unlock_epoch || fresh.vault_id !== bundle.vault_id)
     if (outlived) {
       dropKey()
       await deviceDB.eraseUnlock(scope)
@@ -502,7 +502,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       format:              'safebyok-vault-v1',
       ...scope,
       vault_id:            vaultId,
-      passphrase_epoch:    1,
+      unlock_epoch:    1,
       unlocks:             [envelope],
       registered_at:       clockNow(),
     }
@@ -537,7 +537,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   /**
    * Rewrite the vault's ways in: prove `proof` against the bundle as storage holds it now (or
    * against the one way in `unlockId` names), write the unlocks `revise` makes of the standing ones
-   * under the next passphrase epoch, and take up the unlock under it. `check` runs first, on the
+   * under the next unlock epoch, and take up the unlock under it. `check` runs first, on the
    * standing bundle, so a change refused for what it asks costs no key derivation.
    *
    * Every change to the unlocks goes through here: the proof first, the write only if no other
@@ -561,10 +561,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const proven = await unwrapWith(standing, proof, unlockId)
     const next: VaultBundle = {
       ...standing,
-      passphrase_epoch: standing.passphrase_epoch + 1,
+      unlock_epoch: standing.unlock_epoch + 1,
       unlocks:          await plan.revise(standing, proven),
     }
-    await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }))
+    await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch }))
     bundle = next
     // The change has landed, whatever happens now: a shut meanwhile leaves only its unlock untaken.
     await takeUpUnlock(proven, next, shutsThen)
@@ -633,7 +633,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
    */
   const outrun = (standing: VaultBundle, shutsThen: number) => (
     shutSince(shutsThen) || bundle === null || bundle === UnreadBundle
-    || bundle.vault_id !== standing.vault_id || bundle.passphrase_epoch !== standing.passphrase_epoch
+    || bundle.vault_id !== standing.vault_id || bundle.unlock_epoch !== standing.unlock_epoch
   )
 
   /**
@@ -663,12 +663,12 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   /** Mint a fresh localUnlockKey, wrap the vaultKey under it, and remember the unlock on this device. */
   const rememberDevice = async (unlockedKey: CryptoKey, standing: VaultBundle, until: number) => {
     const localUnlockKey = await makeLocalUnlockKey()
-    const wrapped = await wrapKeyUnder(localUnlockKey, unlockedKey, localBinding(standing.vault_id, standing.passphrase_epoch))
+    const wrapped = await wrapKeyUnder(localUnlockKey, unlockedKey, localBinding(standing.vault_id, standing.unlock_epoch))
     await deviceDB.writeUnlock({
       format:                  'safebyok-unlock-v1',
       ...scope,
       vault_id:                standing.vault_id,
-      passphrase_epoch:        standing.passphrase_epoch,
+      unlock_epoch:        standing.unlock_epoch,
       local_unlock_key:        localUnlockKey,
       vault_key_local_wrapped: wrapped,
       ask_passphrase_at:       until,
@@ -696,7 +696,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     const now = clockNow()
     const fits = readable
       && checked.data.vault_id === bundle.vault_id
-      && checked.data.passphrase_epoch === bundle.passphrase_epoch
+      && checked.data.unlock_epoch === bundle.unlock_epoch
       && checked.data.ask_passphrase_at > now
       && checked.data.ask_passphrase_at <= deadlineAfter(now, reentryMs)
     if (! fits) {
@@ -712,7 +712,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       vaultKey = await unwrapKeyUnder(
         remembered.local_unlock_key,
         remembered.vault_key_local_wrapped,
-        localBinding(bundle.vault_id, bundle.passphrase_epoch),
+        localBinding(bundle.vault_id, bundle.unlock_epoch),
         { extractable: false, usage: ['wrapKey', 'unwrapKey'] },
       )
       askPassphraseAt = remembered.ask_passphrase_at
@@ -945,7 +945,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       let boxStood = false
       const outcome = await retryStale(async () => {
         // A refusal as stale has just caught this device up with storage, which may have relocked
-        // it (a vault reborn, or its passphrase changed, elsewhere): then the retry ends here.
+        // it (a vault reborn, or its unlocks changed, elsewhere): then the retry ends here.
         keyInHand()
         const prev = await vaultDB.readBox(scope, label)
         // Erase wins: a box this store began over, and now finds gone, was erased elsewhere, and

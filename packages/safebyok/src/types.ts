@@ -324,7 +324,7 @@ export type PasskeyProof = {
  * its `vault_id`, and its `unlocks`, each an {@link UnlockEnvelope} wrapping the one vaultKey.
  * All of it is safe in the open; none of it opens without a passphrase or a passkey.
  *
- * `passphrase_epoch` goes up by one on every change to the unlocks -- a passphrase or passkey
+ * `unlock_epoch` goes up by one on every change to the unlocks -- a passphrase or passkey
  * added, removed or changed -- so other devices and remembered unlocks know to ask again.
  */
 export const VaultBundle = Z.object({
@@ -334,7 +334,7 @@ export const VaultBundle = Z.object({
   vaultlabel:          Label,
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
   vault_id:            Z.string().check(Z.minLength(1)),
-  passphrase_epoch:    Z.int().check(Z.positive()),
+  unlock_epoch:    Z.int().check(Z.positive()),
   /** The ways into the vault, each wrapping the one vaultKey: see {@link UnlockEnvelope}. */
   unlocks:             unlockList,
   /** When the vault was made, an {@link EpochMillis}; never changed. */
@@ -354,8 +354,8 @@ export const DeviceUnlock = Z.object({
   user_id:          Z.string().check(Z.minLength(1)),
   vaultlabel:       Label,
   vault_id:         Z.string().check(Z.minLength(1)),
-  /** The bundle's passphrase_epoch when this unlock was remembered; a mismatch voids it. */
-  passphrase_epoch: Z.int().check(Z.positive()),
+  /** The bundle's unlock_epoch when this unlock was remembered; a mismatch voids it. */
+  unlock_epoch: Z.int().check(Z.positive()),
   /** This browser's localUnlockKey: non-extractable, usable only to unwrap what it wrapped. */
   local_unlock_key: cryptoKeyHandle,
   /** The vaultKey, wrapped under the localUnlockKey. */

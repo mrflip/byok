@@ -245,7 +245,7 @@ user id reads back byte for byte.
 * **Encrypted**: each whisper (`whisper_ciphered`), each lockbox's lockboxKey
   (`lockbox_key_wrapped`), and the vaultKey, once under each way into the vault (each unlock
   envelope's `vault_key_wrapped`, inside the bundle's `unlocks`).
-* **In the open**: the scope, each `boxlabel` and `note`, the `vault_id`, `passphrase_epoch`,
+* **In the open**: the scope, each `boxlabel` and `note`, the `vault_id`, `unlock_epoch`,
   `revision_id`s, each unlock envelope's method, id, label, salt and key deriver's label, when
   each vault and lockbox was first stored and each whisper last changed (`registered_at`,
   `changed_at`, epoch milliseconds), and the length of every ciphertext.
@@ -285,14 +285,14 @@ shape of table, copy it, and keep to what makes it right:
   labels and scope on the way in, validates every record on the way out, and turns a `false`
   into `stale_write` and anything you throw into `storage_unavailable`.
 * **One statement per verb**, so each is atomic without a transaction: the expectation goes in
-  the `WHERE` (`UPDATE ... WHERE vault_id = $ AND passphrase_epoch = $ RETURNING 1`), and a row
+  the `WHERE` (`UPDATE ... WHERE vault_id = $ AND unlock_epoch = $ RETURNING 1`), and a row
   back means it landed. A create returns the row that stands with `ON CONFLICT ... DO UPDATE`
   (a no-op update), since `DO NOTHING` returns no row when another device got in first.
 * **Let the schema hold the vault together.** The lockbox's foreign key names its bundle down to
   the `vault_id`, so a lockbox cannot outlive its vault or land in one made anew, and erasing a
   vault is one `DELETE` of its bundle.
 * **Store each record a column to a field**, and compare only the scope, `boxlabel`, `vault_id`,
-  `passphrase_epoch` and `revision_id`. `src/columns.ts` names each record's columns once, the
+  `unlock_epoch` and `revision_id`. `src/columns.ts` names each record's columns once, the
   compiler holding the list to the record's fields both ways, and builds every statement from it.
 * **Authorize in the adapter**: made per request for one user, it refuses every other user's
   scope with `not_permitted`.

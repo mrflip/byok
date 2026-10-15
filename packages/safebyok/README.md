@@ -232,7 +232,7 @@ await vault.unlock(passphrase, { unlockId })            // aimed at one: a singl
 * **Every change asks for a passphrase**, even on an unlocked vault: the vault keeps no copy of
   its vaultKey it could wrap anew, and a walked-away unlocked screen should not be able to add a
   way in. Any passphrase the vault opens with will do.
-* **Every change locks the other devices.** It moves the bundle's `passphrase_epoch`, so each
+* **Every change locks the other devices.** It moves the bundle's `unlock_epoch`, so each
   other device falls back to `locked` and must unlock with a passphrase still standing. This
   device stays unlocked.
 * **An unlock not aimed at one tries each in turn**, one key derivation apiece: about 0.6 s each

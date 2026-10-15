@@ -81,7 +81,7 @@ describe("postgresVaultDB, who may reach a vault", () => {
   const EveryVerb = [
     ['readBundle',   (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.readBundle(u2)],
     ['createBundle', (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.createBundle(TH.bundleOf('u2'))],
-    ['updateBundle', (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.updateBundle(TH.bundleOf('u2'), { vault_id: 'vault-id-u2', passphrase_epoch: 1 })],
+    ['updateBundle', (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.updateBundle(TH.bundleOf('u2'), { vault_id: 'vault-id-u2', unlock_epoch: 1 })],
     ['readBox',      (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.readBox(u2, 'anthropic')],
     ['listBoxes',    (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.listBoxes(u2)],
     ['listBoxRecords', (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.listBoxRecords(u2)],
@@ -143,7 +143,7 @@ describe("postgresVaultDB, what it stores", () => {
       vaultlabel:       'main',
       format:           'safebyok-vault-v1',
       vault_id:         'vault-id-u1',
-      passphrase_epoch: 1,
+      unlock_epoch: 1,
       unlocks:          TH.bundleOf('u1').unlocks,
       registered_at:    Date.UTC(2026, 9, 14),
     }])
@@ -154,8 +154,8 @@ describe("postgresVaultDB, what it stores", () => {
     const vaultDB = TH.requestFor(db, 'u1')
     await vaultDB.createBundle(TH.bundleOf('u1'))
     const unlocks = [TH.envelopeOf('work_phrase'), TH.envelopeOf('home_phrase'), TH.envelopeOf('passphrase')]
-    const next = TH.bundleOf('u1', { passphrase_epoch: 2, unlocks })
-    await vaultDB.updateBundle(next, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
+    const next = TH.bundleOf('u1', { unlock_epoch: 2, unlocks })
+    await vaultDB.updateBundle(next, { vault_id: 'vault-id-u1', unlock_epoch: 1 })
     const standing = await vaultDB.readBundle(u1)
     expect(standing).to.deep.equal(next)
     expect(standing?.unlocks.map((envelope) => envelope.unlocklabel)).to.deep.equal(['work_phrase', 'home_phrase', 'passphrase'])
@@ -213,7 +213,7 @@ describe("postgresVaultDB, what it stores", () => {
     const spy = TH.spyClient(db)
     const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1' })
     await vaultDB.createBundle(TH.bundleOf('u1'))
-    await vaultDB.updateBundle({ ...TH.bundleOf('u1'), passphrase_epoch: 2 }, { vault_id: 'vault-id-u1', passphrase_epoch: 1 })
+    await vaultDB.updateBundle({ ...TH.bundleOf('u1'), unlock_epoch: 2 }, { vault_id: 'vault-id-u1', unlock_epoch: 1 })
     await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'one'), noBoxYet)
     await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-one' })
     await vaultDB.readBox(u1, 'anthropic')
@@ -226,9 +226,9 @@ describe("postgresVaultDB, what it stores", () => {
     const db = await TH.emptyDatabase()
     const vaultDB = TH.requestFor(db, 'u1')
     await vaultDB.createBundle(TH.bundleOf('u1'))
-    const impostor = { ...TH.bundleOf('u1'), vault_id: 'vault-id-impostor', passphrase_epoch: 2 }
+    const impostor = { ...TH.bundleOf('u1'), vault_id: 'vault-id-impostor', unlock_epoch: 2 }
     // The core's VaultDB refuses it before the adapter's half sees it: no vault ever writes one.
-    const refusal = await TH.refusalOf(vaultDB.updateBundle(impostor, { vault_id: 'vault-id-u1', passphrase_epoch: 1 }))
+    const refusal = await TH.refusalOf(vaultDB.updateBundle(impostor, { vault_id: 'vault-id-u1', unlock_epoch: 1 }))
     expect(refusal.kind).to.eq('bad_option')
     expect(await vaultDB.readBundle(u1)).to.deep.equal(TH.bundleOf('u1'))
   })

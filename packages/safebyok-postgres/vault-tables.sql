@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS safebyok_bundles (
   vaultlabel       text   NOT NULL,
   format           text   NOT NULL,
   vault_id         text   NOT NULL,
-  passphrase_epoch bigint NOT NULL,
+  unlock_epoch bigint NOT NULL,
   unlocks          jsonb  NOT NULL,
   registered_at    bigint NOT NULL,
   PRIMARY KEY (applabel, user_id, vaultlabel),

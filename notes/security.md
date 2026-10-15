@@ -57,7 +57,7 @@ security expert who knows what questions to ask.
   or an unbundled import. Substituting a deriver still commits every vault made under it to its
   label, as above.
 * 2026-10-14: every encryption binds its context as AES-GCM additional data
-  (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus passphraseEpoch
+  (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus unlockEpoch
   for key wraps (since 2026-10-15, the device record's only: an unlock envelope binds its own
   header instead, below) and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
   moved between users, vaults, boxes or revisions refuses to open.
@@ -80,7 +80,7 @@ security expert who knows what questions to ask.
 * 2026-10-14: `zod` moved from a regular dependency to a peer dependency (`^4.0.0`): the host app
   supplies it, so safebyok validates with whatever zod instance that app ships.
 * 2026-10-15: storage writes are versioned updates (`VaultDB.updateBundle`, `updateBox`). A
-  bundle update carries the `vault_id` and `passphrase_epoch` it was proven against, and lands
+  bundle update carries the `vault_id` and `unlock_epoch` it was proven against, and lands
   only while the standing bundle has both. A lockbox update carries the `vault_id` its whisper
   was sealed for and the `revision_id` it read (or null for none), and lands only while the
   scope's standing bundle has that `vault_id` and the standing lockbox that `revision_id` (or
@@ -229,7 +229,7 @@ security expert who knows what questions to ask.
   user's rows.
 * 2026-10-15: the Convex component validates records structurally only (fields, types,
   optionality, the `format` literal); the label grammar, non-empty ids, a positive whole
-  `passphrase_epoch` and a note's length are checked by the client's Zod records, not on the
+  `unlock_epoch` and a note's length are checked by the client's Zod records, not on the
   server. A signed-in user can therefore store malformed rows in their own vaults, which their
   own clients then refuse as `corrupt_record`.
 * 2026-10-15: the Convex component checks each update's and erase's expectation by reading the
@@ -344,7 +344,7 @@ security expert who knows what questions to ask.
   on the same handle; that device then asks for the passphrase at its next open. An unlock (or
   the unlock after a passphrase change) also takes up nothing, and throws `vault_locked`, when the
   bundle standing at its end is not the one its passphrase was proven against, by `vault_id` and
-  `passphrase_epoch`: a vault destroyed, remade, or re-keyed elsewhere while the passphrase was
+  `unlock_epoch`: a vault destroyed, remade, or re-keyed elsewhere while the passphrase was
   being checked. Without that, the old vault's vaultKey was taken up against the new bundle, and a
   `store()` sealed boxes into the new vault that its owner could never open.
 * 2026-10-15: `lockSoon(graceSeconds = 5)`, at most 60 seconds, closes the entry gate at once
@@ -417,7 +417,7 @@ security expert who knows what questions to ask.
   additional data is the format, scope, `vault_id`, a purpose per method
   (`vault_key_passphrase_wrapped`), and the envelope's whole public header (`method`,
   `unlock_id`, `unlocklabel`, `key_deriver_label`, `salt_b64`) as key-sorted JSON. The
-  `passphrase_epoch` is no longer in it, since a change to one envelope bumps the epoch and the
+  `unlock_epoch` is no longer in it, since a change to one envelope bumps the epoch and the
   others, whose passphrases the device does not hold, must still open: a backend can therefore
   splice an envelope from an older bundle of the same vault (a removed passphrase's, or one from
   before a change) into the current one, and that old passphrase opens the vault again, as it
@@ -425,7 +425,7 @@ security expert who knows what questions to ask.
   fields, are not bound.
 * 2026-10-15: removing an unlock envelope (`removeUnlock`) is not revocation. Whoever knew the
   removed passphrase and kept any earlier bundle holds the vaultKey, which never rotates; the
-  removal bumps `passphrase_epoch`, so devices unlocked under it lock at their next look, and the
+  removal bumps `unlock_epoch`, so devices unlocked under it lock at their next look, and the
   vault refuses to remove its last envelope (`last_unlock`). Every change to the envelopes
   (`addPassphrase`, `removeUnlock`, `changePassphrase`) asks for a passphrase that opens one,
   even on an unlocked vault: the session's vaultKey handle is non-extractable, so wrapping it

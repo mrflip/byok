@@ -148,8 +148,8 @@ const scopeIn = (args: VaultFieldArgs) => recordOf(args.scope, ScopeFields) as V
 const bundleIn = (args: VaultFieldArgs) => recordOf(args.bundle, BundleFields) as VaultBundle
 
 const bundleExpectationIn = (args: VaultFieldArgs): BundleExpectation => {
-  const { vault_id, passphrase_epoch } = args.expected as BundleExpectation
-  return { vault_id, passphrase_epoch }
+  const { vault_id, unlock_epoch } = args.expected as BundleExpectation
+  return { vault_id, unlock_epoch }
 }
 
 // A revision_id left out, as a GraphQL client may leave out a null, is the null it means.

@@ -124,8 +124,8 @@ class UrqlVaultDB extends VaultDB {
 
   // A stale write refuses on the server and crosses as its kind, so a write that answers landed.
   protected async doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean> {
-    const { vault_id, passphrase_epoch } = expected
-    await this.told(UpdateBundleDoc, { bundle: recordOf(bundle, BundleFields), expected: { vault_id, passphrase_epoch } })
+    const { vault_id, unlock_epoch } = expected
+    await this.told(UpdateBundleDoc, { bundle: recordOf(bundle, BundleFields), expected: { vault_id, unlock_epoch } })
     return true
   }
 

@@ -88,7 +88,7 @@ describe("graphqlVaultDB, its refusals", () => {
     const schema = TH.schemaOver(await TH.emptyDatabase())
     const browser = TH.browserFor(schema, 'u1')
     await browser.createBundle(TH.bundleOf('u1'))
-    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', passphrase_epoch: 7 }))
+    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 7 }))
     expect(stale.kind).to.eq('stale_write')
     const signedOut = await TH.refusalOf(TH.browserFor(schema, null).readBundle(u1))
     expect(signedOut.kind).to.eq('not_permitted')

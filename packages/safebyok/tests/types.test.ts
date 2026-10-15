@@ -94,8 +94,8 @@ const BundleCases = [
   [TH.bundleOf('u1'),                                       true,   'a whole bundle'],
   // refused, as a damaged or foreign record:
   [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },    false,  'a format this version does not know'],
-  [{ ...TH.bundleOf('u1'), passphrase_epoch: 0 },            false,  'an epoch starts at one'],
-  [{ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 },          false,  'an epoch is a whole number'],
+  [{ ...TH.bundleOf('u1'), unlock_epoch: 0 },            false,  'an epoch starts at one'],
+  [{ ...TH.bundleOf('u1'), unlock_epoch: 1.5 },          false,  'an epoch is a whole number'],
   [{ ...TH.bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
   [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { vault_key_wrapped: { cipher_iv_b64: 'iv' } as never })] }, false, 'an envelope missing its ciphertext'],
   [{ ...TH.bundleOf('u1'), registered_at: 1_792_022_400 },   false,  'a registered_at in epoch seconds'],

@@ -129,7 +129,7 @@ describe("convexVaultDB, refusing", () => {
   const EveryVerb: [string, (vaultDB: ReturnType<typeof convexVaultDB>) => Promise<unknown>][] = [
     ['readBundle',   (vaultDB) => vaultDB.readBundle(u1)],
     ['createBundle', (vaultDB) => vaultDB.createBundle(TH.bundleOf('u1'))],
-    ['updateBundle', (vaultDB) => vaultDB.updateBundle(TH.bundleOf('u1', { passphrase_epoch: 2 }), { vault_id: 'vault-id-u1', passphrase_epoch: 1 })],
+    ['updateBundle', (vaultDB) => vaultDB.updateBundle(TH.bundleOf('u1', { unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 })],
     ['readBox',      (vaultDB) => vaultDB.readBox(u1, 'anthropic_api_key')],
     ['listBoxes',    (vaultDB) => vaultDB.listBoxes(u1)],
     ['updateBox',    (vaultDB) => vaultDB.updateBox(u1, TH.boxOf('anthropic_api_key', 'a1'), TH.noBoxYet)],
@@ -221,12 +221,12 @@ describe("a record the deployment refused", () => {
   // Distinctive values throughout, so that finding one in what is thrown means it was quoted.
   const subject = 'user_quotable'
   const scope = { applabel: 'quotable_app', user_id: subject, vaultlabel: 'quotable_vault' }
-  const standing = TH.bundleOf(subject, { ...scope, passphrase_epoch: 52_871 })
-  const nextBundle = { ...standing, passphrase_epoch: 52_872, vault_key_passphrase_wrapped: TH.fakeCiphered('rewrapped_quotable') }
+  const standing = TH.bundleOf(subject, { ...scope, unlock_epoch: 52_871 })
+  const nextBundle = { ...standing, unlock_epoch: 52_872, vault_key_passphrase_wrapped: TH.fakeCiphered('rewrapped_quotable') }
   const lockbox = TH.boxOf('quotable_box', 'quotable_rev', { note: 'a quotable note' })
 
   const RefusedWrites: [string, unknown, (vaultDB: ReturnType<typeof convexVaultDB>) => Promise<unknown>][] = [
-    ['updateBundle', nextBundle, (vaultDB) => vaultDB.updateBundle(nextBundle, { vault_id: standing.vault_id, passphrase_epoch: 52_871 })],
+    ['updateBundle', nextBundle, (vaultDB) => vaultDB.updateBundle(nextBundle, { vault_id: standing.vault_id, unlock_epoch: 52_871 })],
     ['updateBox',    lockbox,    (vaultDB) => vaultDB.updateBox(scope, lockbox, { vault_id: standing.vault_id, revision_id: null })],
   ]
 

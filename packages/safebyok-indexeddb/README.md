@@ -68,7 +68,7 @@ field by field. Nothing is serialized, normalized or repaired.
 
 * **Encrypted**: each whisper (`whisper_ciphered`), each lockbox's lockboxKey
   (`lockbox_key_wrapped`), and, inside the bundle, the vaultKey, wrapped under each passphrase.
-* **In the open**: the scope, each `boxlabel` and `note`, the `vault_id`, `passphrase_epoch`,
+* **In the open**: the scope, each `boxlabel` and `note`, the `vault_id`, `unlock_epoch`,
   `revision_id`s, how each passphrase was made into a key (its key deriver's label and salt),
   when each vault and lockbox was first stored and each whisper last changed (epoch
   milliseconds), and the length of every ciphertext.
@@ -111,7 +111,7 @@ places:
 And keep, as they are:
 
 * **`src/expectations.ts`**: the comparisons each write makes before it lands. An adapter
-  compares only the scope, `boxlabel`, `vault_id`, `passphrase_epoch` and `revision_id`, and a
+  compares only the scope, `boxlabel`, `vault_id`, `unlock_epoch` and `revision_id`, and a
   standing row too damaged to show one of them fails the comparison.
 * **Store each record as itself, field by field**, exactly as handed to you, and return it
   exactly as stored, or null for none. Never look inside a ciphered field, never repair a

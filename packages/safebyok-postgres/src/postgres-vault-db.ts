@@ -125,7 +125,7 @@ const CreateBundleSql = `INSERT INTO safebyok_bundles (${Columns.names(BundleCol
 // The bundle written must name the vault it replaces: a vault_id never changes.
 const UpdateBundleSql = `UPDATE safebyok_bundles SET (${Columns.names(BundleColumns)}) = ROW(${Columns.placeholders(BundleColumns, 1)})
   WHERE ${ScopeIs}
-    AND vault_id = $${String(BundleParamCount + 1)}::text AND passphrase_epoch = $${String(BundleParamCount + 2)}::bigint
+    AND vault_id = $${String(BundleParamCount + 1)}::text AND unlock_epoch = $${String(BundleParamCount + 2)}::bigint
     AND vault_id = ${Columns.placeholderOf(BundleColumns, 'vault_id', 1)}
   RETURNING 1 AS landed`
 
@@ -196,7 +196,7 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
 
   protected async doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean> {
     this.mustReach(bundle)
-    const params = [...Columns.paramsOf(bundle, BundleColumns), expected.vault_id, expected.passphrase_epoch]
+    const params = [...Columns.paramsOf(bundle, BundleColumns), expected.vault_id, expected.unlock_epoch]
     return landed(await this.client.query(UpdateBundleSql, params))
   }
 
