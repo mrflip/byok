@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
+import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, openVault, type KeyDeriver, type Vault } from 'safebyok'
 import * as TH from 'safebyok/testing'
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
@@ -116,6 +116,31 @@ const OpenErrorExample = () => {
 
 /** React reports a boundary-caught render error on the console; the suite stays quiet about it. */
 const hushConsole = () => vi.spyOn(console, 'error').mockImplementation(() => { /* expected */ })
+
+/**
+ * A world whose vault already holds `anthropic_api_key`, made on another device under the
+ * passphrase 'pw', so the provider finds it locked; and a way to mount the provider over it
+ * with a grabber, whose `withUnlockedVault` the test calls itself.
+ */
+const lockedWorld = async () => {
+  const world = makeWorld()
+  const maker = await openVault({ ...world.props, deviceDB: memoryDeviceDB(), userId: 'u1' })
+  await maker.unlock('pw')
+  await maker.store('anthropic_api_key', 'sk-fake')
+  maker.close()
+  const grab = grabber()
+  const tree = (userId: string | null, keyDeriver: KeyDeriver = TH.testDeriver) => (
+    <VaultProvider {...world.props} keyDeriver={keyDeriver} userId={userId}><grab.Grab /></VaultProvider>
+  )
+  return { ...world, ...grab, tree }
+}
+
+/** A promise's outcome so far, read without waiting on it: 'pending' until it settles. */
+const watched = <ResultT,>(promise: Promise<ResultT>) => {
+  const seen: { outcome: ResultT | 'pending' } = { outcome: 'pending' }
+  void promise.then((outcome) => { seen.outcome = outcome })
+  return seen
+}
 
 /** Stands in for a function a test replaces before it is called. */
 const noop = () => { /* replaced before use */ }
@@ -248,6 +273,94 @@ describe("VaultProvider", () => {
     expect(caught).to.deep.equal([])
     expect(reported).to.have.lengthOf(1)
     expect(isVaultError(reported[0], 'unknown_key_deriver')).to.be.true
+  })
+
+  describe("withUnlockedVault settles every call", () => {
+    it("resolves null when the provider unmounts with the dialog open", async () => {
+      const world = await lockedWorld()
+      const { unmount } = render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      unmount()
+      expect(await reading).to.be.null
+    })
+
+    it("resolves null when another user signs in, and shows that user no dialog", async () => {
+      const world = await lockedWorld()
+      const { rerender } = render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      rerender(world.tree('u2'))
+      expect(await reading).to.be.null
+      await waitFor(() => { expect(world.latest().vault).to.not.be.null })
+      expect(world.latest().vault).to.not.equal(vault)
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    })
+
+    it("resolves null when the user signs out", async () => {
+      const world = await lockedWorld()
+      const { rerender } = render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      rerender(world.tree(null))
+      expect(await reading).to.be.null
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    })
+
+    it("has overlapping calls wait on one dialog: one unlock runs them all", async () => {
+      const world = await lockedWorld()
+      render(world.tree('u1'))
+      const vault = await world.opened()
+      const first = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      const second = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await TH.wakeupAtNextTick()
+      expect(screen.getAllByPlaceholderText('vault passphrase')).to.have.lengthOf(1)
+      fireEvent.change(screen.getByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+      fireEvent.click(screen.getByText('Unlock'))
+      expect(await first).to.eq('sk-fake')
+      expect(await second).to.eq('sk-fake')
+    })
+
+    it("has overlapping calls each resolve null when the one dialog is cancelled", async () => {
+      const world = await lockedWorld()
+      render(world.tree('u1'))
+      const vault = await world.opened()
+      const first = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      const second = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await TH.wakeupAtNextTick()
+      fireEvent.click(screen.getByText('Cancel'))
+      expect(await first).to.be.null
+      expect(await second).to.be.null
+    })
+
+    it("an unlock finishing after Cancel neither closes nor settles a newer dialog", async () => {
+      const world = await lockedWorld()
+      const gate = TH.makeGate()
+      const slowDeriver = { ...TH.testDeriver, deriveKeyBytes: async (passphrase: string, saltBytes: Uint8Array) => { await gate.pass(); return await TH.testDeriver.deriveKeyBytes(passphrase, saltBytes) } }
+      render(world.tree('u1', slowDeriver))
+      const vault = await world.opened()
+      const first = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+      fireEvent.click(screen.getByText('Unlock'))
+      await gate.reached
+      fireEvent.click(screen.getByText('Cancel'))
+      expect(await first).to.be.null
+
+      const second = watched(world.latest().withUnlockedVault(() => Promise.reject(new VaultError('vault_locked', 'Locked.'))))
+      await screen.findByPlaceholderText('vault passphrase')
+      gate.release()
+      await waitFor(() => { expect(vault.getSnapshot().state).to.eq('unlocked') })
+      await TH.wakeupAtNextTick()
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.not.be.null
+      expect(second.outcome).to.eq('pending')
+      fireEvent.click(screen.getByText('Cancel'))
+      await waitFor(() => { expect(second.outcome).to.be.null })
+    })
   })
 
   it("asks for a keyDeriver outright, as openVault does", () => {

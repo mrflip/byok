@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
 import { isVaultCondition, isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultError, type VaultSnapshot } from 'safebyok'
 import { PassphraseModal } from './passphrase-modal'
 
@@ -30,6 +30,9 @@ export type VaultContextShape = {
    * passphrase dialog opens; after a successful unlock the action runs again. Resolves null when
    * the user dismisses the dialog instead -- unambiguously for whisper reads, since a whisper is
    * never null. Only an action whose own result could be null needs to wrap it in an object.
+   * Every call settles: actions that find the vault locked while the dialog is already open wait
+   * on that same dialog, and each resolves null when the dialog goes without an unlock -- the
+   * user signs out or switches, the vault reopens, or the provider unmounts.
    *
    * @example const whisper = await withUnlockedVault(() => vault.read('anthropic_api_key'))
    *          // whisper === null: the user dismissed the dialog
@@ -38,6 +41,9 @@ export type VaultContextShape = {
 }
 
 const VaultContext = createContext<VaultContextShape | null>(null)
+
+/** One showing of the passphrase dialog: which one, and the actions waiting on its outcome. */
+type Asking = { round: number, waiters: ((unlocked: boolean) => void)[] }
 
 /** The vault handle and withUnlockedVault, from the nearest VaultProvider. */
 export const useVault = (): VaultContextShape => {
@@ -98,7 +104,13 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
 export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps) => {
   const { applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger } = opts
   const [vault, setVault] = useState<Vault | null>(null)
-  const [asking, setAsking] = useState<{ settle: (unlocked: boolean) => void } | null>(null)
+  // The dialog showing now, if any, and the actions waiting on it. The ref is what the callbacks
+  // read, so that a dialog's outcome reaches its own waiters and no newer dialog's; the state
+  // renders it.
+  const [asking, setAsking] = useState<Asking | null>(null)
+  const askingRef = useRef<Asking | null>(null)
+  // Counts the dialog's showings, so that each is a fresh dialog with nothing kept from the last.
+  const askingRounds = useRef(0)
   // Wrapped, so that a rejection carrying any value at all (null, say) still reads as "failed".
   const [openFailure, setOpenFailure] = useState<{ err: unknown } | null>(null)
   const [openError, setOpenError] = useState<VaultError | null>(null)
@@ -137,16 +149,43 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     if (openError !== null) { setOpenAttempt((prev) => prev + 1) }
   }, [openError])
 
+  /** Closes `ending` if it is still the dialog showing, and settles every action waiting on it. */
+  const endAsking = useCallback((ending: Asking | null, unlocked: boolean) => {
+    if (ending === null) { return }
+    if (askingRef.current === ending) {
+      askingRef.current = null
+      setAsking(null)
+    }
+    for (const settle of ending.waiters) { settle(unlocked) }
+  }, [])
+
+  /** Waits on the dialog showing now, opening one if none is. */
+  const awaitUnlock = useCallback(() => new Promise<boolean>((settle) => {
+    const { current } = askingRef
+    if (current !== null) {
+      current.waiters.push(settle)
+      return
+    }
+    askingRounds.current += 1
+    const opening = { round: askingRounds.current, waiters: [settle] }
+    askingRef.current = opening
+    setAsking(opening)
+  }), [])
+
+  // A dialog belongs to the vault it was opened over: when that handle goes -- a sign-out, another
+  // user, a reopen, the provider unmounting -- its actions resolve null, and it closes.
+  useEffect(() => () => { endAsking(askingRef.current, false) }, [vault, endAsking])
+
   const withUnlockedVault = useCallback(async <ResultT,>(action: () => Promise<ResultT>): Promise<ResultT | null> => {
     try {
       return await action()
     } catch (err) {
       if (! isVaultError(err, 'vault_locked')) { throw err }
-      const unlocked = await new Promise<boolean>((settle) => { setAsking({ settle }) })
+      const unlocked = await awaitUnlock()
       if (! unlocked) { return null }
       return await action()
     }
-  }, [])
+  }, [awaitUnlock])
 
   // Thrown here, in render, so the nearest error boundary (or the dev overlay) shows it: misuse,
   // the developer's to fix, which no retry would mend. Every hook has run by now, so the throw
@@ -158,9 +197,10 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
       {children}
       {asking !== null && vault !== null && (
         <PassphraseModal
+          key={asking.round}
           vault={vault}
           reentryHours={forcePassphraseReentryHours}
-          onDone={(unlocked) => { setAsking(null); asking.settle(unlocked) }}
+          onDone={(unlocked) => { endAsking(asking, unlocked) }}
         />
       )}
     </VaultContext.Provider>
