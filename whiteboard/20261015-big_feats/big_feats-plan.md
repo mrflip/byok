@@ -5,7 +5,7 @@
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach)
-* **Status**: threads 1, 2, 5 filed (#74, #71, #73); 3, 4 in review; 6 underway
+* **Status**: threads 1-5 filed (#74, #71, #76, #77, #73); 6 in review
 
 ## Read first
 
@@ -160,6 +160,16 @@ fingerprint" button if it is cheap.
 *Touches*: `types.ts`, `vault.ts`, crypto helpers, `safebyok-react` (a helper and maybe dialog
 copy), the demo, `notes/security.md`, VOCABULARY.md, READMEs. *Depends on*: thread 2 (cut from
 its tip once filed). *Look-ahead*: none.
+
+*Review:* `fixed`. One demo fix: "Add fingerprint" made a passkey before refusing the empty
+starting passphrase, orphaning it. The construction held (HKDF per RFC 5869, an unambiguous
+`info`, the whole header in the AAD), as did the proof paths and the helper. At the
+orchestrator's word, `createPasskey`'s doc now says a dismissed fallback also orphans a
+credential. Left, minor: HKDF `info` leaves out `vault_id` and the scope (a construction call for
+the Coach); `addPasskey` checks its proof only after the passkey exists; one damaged passkey
+envelope blocks every passkey; the button reads the snapshot without subscribing; two cleanups.
+Not checked: a real authenticator. Filed as [#76](https://github.com/mrflip/safebyok/pull/76),
+stacked on #71.
 
 ### 4. indexeddb_package
 
