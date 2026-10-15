@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 2 building; 5 (second review, re-run) and 10 in review; 11 filing; 1, 3, 4, 9 filed. Newer than the plan wherever the two disagree.
+**Status**: 2 building; 5 (second review, re-run) and 10 in review; 1, 3, 4, 9, 11 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -18,7 +18,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 8  | `size_budget` | thread 2 | pending |
 | 9  | `docs_sweep` | `origin/main` | filed [#33](https://github.com/mrflip/safebyok/pull/33) |
 | 10 | `sandals` | `origin/main` | in review |
-| 11 | `label_grammar_report` | `origin/main` | filing (documents only, no review) |
+| 11 | `label_grammar_report` | `origin/main` | filed [#35](https://github.com/mrflip/safebyok/pull/35) (no review: documents only) |
 
 ## For the Coach
 
@@ -87,7 +87,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   rebased test using a bare `testDeriver`, `scopeOf` or `tweakB64` must write `TH.x`. Root
   scripts run the root check and `pnpm -r --no-bail`. `safebyok` is a peer of `safebyok-convex`.
   The slow justify is 13 tsdown builds; cheapest fix: build once at the start.
-* **Thread 11** (report): all three labels could take a host grammar without touching a stored
+* **Thread 11** (report, [#35](https://github.com/mrflip/safebyok/pull/35)): all three labels could take a host grammar without touching a stored
   record or the binding; the colon is the one forbidden character (plain-concatenated ckeys);
   the hazard is the read path (`Label` types the record schemas). Seam: a fixed `LabelFloor` for
   reads, `OpenVaultOpts.labelRules` per slot for writes, validate never transform. No
