@@ -271,7 +271,7 @@ time or a count as a `bigint`, and each structured value as one opaque `jsonb` -
 value (a cipherIv and its ciphertext, `{ cipher_iv_b64, ciphertext_b64 }`), or the bundle's
 `unlocks`, its list of unlock envelopes. Nothing is normalized: a note or a
 user id reads back byte for byte, as it must, since every field a record holds is bound into its
-encryption.
+encryption (all but the bundle's `unlock_epoch` and which envelopes its `unlocks` holds).
 
 | Table                | One row per | Primary key                                     | Columns                                                                                                |
 | -------------------- | ----------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
