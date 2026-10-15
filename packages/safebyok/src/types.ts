@@ -183,6 +183,13 @@ export const SevenDaysMs = 7 * 24 * 60 * 60 * 1000
  */
 export const MaxWhisperBytes = 40_444 // searchable: 40444
 
+/**
+ * The most lockboxes a vault holds unless the caller says otherwise: room for every API key a
+ * person plausibly keeps, at the largest default whisper, inside what every in-tree storage
+ * adapter can hold and still erase in one go. A vault that needs more raises its `maxLockboxes`.
+ */
+export const MaxLockboxes = 100
+
 /** Injected time source, so expiry is testable; defaults to the wall clock. */
 export type Clock = { now(): number }
 

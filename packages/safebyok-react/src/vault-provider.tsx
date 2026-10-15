@@ -74,7 +74,7 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
  *   </VaultProvider>
  */
 export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps) => {
-  const { applabel, vaultlabel, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes } = opts
+  const { applabel, vaultlabel, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes, maxLockboxes } = opts
   const [vault, setVault] = useState<Vault | null>(null)
   const [asking, setAsking] = useState<{ settle: (unlocked: boolean) => void } | null>(null)
   // Wrapped, so that a rejection carrying any value at all (null, say) still reads as "failed".
@@ -86,7 +86,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     let gone = false
     // Listed one by one so the effect re-runs on each; `satisfies` fails the build if an openVault
     // option is ever added and not passed through.
-    const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes } satisfies Record<keyof OpenVaultOpts, unknown>
+    const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes, maxLockboxes } satisfies Record<keyof OpenVaultOpts, unknown>
     void openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
@@ -101,7 +101,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
       setVault(null)
       setOpenFailure(null)
     }
-  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes])
+  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes, maxLockboxes])
 
   const withUnlockedVault = useCallback(async <ResultT,>(action: () => Promise<ResultT>): Promise<ResultT | null> => {
     try {
