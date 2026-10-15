@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: threads 1, 5, 9 underway; 3 and 4 filed. Newer than the plan wherever the two disagree.
+**Status**: thread 10 building; 1, 5, 9 in review; 3 and 4 filed. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -16,8 +16,8 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | 6  | `boundary_audit` | thread 2 | pending |
 | 7  | `stale_write_retry` | thread 6 | pending |
 | 8  | `size_budget` | thread 2 | pending |
-| 9  | `docs_sweep` | `origin/main` | underway |
-| 10 | `sandals` | `origin/main` | pending |
+| 9  | `docs_sweep` | `origin/main` | in review |
+| 10 | `sandals` | `origin/main` | underway |
 | 11 | `label_grammar_report` | `origin/main` | pending |
 
 ## What the threads have taught
@@ -64,6 +64,13 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   `maskAll` struck (`mask(w, { head: 0, tail: 0 })` is the stars-only form); `maxLen` wins over
   `minStars`; an empty whisper gives `''`. Commit prefixes: `utils:` and `react:` are not in
   PROCESS.md's table -- an entry point is `api:`, the React package `client:`.
+* *Orchestrator:* **Thread 9** found the core README had no locking section: it appended
+  *Locking* (`visibilitychange` -> `vault.lock()`, "when `lockSoon()` lands") and *No recovery*
+  at the README's end, so threads 1 and 2's README edits rebase mechanically. The expiry thread
+  should update the `lockSoon()` line. The demo now calls `navigator.storage.persist()` through
+  a small `keepStorage` module. The devcontainer volumes stay `byok-*`: renaming orphans them.
+* *Orchestrator:* **Slots count builders, not reviews** (YOLO, two-way): with 1, 5 and 9 all in
+  review and nothing building, thread 10 started as a fourth agent.
 * *Orchestrator:* **The main checkout moves under reviewers.** Another agent's uncommitted work
   there became [#30](https://github.com/mrflip/safebyok/pull/30) mid-review. Both reviewers traced
   it and carried on rightly. Reviewers: a change whose HEAD, reflog and stash are untouched,

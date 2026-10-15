@@ -7,7 +7,7 @@
 * **Issued by**: the Coach (flip), from the preplan
   `whiteboard/20261014-low_hanging_fruit/20261014-low_hanging_fruit-preplan.md`, which is on
   `20261015-roadmap_fruit` ([#26](https://github.com/mrflip/safebyok/pull/26), unmerged)
-* **Status**: threads 1, 3, 4 underway
+* **Status**: underway; see the progress document's status line
 
 Sprint worktree `/workspace/byok-low_hanging_fruit`, branch `20261015-low_hanging_fruit`. Sprint
 directory: `whiteboard/20261015-low_hanging_fruit/`. Sprint doc (live mirror, a tab per thread):
@@ -87,6 +87,13 @@ Start: 1, 3, 4. Then the lowest-numbered thread whose base exists, as slots free
    without waiting: PROCESS.md lets the plainly boring dev dependency be installed, then
    reported.
 5. **VOCABULARY.md's `mask` paragraph moves from thread 9 to thread 5**, which writes `mask`.
+6. **The React README's error-boundary note moves from thread 9 to thread 3**, whose behaviour
+   it documents (#32).
+7. **Thread 1's open-time fit check** (`maxLockboxes * (maxWhisperBytes + 1 KiB) >
+   maxVaultBytes / 2`, not the preplan's plain product) is accepted: measured, stronger, and the
+   defaults fit.
+8. **The cap of three counts building workers, not reviews**, so the queue does not idle while
+   reviews run.
 
 ## The threads
 
