@@ -4,6 +4,11 @@ packages:
   - packages/*
   - demos/*
 
+# `pnpm -r` runs one package at a time, in dependency order. A package that depends on another
+# builds it first (its `build:deps`), and tsdown starts by emptying `dist/`: two such packages run
+# side by side would each wipe the core's `dist/` while the other reads it.
+workspaceConcurrency: 1
+
 allowBuilds:
   esbuild: false
   unrs-resolver: true
