@@ -38,6 +38,8 @@ package; and in `.size-limit.json` between #71, #76 and #74.
 
 ## Needs your word
 
+*Answered or explained since*: `human/20261015-sprint_big_feats_rulings.md`.
+
 **Rulings, design:**
 - **Every envelope change takes a proof**, even unlocked (#71), since the session vaultKey is
   non-extractable; and **any way in proves any change** (#76): one passkey can set a new
