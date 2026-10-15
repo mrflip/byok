@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { Client, CombinedError, fetchExchange } from '@urql/core'
 import { executeExchange } from '@urql/exchange-execute'
-import { buildSchema } from 'graphql'
+import { buildSchema, type GraphQLSchema } from 'graphql'
 import { VaultError, memoryDeviceDB, openVault } from 'safebyok'
 import { postgresVaultDB } from 'safebyok-postgres'
 import * as TH from './test-helpers'
@@ -17,6 +17,11 @@ TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB ov
 
 const u1 = TH.scopeOf('u1')
 const thisVault = { vault_id: 'vault-id-u1' }
+
+/** u1's main vault, opened by the core in a browser of its own, over graphqlVaultDB to `schema`. */
+const vaultIn = (schema: GraphQLSchema) => openVault({
+  applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: TH.browserFor(schema, 'u1'), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver,
+})
 
 /** A fetch with no network behind it. */
 const offline = () => Promise.reject(new TypeError('Failed to fetch'))
@@ -101,9 +106,7 @@ describe("graphqlVaultDB, a server's lockbox limit", () => {
 describe("graphqlVaultDB, as the README has it", () => {
   it("carries a real vault, made and opened by the core in the browser", async () => {
     const schema = TH.schemaOver(await TH.emptyDatabase())
-    const opened = () => openVault({
-      applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: TH.browserFor(schema, 'u1'), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver,
-    })
+    const opened = () => vaultIn(schema)
     const first = await opened()
     await first.unlock('correct horse battery staple')
     await first.store('anthropic_api_key', 'sk-ant-test-not-a-real-key', { note: 'work account' })
@@ -126,6 +129,34 @@ describe("graphqlVaultDB, as the README has it", () => {
     expect(await browser.readBundle(u1)).to.be.null
     await TH.browserFor(schema, 'u1').createBundle(TH.bundleOf('u1'))
     expect(await browser.readBundle(u1)).to.deep.equal(TH.bundleOf('u1'))
+  })
+})
+
+describe("graphqlVaultDB, carrying a passkey's way in", () => {
+  it("stores a bundle holding a passkey envelope and reads it back exactly, with no change to the schema", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const withPasskey = TH.bundleOf('u1', { unlocks: [TH.envelopeOf('passphrase'), TH.passkeyEnvelopeOf('laptop')] })
+    await TH.browserFor(schema, 'u1').createBundle(withPasskey)
+    expect(await TH.browserFor(schema, 'u1').readBundle(u1)).to.deep.equal(withPasskey)
+  })
+
+  it("lets a real vault add a passkey through it, a bundle update, and another device unlock with that passkey alone", async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    const opened = () => vaultIn(schema)
+    const laptop = await TH.passkeyOf('laptop')
+    const first = await opened()
+    await first.unlock('correct horse battery staple')
+    await first.store('anthropic_api_key', 'sk-ant-test-not-a-real-key')
+    const unlockId = await first.addPasskey('correct horse battery staple', () => Promise.resolve(laptop), { unlocklabel: 'laptop' })
+    first.close()
+
+    const second = await opened()
+    expect(second.getSnapshot().unlocks).to.deep.include({
+      method: 'passkey', unlock_id: unlockId, unlocklabel: 'laptop', credential_id: laptop.credentialId, prf_salt_b64: laptop.prfSaltB64,
+    })
+    await second.unlock(laptop)
+    expect(await second.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
+    second.close()
   })
 })
 
