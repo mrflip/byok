@@ -12,18 +12,22 @@ use safebyok; if you do, the last column of each table gives the usual term.
 | **lockbox**    | Holds one whisper, encrypted, together with its `boxlabel` and a public note your UI may show while the vault is locked.                                                                       |
 | **vault**      | One user's set of lockboxes, named by your app's `applabel`, the signed-in user, and its own `vaultlabel`.                                                                                     |
 | **passphrase** | What the user types to unlock their vault. It is not their login password, and safebyok never stores it or sends it anywhere. A vault may have several (`addPassphrase`), each its own way in.         |
-| **unlock**     | One way into a vault, as its snapshot lists it while locked: a `method` (today only `passphrase`), an `unlock_id`, and an `unlocklabel` the user chose to tell it from the others (`home_phrase`). Stored as an unlock envelope. |
+| **passkey**    | What the user touches to unlock instead of typing: a fingerprint, a face, a phone or a security key, as a WebAuthn credential whose authenticator answers for the vault through the PRF extension. safebyok never holds its secret; the authenticator does, and answers only after the user's fingerprint, face or PIN. A vault may have several (`addPasskey`), each its own way in, and always keeps a passphrase beside them. |
+| **passkey proof** | What a passkey answers when asked for its vault (`PasskeyProof`): the credential's id, the salt it was asked with, and 32 secret bytes. The host gets one from `safebyok-react`'s `createPasskey` or `askPasskey` and hands it to the vault; it is as good as a passphrase for that vault, so it is dropped after the call. |
+| **unlock**     | One way into a vault, as its snapshot lists it while locked: a `method` (`passphrase` or `passkey`), an `unlock_id`, and an `unlocklabel` the user chose to tell it from the others (`home_phrase`, `laptop_fingerprint`); a passkey's also shows the `credential_id` and `prf_salt_b64` to ask it with. Stored as an unlock envelope. |
 | **mask**       | A function from `safebyok/utils` that shows a best-effort whiff of each end of a whisper, one plain line safe for a log or a reminder, so your UI can tell which API key a lockbox holds without revealing it. It is not a faithful copy: marks, invisible characters, bidirectional controls and spaces are dropped, though right-to-left letters are kept and may reorder their neighbours in a display. `mask` is intended for plain text; calling it with arbitrary blobs may give unusual behavior. Stripping every mark costs the vowels of scripts that write them as marks (Hindi `नमस्ते` comes out as `नमसत`); an API key is ASCII, and is untouched. Its result is public: show it, never trust it to hide more than it does. `mask(whisper, { head: 0, tail: 0 })` hides everything but the length. |
 
 ## Keys
 
-safebyok has four keys. Each is a 256-bit AES-GCM key, named for whose it is, and none ever
-leaves the user's device unencrypted. There are no public or private keys: everything is
-symmetric.
+safebyok has five keys. Each is a 256-bit AES-GCM key, named for whose it is, and none ever leaves the
+user's device unencrypted. There are no public or private keys: everything is symmetric. (A
+passkey has a key pair of its own inside its authenticator; safebyok never uses it, only the PRF
+answer beside it.)
 
 | Name               | What it is                                                                                                                                                         | Standard term                       |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------- |
 | **passphraseKey**  | Made from a passphrase and its envelope's passphraseSalt by the key deriver. Its only job is to wrap the vaultKey.                                                  | passphrase-derived KEK              |
+| **passkeyKey**     | Made from a passkey's PRF answer by HKDF-SHA256, its `info` naming the purpose and the credential. Its only job is to wrap the vaultKey.                             | PRF-derived KEK                     |
 | **vaultKey**       | The vault's random master key. It wraps every lockboxKey, and stays the same when a passphrase is added, removed or changed, so none of those rewrites a lockbox.  | key-encryption key (KEK)            |
 | **lockboxKey**     | A random key for one lockbox, made fresh every time a whisper is stored. It encrypts that whisper.                                                                 | data-encryption key (DEK)           |
 | **localUnlockKey** | Kept by this browser, and impossible to export from it. It wraps a copy of the vaultKey so that "remember this device" can unlock without the passphrase. It holds nothing about the device itself. | non-extractable, device-bound KEK |
@@ -33,7 +37,10 @@ Which key opens which:
 ```text
 passphrase + passphraseSalt ──key deriver──> passphraseKey        one per passphrase
 
+passkey + prfSalt ──PRF, then HKDF──> passkeyKey                    one per passkey
+
 passphraseKey   wraps    vaultKey    →  vaultKeyPassphraseWrapped   one per passphrase, synced to every device
+passkeyKey      wraps    vaultKey    →  vaultKeyPasskeyWrapped      one per passkey, synced to every device
 localUnlockKey  wraps    vaultKey    →  vaultKeyLocalWrapped        this device only
 vaultKey        wraps    lockboxKey  →  lockboxKeyWrapped           one per lockbox
 lockboxKey      ciphers  whisper     →  whisperCiphered             one per lockbox
@@ -52,7 +59,8 @@ as-is.
 | **whisperCiphered**           | The whisper, encrypted under its lockboxKey.                                                       | ciphertext          |
 | **lockboxKeyWrapped**         | The lockboxKey, encrypted under the vaultKey and stored beside its whisperCiphered.                | wrapped DEK         |
 | **vaultKeyPassphraseWrapped** | The vaultKey, encrypted under one passphrase's passphraseKey: a passphrase envelope's `vault_key_wrapped`. Synced to every device through your storage. | wrapped KEK |
-| **unlock envelope**           | One way in as stored, in the bundle's `unlocks`: its method, `unlock_id`, `unlocklabel` and the public fields the method needs (a passphrase's `key_deriver_label` and `salt_b64`), and the vaultKey wrapped under the key that method makes (`vault_key_wrapped`). All of them wrap the one vaultKey. | key slot |
+| **vaultKeyPasskeyWrapped**    | The vaultKey, encrypted under one passkey's passkeyKey: a passkey envelope's `vault_key_wrapped`. Synced to every device through your storage. | wrapped KEK |
+| **unlock envelope**           | One way in as stored, in the bundle's `unlocks`: its method, `unlock_id`, `unlocklabel` and the public fields the method needs (a passphrase's `key_deriver_label` and `salt_b64`; a passkey's `credential_id` and `prf_salt_b64`), and the vaultKey wrapped under the key that method makes (`vault_key_wrapped`). All of them wrap the one vaultKey. | key slot |
 | **vaultKeyLocalWrapped**      | The vaultKey, encrypted under the localUnlockKey. Never leaves this device.                        | device-wrapped KEK  |
 
 ## Ingredients and bindings
@@ -63,6 +71,7 @@ wrong or has been tampered with, decryption fails.
 | Name                     | What it is                                                                                                                                                           | Standard term        |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
 | **passphraseSalt**       | Random bytes (16 under the supplied keyDeriverSpec) fed to the key deriver with the passphrase: one per passphrase envelope (`salt_b64`), never shared, and replaced whenever that passphrase changes.                            | salt                 |
+| **prfSalt**              | 32 random bytes a passkey's authenticator is asked to evaluate its PRF over: one per passkey envelope (`prf_salt_b64`), fresh when the passkey is added. Public; the authenticator's answer to it is the secret. | PRF salt, hmac-secret salt |
 | **keyDeriverSpec**       | The recipe that turns a passphrase into the passphraseKey: Argon2id's parameters under a keyDeriverLabel. safebyok supplies one, `Argon2idWebV1`: 64 MiB of memory, 3 passes, 1 lane, a 16-byte salt and a 32-byte result. A host may choose its own. | KDF parameters       |
 | **keyDeriverLabel**      | The keyDeriverSpec's name (`argon2id_web_v1` for the supplied one), stored with each passphrase envelope so that the vault says how it was made. A label always means the same parameters. | KDF identifier       |
 | **key deriver**          | What makes the passphraseKey under a keyDeriverSpec: `argon2idWebV1Deriver` for the supplied one, `argon2idDeriver(spec)` for a host's own. One standing in for a supplied spec carries its parameters, or the vault refuses it. | KDF                  |
@@ -71,7 +80,7 @@ wrong or has been tampered with, decryption fails.
 | **ciphertext**           | The encrypted bytes, with their authentication tag on the end.                                                                                                       | ciphertext           |
 | **vaultId**              | A random id minted when the vault is made, and never changed; part of every cipherAdditionalData.                                                                   | --                   |
 | **revisionId**           | A fresh id for each write of a lockbox. It is part of the cipherAdditionalData; storage refuses (`stale_write`) a write made from a stale read.                     | version, CAS token   |
-| **passphraseEpoch**      | A counter that goes up whenever the vault's unlocks change -- a passphrase added, removed or changed -- so other devices and remembered unlocks know to ask again.   | key epoch            |
+| **passphraseEpoch**      | A counter that goes up whenever the vault's unlocks change -- a passphrase or passkey added, removed or changed -- so other devices and remembered unlocks know to ask again. | key epoch       |
 
 ## Names, records and times
 
@@ -106,7 +115,7 @@ words of letters and digits joined by single underscores, such as `anthropic_api
 
 ## Words safebyok does not use
 
-* **key, alone.** A key is always one of the four above, by name. An entry's name in a map or a
+* **key, alone.** A key is always one of the five above, by name. An entry's name in a map or a
   storage address is a `ckey`.
 * **data, contents, payload.** The secret is a whisper; encrypted, it is a whisperCiphered.
 * **device key.** The key behind "remember this device" is the localUnlockKey.
