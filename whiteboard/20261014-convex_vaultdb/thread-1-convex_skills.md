@@ -10,7 +10,9 @@ no JS or TS yet. That failure is the same on main, and thread 3's sources end it
   `191a5c33a7e7a22ec9d5ff13930f84748bbcf8f8` (Apache-2.0). Beside them sit their license
   (`LICENSE-convex-agent-skills`) and a `README.md` giving the source, what each skill is for,
   every local change, and a line for each skill left out. Commit `96c7a91` holds the verbatim
-  copy and `2343f0e` the local edits, so the edits read as a diff. TODO's entry is struck.
+  copy, and `2343f0e` and `9af2ddd` the local edits, so
+  `git diff 96c7a91 9af2ddd -- packages/safebyok-convex/.claude` shows every one. TODO's entry
+  is struck.
 
 ## For threads 3 and 4: what to read, and for what
 
@@ -92,6 +94,12 @@ the README lists under *Not covered by any Convex skill*:
   because they are committed: a gitignored copy would not.
 * `SKILL.md` frontmatter supports a `paths:` glob field, but the docs describe it as loading
   automatically, not hiding. It is not used here.
+* **A flaky core test, 1 run in 64**: `tests/crypto.test.ts`, "refuses altered ciphertext and
+  the wrong key alike", alters the ciphertext by setting its first base64url character to `A`.
+  When that character already is `A`, nothing is altered and decryption rightly succeeds. It
+  failed once during this thread's justify and passed on rerun. It is a defect in the test, not
+  in the crypto, and the fix (flip a byte rather than overwrite a character) belongs to a core
+  thread.
 * If `safebyok-convex` is ever published, its `package.json` `files` should leave out
   `.claude/`.
 
