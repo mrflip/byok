@@ -91,8 +91,18 @@ const served = new Map<string, Served>([
   ['eraseVault',   (vaultDB, [scope, expected]) => vaultDB.eraseVault(scope as VaultScope, expected as EraseExpectation)],
 ])
 
+/** What a request posts: its verb and arguments, or nothing when its body is not a JSON object. */
+const postedCall = async (request: Request): Promise<{ verb?: unknown, args?: unknown }> => {
+  try {
+    const posted: unknown = await request.json()
+    return typeof posted === 'object' && posted !== null ? posted : {}
+  } catch {
+    return {}
+  }
+}
+
 export async function POST(request: Request): Promise<Response> {
-  const { verb, args } = await request.json() as { verb?: unknown, args?: unknown }
+  const { verb, args } = await postedCall(request)
   const serve = typeof verb === 'string' ? served.get(verb) : undefined
   if (! serve || ! Array.isArray(args)) {
     return Response.json({ refusal: { kind: 'bad_option', message: 'That is not a vault verb.' } }, { status: 400 })
