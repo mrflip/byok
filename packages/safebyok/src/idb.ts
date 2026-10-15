@@ -5,6 +5,10 @@ import {
   type BundleExpectation, type EraseExpectation, type LockboxExpectation,
 } from './vault-db'
 import type { DeviceDB } from './device-db'
+import { parseDbName, parseInspectorOpts, type IdbOpts, type IdbShelf } from './idb-opts'
+import { VaultError } from './errors'
+
+export type { IdbOpts, IdbShelf } from './idb-opts'
 
 /**
  * The browser adapters, over IndexedDB (through `idb-keyval`): a vault that lives entirely on
@@ -20,14 +24,6 @@ import type { DeviceDB } from './device-db'
  * This entry point touches IndexedDB only when an adapter is used, so importing it is safe
  * anywhere; the adapters themselves need a browser (or anything else with `indexedDB`).
  */
-
-export type IdbOpts = {
-  /** The IndexedDB database to keep records in. Default 'safebyok'. */
-  dbName?: string
-}
-
-/** Which of the two safebyok shelves an IndexedDB database holds records on. */
-export type IdbShelf = 'vault_db' | 'device_db'
 
 // One UseStore per (dbName, shelf), shared by adapters and inspectors alike: idb-keyval opens
 // the underlying database lazily, so making these is free until something reads or writes.
@@ -74,13 +70,14 @@ const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
 /**
  * VaultDB over this browser's IndexedDB: the local-only tier. Nothing syncs -- this "backend"
  * never leaves the device -- but every secret field is ciphertext all the same, and the stored
- * rows are exactly what a real backend would hold.
+ * rows are exactly what a real backend would hold. Kind 'bad_option' for a `dbName` that is not
+ * non-empty text.
  *
  * @example
  *   const vaultDB = idbVaultDB({ dbName: 'my_app' })
  *   const vault = await openVault({ applabel: 'my_app', userId, vaultlabel: 'main', vaultDB, ...browserOpts({ dbName: 'my_app' }) })
  */
-export const idbVaultDB = (opts: IdbOpts = {}): VaultDB => new IdbVaultDB(opts.dbName ?? 'safebyok')
+export const idbVaultDB = (opts?: IdbOpts): VaultDB => new IdbVaultDB(parseDbName(opts, 'idbVaultDB'))
 
 class IdbVaultDB extends VaultDB {
   // IndexedDB sets no limit per record or per vault: the origin's storage quota bounds the whole
@@ -172,14 +169,15 @@ class IdbVaultDB extends VaultDB {
  * non-extractable localUnlockKey -- as a handle, never as bytes.
  *
  * A record that will not read back (damaged, or written by another version) reads as "no
- * remembered unlock" and is dropped: losing the convenience is the safe failure.
+ * remembered unlock" and is dropped: losing the convenience is the safe failure. Kind
+ * 'bad_option' for a `dbName` that is not non-empty text.
  *
  * @example
  *   const deviceDB = idbDeviceDB()
  *   await deviceDB.readUnlock({ applabel: 'acme', user_id: 'u1', vaultlabel: 'main' })  // null
  */
-export const idbDeviceDB = (opts: IdbOpts = {}): DeviceDB => {
-  const dbName = opts.dbName ?? 'safebyok'
+export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
+  const dbName = parseDbName(opts, 'idbDeviceDB')
   const shelf = () => shelfStore(dbName, 'device_db')
   const ring = () => { ringBell(dbName, 'device_db') }
 
@@ -230,22 +228,25 @@ export type IdbRow = { ckey: string, row: unknown }
  *   const stop = inspector.subscribe(() => { void inspector.rows().then(render) })
  */
 export const inspectIdb = (opts: IdbOpts & { shelf: IdbShelf }) => {
-  const dbName = opts.dbName ?? 'safebyok'
+  const { dbName, shelf } = parseInspectorOpts(opts)
   return {
     /** Every stored row on the shelf, sorted by ckey. */
     rows: async (): Promise<IdbRow[]> => {
-      const stored = await entries(shelfStore(dbName, opts.shelf))
+      const stored = await entries(shelfStore(dbName, shelf))
       return stored
         .filter((pair): pair is [string, unknown] => typeof pair[0] === 'string')
         .map(([ckey, row]) => ({ ckey, row }))
         .toSorted((one, two) => one.ckey.localeCompare(two.ckey))
     },
     /** Calls `listener` after any write to the shelf, this tab or another; returns the unsubscribe. */
-    subscribe: (listener: () => void): (() => void) => onBell(dbName, opts.shelf, listener),
+    subscribe: (listener: () => void): (() => void) => {
+      if (typeof listener !== 'function') { throw new VaultError('bad_option', 'subscribe needs a listener function to call after each write.') }
+      return onBell(dbName, shelf, listener)
+    },
     /** Remove every row on the shelf. */
     wipe: async (): Promise<void> => {
-      await clear(shelfStore(dbName, opts.shelf))
-      ringBell(dbName, opts.shelf)
+      await clear(shelfStore(dbName, shelf))
+      ringBell(dbName, shelf)
     },
   }
 }

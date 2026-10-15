@@ -3,6 +3,7 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { browserOpts } from '../src/browser'
+import { VaultError } from '../src/errors'
 import { argon2idWebV1Deriver } from '../src/key-deriver'
 import { inspectIdb } from '../src/idb'
 import { memoryStore } from '../src/string-store'
@@ -36,6 +37,13 @@ describe("browserOpts", () => {
     expect(browserOpts()).to.eq(browserOpts({ dbName: 'safebyok' }))
     expect(browserOpts({ dbName: 'acme' })).to.not.eq(browserOpts({ dbName: 'other' }))
     expect(Object.isFrozen(browserOpts())).to.be.true
+  })
+
+  it("refuses a dbName that is not non-empty text with kind 'bad_option', quoting none of it", () => {
+    for (const dbName of ['', 42, null]) {
+      expect(() => browserOpts({ dbName } as unknown as { dbName: string }))
+        .to.throw(VaultError, /dbName/).with.property('kind', 'bad_option')
+    }
   })
 
   it("spreads into openVault beside the host's vault store", async () => {

@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { anyApi } from 'convex/server'
 import { ConvexError } from 'convex/values'
 import { VaultError, memoryDeviceDB, openVault } from 'safebyok'
-import type { VaultBundle } from 'safebyok'
 import * as TH from './test-helpers'
 import { convexVaultDB } from '../src/index'
 import { toConvexLockbox } from '../src/convex-vault-db'
@@ -236,11 +235,18 @@ describe("convexVaultDB, refusing", () => {
 
   it("never quotes a record the deployment refused", async () => {
     const deployment = deploy()
-    const vaultDB = convexVaultDB(deployment.client('u1'), deployment.api.safebyok)
-    await vaultDB.createBundle(TH.bundleOf('u1'))
-    // Zod lets an unknown field through; Convex's validator refuses it, quoting the arguments.
-    const overgrown = { ...TH.bundleOf('u1', { passphrase_epoch: 2 }), stray_field: 'x' } as VaultBundle
-    const refusal = await refusalOf(vaultDB.updateBundle(overgrown, { vault_id: 'vault-id-u1', passphrase_epoch: 1 }))
+    const client = deployment.client('u1')
+    // The core strips a field it does not know, so this one strays in on the wire, past it, where
+    // Convex's validator refuses it, quoting the arguments.
+    const straying: ConvexVaultClient = {
+      query:    client.query.bind(client),
+      onUpdate: client.onUpdate.bind(client),
+      mutation: (mutationRef, args) => client.mutation(mutationRef, { ...args, stray_field: 'x' }),
+    }
+    const vaultDB = convexVaultDB(straying, deployment.api.safebyok)
+    await convexVaultDB(client, deployment.api.safebyok).createBundle(TH.bundleOf('u1'))
+    const next = TH.bundleOf('u1', { passphrase_epoch: 2 })
+    const refusal = await refusalOf(vaultDB.updateBundle(next, { vault_id: 'vault-id-u1', passphrase_epoch: 1 }))
     expect(refusal.kind).to.eq('storage_unavailable')
     expect(refusal.message).to.not.include('ct-bundle-u1')
     expect(refusal.message).to.not.include('vault-id-u1')
