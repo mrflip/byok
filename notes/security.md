@@ -113,7 +113,11 @@ security expert who knows what questions to ask.
   so `expires_at` stays a finite number and the stored shape is unchanged. What still ends such an
   unlock: `lock()` (memory and device record), a passphrase change on another device (the next
   look at the bundle sees a new epoch), and the vault being destroyed or made anew (a new
-  `vault_id`). Nothing else does: no timer, and no idle detection.
+  `vault_id`). Nothing else does: no timer, and no idle detection. Two consequences: an open
+  handle sees that new epoch only when it next reads the bundle (an unlock, a write, or a change
+  the vaultDB pushes), so a handle that only reads whispers, on storage that pushes nothing, keeps
+  its vaultKey in memory until then; and lowering the option later does not shorten an unlock a
+  device already remembers, since the remembered path reads the stored `expires_at` as written.
 * 2026-10-14: the package was renamed `byok` → `safebyok` before any release, and its stored
   format tags with it (`safebyok-vault-v1`, `safebyok-lockbox-v1`, `safebyok-unlock-v1`). The
   tags are also the first element of every encryption's additional data, so a record written
