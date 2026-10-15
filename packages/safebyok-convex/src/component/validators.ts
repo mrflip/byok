@@ -39,21 +39,41 @@ export const VaultBundleFormat = v.union(v.literal('safebyok-vault-v1'))
 export const LockboxFormat = v.union(v.literal('safebyok-lockbox-v1'))
 
 /**
- * A vault's bundle: its scope, `vault_id`, `passphrase_epoch`, how its passphraseKey is derived,
- * its vaultKey wrapped under that passphraseKey, and when it was made (`registered_at`, epoch
- * milliseconds). Nothing in it opens without the passphrase.
+ * A passphrase's way into a vault: its `unlock_id` and `unlocklabel`, how its passphraseKey is
+ * derived (`key_deriver_label`, `salt_b64`), and the vaultKey wrapped under that passphraseKey.
+ *
+ * @example { method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase', key_deriver_label: 'argon2id_web_v1', salt_b64: 'q83v...', vault_key_wrapped: { cipher_iv_b64, ciphertext_b64 } }
+ */
+export const PassphraseEnvelope = v.object({
+  method:            v.literal('passphrase'),
+  unlock_id:         v.string(),
+  unlocklabel:       v.string(),
+  key_deriver_label: v.string(),
+  salt_b64:          v.string(),
+  vault_key_wrapped: Ciphered,
+})
+
+/**
+ * One way into a vault, told apart by its `method`: today only a {@link PassphraseEnvelope}. A new
+ * method widens this union, an additive deploy shipped with this package.
+ */
+export const UnlockEnvelope = v.union(PassphraseEnvelope)
+
+/**
+ * A vault's bundle: its scope, `vault_id`, `passphrase_epoch`, its ways in (`unlocks`, each the
+ * vaultKey wrapped under a key one method makes), and when it was made (`registered_at`, epoch
+ * milliseconds). Nothing in it opens without a passphrase. How many ways in, and that no two
+ * share an id or label, are the client's rules.
  */
 export const VaultBundle = v.object({
-  format:                       VaultBundleFormat,
-  applabel:                     v.string(),
-  user_id:                      v.string(),
-  vaultlabel:                   v.string(),
-  vault_id:                     v.string(),
-  passphrase_epoch:             v.number(),
-  key_deriver_label:            v.string(),
-  passphrase_salt_b64:          v.string(),
-  vault_key_passphrase_wrapped: Ciphered,
-  registered_at:                v.number(),
+  format:           VaultBundleFormat,
+  applabel:         v.string(),
+  user_id:          v.string(),
+  vaultlabel:       v.string(),
+  vault_id:         v.string(),
+  passphrase_epoch: v.number(),
+  unlocks:          v.array(UnlockEnvelope),
+  registered_at:    v.number(),
 })
 
 /**

@@ -6,7 +6,8 @@ Bring Your Own Key (BYOK) Browser Vault using E2EE (End-to-end Encryption) and p
 
 * Secrets are always stored in encrypted form, using keys that never leave the end-user's device
 * Secrets synchronize across multiple devices using a passphrase the user controls
-* The user may change their passphrase without re-entering their information
+* The user may change their passphrase without re-entering their information, and keep several
+  passphrases, any of which opens the vault
 * Accessing a vault is prohibitively difficult -- even given the application's database, code and environment.
 
 It is react-friendly (`safebyok-react`) and database agnostic: storage adapters implement a small
@@ -174,6 +175,37 @@ says four things:
 * `error`: a failed `openVault`, closing its storage watch, found the adapter's unsubscribe
   throwing. `openVault` still rejects with what stopped the open.
 
+## Several passphrases
+
+A vault may have up to `MaxUnlocks` (8) passphrases, each its own way in: a daily one, one
+written down at home, one a partner holds. Each wraps the same vaultKey under its own salt, no
+passphrase is ever stored, and adding or removing one rewrites no lockbox. The snapshot lists
+them, locked or not, as `unlocks`: each a `method` (`passphrase`), an `unlock_id`, and the
+`unlocklabel` the user chose.
+
+```ts
+vault.getSnapshot().unlocks       // [{ method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase' }]
+
+const spareId = await vault.addPassphrase(passphrase, spare, { unlocklabel: 'written_down' })
+await vault.changePassphrase(spare, renewedSpare)       // changes that one; the first still opens
+await vault.removeUnlock(passphrase, spareId)           // never the last one: 'last_unlock'
+await vault.unlock(passphrase, { unlockId })            // aimed at one: a single key derivation
+```
+
+* **Every change asks for a passphrase**, even on an unlocked vault: the vault keeps no copy of
+  its vaultKey it could wrap anew, and a walked-away unlocked screen should not be able to add a
+  way in. Any passphrase the vault opens with will do.
+* **Every change locks the other devices.** It moves the bundle's `passphrase_epoch`, so each
+  other device falls back to `locked` and must unlock with a passphrase still standing. This
+  device stays unlocked.
+* **An unlock not aimed at one tries each in turn**, one key derivation apiece: about 0.6 s each
+  with the browser's deriver, so a mistyped passphrase in a vault of eight takes about five
+  seconds to refuse. A host that knows which one the user means (a picker over `unlocks`) passes
+  its `unlockId`.
+* **Removal is not revocation.** A removed passphrase stops opening the vault from here on, but
+  whoever knew it and kept a copy of the bundle from before can still open that copy, and the
+  vaultKey inside is the one the vault still uses. There is no key rotation yet.
+
 ## No recovery
 
 There is no recovery path, on purpose. A forgotten passphrase means an unrecoverable vault: the
@@ -198,7 +230,7 @@ render for that, and hands a condition down as `openError`).
 
 | Kind                  | What happened                                                    | What to do                                              |
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
-| `bad_label`           | a label (or the `userId`) that fails the rules                   | Pass labels the app chose; check a user-typed one first with `Label` |
+| `bad_label`           | a label (or the `userId`) that fails the rules, or an `unlocklabel` the vault already has | Pass labels the app chose; check a user-typed one first with `Label`, and against the snapshot's `unlocks` |
 | `bad_whisper`         | a whisper JSON cannot carry (`undefined`, a function, a class instance) | Store plain JSON; to empty a lockbox, `erase` it |
 | `bad_option`          | an `openVault` option, or a `store()` note, out of its range     | Fix the option; the message names it                    |
 | `vault_closed`        | the vault handle was closed                                      | Open the vault again; do not use a handle after `close()` |
@@ -214,8 +246,11 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `wrong_passphrase`    | the passphrase did not unlock the vault, or was empty            | Ask again                                               |
 | `absent_box`          | no lockbox under that label                                      | Offer to create it, or refresh the list: it may have been erased elsewhere |
 | `absent_vault`        | the vault has never been created, or was deleted elsewhere, and the call will not create it | Unlock with a new passphrase to create it |
+| `absent_unlock`       | no way into the vault has that `unlock_id`: it may have been removed on another device | Look again at the snapshot's `unlocks`, and ask the user which they mean |
 | `whisper_too_large`   | a whisper over the vault's `maxWhisperBytes`                     | Tell the user it is too large; a host that means to allow more passes a larger `maxWhisperBytes` |
 | `vault_full`          | a new lockbox in a vault already holding its `maxLockboxes`, or a write the storage backend has no room for | Tell the user to erase a lockbox first; the host may raise `maxLockboxes` where the backend allows |
+| `too_many_unlocks`    | a passphrase added to a vault already holding `MaxUnlocks` (8) ways in | Tell the user to remove one first                        |
+| `last_unlock`         | removing the vault's last way in, which would leave nobody able to open it | Add another passphrase first; to be rid of the vault, `destroy()` it |
 | `corrupt_record`      | a stored record failed validation or decryption verification     | Nothing was changed. Do not retry; tell the user, and see a developer: the record is damaged, was moved, or came from a newer safebyok |
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
 | `not_permitted`       | the storage backend refused this user: signed out, or not theirs to reach | Have the user sign in again                             |

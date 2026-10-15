@@ -59,7 +59,8 @@ security expert who knows what questions to ask.
   label, as above.
 * 2026-10-14: every encryption binds its context as AES-GCM additional data
   (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus passphraseEpoch
-  for key wraps and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
+  for key wraps (since 2026-10-15, the device record's only: an unlock envelope binds its own
+  header instead, below) and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
   moved between users, vaults, boxes or revisions refuses to open.
 * 2026-10-14: a wrong passphrase is learned from the vaultKey envelope's AEAD failure, never a
   comparison; there is no separate passphrase verifier field.
@@ -368,3 +369,29 @@ security expert who knows what questions to ask.
   gets zod's issues, which name paths and limits but carry no input (zod's `reportInput` is
   off). The build keeps each module its own file in `dist/` (`unbundle`), so a host's bundle
   carries only the modules its imports reach.
+* 2026-10-15: a bundle holds its ways in as `unlocks`, a list of one to `MaxUnlocks` (8) unlock
+  envelopes, each the one vaultKey wrapped under its own key. A passphrase envelope has its own
+  random `salt_b64` (never shared between envelopes) and its own `unlock_id`, and its wrap's
+  additional data is the format, scope, `vault_id`, a purpose per method
+  (`vault_key_passphrase_wrapped`), and the envelope's whole public header (`method`,
+  `unlock_id`, `unlocklabel`, `key_deriver_label`, `salt_b64`) as key-sorted JSON. The
+  `passphrase_epoch` is no longer in it, since a change to one envelope bumps the epoch and the
+  others, whose passphrases the device does not hold, must still open: a backend can therefore
+  splice an envelope from an older bundle of the same vault (a removed passphrase's, or one from
+  before a change) into the current one, and that old passphrase opens the vault again, as it
+  always opens the older bundle itself. The list's order and length, and the bundle's other
+  fields, are not bound.
+* 2026-10-15: removing an unlock envelope (`removeUnlock`) is not revocation. Whoever knew the
+  removed passphrase and kept any earlier bundle holds the vaultKey, which never rotates; the
+  removal bumps `passphrase_epoch`, so devices unlocked under it lock at their next look, and the
+  vault refuses to remove its last envelope (`last_unlock`). Every change to the envelopes
+  (`addPassphrase`, `removeUnlock`, `changePassphrase`) asks for a passphrase that opens one,
+  even on an unlocked vault: the session's vaultKey handle is non-extractable, so wrapping it
+  anew needs the extractable transient that a proof unwraps.
+* 2026-10-15: an `unlock()` or a proof not aimed at one envelope (`unlockId`) tries each
+  passphrase envelope in the bundle's order, one key derivation apiece, and stops at the first
+  that opens: a wrong passphrase costs as many derivations as there are envelopes, at most
+  `MaxUnlocks` (8, about 4.8 s with the noble deriver in Node 24), a bound enforced on read, so a
+  backend cannot make one unlock derive more. Which envelope opened shows in how long the unlock
+  took, on the device only. Envelopes made by a key deriver the vault was not opened with are
+  passed over, and refused as `unknown_key_deriver` only when no envelope is left to try.
