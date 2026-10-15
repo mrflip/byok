@@ -242,8 +242,10 @@ security expert who knows what questions to ask.
   unlock (a localUnlockKey and the vaultKey wrapped under it) would otherwise linger in IndexedDB
   beyond the reach of `lock()` and of any expiry, so `idbDeviceDB` sweeps it: `readUnlock` and
   `eraseUnlock` list the device shelf's ckeys and delete, unread, every one that is not an unlock
-  tuple (`Ckeys.isUnlock`). The first open after an upgrade does it, and a test proves no old
-  value is fetched. `eraseAll()` clears the whole shelf. `memoryDeviceDB` keeps nothing past the
+  tuple (`Ckeys.isUnlock`). An open that finds the vault does it, and so does every lock; under
+  `idbVaultDB` or `localVaultDB`, whose first open after an upgrade finds no vault (so reads no
+  unlock), the old row waits for the first lock or the next open after an unlock. A test proves
+  no old value is fetched. `eraseAll()` clears the whole shelf. `memoryDeviceDB` keeps nothing past the
   page, so it needs no sweep.
 * 2026-10-15: the Convex component (`packages/safebyok-convex`) authenticates in the host app,
   not inside the component (where `ctx.auth` does not exist): `SafebyokComponent.api({ getUserId })`
