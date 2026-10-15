@@ -70,6 +70,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+/** React reports a boundary-caught render error on the console; the suite stays quiet about it. */
+const hushConsole = () => vi.spyOn(console, 'error').mockImplementation(() => { /* expected */ })
+
+/** Stands in for a function a test replaces before it is called. */
+const noop = () => { /* replaced before use */ }
+
 describe("VaultProvider", () => {
   it("provides no vault without a signed-in user", () => {
     const world = makeWorld()
@@ -181,9 +187,6 @@ describe("VaultProvider", () => {
   })
 
   describe("when openVault rejects", () => {
-    /** React reports a boundary-caught render error on the console; the suite stays quiet about it. */
-    const hushConsole = () => vi.spyOn(console, 'error').mockImplementation(() => { /* expected */ })
-
     it("throws a bad label to the error boundary, as the very VaultError", async () => {
       hushConsole()
       const caught: unknown[] = []
@@ -237,8 +240,9 @@ describe("VaultProvider", () => {
     it("ignores a rejection that arrives after the user signed out", async () => {
       hushConsole()
       const world = makeWorld()
-      let rejectRead: (err: unknown) => void = () => { /* replaced below */ }
-      vi.spyOn(world.vaultDB, 'readBundle').mockReturnValueOnce(new Promise((_resolve, reject) => { rejectRead = reject }))
+      let rejectRead: (err: unknown) => void = noop
+      // eslint-disable-next-line unicorn/prefer-promise-with-resolvers -- Promise.withResolvers is ES2024, and every tsconfig's lib stops at ES2023
+      const readBundle = vi.spyOn(world.vaultDB, 'readBundle').mockReturnValueOnce(new Promise((_resolve, reject) => { rejectRead = reject }))
       const caught: unknown[] = []
       const tree = (userId: string | null) => (
         <CatchingBoundary caught={caught}>
@@ -248,7 +252,7 @@ describe("VaultProvider", () => {
         </CatchingBoundary>
       )
       const { rerender } = render(tree('u1'))
-      await waitFor(() => { expect(world.vaultDB.readBundle).toHaveBeenCalledOnce() })
+      await waitFor(() => { expect(readBundle).toHaveBeenCalledOnce() })
       rerender(tree(null))
       await act(async () => {
         rejectRead(new VaultError('storage_unavailable', 'The vault storage could not be reached.'))

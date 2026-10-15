@@ -87,11 +87,11 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     // Listed one by one so the effect re-runs on each; `satisfies` fails the build if an openVault
     // option is ever added and not passed through.
     const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, rememberForMs, clock, keyDeriver, maxWhisperBytes } satisfies Record<keyof OpenVaultOpts, unknown>
-    openVault(openOpts).then((opened) => {
+    void openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
       setVault(opened)
-    }, (err: unknown) => {
+    }).catch((err: unknown) => {
       if (gone) { return }
       setOpenFailure({ err })
     })
