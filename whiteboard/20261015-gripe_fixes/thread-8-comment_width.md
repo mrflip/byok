@@ -1,6 +1,6 @@
 # Thread 8: comment_width (2026-10-15)
 
-Branch `20261015-comment_width`, PR not yet filed, stacked on #66 (cut from its tip `5fefc90`; the
+Branch `20261015-comment_width`, PR [#81](https://github.com/mrflip/safebyok/pull/81), stacked on #66 (cut from its tip `5fefc90`; the
 sprint's other threads' work is not on this base). Justify: green; root 105 tests, core 705,
 Convex 265, React 28, demo 61.
 
