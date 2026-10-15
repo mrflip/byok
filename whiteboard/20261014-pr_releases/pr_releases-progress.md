@@ -1,6 +1,6 @@
 # Sprint pr_releases: progress
 
-**Status**: paused: all three threads on GitHub (#15, #16 filed; #22 draft); #15 and #16 rebased by another session, #22 needs restacking.
+**Status**: paused: all three threads on GitHub (#15, #16 filed; #22 draft); #15, #16 restored to the workers' tips after a flawed rebase; none restacked onto current main.
 
 ## Status
 
@@ -81,4 +81,4 @@ as burned); "already staged" is recognised only by npm's "previously published" 
 tag push or release creation is not retried by a re-run; global `npm@12.2.0` installed unpinned by hash in
 `publish`. Not run: `npm stage`, the workflows, actionlint (not installed in the reviewer's sandbox).
 
-*Orchestrator, state at pause (2026-10-15):* all three threads are now on GitHub. #15 and #16 were rebased onto the newer `main` by another session after this sprint's reviews; the orchestrator did not touch them, and the pre-rebase tips are kept as local tags `20261014-react_publishable-prerebase` and `20261014-core_under_packages-prerebase` in the main checkout. Thread 3 is draft [#22](https://github.com/mrflip/safebyok/pull/22), built on #16's pre-rebase tip, with the reviewer's fix committed as its last commit; it needs restacking. The Coach is continuing in a new sprint thread. The sprint-doc mirror holds full-text Plan and Progress tabs; the preplan, thread files and `human/` entries are not yet mirrored there.
+*Orchestrator, state at pause (2026-10-15):* all three threads are on GitHub. Another session rebased #15 and #16 onto the newer `main` and the build went red; at the Coach's word, GitHub was overwritten with the workers' own pre-rebase tips (force-push, leased on the rebased tips `651d425` and `47b1175`): #15 is `495a01e` and #16 is `dae73d2` again, as reviewed. The rebased versions are still in the main checkout's local branches. Thread 3 is draft [#22](https://github.com/mrflip/safebyok/pull/22), standing on `dae73d2` with the reviewer's fix committed as its last commit. None of the three has been restacked onto the current `main` (convex PRs #17, #18, #19 have merged since); the Coach is continuing in a new sprint thread. The sprint-doc mirror holds full-text Plan and Progress tabs; the preplan, thread files and `human/` entries are not yet mirrored there.
