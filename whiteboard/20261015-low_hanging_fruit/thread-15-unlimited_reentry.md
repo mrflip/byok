@@ -1,6 +1,6 @@
 # Thread 15: unlimited_reentry (2026-10-15)
 
-Branch `20261015-unlimited_reentry`, cut from origin/main at 374d3d4; PR not yet filed. Justify: green (root 98, safebyok 332, safebyok-convex 219, safebyok-react 15, demo 28).
+Branch `20261015-unlimited_reentry`, cut from origin/main at 374d3d4; PR not yet filed. Reviewed: three commits (c5b8861 clamp on read, 67f0597 tests, 2689275 security note). Justify: green (root 98, safebyok 333, safebyok-convex 219, safebyok-react 15, demo 28).
 
 The Coach's ruling on [#40](https://github.com/mrflip/safebyok/pull/40)'s question about an upper cap on `forcePassphraseReentryHours`: "allow unlimited, u do u". Thread 2's file explains the option's origin.
 
@@ -13,7 +13,7 @@ The Coach's ruling on [#40](https://github.com/mrflip/safebyok/pull/40)'s questi
 * **Decisions taken**:
   - **Clamp the sum, not the span.** The span alone cannot know `now`; the clamp is on the deadline, where it is the stored fact.
   - **`LatestAskPassphraseAt` is not exported from the package entry.** It would widen the public surface (and the exact-surface test in `index.test.ts`). A host that wants to show "never" can compare against 8.64e15, which the docs state. Easy to export later.
-  - **The remembered path reads `expires_at` as stored.** A finite stored value needs no clamp, and the schema already refuses `Infinity`, `NaN` and text.
+  - **The remembered path clamps `expires_at` on read** (the reviewer's c5b8861, which corrected my first reading that a finite stored value needs no clamp): records from a host's own deviceDB, or from before this change, can hold a finite deadline past 8.64e15, which would reach the snapshot as an Invalid Date. The schema already refuses `Infinity`, `NaN` and text.
   - **Timers: none.** `grep setTimeout|setInterval` over the core, the React binding and the demo finds nothing. Expiry is checked at use (`ensureUnlocked`, `vaultState`), so nothing computes `deadline - now` into a delay.
 
 * **Deviations**: none.
@@ -23,4 +23,5 @@ The Coach's ruling on [#40](https://github.com/mrflip/safebyok/pull/40)'s questi
   - The demo's `LockChip` prints `new Date(askPassphraseAt).toLocaleString()`; for the clamped value that is a year-275760 date, valid but odd. A host showing "never" should special-case `askPassphraseAt === 8.64e15`.
 
 * **For the Coach**:
+  - **Open, significant, not blocking merge:** an unlock granted under `Infinity` outlives a later lowering of the option: the device record holds 8.64e15, and a reopen with `forcePassphraseReentryHours: 24` still reads it as unlocked. A real fix caps at read time (stored deadline no later than the unlock's own time plus the current window, which needs the record to carry when it was granted) and rewrites the device record. It ties to your open question from [#43](https://github.com/mrflip/safebyok/pull/43) (clamp `expires_at` on read). The security note says so; the fix waits on your answer.
   - Say whether to export `LatestAskPassphraseAt` (and show "until locked" in the demo's chip).
