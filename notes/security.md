@@ -14,11 +14,13 @@ security expert who knows what questions to ask.
   showing; a `head` and `tail` large enough to cover a short whisper show it nearly whole, and
   `minStars: 0` shows a short one entirely. Every result, even the stars, goes through a final
   normalization that strips combining marks, control, format, surrogate, private-use and
-  unassigned code points, spaces, ignorable code points, bidirectional controls and the two
-  symbols drawn blank, U+2800 and U+1D159, so it is one plain line that cannot overwrite what
-  displays beside it. Strong right-to-left letters stay, and under the ordinary bidirectional
-  algorithm they can still reorder the digits and punctuation next to them, in the result or
-  around it. It throws `bad_option` or `bad_whisper` without quoting its input.
+  unassigned code points, spaces, ignorable code points, bidirectional controls, the symbols
+  drawn blank or as a box (U+2800, U+1D159, U+FFFC) and every strong right-to-left letter and
+  number (the spans DerivedBidiClass.txt gives R, AL and AN by default), so it is one plain
+  line that runs left to right and cannot overwrite or reorder what displays beside it. Those
+  scripts vanish from a mask. `head`, `tail` and `minStars` are capped at 1000, so no option
+  makes it build an unbounded string. It throws `bad_option` or `bad_whisper` without quoting
+  its input.
 * 2026-10-14 (revised 2026-10-15 for the push-to-main workflow): the package is staged on npm by `.github/workflows/release.yml`, run on every push
   to main (when the Coach has merged the Version PR, and a version npm lacks is waiting),
   authenticating by npm's trusted publishing (OIDC, no stored token) from the `npm`
