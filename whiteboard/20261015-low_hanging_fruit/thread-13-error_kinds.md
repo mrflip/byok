@@ -1,6 +1,6 @@
 # Thread 13: error_kinds (2026-10-15)
 
-Branch `20261015-error_kinds`, PR PRNUM, stacked on [#46](https://github.com/mrflip/safebyok/pull/46)
+Branch `20261015-error_kinds`, [PR #50](https://github.com/mrflip/safebyok/pull/50), stacked on [#46](https://github.com/mrflip/safebyok/pull/46)
 (thread 12). Justify: green (core 322, convex 257, react 15, demo 28, root 91).
 
 * **Built**:
