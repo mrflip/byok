@@ -4,17 +4,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { KnockKnock } from '../../src/components/KnockKnock'
 import * as TH from '../test-helpers'
 
-/** Anthropic as fetch sees it: a canned reply of `status`, recording the API key each request carried. */
-const fakeAnthropic = (status: number, jokeText = '') => {
-  const apiKeysSeen: (string | null)[] = []
-  const reply = status === 200
-    ? { id: 'msg_fake', type: 'message', role: 'assistant', model: 'claude-haiku-5-5', content: [{ type: 'text', text: jokeText }], stop_reason: 'end_turn', stop_sequence: null, usage: { input_tokens: 10, output_tokens: 20 } }
-    : { type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }
-  vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-    apiKeysSeen.push(new Request(input, init).headers.get('x-api-key'))
-    return Promise.resolve(Response.json(reply, { status }))
-  }))
-  return { apiKeysSeen }
+/** Anthropic, faked at the global `fetch` the SDK calls: see TH.fakeAnthropic. */
+const stubAnthropic = (status: number, jokeText = '') => {
+  const anthropic = TH.fakeAnthropic(status, jokeText)
+  vi.stubGlobal('fetch', anthropic.fetchFn)
+  return anthropic
 }
 
 afterEach(() => {
@@ -43,8 +37,7 @@ describe("KnockKnock", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
     await TH.answerPassphraseDialog()
     await screen.findByText(/Anthropic key in the vault/)
-    const vault = await world.open()
-    await vault.unlock(TH.Passphrase)
+    const vault = await world.openUnlocked()
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
   })
 
@@ -52,8 +45,7 @@ describe("KnockKnock", () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
     // Unlocked on this device first, so a save would need no passphrase dialog to land.
-    const outside = await world.open()
-    await outside.unlock(TH.Passphrase)
+    const outside = await world.openUnlocked()
     outside.close()
     world.renderInVault(<KnockKnock />)
     fireEvent.click(await screen.findByRole('button', { name: 'replace it' }))
@@ -71,20 +63,20 @@ describe("KnockKnock", () => {
   it("tells the joke Claude tells, the key going to Anthropic and nowhere on the page", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
-    const anthropic = fakeAnthropic(200, 'Banana who? Banana split, gotta run!')
+    const anthropic = stubAnthropic(200, 'Banana who? Banana split, gotta run!')
     const { container } = world.renderInVault(<KnockKnock />)
     await screen.findByText(/Anthropic key in the vault/)
     knockAs('Banana')
     await TH.answerPassphraseDialog()
     await screen.findByText('Banana who? Banana split, gotta run!')
-    expect(anthropic.apiKeysSeen).to.deep.equal(['sk-ant-test-not-a-real-key'])
+    expect(anthropic.seen.map((request) => request.apiKeyHeader)).to.deep.equal(['sk-ant-test-not-a-real-key'])
     expect(container.outerHTML).to.not.include('sk-ant-test-not-a-real-key')
   })
 
   it("knocks from the keyboard too", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
-    fakeAnthropic(200, 'Olive who? Olive you!')
+    stubAnthropic(200, 'Olive who? Olive you!')
     world.renderInVault(<KnockKnock />)
     await screen.findByText(/Anthropic key in the vault/)
     const field = screen.getByPlaceholderText('Banana')
@@ -97,7 +89,7 @@ describe("KnockKnock", () => {
   it("says calmly that Anthropic refused the key, quoting none of it", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
-    fakeAnthropic(401)
+    stubAnthropic(401)
     const { container } = world.renderInVault(<KnockKnock />)
     await screen.findByText(/Anthropic key in the vault/)
     knockAs('Lettuce')
@@ -109,19 +101,19 @@ describe("KnockKnock", () => {
   it("gripes, rather than calling Anthropic, when the stored key is not text", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: { apiKey: 'sk-ant-test-not-a-real-key' } })
-    const anthropic = fakeAnthropic(200, 'never told')
+    const anthropic = stubAnthropic(200, 'never told')
     world.renderInVault(<KnockKnock />)
     await screen.findByText(/Anthropic key in the vault/)
     knockAs('Banana')
     await TH.answerPassphraseDialog()
     await screen.findByText(/That joke got lost on the way/)
-    expect(anthropic.apiKeysSeen).to.have.lengthOf(0)
+    expect(anthropic.seen).to.have.lengthOf(0)
   })
 
   it("tells nothing when the passphrase dialog is dismissed", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
-    const anthropic = fakeAnthropic(200, 'never told')
+    const anthropic = stubAnthropic(200, 'never told')
     world.renderInVault(<KnockKnock />)
     await screen.findByText(/Anthropic key in the vault/)
     knockAs('Banana')
@@ -129,7 +121,7 @@ describe("KnockKnock", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await waitFor(() => { expect(screen.queryByText(/clearing its throat/)).to.be.null })
     expect(screen.queryByText('never told')).to.be.null
-    expect(anthropic.apiKeysSeen).to.have.lengthOf(0)
+    expect(anthropic.seen).to.have.lengthOf(0)
   })
 
   it("replaces a key already stored", async () => {
@@ -141,8 +133,7 @@ describe("KnockKnock", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
     await TH.answerPassphraseDialog()
     await screen.findByText(/Anthropic key in the vault/)
-    const vault = await world.open()
-    await vault.unlock(TH.Passphrase)
+    const vault = await world.openUnlocked()
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-replaced')
   })
 

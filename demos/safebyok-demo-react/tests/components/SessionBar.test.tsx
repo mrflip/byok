@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { memoryStore } from 'safebyok'
-import { useVault, useVaultSnapshot } from 'safebyok-react'
 import { SessionBar } from '../../src/components/SessionBar'
 import { createAuth } from '../../src/lib/auth'
 import * as TH from '../test-helpers'
@@ -12,23 +11,12 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
-/** The vault's state beside the bar, and a way to unlock it, so a test can watch what signing out does. */
-const VaultProbe = () => {
-  const { vault } = useVault()
-  return (
-    <p>
-      <span data-testid="vault-state">{useVaultSnapshot().state}</span>
-      <button onClick={() => { void vault?.unlock(TH.Passphrase) }}>unlock</button>
-    </p>
-  )
-}
-
 /** The bar over a fresh fake auth, in a vault for `u1`. */
 const renderBar = () => {
   const world = TH.makeWorld()
   const dbStore = memoryStore()
   const auth = createAuth({ applabel: 'acme', dbStore, deviceStore: memoryStore() })
-  world.renderInVault(<><SessionBar auth={auth} /><VaultProbe /></>)
+  world.renderInVault(<><SessionBar auth={auth} /><TH.VaultProbe /></>)
   return { world, auth, dbStore }
 }
 
@@ -67,11 +55,11 @@ describe("SessionBar", () => {
     signInAs('margo')
     await screen.findByText('margo')
     fireEvent.click(await screen.findByRole('button', { name: 'unlock' }))
-    await waitFor(() => { expect(screen.getByTestId('vault-state').textContent).to.eq('unlocked') })
+    await TH.expectProbeState('unlocked')
     fireEvent.click(screen.getByRole('button', { name: 'Sign out' }))
     await screen.findByPlaceholderText('username')
     expect(auth.getSnapshot()).to.be.null
-    expect(screen.getByTestId('vault-state').textContent).to.eq('locked')
+    expect(screen.getByTestId('state').textContent).to.eq('locked')
   })
 
   it("deletes the account and its vault, once the user confirms", async () => {
@@ -79,7 +67,7 @@ describe("SessionBar", () => {
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
     signInAs('margo')
     await screen.findByText('margo')
-    await waitFor(() => { expect(screen.getByTestId('vault-state').textContent).to.eq('locked') })
+    await TH.expectProbeState('locked')
     expect(await world.vaultDB.readBundle(TH.scopeOf('u1'))).to.not.be.null
     vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
     fireEvent.click(screen.getByRole('button', { name: 'Delete account' }))

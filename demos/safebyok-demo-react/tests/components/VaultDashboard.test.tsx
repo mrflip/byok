@@ -1,8 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { VaultError, localVaultDB, memoryDeviceDB, memoryStore } from 'safebyok'
-import { VaultProvider } from 'safebyok-react'
+import { VaultError, localVaultDB, memoryStore } from 'safebyok'
 import { VaultDashboard } from '../../src/components/VaultDashboard'
 import { OutageVaultDB, makeOutage } from '../../src/lib/outage'
 import * as TH from '../test-helpers'
@@ -38,11 +37,7 @@ describe("VaultDashboard, opening", () => {
     const outage = makeOutage()
     outage.setDown(true)
     const vaultDB = new OutageVaultDB(localVaultDB(memoryStore()), outage)
-    render(
-      <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={vaultDB} deviceDB={memoryDeviceDB()} keyDeriver={TH.testDeriver}>
-        <VaultDashboard />
-      </VaultProvider>,
-    )
+    TH.makeWorld({ vaultDB }).renderInVault(<VaultDashboard />)
     await screen.findByText(/Can't reach your vault/)
     outage.setDown(false)
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
@@ -50,13 +45,9 @@ describe("VaultDashboard, opening", () => {
   })
 
   it("says a damaged vault record can't be opened, and offers no Retry", async () => {
-    const vaultDB = localVaultDB(memoryStore())
-    vi.spyOn(vaultDB, 'readBundle').mockRejectedValue(new VaultError('corrupt_record', 'The stored vault failed its checks.'))
-    render(
-      <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={vaultDB} deviceDB={memoryDeviceDB()} keyDeriver={TH.testDeriver}>
-        <VaultDashboard />
-      </VaultProvider>,
-    )
+    const world = TH.makeWorld()
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValue(new VaultError('corrupt_record', 'The stored vault failed its checks.'))
+    world.renderInVault(<VaultDashboard />)
     await screen.findByText(/stored record is damaged/)
     expect(screen.queryByRole('button', { name: 'Retry' })).to.be.null
   })
@@ -73,8 +64,7 @@ describe("VaultDashboard, its lockboxes", () => {
     await screen.findByText('anthropic_api_key')
     expect(within(rowOf('anthropic_api_key')).getByText('work account')).to.not.be.null
     expect(within(rowOf('anthropic_api_key')).queryByText('sk-ant-test-not-a-real-key')).to.be.null
-    const vault = await world.open()
-    await vault.unlock(TH.Passphrase)
+    const vault = await world.openUnlocked()
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
   })
 
@@ -86,8 +76,7 @@ describe("VaultDashboard, its lockboxes", () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await TH.answerPassphraseDialog()
     await screen.findByText('openai_api_key')
-    const vault = await world.open()
-    await vault.unlock(TH.Passphrase)
+    const vault = await world.openUnlocked()
     expect(await vault.read('openai_api_key')).to.deep.equal({ apiKey: 'sk-test-not-a-real-key', orgId: null })
   })
 
@@ -146,8 +135,7 @@ describe("VaultDashboard, its lockboxes", () => {
     fillForm({ whisper: 'sk-ant-test-replaced', note: 'rotated' })
     fireEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() => { expect(within(rowOf('anthropic_api_key')).queryByText('rotated')).to.not.be.null })
-    const vault = await world.open()
-    await vault.unlock(TH.Passphrase)
+    const vault = await world.openUnlocked()
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-replaced')
   })
 

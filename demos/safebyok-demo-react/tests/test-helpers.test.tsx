@@ -1,41 +1,36 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { useVault, useVaultSnapshot } from 'safebyok-react'
+import { localVaultDB, memoryStore } from 'safebyok'
+import { tellKnockKnockJoke } from '../src/lib/anthropic'
 import * as TH from './test-helpers'
 
 afterEach(cleanup)
 
-/** The vault's state, and a button that reads a lockbox through withUnlockedVault. */
-const Probe = () => {
-  const { vault, withUnlockedVault } = useVault()
-  const snapshot = useVaultSnapshot()
-  return (
-    <p>
-      <span data-testid="vault">{vault === null ? 'none' : 'open'}</span>
-      <span data-testid="state">{snapshot.state}</span>
-      <span data-testid="boxes">{snapshot.boxes.map((box) => box.boxlabel).join(',')}</span>
-      <button onClick={() => { void withUnlockedVault(() => vault?.read('anthropic_api_key') ?? Promise.resolve(null)) }}>read</button>
-    </p>
-  )
-}
-
 describe("makeWorld", () => {
   it("renders a component inside a vault for u1, absent until something is stored", async () => {
-    TH.makeWorld().renderInVault(<Probe />)
-    await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
+    TH.makeWorld().renderInVault(<TH.VaultProbe />)
+    await TH.expectProbeState('absent')
+  })
+
+  it("puts the vault behind the vaultDB it is handed", async () => {
+    const vaultDB = localVaultDB(memoryStore())
+    const world = TH.makeWorld({ vaultDB })
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+    expect(world.vaultDB).to.eq(vaultDB)
+    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.not.be.null
   })
 
   it("renders no vault for a signed-out page", () => {
-    TH.makeWorld().renderInVault(<Probe />, null)
+    TH.makeWorld().renderInVault(<TH.VaultProbe />, null)
     expect(screen.getByTestId('vault').textContent).to.eq('none')
   })
 
   it("seeds the vault from another device, so the page finds it filled and locked", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
-    world.renderInVault(<Probe />)
-    await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('locked') })
+    world.renderInVault(<TH.VaultProbe />)
+    await TH.expectProbeState('locked')
     expect(screen.getByTestId('boxes').textContent).to.eq('anthropic_api_key')
   })
 
@@ -47,28 +42,66 @@ describe("makeWorld", () => {
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
     expect(await world.vaultDB.readBundle(TH.scopeOf('u1'))).to.not.be.null
   })
+
+  it("opens the vault from outside the page already unlocked, with the tests' passphrase", async () => {
+    const world = TH.makeWorld()
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+    const vault = await world.openUnlocked()
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
+  })
 })
 
 describe("answerPassphraseDialog", () => {
   it("unlocks a locked vault through the dialog withUnlockedVault raises", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
-    world.renderInVault(<Probe />)
-    await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('locked') })
+    world.renderInVault(<TH.VaultProbe />)
+    await TH.expectProbeState('locked')
     fireEvent.click(screen.getByRole('button', { name: 'read' }))
     await TH.answerPassphraseDialog()
-    await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('unlocked') })
+    await TH.expectProbeState('unlocked')
     expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
   })
 
   it("types the passphrase it is given, so a wrong one leaves the dialog asking", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
-    world.renderInVault(<Probe />)
-    await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('locked') })
+    world.renderInVault(<TH.VaultProbe />)
+    await TH.expectProbeState('locked')
     fireEvent.click(screen.getByRole('button', { name: 'read' }))
     await TH.answerPassphraseDialog('not the passphrase')
     await screen.findByText(/passphrase/i, { selector: '.gripe' })
     expect(screen.getByTestId('state').textContent).to.eq('locked')
+  })
+})
+
+describe("fakeAnthropic", () => {
+  it("answers with the joke it was given, recording the request and the key it carried", async () => {
+    const anthropic = TH.fakeAnthropic(200, 'Banana who? Banana split, gotta run!')
+    expect(await tellKnockKnockJoke('sk-ant-fake-key', 'Banana', anthropic.fetchFn)).to.eq('Banana who? Banana split, gotta run!')
+    expect(anthropic.seen).to.have.lengthOf(1)
+    expect(anthropic.seen[0]?.apiKeyHeader).to.eq('sk-ant-fake-key')
+    expect(anthropic.seen[0]?.url).to.include('/v1/messages')
+    expect(JSON.stringify(anthropic.seen[0]?.body.messages)).to.include('Banana')
+  })
+
+  it("refuses the key as Anthropic would at any status but 200", async () => {
+    const anthropic = TH.fakeAnthropic(401)
+    const reply = await anthropic.fetchFn('https://api.anthropic.com/v1/messages', { method: 'POST', body: '{"model":"m","messages":[]}' })
+    expect(reply.status).to.eq(401)
+    expect(await reply.json()).to.have.nested.property('error.type', 'authentication_error')
+  })
+})
+
+describe("VaultProbe", () => {
+  it("unlocks the vault with the tests' passphrase, through its unlock button", async () => {
+    const world = TH.makeWorld()
+    await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+    world.renderInVault(<TH.VaultProbe />)
+    await TH.expectProbeState('locked')
+    fireEvent.click(screen.getByRole('button', { name: 'unlock' }))
+    await TH.expectProbeState('unlocked')
+    expect(screen.getByTestId('vault').textContent).to.eq('open')
   })
 })
