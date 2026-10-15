@@ -1,0 +1,29 @@
+# Thread 8: store_vault_cap (2026-10-15)
+
+Branch `20261015-store_vault_cap`, PR [#89](https://github.com/mrflip/safebyok/pull/89), stacked on #84 (the line #71 → #76 → #73 → #78 → #74 → #77 → #84 → this). Justify: green (root 123, safebyok 916, convex 276, indexeddb 101, react 71, postgres 150, graphql 151, argon2-wasm 44, demo 124); `pnpm size` green after one budget change (below).
+
+* **Built**:
+  - `VaultDB` declares an abstract `maxLockboxes` (`packages/safebyok/src/vault-db.ts`): a whole number, or `Infinity` for none. `openVault` reads it like `maxRecordBytes` (one `parseDeclared` over a `DeclaredLimitFor` table, `Infinity` becoming `Number.MAX_SAFE_INTEGER`), refuses an adapter that declares none, refuses a `maxLockboxes` above it (`bad_option`, naming the adapter's number), and defaults to `min(MaxLockboxes, adapter's)`.
+  - `localVaultDB`, `idbVaultDB`: `Infinity`. `convexVaultDB`: the component's `MaxVaultLockboxes` (8,000), imported from `src/component/tallies.ts`, so the declared and enforced numbers are one constant.
+  - `postgresVaultDB({ ..., maxLockboxes })`, default 1000, a safe integer (it reaches Postgres as a bigint). `vault-tables.sql` adds `safebyok_bundles.lockbox_count` and a row trigger, `safebyok_lockboxes_counted`, keeping it equal to the vault's lockboxes on every insert and delete, the host's own SQL included. `InsertBoxSql` is now one CTE statement: lock the bundle row `FOR UPDATE`, insert only while `lockbox_count < $5`, and answer `{ landed, full }`; `full` throws `vault_full`. `EraseBoxSql` locks the bundle row first too.
+  - `graphqlVaultDB(client, { maxLockboxes })`, default 1000 (Postgres's default; a test pins them equal), `Infinity` allowed. Exports the `GraphqlVaultDBOpts` type.
+  - The demo's `OutageVaultDB` passes its inner adapter's limit through.
+  - READMEs (Postgres, GraphQL, IndexedDB, Convex), `notes/security.md` (a new entry, and the Postgres entry no longer says "no size of its own"), one changeset for the five packages.
+* **Decisions taken**:
+  - **The ruling read as the plan glosses it**, and it fit the code. "No core constant": the core's doc says only "a large whole number"; the literal `1_200_300_400_500_600` appears in Postgres's option doc, error message and README, and in tests.
+  - **Postgres's default is 1000**, ten times the core's default, so a host raising `openVault`'s `maxLockboxes` has headroom before touching the server. It is not exported; `postgresVaultDB(...).maxLockboxes` reads it.
+  - **A counter column, not `count(*)`.** Under READ COMMITTED, each statement counts from its own snapshot, so a `count(*)` in the insert lets two racing inserts both land even with the bundle row locked. A count on the locked row itself is re-read when a waiter gets the lock (Postgres's documented re-check of a row it waited for), so it holds. Under REPEATABLE READ or SERIALIZABLE the waiter gets a serialization failure, which refuses as `storage_unavailable`. That is the isolation the doc block relies on.
+  - **Kept by a trigger, not by each statement**, so any writer (an eraseVault's cascade, a host's DELETE) keeps the count true. The cost: `TRUNCATE` of the lockboxes alone leaves it stale (the DDL says so).
+  - **Erase locks the bundle first**, because otherwise an erase holding a lockbox row whose trigger wants the bundle row, against an insert holding the bundle row and waiting on that boxlabel's unique index, would deadlock. Postgres would resolve it by aborting one, but the lock order removes it.
+  - **A full vault's first write for a boxlabel already taken refuses `stale_write`, not `vault_full`**: the writer missed a lockbox it would replace, and replacements are never refused for the count.
+  - **The foreign-key catch on a first lockbox write is gone**, along with its test: with the bundle row locked, no erase lands between the read and the insert.
+* **Deviations**:
+  - `.size-limit.json`: `openVault` rises from 19 kB to 19.5 kB (it measured 18.96 kB before, 19.02 kB after).
+  - The shared suite (`describeVaultDB`, `VaultDBVerbs` in `safebyok/testing`) is **not** changed, per the orchestrator: thread 10 moves `perUser` and deletes the per-package copies. Adding `maxLockboxes` to `VaultDBVerbs` here would break those copies' type check.
+* **For the assembly (thread 10's `perUser`)**: once `perUser` lives in `safebyok/testing`, add `'maxLockboxes'` to `VaultDBVerbs`'s `Pick`, `maxLockboxes: anyone.maxLockboxes` beside `maxRecordBytes` in `perUser`, and in `safebyok-convex/tests/convex-vault-db.test.ts`'s own structural VaultDB (line 44, `maxRecordBytes: convexVaultDB(...).maxRecordBytes`) if that copy survives. Then a `describeVaultDB` contract test can join "declares the most it holds in one record": `expect(vaultDB.maxLockboxes).to.be.greaterThan(0)`.
+* **Discoveries**:
+  - PGlite runs one statement at a time, so no test here can race two inserts. The race test checks only the outcome, and says so. The concurrency argument is reasoned from Postgres's documentation (13.2.1 and 13.2.2), not run.
+  - `zod/mini`'s `Z.int()` is bounded to safe integers, so a declared `2 ** 53 + 1` is refused, not clamped.
+* **For the Coach**:
+  - Is 1000 the Postgres default you want? It caps what a modified browser can write into its own vault at 1000 × 1 MiB.
+  - Nobody has checked the race on a real multi-connection Postgres. A one-off run against a local `postgres`, two clients and a barrier, would confirm it; this machine has no server.
