@@ -5,8 +5,8 @@ sprint's other threads' work is not on this base). Justify: green; root 105 test
 Convex 265, React 28, demo 61.
 
 * **Built**: `@stylistic/max-len` is on in the five lint configs (root, core, React, Convex, demo)
-  and 123 comment lines in 41 files, on this base, are rewrapped to pass (about 110 prose lines
-  plus the `@example` lines). STYLE.md has one bullet saying so. Empty changeset.
+  and on this base 123 comment lines past 100 columns were found: 116 in 36 files are rewrapped, and
+  seven `eslint-disable` directive lines are left (the rule ignores them). STYLE.md has one bullet saying so. Empty changeset.
 * **Two commits to read apart**: `140f0f4` is the reflow alone (rule still off, justify green);
   `323334a` is the rule, STYLE.md and the changeset. Redoing the reflow later means redoing the first.
 
@@ -23,8 +23,8 @@ Convex 265, React 28, demo 61.
   block, a one-line `/** ... */` -- over 100 columns. Generated code is not special-cased: Convex's
   `_generated/` is already in the Convex config's ignores.
 * **Does not catch**: a comment trailing code on the same line (`const x = 1 // long ...`) or an
-  inline `/* ... */` after code -- the rule measures those at the `code` limit. Probed. There are
-  some on this base; they remain. Closing that needs `code: 100` with `ignoreComments`-style
+  inline `/* ... */` after code -- the rule measures those at the `code` limit. Probed. Code lines
+  carrying a trailing comment, some past 150 columns, remain. Closing that needs `code: 100` with `ignoreComments`-style
   carve-outs, which would then enforce width on code the formatter owns, so it was left.
 * **Does not touch code length**: `code: 1e5` (not `100000`, which `unicorn/numeric-separators-style`
   refuses) is "no limit"; `Infinity` is not a valid option value for the rule's schema, not tried.
