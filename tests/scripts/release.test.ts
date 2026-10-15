@@ -1,8 +1,8 @@
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import * as Release from '../../scripts/release'
+import * as TH from '../test-helpers'
 
 const RepoRoot = path.resolve(import.meta.dirname, '../..')
 
@@ -110,8 +110,7 @@ describe("versionPrNames", () => {
 
 describe("readReleasePlan", () => {
   let workdir: string
-  beforeEach(() => { workdir = mkdtempSync(path.join(tmpdir(), 'release-plan-')) })
-  afterEach(() => { rmSync(workdir, { recursive: true, force: true }) })
+  beforeEach(() => { workdir = TH.makeScratchDir('release-plan-') })
 
   it("reads the releases from changeset status's plan", () => {
     const planPath = path.join(workdir, 'plan.json')
@@ -153,8 +152,7 @@ describe("sourceConditions", () => {
 
 describe("readPackDir", () => {
   let scratch = ''
-  beforeEach(() => { scratch = mkdtempSync(path.join(tmpdir(), 'release-pack-')) })
-  afterEach(() => { rmSync(scratch, { recursive: true, force: true }) })
+  beforeEach(() => { scratch = TH.makeScratchDir('release-pack-') })
 
   it("lists each package to publish, dependencies first, its tarball made absolute", () => {
     const plan = [
@@ -185,8 +183,7 @@ describe("readPackDir", () => {
 
 describe("packedManifest", () => {
   let scratch = ''
-  beforeEach(() => { scratch = mkdtempSync(path.join(tmpdir(), 'release-packed-')) })
-  afterEach(() => { rmSync(scratch, { recursive: true, force: true }) })
+  beforeEach(() => { scratch = TH.makeScratchDir('release-packed-') })
 
   it("finds the real range pnpm packs in place of the binding's workspace:^ peer", async () => {
     const tarball = path.join(scratch, 'safebyok-react.tgz')
@@ -252,10 +249,9 @@ describe("stage", () => {
   let scratch = ''
   let tagfile = ''
   beforeEach(() => {
-    scratch = mkdtempSync(path.join(tmpdir(), 'release-stage-'))
+    scratch = TH.makeScratchDir('release-stage-')
     tagfile = path.join(scratch, 'changesets-output.ndjson')
   })
-  afterEach(() => { rmSync(scratch, { recursive: true, force: true }) })
 
   const reported = () => {
     try {

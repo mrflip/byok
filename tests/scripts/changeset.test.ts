@@ -1,8 +1,8 @@
-import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import * as Changeset from '../../scripts/changeset'
+import * as TH from '../test-helpers'
 
 const ThreadCases = [
   // regular usage:
@@ -47,11 +47,10 @@ describe("changesetFilename", () => {
 describe("renameNewChangesets", () => {
   let scratch: string
   beforeEach(() => {
-    scratch = mkdtempSync(path.join(tmpdir(), 'changeset-rename-'))
+    scratch = TH.makeScratchDir('changeset-rename-')
     writeFileSync(path.join(scratch, 'README.md'), '# Changesets\n')
     writeFileSync(path.join(scratch, 'config.json'), '{}\n')
   })
-  afterEach(() => { rmSync(scratch, { recursive: true, force: true }) })
 
   it("renames the changeset the CLI wrote for the thread, and keeps its contents", () => {
     const before = Changeset.markdownFiles(scratch)
