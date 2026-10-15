@@ -29,13 +29,16 @@ security expert who knows what questions to ask.
   JS, audited, no WASM -- at about half a second per derivation in V8. AES-256-GCM encryption,
   key wrapping and randomness come from WebCrypto (`crypto.subtle`, `crypto.getRandomValues`).
 * 2026-10-14: the key deriver is a seam (`OpenVaultOpts.keyDeriver`): the pinned Argon2id deriver
-  is the default, tests substitute a cheap SHA-256 deriver, and a stored vault records its
+  was the default until 2026-10-15 (below), tests substitute a cheap SHA-256 deriver, and a stored vault records its
   deriver's label and refuses to unlock under any other.
 * 2026-10-15: `openVault` has no default key deriver: `keyDeriver` is required, and
   `browserOpts()` (the `safebyok/browser` entry) supplies the pinned Argon2id one. An app that
-  passes none is refused with `bad_option`, never quietly given one, and the core's main entry
-  imports neither Argon2id nor `safebyok/browser`. Substituting a deriver still commits every
-  vault made under it to its label, as above.
+  passes none is refused with `bad_option`, never quietly given one. `openVault` imports no
+  Argon2id and the main entry nothing from `safebyok/browser`, but the main entry still
+  re-exports `argon2idWebV1Deriver`: Argon2id stays out of an app only where a bundler
+  tree-shakes it (the package is `sideEffects: false`), not under a plain `require('safebyok')`
+  or an unbundled import. Substituting a deriver still commits every vault made under it to its
+  label, as above.
 * 2026-10-14: every encryption binds its context as AES-GCM additional data
   (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus passphraseEpoch
   for key wraps and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
