@@ -444,8 +444,9 @@ security expert who knows what questions to ask.
   checks** -- what the host passed is what is stored and bound, never the schema's output, so a
   trimming or lowercasing schema cannot move a user to another vault or strand ciphertext; **the
   refusal is ours**, `bad_label` or `bad_option`, naming the field and never quoting the name or
-  the schema's issues (a host refine's thrown error rides along as `cause`, as a host's own error
-  does elsewhere); a schema that is async or throws is refused as misuse, never taken as a pass.
+  the schema's issues; a schema that is async or throws is refused as misuse, never taken as a
+  pass, and the refusal carries nothing of what it threw (no `cause`), as a refine that throws
+  may quote the name or note, and any text, a pasted key among it, may now be one.
   **Every name is checked everywhere**: the vault and every `VaultDB` verb check with the same
   bag, records read back included, so a stored row whose name or note the vault's checks refuse
   is `corrupt_record`, not trusted; the bag never reaches storage or the Convex server, which take

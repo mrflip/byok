@@ -99,7 +99,7 @@ await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team acc
   lowercases would otherwise send the same user to another vault.
 * **The refusal is the vault's own**: kind `bad_label` (`bad_option` for a note), naming the
   field, never quoting the name or your schema's issues. A schema must check synchronously; one
-  that is async or throws is refused as `bad_option`.
+  that is async or throws is refused as `bad_option`, carrying nothing of what it threw.
 * **Every name is checked everywhere**, records read back included. Narrow a check later and a
   lockbox stored under a name the new one refuses reads back as `corrupt_record`.
 * **Sizes follow the names.** Each `store()` weighs its lockbox -- whisper, names and note -- and
