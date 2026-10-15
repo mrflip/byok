@@ -1,6 +1,6 @@
 # Thread 7: pluggable_logger (2026-10-15)
 
-Branch `20261015-pluggable_logger`, PR not yet filed, stacked on [#64](https://github.com/mrflip/safebyok/pull/64)
+Branch `20261015-pluggable_logger`, PR [#65](https://github.com/mrflip/safebyok/pull/65), stacked on [#64](https://github.com/mrflip/safebyok/pull/64)
 (thread 6, the top of the merge stack, `c186978`). Justify green: core 705, convex 265, react 28,
 demo 61, root 105. `pnpm size` within every limit, none raised (everything 22.45 -> 22.85 kB,
 openVault 15.43 -> 15.90 kB of 16.5; stableJsonify unchanged at 2.32 kB).
