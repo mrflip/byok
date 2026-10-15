@@ -1,6 +1,6 @@
 # Thread 2: unlock_envelopes (2026-10-15)
 
-Branch `20261015-unlock_envelopes`, PR [#71](https://github.com/mrflip/safebyok/pull/71), stacked on #63 (merged; rebased onto main, same tree). Justify green: root 105,
+Branch `20261015-unlock_envelopes`, PR [#71](https://github.com/mrflip/safebyok/pull/71), stacked on #82 (gripe_fixes' top), in the line #82 → #71 → #76 → #73 → #78 → #74 → #77. Justify green: root 105,
 core 759 (was 705), Convex 269 (was 265), React 28, demo 61; `pnpm size` within the raised limits.
 
 * **Built**:
@@ -78,6 +78,11 @@ core 759 (was 705), Convex 269 (was 265), React 28, demo 61; `pnpm size` within 
   - The gripe_fixes sprint's hunks in `vault.ts` (`keyDeriverShape`, `LockboxFieldsBytes`, the
     two "pretending" comments) are untouched here; `rememberDevice` and `rememberedUnlock` lines
     changed only in their binding call (`localBinding`), which `vaultdb_validation` may also touch.
+* **Restacked onto #82** (the Coach's word): gripe_fixes' `derivePassphraseKey` (refusing a
+  deriver's output that is not 32 bytes) moved from `vault.ts` into `envelope.ts`, since every
+  derivation now runs there; `addPassphrase` and `removeUnlock` take its `parsePassphrase` type
+  check; the tests use `TH.expectRefusal`. The size budget rose again: everything 26, openVault
+  18.5, idbDeviceDB 9.5, browserOpts 14.5 kB (the record schemas now reach the IndexedDB entry).
 * **Open questions (minor, in the PR too)**: a taken `unlocklabel` refuses as `bad_label`
   (misuse) rather than a condition; envelopes of another deriver are passed over silently; small
   cleanups the review left.
