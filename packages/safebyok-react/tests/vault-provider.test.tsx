@@ -170,7 +170,7 @@ describe("VaultProvider", () => {
     }
     render(
       <VaultProvider applabel="acme" vaultlabel="main" userId="u1" vaultDB={localVaultDB(memoryStore())} deviceDB={memoryDeviceDB()}
-        keyDeriver={testDeriver} clock={{ now: () => 1000 }} rememberForMs={60_000} maxWhisperBytes={8} maxLockboxes={1}>
+        keyDeriver={testDeriver} clock={{ now: () => 1000 }} forcePassphraseReentryHours={1} maxWhisperBytes={8} maxLockboxes={1}>
         <Grab />
       </VaultProvider>,
     )
@@ -179,7 +179,8 @@ describe("VaultProvider", () => {
     if (vault === null) { throw new Error('the provider opened no vault') }
 
     await vault.unlock('correct horse battery staple')
-    expect(vault.getSnapshot().expiresAt).to.eq(61_000)
+    // One hour, 3,600,000 ms, after the clock's 1000.
+    expect(vault.getSnapshot().askPassphraseAt).to.eq(3_601_000)
     // 'sk-fake' is nine bytes of JSON, one over the limit given.
     let refusal: unknown = null
     try {

@@ -1,5 +1,5 @@
 import * as Z from 'zod'
-import { Label, LockboxSummary, type Lockbox, MaxLockboxes, MaxWhisperBytes, SevenDaysMs, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
+import { Label, LockboxSummary, type Lockbox, ForcePassphraseReentryHours, MaxLockboxes, MaxWhisperBytes, VaultBundle, Whisper, wallClock, type Clock, type VaultScope } from './types'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import {
@@ -15,7 +15,7 @@ import type { VaultDB } from './vault-db'
  *  * `opening`  -- still reading the bundle and device cache; show nothing yet
  *  * `absent`   -- never created; the first unlock() will choose its passphrase
  *  * `locked`   -- exists, summaries readable, whispers not; unlock() opens it
- *  * `unlocked` -- whispers readable until expiresAt or lock()
+ *  * `unlocked` -- whispers readable until askPassphraseAt or lock()
  */
 export type VaultState = 'opening' | 'absent' | 'locked' | 'unlocked'
 
@@ -28,8 +28,11 @@ export type VaultSnapshot = {
   state:     VaultState
   scope:     VaultScope
   boxes:     readonly LockboxSummary[]
-  /** Epoch ms when the current unlock lapses, while unlocked; null otherwise. */
-  expiresAt: number | null
+  /**
+   * Epoch ms from which the vault asks for the passphrase again, while unlocked; null otherwise.
+   * The unlock's time plus `forcePassphraseReentryHours`.
+   */
+  askPassphraseAt: number | null
 }
 
 export type OpenVaultOpts = {
@@ -47,8 +50,12 @@ export type OpenVaultOpts = {
    * reasons to substitute. Asked for outright, so an app that passes another never ships this one.
    */
   keyDeriver: KeyDeriver
-  /** How long an unlock is remembered on this device. Default: seven days. */
-  rememberForMs?: number | undefined
+  /**
+   * How many hours an entered passphrase lasts on this device, remembered across reloads, before
+   * the vault asks for it again. Default: {@link ForcePassphraseReentryHours}, 168 (seven days).
+   * Any number above zero, fractions too: 0.25 is fifteen minutes.
+   */
+  forcePassphraseReentryHours?: number | undefined
   /** Time source for expiry; tests inject one. Default: the wall clock. */
   clock?: Clock | undefined
   /**
@@ -83,7 +90,7 @@ export type Vault = {
 
   /**
    * Open the vault with its passphrase, remembering the unlock on this device for
-   * `rememberForMs`. On an `absent` vault this first unlock creates it, with this passphrase.
+   * `forcePassphraseReentryHours`. On an `absent` vault this first unlock creates it, with this passphrase.
    * A wrong passphrase throws kind 'wrong_passphrase' and changes nothing -- learned from the
    * vaultKey envelope refusing to decrypt, never from a comparison.
    */
@@ -183,7 +190,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   if (! opts.userId) { throw new VaultError('bad_label', 'A vault needs the signed-in user: pass the userId from your auth layer.') }
   const scope: VaultScope = { applabel, user_id: opts.userId, vaultlabel }
   const { vaultDB, deviceDB } = opts
-  const rememberForMs = opts.rememberForMs ?? SevenDaysMs
+  const reentryMs = parseForcePassphraseReentryHours(opts.forcePassphraseReentryHours)
   const clock = opts.clock ?? wallClock
   const keyDeriver = parseKeyDeriver(opts.keyDeriver)
   const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
@@ -192,7 +199,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
   let boxes: readonly LockboxSummary[] = []
-  let expiresAt: number | null = null
+  let askPassphraseAt: number | null = null
   let vaultKey: CryptoKey | null = null
   let closed = false
 
@@ -200,15 +207,15 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const vaultState = (): VaultState => {
     if (bundle === UnreadBundle) { return 'opening' }
     if (bundle === null) { return 'absent' }
-    if (vaultKey !== null && expiresAt !== null && expiresAt > clock.now()) { return 'unlocked' }
+    if (vaultKey !== null && askPassphraseAt !== null && askPassphraseAt > clock.now()) { return 'unlocked' }
     return 'locked'
   }
-  let snapshot: VaultSnapshot = { state: vaultState(), scope, boxes, expiresAt }
+  let snapshot: VaultSnapshot = { state: vaultState(), scope, boxes, askPassphraseAt }
   // The snapshot keeps its identity until something really changed: useSyncExternalStore's
   // contract, and what spares React a render when a background refresh found nothing new.
   const bump = () => {
     const state = vaultState()
-    const next: VaultSnapshot = { state, scope, boxes, expiresAt: state === 'unlocked' ? expiresAt : null }
+    const next: VaultSnapshot = { state, scope, boxes, askPassphraseAt: state === 'unlocked' ? askPassphraseAt : null }
     if (stableJsonify(next) === stableJsonify(snapshot)) { return }
     snapshot = next
     listeners.forEach((listener) => { listener() })
@@ -230,7 +237,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       && (fresh?.passphrase_epoch !== bundle.passphrase_epoch || fresh.vault_id !== bundle.vault_id)
     if (outlived) {
       vaultKey = null
-      expiresAt = null
+      askPassphraseAt = null
       await deviceDB.eraseUnlock(scope)
     }
     bundle = fresh
@@ -245,9 +252,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
   const ensureUnlocked = (): CryptoKey => {
     ensureOpen()
-    if (vaultKey !== null && expiresAt !== null && expiresAt > clock.now()) { return vaultKey }
+    if (vaultKey !== null && askPassphraseAt !== null && askPassphraseAt > clock.now()) { return vaultKey }
     vaultKey = null
-    expiresAt = null
+    askPassphraseAt = null
     bump()
     throw new VaultError('vault_locked', 'The vault is locked: ask the user for their passphrase and call unlock().')
   }
@@ -352,7 +359,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
         bundleBinding(bundle.vault_id, bundle.passphrase_epoch, 'vault_key_local_wrapped'),
         { extractable: false, usage: ['wrapKey', 'unwrapKey'] },
       )
-      expiresAt = remembered.expires_at
+      askPassphraseAt = remembered.expires_at
     } catch {
       // A record that no longer opens reads as "no remembered unlock": the safe failure.
       await deviceDB.eraseUnlock(scope)
@@ -417,9 +424,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       // stands there now, not against a cached one a destroy or recreate may have outdated.
       await refresh()
       const unlocked = await settleUnlock(passphrase)
-      expiresAt = clock.now() + rememberForMs
+      askPassphraseAt = clock.now() + reentryMs
       // The transient's last act: wrapped into this device's remembered unlock, then dropped.
-      await rememberDevice(unlocked.transientKey, currentBundle(), expiresAt)
+      await rememberDevice(unlocked.transientKey, currentBundle(), askPassphraseAt)
       vaultKey = unlocked.sessionKey
       bump()
     },
@@ -427,7 +434,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     lock: async () => {
       ensureOpen()
       vaultKey = null
-      expiresAt = null
+      askPassphraseAt = null
       await deviceDB.eraseUnlock(scope)
       bump()
     },
@@ -452,8 +459,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       }
       await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, passphrase_epoch: standing.passphrase_epoch }))
       bundle = next
-      expiresAt = clock.now() + rememberForMs
-      await rememberDevice(proven.transientKey, next, expiresAt)
+      askPassphraseAt = clock.now() + reentryMs
+      await rememberDevice(proven.transientKey, next, askPassphraseAt)
       vaultKey = proven.sessionKey
       bump()
     },
@@ -521,7 +528,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       // refuses, even if a background refresh brings it in while this awaits.
       const doomed = bundle
       vaultKey = null
-      expiresAt = null
+      askPassphraseAt = null
       await deviceDB.eraseUnlock(scope)
       if (doomed !== null && doomed !== UnreadBundle) {
         await refreshOnStale(vaultDB.eraseVault(scope, { vault_id: doomed.vault_id }))
@@ -594,6 +601,21 @@ const maxWhisperBytes = Z.number().int().positive().default(MaxWhisperBytes)
 const maxLockboxes = Z.number().int().positive().default(MaxLockboxes)
 /** A limit as an adapter declares one: some bytes, or none at all. */
 const declaredBytes = Z.union([Z.number().positive(), Z.literal(Infinity)])
+
+const MsPerHour = 60 * 60 * 1000
+
+/** Hours, as the host thinks of them, to whole milliseconds, as every time inside is kept. */
+const forcePassphraseReentryHours = Z.number().positive().default(ForcePassphraseReentryHours)
+  .transform((hours) => Math.round(hours * MsPerHour))
+  .pipe(Z.number().int().min(1).max(Number.MAX_SAFE_INTEGER))
+
+const parseForcePassphraseReentryHours = (candidate: number | undefined): number => {
+  const checked = forcePassphraseReentryHours.safeParse(candidate)
+  if (! checked.success) {
+    throw new VaultError('bad_option', 'forcePassphraseReentryHours is a number of hours greater than zero; fractions are fine (0.25 is fifteen minutes).')
+  }
+  return checked.data
+}
 
 const parseMaxWhisperBytes = (candidate: number | undefined): number => {
   const checked = maxWhisperBytes.safeParse(candidate)
