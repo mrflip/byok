@@ -249,7 +249,7 @@ describe("the abstract VaultDB, around an adapter's half", () => {
 const RefusedWrites = [
   // the records:
   ['bad_option', (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 }),                          'a bundle with a fractional passphrase_epoch'],
-  ['bad_option', (vaultDB: VaultDB) => vaultDB.createBundle(omit(TH.bundleOf('u1'), ['vault_key_passphrase_wrapped']) as VaultBundle),  'a bundle missing its wrapped vaultKey'],
+  ['bad_option', (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), unlocks: [omit(TH.envelopeOf('passphrase'), ['vault_key_wrapped'])] } as VaultBundle), 'a bundle whose envelope is missing its wrapped vaultKey'],
   ['bad_label',  (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), applabel: 'Acme' }),                               'a bundle whose applabel breaks the label rules'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { note: 'n'.repeat(257) }), TH.noBoxYet), 'a lockbox whose note no read would accept'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { changed_at: 1_792_022_400 }), TH.noBoxYet), 'a lockbox time in epoch seconds'],

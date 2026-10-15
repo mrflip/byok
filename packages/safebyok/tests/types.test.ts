@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import * as ZClassic from 'zod'
-import { EpochMillis, FarFuture, FarPast, Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { EpochMillis, FarFuture, FarPast, Label, Lockbox, LockboxNote, LockboxSummary, MaxUnlocks, VaultBundle, VaultScope, Whisper } from '../src/types'
 import * as TH from './test-helpers'
 
 const WhisperCases = [
@@ -79,6 +79,15 @@ describe("VaultScope", () => {
 /** An ISO time, as records stored them before every time became epoch milliseconds. */
 const OldIso = '2026-10-14T00:00:00.000Z'
 const { registered_at: _bundleTime, ...bundleWithoutTime } = TH.bundleOf('u1')
+const { unlocks: _unlocks, ...bundleWithoutUnlocks } = TH.bundleOf('u1')
+/** The three fields a bundle held its one passphrase in, before `unlocks`. */
+const EnvelopeFieldsOfOld = {
+  key_deriver_label:            'test_digest_v0',
+  // eslint-disable-next-line sonarjs/no-hardcoded-passwords -- base64 of the literal text 'saltsaltsaltsalt': a fake salt (which is public material anyway), not a credential
+  passphrase_salt_b64:          'c2FsdHNhbHRzYWx0c2FsdA',
+  vault_key_passphrase_wrapped: TH.fakeCiphered('old'),
+}
+
 
 const BundleCases = [
   // regular usage:
@@ -88,13 +97,37 @@ const BundleCases = [
   [{ ...TH.bundleOf('u1'), passphrase_epoch: 0 },            false,  'an epoch starts at one'],
   [{ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 },          false,  'an epoch is a whole number'],
   [{ ...TH.bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
-  [{ ...TH.bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, 'an envelope missing its ciphertext'],
+  [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { vault_key_wrapped: { cipher_iv_b64: 'iv' } as never })] }, false, 'an envelope missing its ciphertext'],
   [{ ...TH.bundleOf('u1'), registered_at: 1_792_022_400 },   false,  'a registered_at in epoch seconds'],
   [{ ...TH.bundleOf('u1'), registered_at: Infinity },        false,  'a registered_at that never comes'],
   [{ ...TH.bundleOf('u1'), registered_at: OldIso },          false,  'a registered_at as an ISO string'],
   [bundleWithoutTime,                                       false,  'a bundle missing its registered_at'],
   [{ ...bundleWithoutTime, created_at: OldIso, updated_at: OldIso }, false, 'a bundle from before its time was named registered_at'],
+  [{ ...bundleWithoutUnlocks, ...EnvelopeFieldsOfOld },      false,  'a bundle from before its unlocks were a list of envelopes'],
 ] as const
+
+const manyEnvelopes = (count: number) => Array.from({ length: count }, (_unused, ii) => TH.envelopeOf(`phrase${String(ii)}`))
+const UnlockListCases = [
+  // regular usage:
+  [[TH.envelopeOf('passphrase')],                                          true,   'one way in'],
+  [[TH.envelopeOf('passphrase'), TH.envelopeOf('home_phrase')],            true,   'two passphrases, each with its own id and label'],
+  [manyEnvelopes(MaxUnlocks),                                              true,   'as many ways in as MaxUnlocks allows'],
+  // refused, as a damaged or foreign record:
+  [[],                                                                     false,  'no way in at all'],
+  [manyEnvelopes(MaxUnlocks + 1),                                          false,  'one envelope past MaxUnlocks, which would make an unlock run long'],
+  [[TH.envelopeOf('passphrase'), TH.envelopeOf('home_phrase', { unlock_id: 'unlock-passphrase' })], false, 'two envelopes sharing an unlock_id'],
+  [[TH.envelopeOf('passphrase'), TH.envelopeOf('passphrase', { unlock_id: 'unlock-other' })],      false, 'two envelopes sharing an unlocklabel'],
+  [[TH.envelopeOf('passphrase', { method: 'passkey' as never })],          false,  'a method this version does not know'],
+  [[TH.envelopeOf('Not_a_label')],                                         false,  'an unlocklabel outside the label grammar'],
+  [[TH.envelopeOf('passphrase', { salt_b64: '' })],                        false,  'an empty salt'],
+  [[TH.envelopeOf('passphrase', { unlock_id: '' })],                       false,  'an empty unlock_id'],
+] as const
+
+describe("VaultBundle's unlocks", () => {
+  for (const [unlocks, expected, blurb] of UnlockListCases) {
+    it(blurb, () => { expect(VaultBundle.safeParse({ ...TH.bundleOf('u1'), unlocks }).success).to.eq(expected) })
+  }
+})
 
 describe("VaultBundle", () => {
   for (const [candidate, expected, blurb] of BundleCases) {
