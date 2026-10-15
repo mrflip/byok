@@ -1,4 +1,4 @@
-import * as Z from 'zod'
+import * as Z from 'zod/mini'
 import { Label, Lockbox, LockboxSummary, VaultBundle, VaultScope } from './types'
 import { VaultError } from './errors'
 import type { StringStore } from './string-store'
@@ -263,7 +263,7 @@ const staleErase = () => new VaultError('stale_write', 'The vault changed in sto
  * ones, `format` included, so a backend that projects server-side is validated like one that
  * returns whole records (whose ciphered fields this strips).
  */
-const ListedLockbox = Lockbox.omit({ lockbox_key_wrapped: true, whisper_ciphered: true })
+const ListedLockbox = Z.omit(Lockbox, { lockbox_key_wrapped: true, whisper_ciphered: true })
 
 /**
  * The adapter's half of a verb, with anything it throws that is not already a VaultError turned
@@ -314,10 +314,10 @@ const checkBundle = (raw: unknown, scope: VaultScope): VaultBundle => {
  * else's database, and a record may be damaged or written by another version of this package.
  * The refusal names the record but never quotes it.
  */
-const checkRecord = <RecordT>(recordSchema: Z.ZodType<RecordT>, raw: unknown, said: string): RecordT => {
+const checkRecord = <RecordT>(recordSchema: Z.ZodMiniType<RecordT>, raw: unknown, said: string): RecordT => {
   const checked = recordSchema.safeParse(raw)
   if (! checked.success) {
-    throw new VaultError('corrupt_record', `A stored ${said} record did not read back in a shape this package knows. It may be damaged, or written by a newer version of safebyok; it was left as it is.`)
+    throw new VaultError('corrupt_record', `A stored ${said} record did not read back in a shape this package knows. It may be damaged, or written by another version of safebyok; it was left as it is.`)
   }
   return checked.data
 }

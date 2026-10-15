@@ -121,7 +121,8 @@ Three tables, inside the component, beside nothing of your app's:
   lockbox's lockboxKey (`lockbox_key_wrapped`), and the vaultKey (`vault_key_passphrase_wrapped`).
 * **In the open**: the scope (`applabel`, `user_id`, `vaultlabel`), each `boxlabel` and `note`,
   the `vault_id`, `passphrase_epoch`, `revision_id`s, the passphraseSalt and key deriver's label,
-  timestamps, and the length of every ciphertext.
+  when each vault and lockbox was first stored and each whisper last changed (`registered_at`,
+  `changed_at`, epoch milliseconds), and the length of every ciphertext.
 * **Never**: a whisper, a passphrase, any key in usable form, or the device-local remembered
   unlock. No history: an update replaces its row. (Convex's own backups and exports keep what
   they keep.)

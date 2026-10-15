@@ -5,13 +5,18 @@ import { defineConfig } from 'tsdown'
 // the package as a consumer would, and fail the build on anything they find. Each entry point also
 // gains a `@safebyok/source` condition pointing at its src/, which the workspace's tsconfigs ask
 // for, while `publishConfig.exports`, the dist-only copy, is what publishing ships.
+//
+// `unbundle` keeps each source module its own file in dist/, so `sideEffects: false` can do its
+// work: a host's bundler drops every module the host's imports never reach, schemas and all. A
+// bundled chunk would hold them together, and a bare `stableJsonify` would carry every validator.
 export default defineConfig({
   // `safebyok/testing` is its own entry, so only a test that asks for it loads vitest.
-  entry:      { index: 'src/index.ts', idb: 'src/idb.ts', browser: 'src/browser.ts', testing: 'src/testing/index.ts', utils: 'src/utils.ts' },
+  entry:      { index: 'src/index.ts', idb: 'src/idb.ts', browser: 'src/browser.ts', testing: 'tests/test-helpers.ts', utils: 'src/utils.ts' },
   format:     ['esm', 'cjs'],
   // Browser first, but nothing here is browser-only: WebCrypto is the same global under Node.
   platform:   'neutral',
   target:     'es2022',
+  unbundle:   true,
   dts:        true,
   sourcemap:  true,
   clean:      true,

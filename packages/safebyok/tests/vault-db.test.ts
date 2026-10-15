@@ -4,7 +4,7 @@ import { memoryStore } from '../src/string-store'
 import { VaultDB, localVaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation } from '../src/vault-db'
 import { VaultError } from '../src/errors'
 import type { Lockbox, VaultBundle, VaultScope } from '../src/types'
-import { boxOf, bundleOf, describeVaultDB, scopeOf } from '../src/testing'
+import * as TH from './test-helpers'
 
 /**
  * The smallest honest adapter: a Map of records, each check-and-write in one synchronous step.
@@ -80,8 +80,8 @@ class TroubledVaultDB extends MapVaultDB {
 
 const unheard = (): void => undefined
 
-describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
-describeVaultDB('the smallest honest adapter', () => new MapVaultDB())
+TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
+TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB())
 
 describe("localVaultDB", () => {
   it("holds a mebibyte in one record, and sets no limit on a vault", () => {
@@ -92,40 +92,40 @@ describe("localVaultDB", () => {
 
   it("reads a vault stored before the storage verbs: the same rows, at the same ckeys", async () => {
     const store = memoryStore()
-    store.write('vault:acme:u1:main', JSON.stringify(bundleOf('u1')))
-    store.write('box:acme:u1:main:anthropic', JSON.stringify(boxOf('anthropic', 'one')))
+    store.write('vault:acme:u1:main', JSON.stringify(TH.bundleOf('u1')))
+    store.write('box:acme:u1:main:anthropic', JSON.stringify(TH.boxOf('anthropic', 'one')))
     const vaultDB = localVaultDB(store)
-    expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
-    expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(boxOf('anthropic', 'one'))
-    expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(1)
+    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
+    expect(await vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'one'))
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(1)
   })
 
   it("reads lockboxes as written today, with a note and without one, and writes them back the same", async () => {
     // A stored vault is a contract: these rows are byte for byte what store() writes today.
     const store = memoryStore()
-    const { note: _note, ...noteless } = boxOf('openai', 'two')
-    const notedRow = JSON.stringify(boxOf('anthropic', 'one'))
+    const { note: _note, ...noteless } = TH.boxOf('openai', 'two')
+    const notedRow = JSON.stringify(TH.boxOf('anthropic', 'one'))
     const notelessRow = JSON.stringify(noteless)
     expect(notelessRow).to.not.include('note')
-    store.write('vault:acme:u1:main', JSON.stringify(bundleOf('u1')))
+    store.write('vault:acme:u1:main', JSON.stringify(TH.bundleOf('u1')))
     store.write('box:acme:u1:main:anthropic', notedRow)
     store.write('box:acme:u1:main:openai', notelessRow)
     const vaultDB = localVaultDB(store)
-    const summaries = await vaultDB.listBoxes(scopeOf('u1'))
+    const summaries = await vaultDB.listBoxes(TH.scopeOf('u1'))
     expect(summaries.map((summary) => summary.note)).to.deep.equal(['a test box', null])
-    const prev = await vaultDB.readBox(scopeOf('u1'), 'openai')
+    const prev = await vaultDB.readBox(TH.scopeOf('u1'), 'openai')
     expect(prev).to.deep.equal(noteless)
-    await vaultDB.updateBox(scopeOf('u1'), noteless, { vault_id: 'vault-id-u1', revision_id: 'rev-two' })
+    await vaultDB.updateBox(TH.scopeOf('u1'), noteless, { vault_id: 'vault-id-u1', revision_id: 'rev-two' })
     expect(store.read('box:acme:u1:main:openai')).to.eq(notelessRow)
   })
 
   it("stores each record as its JSON, at the ckey it always had", async () => {
     const store = memoryStore()
     const vaultDB = localVaultDB(store)
-    await vaultDB.createBundle(bundleOf('u1'))
-    await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
-    expect(store.read('vault:acme:u1:main')).to.eq(JSON.stringify(bundleOf('u1')))
-    expect(store.read('box:acme:u1:main:anthropic')).to.eq(JSON.stringify(boxOf('anthropic', 'one')))
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    expect(store.read('vault:acme:u1:main')).to.eq(JSON.stringify(TH.bundleOf('u1')))
+    expect(store.read('box:acme:u1:main:anthropic')).to.eq(JSON.stringify(TH.boxOf('anthropic', 'one')))
     expect(store.ckeys()).to.have.members(['vault:acme:u1:main', 'box:acme:u1:main:anthropic'])
   })
 
@@ -134,7 +134,7 @@ describe("localVaultDB", () => {
     const vaultDB = localVaultDB(store)
     store.write('vault:acme:u1:main', '{"format":"not-a-vault","shhh":"SUPERSECRET"}')
     let refusal: unknown = null
-    try { await vaultDB.readBundle(scopeOf('u1')) } catch (err) { refusal = err }
+    try { await vaultDB.readBundle(TH.scopeOf('u1')) } catch (err) { refusal = err }
     expect(refusal).to.be.instanceOf(VaultError)
     expect((refusal as VaultError).kind).to.eq('corrupt_record')
     expect((refusal as VaultError).message).to.not.include('SUPERSECRET')
@@ -144,28 +144,28 @@ describe("localVaultDB", () => {
     const store = memoryStore()
     const vaultDB = localVaultDB(store)
     store.write('box:acme:u1:main:anthropic', 'SUPERSECRET{')
-    await expect(vaultDB.readBox(scopeOf('u1'), 'anthropic')).rejects.toThrow(/did not read back as JSON/)
+    await expect(vaultDB.readBox(TH.scopeOf('u1'), 'anthropic')).rejects.toThrow(/did not read back as JSON/)
   })
 
   it("refuses a record that names a scope or label other than the one asked for", async () => {
     const store = memoryStore()
     const vaultDB = localVaultDB(store)
     // A u2 bundle smuggled into u1's slot, and a lockbox row moved under another label.
-    store.write('vault:acme:u1:main', JSON.stringify(bundleOf('u2')))
-    await expect(vaultDB.readBundle(scopeOf('u1'))).rejects.toThrow(/different app, user, or vault/)
-    store.write('box:acme:u1:main:other_box', JSON.stringify(boxOf('anthropic', 'one')))
-    await expect(vaultDB.readBox(scopeOf('u1'), 'other_box')).rejects.toThrow(/different boxlabel/)
+    store.write('vault:acme:u1:main', JSON.stringify(TH.bundleOf('u2')))
+    await expect(vaultDB.readBundle(TH.scopeOf('u1'))).rejects.toThrow(/different app, user, or vault/)
+    store.write('box:acme:u1:main:other_box', JSON.stringify(TH.boxOf('anthropic', 'one')))
+    await expect(vaultDB.readBox(TH.scopeOf('u1'), 'other_box')).rejects.toThrow(/different boxlabel/)
   })
 
   it("keeps a user whose user_id holds a colon out of another user's listing and erasure", async () => {
     const vaultDB = localVaultDB(memoryStore())
     // User 'u1:main' with vault 'other' stores its rows under the prefix of user 'u1', vault 'main'.
     const colonScope = { applabel: 'acme', user_id: 'u1:main', vaultlabel: 'other' }
-    await vaultDB.createBundle({ ...bundleOf('u1'), ...colonScope, vault_id: 'vault-id-colon' })
-    await vaultDB.updateBox(colonScope, boxOf('anthropic', 'colon'), { vault_id: 'vault-id-colon', revision_id: null })
-    await vaultDB.createBundle(bundleOf('u1'))
-    expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
-    await vaultDB.eraseVault(scopeOf('u1'), { vault_id: 'vault-id-u1' })
+    await vaultDB.createBundle({ ...TH.bundleOf('u1'), ...colonScope, vault_id: 'vault-id-colon' })
+    await vaultDB.updateBox(colonScope, TH.boxOf('anthropic', 'colon'), { vault_id: 'vault-id-colon', revision_id: null })
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
+    await vaultDB.eraseVault(TH.scopeOf('u1'), { vault_id: 'vault-id-u1' })
     const theirs = await vaultDB.readBox(colonScope, 'anthropic')
     expect(theirs?.revision_id).to.eq('rev-colon')
   })
@@ -176,7 +176,7 @@ describe("the abstract VaultDB, around an adapter's half", () => {
     const vaultDB = new MapVaultDB()
     vaultDB.rows.set('acme:u1:main', { format: 'not-a-vault' })
     let refusal: unknown = null
-    try { await vaultDB.readBundle(scopeOf('u1')) } catch (err) { refusal = err }
+    try { await vaultDB.readBundle(TH.scopeOf('u1')) } catch (err) { refusal = err }
     expect(refusal).to.be.instanceOf(VaultError)
     expect((refusal as VaultError).kind).to.eq('corrupt_record')
     // Refused, never repaired or deleted: the record is still there for forensics.
@@ -185,31 +185,31 @@ describe("the abstract VaultDB, around an adapter's half", () => {
 
   it("lists a lockbox an earlier version kept with an undefined note, as IndexedDB does, with a null note", async () => {
     const vaultDB = new MapVaultDB()
-    vaultDB.rows.set('acme:u1:main/anthropic', { ...boxOf('anthropic', 'one'), note: undefined })
-    const [summary] = await vaultDB.listBoxes(scopeOf('u1'))
+    vaultDB.rows.set('acme:u1:main/anthropic', { ...TH.boxOf('anthropic', 'one'), note: undefined })
+    const [summary] = await vaultDB.listBoxes(TH.scopeOf('u1'))
     expect(summary).to.have.property('note')
     expect(summary?.note).to.be.null
   })
 
   it("accepts a listing projected server-side, without ciphered fields, so long as it keeps format", async () => {
     const vaultDB = new MapVaultDB()
-    const projected = omit(boxOf('anthropic', 'one'), ['lockbox_key_wrapped', 'whisper_ciphered'])
+    const projected = omit(TH.boxOf('anthropic', 'one'), ['lockbox_key_wrapped', 'whisper_ciphered'])
     vaultDB.rows.set('acme:u1:main/anthropic', projected)
-    const summaries = await vaultDB.listBoxes(scopeOf('u1'))
+    const summaries = await vaultDB.listBoxes(TH.scopeOf('u1'))
     expect(summaries[0]?.revision_id).to.eq('rev-one')
     vaultDB.rows.set('acme:u1:main/anthropic', omit(projected, ['format']))
-    await expect(vaultDB.listBoxes(scopeOf('u1'))).rejects.toThrow(/did not read back in a shape/)
+    await expect(vaultDB.listBoxes(TH.scopeOf('u1'))).rejects.toThrow(/did not read back in a shape/)
   })
 
   it("turns an adapter's own failure into kind 'storage_unavailable', keeping it as the cause", async () => {
     const outage = new Error('the backend is down')
     const vaultDB = new TroubledVaultDB(() => { throw outage })
     let refusal: unknown = null
-    try { await vaultDB.readBundle(scopeOf('u1')) } catch (err) { refusal = err }
+    try { await vaultDB.readBundle(TH.scopeOf('u1')) } catch (err) { refusal = err }
     expect(refusal).to.be.instanceOf(VaultError)
     expect((refusal as VaultError).kind).to.eq('storage_unavailable')
     expect((refusal as VaultError).cause).to.eq(outage)
-    await expect(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null }))
+    await expect(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null }))
       .rejects.toThrow(/could not be reached/)
   })
 
@@ -217,15 +217,15 @@ describe("the abstract VaultDB, around an adapter's half", () => {
     const forbidden = new VaultError('not_permitted', 'This backend does not let the signed-in user reach that vault.')
     const vaultDB = new TroubledVaultDB(() => { throw forbidden })
     let refusal: unknown = null
-    try { await vaultDB.readBundle(scopeOf('u1')) } catch (err) { refusal = err }
+    try { await vaultDB.readBundle(TH.scopeOf('u1')) } catch (err) { refusal = err }
     expect(refusal).to.eq(forbidden)
   })
 
   it("subscribe defaults to silence: a usable unsubscribe, and no notifications", async () => {
     const vaultDB = new MapVaultDB()
     let heardCount = 0
-    const unsubscribe = vaultDB.subscribe(scopeOf('u1'), () => { heardCount += 1 })
-    await vaultDB.createBundle(bundleOf('u1'))
+    const unsubscribe = vaultDB.subscribe(TH.scopeOf('u1'), () => { heardCount += 1 })
+    await vaultDB.createBundle(TH.bundleOf('u1'))
     expect(heardCount).to.eq(0)
     unsubscribe()
   })
@@ -234,7 +234,7 @@ describe("the abstract VaultDB, around an adapter's half", () => {
     const outage = new Error('the backend is not connected')
     const vaultDB = new TroubledVaultDB(() => { throw outage })
     let refusal: unknown = null
-    try { vaultDB.subscribe(scopeOf('u1'), unheard) } catch (err) { refusal = err }
+    try { vaultDB.subscribe(TH.scopeOf('u1'), unheard) } catch (err) { refusal = err }
     expect(refusal).to.be.instanceOf(VaultError)
     expect((refusal as VaultError).kind).to.eq('storage_unavailable')
     expect((refusal as VaultError).cause).to.eq(outage)
@@ -242,6 +242,6 @@ describe("the abstract VaultDB, around an adapter's half", () => {
 
   it("refuses to subscribe to a malformed scope", () => {
     const vaultDB = new MapVaultDB()
-    expect(() => vaultDB.subscribe({ ...scopeOf('u1'), applabel: 'Acme' }, unheard)).to.throw(/vault scope/)
+    expect(() => vaultDB.subscribe({ ...TH.scopeOf('u1'), applabel: 'Acme' }, unheard)).to.throw(/vault scope/)
   })
 })

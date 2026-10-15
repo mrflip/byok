@@ -38,9 +38,6 @@ Small irritants, each a few lines, picked up by whoever is nearby.
 * The root eslint config does not ignore a root `dist/`, so a stale build from before the core
   moved (gitignored, so invisible to `git status`) fails the whole justify with thousands of
   warnings. Ignore `**/dist/` at the root; until then, `rm -rf dist` at the root clears it.
-* Make a test helpers library, `TestHelpers.ts`, star-imported as `TH`. Look for things like
-  `await new Promise((resolve) => { setTimeout(resolve, 0) })` and replace them with helpers (eg
-  `await TH.wakeupAtNextTick()`). #25's `tweakB64` would move into it.
 
 ## Roadmapped
 
@@ -123,11 +120,12 @@ first release; the Convex sprint's component thread puts the same columns in its
   binding; the Convex design already strips them on read, and surfacing them to a host is a
   later additive field on the listing. What no tag gives is verification while locked: a signed
   listing would need a vault signing keypair, and it is additive later, so it is not reserved.
-* **Every time is UTC epoch milliseconds, an integer** (ruled; now in STYLE.md): stored
+* **Every time is UTC epoch milliseconds, an integer** (ruled; now in STYLE.md; **built**,
+  second_harvest thread 6, with the two bullets below it): stored
   records, the snapshot, the device record, the Convex columns, the demo's own records. The
   low-hanging-fruit `epoch_millis` thread does the code outside the stored records; the records
   switch here, with the rename below, since the old fields go anyway.
-* **Timestamps named for the event, as epoch-millisecond integers, and only three.** Lockbox
+* **Timestamps named for the event, as epoch-millisecond integers, and only three** (built). Lockbox
   `registered_at` (first stored through the library; carried forward) and `changed_at` (ruled
   the stronger contract: it moves only when the serialized whisper differs; `store()` decrypts
   the previous whisper, which it already fetches, compares the serialized forms, and carries
@@ -150,7 +148,7 @@ first release; the Convex sprint's component thread puts the same columns in its
   then applies to the whisper alone, inside the encryption. Reserved now because a bound field
   cannot be added later without re-encrypting every lockbox. The demo moves its note into the
   bag; the Convex table omits an empty bag as it did an absent note.
-* **The device record's deadline is named for its consequence**: `expires_at` becomes
+* **The device record's deadline is named for its consequence** (built): `expires_at` becomes
   `ask_passphrase_at` (see 4). Local-only, so this one is cheap at any time.
 * **A vault has a size cap, mirrored on the adapter** (low-hanging-fruit thread 1 builds it;
   listed here because it is a surface to settle before the release). Today nothing caps how
@@ -232,7 +230,7 @@ Caveats:
 - Hermes has no WebAssembly, so this package does not serve React Native; that needs a native
   Argon2 binding behind the same label.
 
-### 7. zod/mini and a tree-shaking audit
+### 7. zod/mini and a tree-shaking audit -- built
 
 Depends on low-hanging-fruit thread 8 (the size budget, [#42](https://github.com/mrflip/safebyok/pull/42), merged: it is the before-and-after). Measured
 before: zod classic is about three quarters of every bundle (183 KB raw), and it does not
@@ -242,6 +240,11 @@ tree-shake because the schemas are built at module top level in a shared chunk; 
 and error strings become per-check params), then audit: `sideEffects: false` is true, nothing
 runs at module top level, each entry pulls only what it uses, and the budget limits drop to match.
 Report what zod/mini cost in authoring clarity; if it is more than the bytes are worth, say so.
+
+Built (second_harvest thread 1, `whiteboard/20261015-second_harvest/thread-1-zod_mini.md`):
+every entry fell by about 14 kB brotlied, and a bare `stableJsonify` from 25 kB to 2.3 kB, no zod
+in it. A host's label policy (*Pluggable label validator*, below) should be typed as
+`Z.core.$ZodType`, so a classic or a mini schema both fit.
 
 ### 8. Fingerprint unlock (passkeys, hardware keys)
 

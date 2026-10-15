@@ -90,7 +90,7 @@ export const VaultDashboard = () => {
       {snapshot.boxes.length > 0 && (
         <table>
           <thead>
-            <tr><th>label</th><th>whisper</th><th>note</th><th>updated</th><th></th></tr>
+            <tr><th>label</th><th>whisper</th><th>note</th><th>changed</th><th></th></tr>
           </thead>
           <tbody>
             {snapshot.boxes.map((box) => {
@@ -104,7 +104,7 @@ export const VaultDashboard = () => {
                       : <><code>{showWhisper(viewed)}</code> <button className="mini" onClick={() => { hide(box.boxlabel) }}>hide</button></>}
                   </td>
                   <td className="quiet">{box.note}</td>
-                  <td className="quiet">{new Date(box.updated_at).toLocaleString()}</td>
+                  <td className="quiet">{new Date(box.changed_at).toLocaleString()}</td>
                   <td className="row">
                     <button className="mini" onClick={() => { void applyWhisper(box.boxlabel) }}>use</button>
                     <button className="mini" onClick={() => { void edit(box.boxlabel, box.note ?? '') }}>edit</button>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import * as ZClassic from 'zod'
 import { EpochMillis, FarFuture, FarPast, Label, Lockbox, LockboxNote, LockboxSummary, VaultBundle, VaultScope, Whisper } from '../src/types'
-import { boxOf, bundleOf, scopeOf } from '../src/testing'
+import * as TH from './test-helpers'
 
 const WhisperCases = [
   // every JSON shape a whisper may take:
@@ -61,11 +62,11 @@ describe("Label", () => {
 
 const ScopeCases = [
   // regular usage:
-  [scopeOf('u1'),                                  true,   'an applabel, a user_id and a vaultlabel'],
-  [scopeOf('user|2fJ8:google'),                    true,   'a user_id in whatever form the host app issues'],
+  [TH.scopeOf('u1'),                                  true,   'an applabel, a user_id and a vaultlabel'],
+  [TH.scopeOf('user|2fJ8:google'),                    true,   'a user_id in whatever form the host app issues'],
   // refused:
-  [{ ...scopeOf('u1'), user_id: '' },              false,  'an empty user_id names no one'],
-  [{ ...scopeOf('u1'), applabel: 'Acme' },         false,  'an applabel outside the label grammar'],
+  [{ ...TH.scopeOf('u1'), user_id: '' },              false,  'an empty user_id names no one'],
+  [{ ...TH.scopeOf('u1'), applabel: 'Acme' },         false,  'an applabel outside the label grammar'],
   [{ applabel: 'acme', user_id: 'u1' },            false,  'a scope missing its vaultlabel'],
 ] as const
 
@@ -75,15 +76,24 @@ describe("VaultScope", () => {
   }
 })
 
+/** An ISO time, as records stored them before every time became epoch milliseconds. */
+const OldIso = '2026-10-14T00:00:00.000Z'
+const { registered_at: _bundleTime, ...bundleWithoutTime } = TH.bundleOf('u1')
+
 const BundleCases = [
   // regular usage:
-  [bundleOf('u1'),                                         true,   'a whole bundle'],
+  [TH.bundleOf('u1'),                                         true,   'a whole bundle'],
   // refused, as a damaged or foreign record:
-  [{ ...bundleOf('u1'), format: 'safebyok-vault-v2' },    false,  'a format this version does not know'],
-  [{ ...bundleOf('u1'), passphrase_epoch: 0 },            false,  'an epoch starts at one'],
-  [{ ...bundleOf('u1'), passphrase_epoch: 1.5 },          false,  'an epoch is a whole number'],
-  [{ ...bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
-  [{ ...bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, 'an envelope missing its ciphertext'],
+  [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },    false,  'a format this version does not know'],
+  [{ ...TH.bundleOf('u1'), passphrase_epoch: 0 },            false,  'an epoch starts at one'],
+  [{ ...TH.bundleOf('u1'), passphrase_epoch: 1.5 },          false,  'an epoch is a whole number'],
+  [{ ...TH.bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
+  [{ ...TH.bundleOf('u1'), vault_key_passphrase_wrapped: { cipher_iv_b64: 'iv' } }, false, 'an envelope missing its ciphertext'],
+  [{ ...TH.bundleOf('u1'), registered_at: 1_792_022_400 },   false,  'a registered_at in epoch seconds'],
+  [{ ...TH.bundleOf('u1'), registered_at: Infinity },        false,  'a registered_at that never comes'],
+  [{ ...TH.bundleOf('u1'), registered_at: OldIso },          false,  'a registered_at as an ISO string'],
+  [bundleWithoutTime,                                      false,  'a bundle missing its registered_at'],
+  [{ ...bundleWithoutTime, created_at: OldIso, updated_at: OldIso }, false, 'a bundle from before its time was named registered_at'],
 ] as const
 
 describe("VaultBundle", () => {
@@ -92,10 +102,11 @@ describe("VaultBundle", () => {
   }
 })
 
-const { note: _note, ...notelessBox } = boxOf('anthropic_api_key', 'a1')
+const { note: _note, ...notelessBox } = TH.boxOf('anthropic_api_key', 'a1')
+const { registered_at: _boxRegistered, changed_at: _boxChanged, ...boxWithoutTimes } = notelessBox
 const LockboxCases = [
   // regular usage:
-  [boxOf('anthropic_api_key', 'a1'),                       true,   'a whole lockbox, with its note'],
+  [TH.boxOf('anthropic_api_key', 'a1'),                       true,   'a whole lockbox, with its note'],
   [notelessBox,                                            true,   'a lockbox with no note field at all'],
   // a stored vault is a contract: earlier versions wrote a lockbox with no note as `note:
   // undefined`, which IndexedDB's structured clone keeps, so it still reads as no note
@@ -104,6 +115,12 @@ const LockboxCases = [
   [{ ...notelessBox, note: null },                         false,  'a null note'],
   [{ ...notelessBox, note: 'n'.repeat(257) },              false,  'a note over 256 characters'],
   [{ ...notelessBox, format: 'safebyok-lockbox-v2' },      false,  'a format this version does not know'],
+  [{ ...notelessBox, changed_at: FarFuture + 1 },          false,  'a changed_at past FarFuture'],
+  [{ ...notelessBox, registered_at: Infinity },            false,  'a registered_at that never comes'],
+  [{ ...notelessBox, changed_at: null },                   false,  'a null changed_at'],
+  [{ ...notelessBox, registered_at: Date.UTC(2026, 9, 14) + 0.5 }, false, 'a registered_at with a fraction of a millisecond'],
+  [boxWithoutTimes,                                        false,  'a lockbox missing its times'],
+  [{ ...boxWithoutTimes, created_at: OldIso, updated_at: OldIso }, false, 'a lockbox from before its times were named registered_at and changed_at'],
 ] as const
 
 describe("Lockbox", () => {
@@ -151,8 +168,8 @@ describe("LockboxSummary", () => {
   })
 
   it("strips the two ciphered fields and the format from a whole lockbox", () => {
-    const summary = LockboxSummary.parse(boxOf('anthropic_api_key', 'a1'))
-    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'created_at', 'updated_at'])
+    const summary = LockboxSummary.parse(TH.boxOf('anthropic_api_key', 'a1'))
+    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'registered_at', 'changed_at'])
   })
 })
 
@@ -224,5 +241,21 @@ describe("EpochMillis", () => {
     expect(EpochMillis.safeParse(1_792_022_400).success).to.be.false
     expect(EpochMillis.safeParse(1_792_022_400_000_000).success).to.be.false
     expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.false
+    expect(EpochMillis.safeParse(Infinity).success).to.be.false
+  })
+})
+
+describe("the exported validators, inside a host's own Zod", () => {
+  // A host on classic Zod holds them in its own schemas, as a form checking a lockbox might.
+  const BoxForm = ZClassic.object({ scope: VaultScope, boxlabel: Label, note: ZClassic.optional(LockboxNote) })
+
+  it("compose into a classic Zod schema and check as they do alone", () => {
+    const form = { scope: TH.scopeOf('u1'), boxlabel: 'anthropic_api_key', note: 'work account' }
+    expect(BoxForm.parse(form)).to.deep.equal(form)
+  })
+
+  it("refuse inside a classic Zod schema what they refuse alone", () => {
+    expect(BoxForm.safeParse({ scope: TH.scopeOf('u1'), boxlabel: 'ANTHROPIC' }).success).to.be.false
+    expect(BoxForm.safeParse({ scope: TH.scopeOf('u1'), boxlabel: 'anthropic', note: 'n'.repeat(257) }).success).to.be.false
   })
 })

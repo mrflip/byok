@@ -38,7 +38,9 @@ import { VaultProvider } from 'safebyok-react'
 The provider takes every `openVault` option as a prop. `browserOpts()` supplies the two a browser
 app answers like any other, `keyDeriver` and `deviceDB`; `vaultDB` is your backend's adapter. It
 answers the same bag on every call, so it is safe in a render: the provider reopens the vault
-whenever a prop changes identity.
+whenever a prop changes identity. So define a `logger` or a `clock` once, outside the component (or
+memoize it): an object literal written in the props is a new one at every render, and reopens
+the vault each time.
 
 ## When opening fails
 

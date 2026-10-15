@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isVaultError, localVaultDB, memoryStore } from 'safebyok'
-import { bundleOf, describeVaultDB, scopeOf } from 'safebyok/testing'
+import * as TH from 'safebyok/testing'
 import { OutageVaultDB, makeOutage } from '../../src/lib/outage'
 
 /** The kind of VaultError `operation` rejected with, or null for anything else; fails the test if it resolved. */
@@ -13,8 +13,8 @@ const refusalKind = async (operation: Promise<unknown>): Promise<string | null> 
   throw new Error('expected a rejection, but the operation resolved')
 }
 
-const scope = scopeOf('u1')
-const bundle = bundleOf('u1')
+const scope = TH.scopeOf('u1')
+const bundle = TH.bundleOf('u1')
 
 /** An OutageVaultDB over a fresh in-memory adapter, with its switch. */
 const downOver = () => {
@@ -48,7 +48,7 @@ describe("makeOutage", () => {
 })
 
 // While the switch is up, it is an adapter like any other, and owes the suite every adapter owes.
-describeVaultDB('OutageVaultDB, while up', () => new OutageVaultDB(localVaultDB(memoryStore()), makeOutage()))
+TH.describeVaultDB('OutageVaultDB, while up', () => new OutageVaultDB(localVaultDB(memoryStore()), makeOutage()))
 
 describe("OutageVaultDB, while down", () => {
   it("refuses a read as storage_unavailable, as a real adapter whose backend is down", async () => {

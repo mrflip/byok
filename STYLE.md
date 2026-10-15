@@ -21,7 +21,8 @@ is a bug.
   `import { Lockbox, LockboxKinds } from './lockbox'`.
 * When a list of type imports grows cumbersome, import the types whole under a short name ending
   in `T`: `import type * as VT from './vault-types'`.
-* Follow a library's own import conventions where it has one: `import * as Z from 'zod'` is ours.
+* Follow a library's own import conventions where it has one: `import * as Z from 'zod/mini'` is ours
+  (see *Validation*).
 
 The test for a module between these rules: does the import put *one well-named noun* in scope,
 or several loose verbs? One noun is the goal.
@@ -61,7 +62,10 @@ else's database, and stay one spelling from the wire to the code. Everything els
 **A time is UTC epoch milliseconds, an integer** (`registered_at: 1760000000000`,
 `askPassphraseAt`), in a stored record, a snapshot, a test fixture and the demo alike: never an
 ISO string, never a `Date`. The clock seam (`Clock.now()`) already yields it, every index sorts
-it, and one convention means no parsing at any boundary. A field named `*_at` holds one.
+it, and one convention means no parsing at any boundary. A field named `*_at` holds one. The
+package writes and reads whole milliseconds, which `EpochMillis` checks with the bounds (1981 to
+2255): a stored time with a fraction fails. Only a reading of the host's clock may carry a
+fraction, and the vault rounds it down as it reads it.
 
 Specificity is a virtue (`saltBytes` says it is bytes), but don't tag the obvious: `title`, not
 `titleStr`. When genericity is exactly the point, use the tag bare: `encode(bytes)`.
@@ -134,6 +138,15 @@ between columns lets the editor align them (see *Tests*).
   After it, no ambiguity and no undefined-checking paranoia.
 * A Zod schema is the first choice for defaults, coercion, limits and collapsing unions: one
   schema, one message per limit, never a hand-written `if (n > 99) throw` beside it.
+* **Clear intent at the door, clean data inside.** An entrypoint may take a host's plain way of
+  saying something -- `forcePassphraseReentryHours: Infinity` for "never" -- and turns it into
+  the bounded form the code keeps, at the parse: `Infinity` hours becomes the longest finite
+  window. Past the entrypoint, and in every stored field, nothing is infinite.
+* **`src/` uses `zod/mini`**, never classic `zod` (the linter refuses it): mini's builders
+  tree-shake, so a host pays only for the validators its imports reach. Its schemas are plain
+  functions, its limits checks: `Z.optional(Z.string().check(Z.maxLength(256)))` where classic
+  reads `z.string().max(256).optional()`. A test playing a host may import classic, as a host
+  would.
 * Enumerations lead with their values, then the type: `export const LockboxKindVals = [...] as
   const`, `export type LockboxKind = typeof LockboxKindVals[number]`.
 * Name a schema after what it checks, in the same case: the field `salt_bytes` has the validator
@@ -166,6 +179,12 @@ up for a poor name, or marks off a stanza that should be its own function is a s
 
 Vitest, in each package's `tests/`, path for path with its `src/`: `src/foo/bar.ts` is tested in
 `tests/foo/bar.test.ts`. Test and build artifacts never land in `src/`.
+
+* **Test helpers live in one module, `tests/test-helpers.ts`, star-imported as `TH`**:
+  `import * as TH from './test-helpers'`, then `TH.scopeOf('u1')`. It exports everything. The
+  core's is also published as `safebyok/testing`, so another package's tests reach the same
+  helpers; a package with helpers of its own keeps them in its own `tests/test-helpers.ts`, which
+  re-exports `safebyok/testing` beside them, so each test still has one `TH`.
 
 * **Assertions are chai-style**: `expect(foo).to.eq(bar)`, `to.deep.equal` (`to.equal` is `===`;
   an object or array wants `deep`), `to.have.lengthOf`, `to.throw`, `to.have.members`. `true`,

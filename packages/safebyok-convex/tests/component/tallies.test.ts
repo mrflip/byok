@@ -1,9 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { getDocumentSize } from 'convex/values'
-import { boxOf, scopeOf } from 'safebyok/testing'
+import * as TH from '../test-helpers'
 import type { Id } from '../../src/component/_generated/dataModel'
 import { MaxVaultLockboxBytes, MaxVaultLockboxes, refuses, weigh } from '../../src/component/tallies'
-import { componentTest } from '../helpers'
 
 const MiB = 1024 * 1024
 
@@ -18,10 +17,10 @@ describe("the limits every vault is held to", () => {
 })
 
 describe("weigh", () => {
-  const row = { ...scopeOf('u1'), ...boxOf('anthropic_api_key', 'a1') }
+  const row = { ...TH.scopeOf('u1'), ...TH.boxOf('anthropic_api_key', 'a1') }
 
   it("weighs a stored row as Convex counts the document it reads", async () => {
-    const t = componentTest()
+    const t = TH.componentTest()
     const stored = await t.run(async (ctx) => {
       const rowId = await ctx.db.insert('safebyok_lockboxes', row)
       return await ctx.db.get('safebyok_lockboxes', rowId)
@@ -31,7 +30,7 @@ describe("weigh", () => {
   })
 
   it("weighs a row just inserted, by the _id it was given, as its stored document will weigh", async () => {
-    const t = componentTest()
+    const t = TH.componentTest()
     const { rowId, stored } = await t.run(async (ctx) => {
       const insertedId = await ctx.db.insert('safebyok_lockboxes', row)
       return { rowId: insertedId, stored: await ctx.db.get('safebyok_lockboxes', insertedId) }
