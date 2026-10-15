@@ -28,7 +28,10 @@ fake auth's scaffolding rows sit in localStorage.
   remembered on the device for seven days. Signing out locks the vault.
 * **Inspection panels** ([src/components/inspection/](src/components/inspection/)) -- the raw
   rows of the pretend-backend store and the device-local store, rendered straight from storage by
-  machinery that never talks to the vault. **To delete them:** remove the two tagged lines (and
+  machinery that never talks to the vault. The backend's panel has an outage switch
+  ([src/lib/outage.ts](src/lib/outage.ts)): take the pretend backend down, sign out and back in,
+  and the dashboard says "Can't reach your vault" in place, with a Retry button -- what
+  `safebyok-react` hands an app as `openError` and `retryOpen`. **To delete them:** remove the two tagged lines (and
   imports) in [src/App.tsx](src/App.tsx), then delete `src/components/inspection/`. What remains
   is the app as a host would actually build it.
 
@@ -42,5 +45,5 @@ fake auth's scaffolding rows sit in localStorage.
 | the app itself | [src/components/](src/components/), [src/lib/anthropic.ts](src/lib/anthropic.ts) |
 
 Tests live in `tests/`, mirroring `src/`, and cover the demo's machinery (auth scaffold, whisper
-text handling, the Anthropic request shape via an injected fetch) -- not the React furniture. The
+text handling, the outage switch, the Anthropic request shape via an injected fetch) -- not the React furniture. The
 vault and provider are tested in their own packages.

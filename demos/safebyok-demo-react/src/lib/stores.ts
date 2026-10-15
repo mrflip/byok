@@ -1,5 +1,6 @@
 import { domStore, memoryStore, type StringStore } from 'safebyok'
 import { idbVaultDB, inspectIdb } from 'safebyok/idb'
+import { OutageVaultDB, makeOutage } from './outage'
 
 /**
  * DEMO JANK: concrete storage wiring. The vault's records live in this browser's IndexedDB,
@@ -14,8 +15,9 @@ import { idbVaultDB, inspectIdb } from 'safebyok/idb'
  *
  * The fake auth keeps its scaffolding rows in localStorage: accounts beside the pretend backend,
  * the session standing in for a cookie. The inspectors at the bottom of the page render every
- * shelf raw, so you can watch what lands where. A real app replaces vaultDB with a Convex (or
- * REST) adapter and keeps the browser's defaults exactly as they are.
+ * shelf raw, so you can watch what lands where, and the backend's panel has an outage switch to
+ * show what the app does when storage cannot be reached. A real app replaces vaultDB with a
+ * Convex (or REST) adapter and keeps the browser's defaults exactly as they are.
  */
 
 export const Applabel = 'safebyok_demo'
@@ -28,7 +30,11 @@ export const dbStore: StringStore = storage === null ? memoryStore() : domStore(
 /** The fake auth's session: stands in for a cookie; never leaves the browser. */
 export const deviceStore: StringStore = storage === null ? memoryStore() : domStore(storage, 'safebyok-demo:device:')
 
-export const vaultDB = idbVaultDB({ dbName: Applabel })
+/** The pretend backend's outage switch, flipped from its inspection panel. */
+export const outage = makeOutage()
+
+/** The vault's storage: IndexedDB, behind the pretend outage switch. */
+export const vaultDB = new OutageVaultDB(idbVaultDB({ dbName: Applabel }), outage)
 
 /** Raw windows onto the two IndexedDB shelves, for the inspection panels. */
 export const vaultDbInspector = inspectIdb({ dbName: Applabel, shelf: 'vault_db' })
