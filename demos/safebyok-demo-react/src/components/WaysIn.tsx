@@ -18,6 +18,8 @@ export const WaysIn = () => {
 
   const addFingerprint = async () => {
     setGripe(null)
+    // Asked before the passkey is made: once made, a refused proof would leave it on the authenticator.
+    if (! passphrase.trim()) { setGripe('Type your passphrase first: adding a passkey asks for it.'); return }
     try {
       const passkey = await createPasskey({ rp: { name: 'safebyok playground' }, user: { name: snapshot.scope.user_id, displayName: snapshot.scope.user_id } })
       if (passkey === null) { return }
