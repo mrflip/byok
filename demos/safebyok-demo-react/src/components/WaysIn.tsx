@@ -3,9 +3,10 @@ import { createPasskey, passkeysAvailable, useVault, useVaultSnapshot } from 'sa
 
 /**
  * The vault's ways in -- its passphrases and passkeys, listed even while locked -- and an "Add
- * fingerprint" form. The line that matters is `vault.addPasskey(passphrase, passkey, ...)`: the
- * passkey comes from `createPasskey()`, and the passphrase is the proof every change to the ways in
- * asks for, even unlocked. Once added, the passphrase dialog offers "Use a passkey".
+ * fingerprint" form. The line that matters is `vault.addPasskey(passphrase, makePasskey, ...)`:
+ * the passphrase is the proof every change to the ways in asks for, even unlocked, and only once
+ * it holds does the vault call `makePasskey`, `createPasskey()`. Once added, the passphrase dialog
+ * offers "Use a passkey".
  */
 export const WaysIn = () => {
   const { vault } = useVault()
@@ -18,12 +19,10 @@ export const WaysIn = () => {
 
   const addFingerprint = async () => {
     setGripe(null)
-    // Asked before the passkey is made: once made, a refused proof would leave it on the authenticator.
-    if (! passphrase.trim()) { setGripe('Type your passphrase first: adding a passkey asks for it.'); return }
     try {
-      const passkey = await createPasskey({ rp: { name: 'safebyok playground' }, user: { name: snapshot.scope.user_id, displayName: snapshot.scope.user_id } })
-      if (passkey === null) { return }
-      await vault.addPasskey(passphrase, passkey, { unlocklabel })
+      const makePasskey = () => createPasskey({ rp: { name: 'safebyok playground' }, user: { name: snapshot.scope.user_id, displayName: snapshot.scope.user_id } })
+      const unlockId = await vault.addPasskey(passphrase, makePasskey, { unlocklabel })
+      if (unlockId === null) { return }
       setPassphrase('')
     } catch (err) {
       setGripe(err instanceof Error ? err.message : 'Could not add that passkey.')

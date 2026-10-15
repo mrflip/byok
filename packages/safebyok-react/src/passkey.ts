@@ -47,7 +47,8 @@ export type AskPasskeyOpts = {
 }
 
 /**
- * A new passkey, and its first answer over a fresh salt: what `vault.addPasskey` takes. The browser
+ * A new passkey, and its first answer over a fresh salt: what `vault.addPasskey` calls for, once
+ * it has checked its proof, so a refused proof never leaves a passkey behind. The browser
  * asks the user to make the passkey (a fingerprint, a face, a security key), and, on authenticators
  * that answer only when asked again, to touch it once more.
  *
@@ -58,8 +59,8 @@ export type AskPasskeyOpts = {
  * vault, and stays on the authenticator until the user deletes it.
  *
  * @example
- *   const passkey = await createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName: fullName } })
- *   if (passkey !== null) { await vault.addPasskey(passphrase, passkey, { unlocklabel: 'laptop_fingerprint' }) }
+ *   const makePasskey = () => createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName: fullName } })
+ *   const unlockId = await vault.addPasskey(passphrase, makePasskey, { unlocklabel: 'laptop_fingerprint' })  // null: dismissed
  */
 export const createPasskey = async (opts: CreatePasskeyOpts): Promise<PasskeyProof | null> => {
   ensureAvailable()
