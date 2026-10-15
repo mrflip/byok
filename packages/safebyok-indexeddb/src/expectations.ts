@@ -29,7 +29,8 @@ export const bundleMeetsExpectation = (standing: unknown, expected: BundleExpect
 
 /**
  * True when the bundle standing belongs to the vault `expected` names, at any epoch: what an
- * erase, and the bundle half of a lockbox write, compare.
+ * erase, and the bundle half of a lockbox write, compare. A bundle that shows no epoch is too
+ * damaged to compare, as for {@link bundleMeetsExpectation}.
  *
  * @param standing - The bundle row standing in storage, or undefined when there is none.
  * @param expected - The vault the write or erase is aimed at.
@@ -38,6 +39,7 @@ export const bundleMeetsExpectation = (standing: unknown, expected: BundleExpect
  */
 export const vaultMeetsExpectation = (standing: unknown, expected: EraseExpectation): boolean => (
   fieldOf(standing, 'vault_id') === expected.vault_id
+  && Number.isFinite(fieldOf(standing, 'passphrase_epoch'))
 )
 
 /**
