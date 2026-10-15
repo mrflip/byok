@@ -1,6 +1,6 @@
 # Sprint low_hanging_fruit: progress
 
-**Status**: 2 building; 1, 3, 4, 5, 9, 10, 11 filed; 6, 7, 8 wait on 2. Newer than the plan wherever the two disagree.
+**Status**: 2 in review; 1, 3, 4, 5, 9, 10, 11 filed; 6, 7, 8 wait on 2. Newer than the plan wherever the two disagree.
 
 Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-3736-4ae7-9973-f69c1cdc5fe9), a live mirror: *Plan* and *Progress* tabs (the orchestrator's), and under *Threads* one tab per thread, written by that thread's worker.
 
@@ -9,7 +9,7 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
 | #  | Thread | Base | Status |
 | -- | ------ | ---- | ------ |
 | 1  | `vault_size_cap` | `origin/main` | filed [#34](https://github.com/mrflip/safebyok/pull/34) |
-| 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | underway |
+| 2  | `explicit_options` | thread 1 (#34, dd8c7ca) | in review |
 | 3  | `provider_open_rejection` | `origin/main` | filed [#32](https://github.com/mrflip/safebyok/pull/32) |
 | 4  | `epoch_millis` | `origin/main` | filed [#31](https://github.com/mrflip/safebyok/pull/31) |
 | 5  | `mask_utils` | `origin/main` | filed [#37](https://github.com/mrflip/safebyok/pull/37) |
@@ -70,6 +70,19 @@ Sprint doc: [Sprint low_hanging_fruit](https://claude.ai/code/artifact/5c68c0cb-
   - *Review:* fixed (security note: concurrent stores on one handle overshoot too). Taken at
     filing: an undeclared `maxRecordBytes` refused too; "not even one lockbox fits". Left: no
     server-side cap; a full vault refreshes on every refused store. Rebased onto #29.
+* **Thread 2** (`explicit_options`) -- for threads 6, 7, 8:
+  - `keyDeriver` is required (Zod-checked, the given object kept); `safebyok/browser`'s
+    `browserOpts({ dbName }?)` returns one frozen bag per `dbName` (so an inline spread in a
+    React render does not reopen the vault). `expiresAt` is `askPassphraseAt`;
+    `forcePassphraseReentryHours` (default `ForcePassphraseReentryHours = 168`, fractions
+    allowed, rounded to whole ms) replaces `rememberForMs`; `SevenDaysMs` is gone. Stored
+    `expires_at` unchanged.
+  - **Thread 8**: zod, not noble, is most of a bare `openVault` bundle: ~120 kB minified
+    without noble, ~135 kB with. `tests/index.test.ts` bundles a bare `openVault` with
+    rolldown (from `src/`) and greps for `argon2`, with a positive control.
+  - For whoever lands second: #33's *Locking* section mentions `rememberForMs` (rename it);
+    #37's `safebyok/utils` shares the `tsdown.config.ts`, `exports` and `typesVersions` lines.
+    The React passphrase dialog always says "seven days" (for the expiry thread).
 * **Thread 3** (`provider_open_rejection`, [#32](https://github.com/mrflip/safebyok/pull/32)):
   `VaultProvider` throws a rejected `openVault` during render; the React README's "When opening
   fails" section tells hosts to wrap it in an error boundary keyed on `userId`. *Review:* fixed
