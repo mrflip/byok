@@ -10,6 +10,21 @@ import type { GraphqlVaultClient, GraphqlVaultDBOpts } from '../src/index'
 
 TH.bootDatabaseFirst()
 
+/**
+ * Devices over this file's database, emptied: each a browser of its own, with urql Clients of its
+ * own, served by a server of its own whose statements pass the race's turnstile on their way to
+ * the one PGlite beneath them all. The turnstile is at the database, where a server's write is
+ * one statement, rather than at the wire, where it is one request.
+ */
+const browsersOverPGlite: TH.MakeVaultDBDevices = async (turnstile) => {
+  const db = await TH.emptyDatabase()
+  return ({ maxLockboxes }) => {
+    const client = TH.throughTurnstile(turnstile, db, ['query'])
+    const schema = TH.schemaOver(db, ({ userId }) => postgresVaultDB({ client, userId, listen: TH.listenOn(db), maxLockboxes }))
+    return TH.perUser((userId) => graphqlVaultDB(TH.urqlClientFor(schema, userId), { maxLockboxes }))
+  }
+}
+
 TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB over PGlite', async () => {
   const schema = TH.schemaOver(await TH.emptyDatabase())
   return TH.perUser((userId) => TH.browserFor(schema, userId))
@@ -23,7 +38,14 @@ TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB ov
     const schema = TH.schemaOver(await TH.emptyDatabase())
     return (userId) => TH.browserFor(schema, userId)
   },
-  pushes: true,
+  pushes:      true,
+  makeDevices: browsersOverPGlite,
+})
+
+describe("graphqlVaultDB's devices, for the battery's races", () => {
+  it("send every write's statement, on the server, through the race's turnstile", async () => {
+    await TH.expectRoundTripsThroughTurnstile(browsersOverPGlite)
+  })
 })
 
 const u1 = TH.scopeOf('u1')

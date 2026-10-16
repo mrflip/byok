@@ -9,6 +9,19 @@ import type { PostgresClient, PostgresListen, PostgresVaultDBOpts } from '../src
 
 TH.bootDatabaseFirst()
 
+/**
+ * Devices over this file's database, emptied: each sends its statements through a client of its
+ * own, every one passing the race's turnstile. Beneath them all is the one PGlite, which runs one
+ * statement at a time, so no two statements ever run at once.
+ */
+const devicesOverPGlite: TH.MakeVaultDBDevices = async (turnstile) => {
+  const db = await TH.emptyDatabase()
+  return ({ maxLockboxes }) => {
+    const client = TH.throughTurnstile(turnstile, db, ['query'])
+    return TH.perUser((userId) => postgresVaultDB({ client, userId, listen: TH.listenOn(db), maxLockboxes }))
+  }
+}
+
 TH.describeVaultDB('postgresVaultDB over PGlite', async () => {
   const db = await TH.emptyDatabase()
   return TH.perUser((userId) => TH.requestFor(db, userId))
@@ -21,7 +34,14 @@ TH.describeVaultDB('postgresVaultDB over PGlite', async () => {
     const db = await TH.emptyDatabase()
     return (userId) => TH.requestFor(db, userId)
   },
-  pushes: true,
+  pushes:      true,
+  makeDevices: devicesOverPGlite,
+})
+
+describe("postgresVaultDB's devices, for the battery's races", () => {
+  it("send every write's statement through the race's turnstile", async () => {
+    await TH.expectRoundTripsThroughTurnstile(devicesOverPGlite)
+  })
 })
 
 const u1 = TH.scopeOf('u1')

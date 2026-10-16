@@ -3,6 +3,7 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it, vi } from 'vitest'
 import { createStore, get, set } from 'idb-keyval'
+import type { UseStore } from 'idb-keyval'
 import { memoryDeviceDB, openVault, VaultError } from 'safebyok'
 import { boxCkey, bundleCkey } from '../src/ckeys'
 import { idbVaultDB } from '../src/idb-vault-db'
@@ -10,7 +11,43 @@ import type { IdbVaultDBOpts } from '../src/idb-opts'
 import { inspectIdbVaultDB } from '../src/inspect-idb-vault-db'
 import * as TH from './test-helpers'
 
-TH.describeVaultDB('idbVaultDB', () => idbVaultDB({ dbName: TH.freshDbName() }), { pushes: true })
+/** The turnstile of each database a race made its devices over, by the name idb-keyval opens it under. */
+const turnstiles = vi.hoisted(() => new Map<string, { pass: () => Promise<void> }>())
+
+// A device's round trip to IndexedDB is a transaction, which idb-keyval opens inside the store
+// function createStore returns: this passes a race's turnstile just before each one opens, so a
+// race can hold a device between two transactions. A database no race made goes straight through.
+vi.mock('idb-keyval', async (importOriginal) => {
+  const keyval = await importOriginal<typeof import('idb-keyval')>()
+  const throughTurnstile = (dbName: string, storeName: string): UseStore => {
+    const useStore = keyval.createStore(dbName, storeName)
+    return async (txMode, callback) => {
+      await turnstiles.get(dbName)?.pass()
+      return useStore(txMode, callback)
+    }
+  }
+  return { ...keyval, createStore: throughTurnstile }
+})
+
+/**
+ * Devices over a fresh database: each an idbVaultDB of its own, each transaction passing the race's
+ * turnstile. In one page they share the database's connection and its bell, as two tabs would not;
+ * IndexedDB runs transactions that write one store one after another, whichever connection opened
+ * them, as a browser does across tabs.
+ */
+const devicesOverOneDatabase: TH.MakeVaultDBDevices = (turnstile) => {
+  const dbName = TH.freshDbName()
+  turnstiles.set(`${dbName}:vault_db`, turnstile)
+  return () => idbVaultDB({ dbName })
+}
+
+TH.describeVaultDB('idbVaultDB', () => idbVaultDB({ dbName: TH.freshDbName() }), { pushes: true, makeDevices: devicesOverOneDatabase })
+
+describe("idbVaultDB's devices, for the battery's races", () => {
+  it("open every write's transaction through the race's turnstile", async () => {
+    await TH.expectRoundTripsThroughTurnstile(devicesOverOneDatabase)
+  })
+})
 
 /** The shelf's object store, opened as the adapter opens it, for a test to read or plant rows. */
 const rawShelf = (dbName: string) => createStore(`${dbName}:vault_db`, 'records')
