@@ -10,7 +10,7 @@
 | 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | waits on 11                |
 | 6 | race_helper       | waiting on thread 5        |
-| 7 | indexeddb_fixes   | underway (on #105)         |
+| 7 | indexeddb_fixes   | in review (#109)           |
 | 8 | size_rule         | filed #99 (commits on it)  |
 | 9 | damaged_bundle    | in review (#108)           |
 | 10 | identity_revoked | filing #106 onto #105 (review fixed) |
@@ -27,6 +27,13 @@
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
+
+* **Thread 7 (#109), indexeddb_fixes.** `listBoxes`/`eraseVault` read `boxRange(scope)` (an
+  `IDBKeyRange` over the tuple-JSON lockbox prefix) instead of the whole shelf; every request goes
+  through `settle()`, so a null `request.error` becomes an Error and no `cause` is ever null; the
+  bell closes its channel when the last listener leaves. Stored keys unchanged -- the Coach's
+  "anything deeper?": no. *For threads 5 and 6:* vitest's `rejects.toThrow(/re/)` passes on a
+  `null` rejection; a null-cause test needs an explicit `instanceOf(Error)`.
 
 * **Thread 11 (#107), vaultdb_contract.** The contract is `packages/safebyok/VAULTDB.md`, 26
   numbered lines; `describeVaultDB` runs a group per line, titled `..., 3.3: <line>`, and
