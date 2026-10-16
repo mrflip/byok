@@ -1,0 +1,90 @@
+# wins: humans_gripes
+
+Read all 23 dated entries in human/ on origin/main (plus README.md), and the one human/ file only on an open PR: 20261016-sprint_gripes_part2_done.md (PR#100, open). PR#81 (comment_width) carries a copy of 20261015-sprint_second_harvest_done.md identical to main, so nothing extra.
+
+- safebyok-react demo built at `demos/safebyok-react/` (stub vault, fake sign-in, lockbox CRUD, ask-for-passphrase-on-demand remembered 7 days, inspector), 86 vitest tests — 20261014-byok_react_demo
+- Root eslint config ignores `demos/**` and pnpm-workspace gained `packages: [demos/*]` — 20261014-byok_react_demo
+- Every PR that changes a public package carries a changeset (CI asks; `pnpm changeset --empty` for none) (PR#22) — 20261014-changeset_releases
+- release.yml on push to main keeps one Version PR, then justifies, packs, stages each tarball via scripts/release.ts, and changesets tags and releases each package (PR#22) — 20261014-changeset_releases
+- safebyok and safebyok-react version in lockstep with a test refusing a public package left out; `pnpm bump` and bumpp removed (PR#22) — 20261014-changeset_releases
+- "Allow GitHub Actions to create and approve pull requests" is on, and the tag ruleset covers `refs/tags/safebyok*@*` beside `v*` (2026-10-15) — 20261014-changeset_releases PR#22
+- Real cryptography landed: Argon2id (`argon2id_web_v1`) -> passphraseKey -> vaultKey -> lockboxKey -> whisperCiphered via AES-256-GCM, bound to context so relocated ciphertext refuses to open (PR#5) — 20261014-crypto
+- `changePassphrase(old, new)` added: new salt, epoch+1, no lockbox rewritten (PR#5) — 20261014-crypto
+- Argon2id from `@noble/hashes` measured at about 560 ms per derivation before choosing it over hash-wasm (PR#5) — 20261014-crypto
+- VaultDB is an abstract class: seven fetch/save/trash primitives, verbs composed on top; invalid records refused as `corrupt_record` and left in place (PR#5) — 20261014-crypto
+- `safebyok/idb` entry added: `idbDeviceDB`, `idbVaultDB`, `inspectIdb`, with BroadcastChannel cross-tab bells (PR#5) — 20261014-crypto
+- Relic files rewritten (recovery stripped, API matched to src/); slop survey found 24 issues in `whiteboard/20261014-crypto/relic-slop-survey.md` (PR#5) — 20261014-crypto
+- Demo now speaks IndexedDB and shows real ciphertext (PR#5); safebyok 159 tests, safebyok-react 6, demo 24 — 20261014-crypto
+- Round four: `guard` renamed `withUnlockedVault` across safebyok-react, tests, demo and docs — 20261014-foundations_round_four
+- Coach ruled/applied: a whisper is never bare null; `Whisper = Exclude<WhisperJson, null>`, validator refuses top-level null with `bad_whisper` — 20261014-foundations_round_four
+- Null-sentinel audit: vault.ts `bundle` now uses `Symbol.for('safebyok.unread_bundle')` and `vaultState()` derives `'opening'`; storage reads keep `| null` as "no such record" — 20261014-foundations_round_four
+- Each React package's eslint config names its own `tsconfigRootDir`; `FormEvent` replaced by `SubmitEvent` in the passphrase modal — 20261014-foundations_round_four
+- Round three: CLAUDE.md and PROCESS.md strengthened on library-first; `src/stable-jsonify.ts` is now an alias of `safe-stable-stringify` ^2.5.0 — 20261014-foundations_round_three
+- Demo renamed `safebyok-demo-react`, prefix `demo:`, root gained `pnpm demo:react`; history rewritten into logical commits and force-pushed to PR #3 — 20261014-foundations_round_three
+- Round two: `demos:` prefix in PROCESS.md, sign-out locks the vault, labels are `/^[a-z](_?[a-z0-9])+$/` max 40, `stableJsonify` backs snapshot change detection — 20261014-foundations_round_two
+- Round two: library moved to root `src/`, zod added as regular dependency, `packages/safebyok-react` created (provider, useVault, useVaultSnapshot, guard, passphrase dialog) — 20261014-foundations_round_two
+- VOCABULARY.md landed and applied across src, tests, demo, STYLE, CLAUDE, SECURITY and lint messages; `KdfProfile` is now `KeyDeriverSpec` labelled `argon2id_web_v1` — 20261014-vocabulary
+- Package renamed to `safebyok` (byokvault would collide with npm `byok-vault`); repo is `mrflip/safebyok`; stored format tags renamed, no reader for old `byok-*` tags — 20261014-rename_to_safebyok
+- Sprint pr_releases thread 1 PR#15 (safebyok-react publishable, per-package and whole-repo tests) and thread 2 PR#16 (core moves to `packages/safebyok`) filed, review clean — 20261014-sprint_pr_releases_paused
+- `npm stage publish` and `pnpm bump` release workflow done in PR#11, rebased on main, CI green; GitHub `npm` environment required reviewers are off (answered) — 20261014-staged_publish
+- Release workflow installs npm 12.2.0 (has `npm stage`, supports Node 24.21) — 20261014-staged_publish PR#11
+- `openVault({ maxWhisperBytes })` added, default `MaxWhisperBytes = 40_444`, checked on write only; every VaultDB declares `maxRecordBytes`; openVault refuses over half of it (PR#7) — 20261014-whisper_cap_and_convex
+- Settled in chat: `localVaultDB` declares 1 MiB per record, `idbVaultDB` declares `Infinity` — 20261014-whisper_cap_and_convex
+- Convex design written (`whiteboard/20261014-convex/design.md`) and `safebyok-convex` scaffold (PR#8) — 20261014-whisper_cap_and_convex
+- Label grammar investigated, no code changed: the cipher binding does not constrain labels (each is a JSON-array element via `stableJsonify`); only the colon in ckeys does (PR#35) — 20261015-label_grammar_report
+- Label report found Convex is indifferent to label grammar (labels are `v.string()` values, not field names) and widening is a schema edit on the read path only (PR#35) — 20261015-label_grammar_report
+- Sprint big_feats built six PRs: multiple unlock envelopes (PR#71), passkeys via WebAuthn PRF (PR#76), hash-wasm Argon2id about 4x faster and byte-identical (PR#74), IndexedDB package (PR#77), Postgres VaultDB (PR#73), GraphQL VaultDB (PR#78) — 20261015-sprint_big_feats_done
+- Every big_feats thread was reviewed at medium and every review came back `fixed` (e.g. aimed unlock on destroyed vault, late listener call, departed subscriber keeping LISTEN alive) — 20261015-sprint_big_feats_done
+- Decided in YOLO: cut from PR#63 tip; `passphrase_epoch` keeps its name; threads 1 and 4 wait on `kdf_configs` (PR#68) and `vaultdb_validation` (PR#70); Postgres rebased onto envelopes — 20261015-sprint_big_feats_done
+- Small follow-ups ordered at filing: salt checks and blank-proof refusal (PR#71), 400 for malformed route body (PR#73), doc lines on orphaned passkeys (PR#76), one copy of `graphql` (PR#78) — 20261015-sprint_big_feats_done
+- Sprint big_feats paused 10:18 UTC at the Coach's word and the three stopped agents were resumed in place at 11:19 UTC — 20261015-sprint_big_feats_paused
+- (Coach) ruled: any way in proves any change; a vault still keeps at least one passphrase (PR#76) — 20261015-sprint_big_feats_rulings
+- (Coach) ruled: any change to a vault's ways in (including adding/removing a passkey) moves its epoch; other devices' remembered unlock lapses at next refresh and they lock — 20261015-sprint_big_feats_rulings
+- (Coach) ruled: hash-wasm's lack of a published audit is noted in `notes/security.md` — 20261015-sprint_big_feats_rulings PR#74
+- (Coach) ruled: rename `passphrase_epoch` to `unlock_epoch` in the core and all five adapters — 20261015-sprint_big_feats_rulings
+- (Coach) ruled: each store sets its own vault cap, core offers no constant (agent's reading: `maxLockboxes`, `vault_full` on Postgres) — 20261015-sprint_big_feats_rulings PR#73
+- (Coach) ruled: `TH.perUser` moves into `safebyok/testing` (helpers there need no new dependency) — 20261015-sprint_big_feats_rulings
+- (Coach) ruled: package names `safebyok-postgres`, `safebyok-graphql`, `safebyok-indexeddb`, `safebyok-argon2-wasm`, with CLAUDE.md and guidance docs updated — 20261015-sprint_big_feats_rulings
+- (Coach) ruled: no backward compatibility, every published version deprecated; `safebyok/idb` loses exports with no re-export (PR#77) — 20261015-sprint_big_feats_rulings
+- Agent's recommendations on smaller items, awaiting nod: leave the 4.8 s un-aimed unlock, keep new public surface, keep `graphql` as optional peer, leave `bad_label` for a taken unlocklabel — 20261015-sprint_big_feats_rulings
+- Restack plan recorded: main -> #71 -> #76 -> #73 -> #78 as one line, with #74 needing #68 and #77 needing #70 — 20261015-sprint_big_feats_rulings
+- Sprint convex_vaultdb built: PR#18 core storage verbs (`versionedUpdate`, vault_id erase expectations, `stale_write`/`not_permitted`/`storage_unavailable`), PR#19 Convex component, PR#20 `convexVaultDB`, PR#17 Convex agent skills — 20261015-sprint_convex_vaultdb_done
+- (Coach) ruled: erases carry a `vault_id`-only expectation (`eraseBox` and `eraseVault`); generic error kinds live in the core and Convex threads may shape core architecture (`VaultBundle`/`VaultScope` exported as Zod values) — 20261015-sprint_convex_vaultdb_done
+- Sprint gripe_fixes landed eight PRs restacked into one merge line (top PR#82): validation at every entrypoint plus survey (PR#70), thin tests (PR#75), shared test helpers (PR#80), `argon2idDeriver(spec)` (PR#68), CI/tooling (PR#72), React dialog (PR#67), security notes/VOCABULARY (PR#69) — 20261015-sprint_gripe_fixes_done
+- PR#68 breaking: a host deriver labelled `argon2id_web_v1` without the spec's parameters is refused at open — 20261015-sprint_gripe_fixes_done
+- (Coach) approved `openVault` size budget bump: `openVault` 17 kB (16.61 used), everything 24.5 kB (24.24 used) (PR#68) — 20261015-sprint_gripe_fixes_done
+- (Coach) ruled: second KDF configuration becomes a TODO.md entry (built-as-a-whole recommended KDFs plus roll-your-own functions) — 20261015-sprint_gripe_fixes_done
+- (Coach) ruled: PR#81 comment width rule stays out of the line; the Coach redoes it from its recipe — 20261015-sprint_gripe_fixes_done
+- Gripes list now notes each FIX entry's PR; NOTED/fixed/REPLY entries moved under *Addressed*, NOTYET/ragebait under *Deferred by design*; VERIFY FIXED root scripts closed as verified under dash and `bash --posix` — 20261015-sprint_gripe_fixes_done
+- Sprint gripe_followups landed PR#87 (`UserId` 1 to 100 chars, `erase()` of a damaged box, `Vault.reentryWindowMs`, `ForeverMs`; `PassphraseModal` `reentryHours` prop removed), PR#85 (`validation-overrides.md`), PR#83 (sprint PR with /sprint skill changes) — 20261015-sprint_gripe_followups_done
+- Decided: `Vault.reentryWindowMs` is a vault property not a snapshot field; `reentryHours` removed not deprecated; Convex component left alone since client refuses longer ids — 20261015-sprint_gripe_followups_done
+- Sprint gripe_rulings landed PR#92 `tuple_ckeys` (ckeys are `JSON.stringify([kind, applabel, user_id, vaultlabel(, boxlabel)])`, public `Ckeys` module; stored-format change, old vaults read as absent) — 20261015-sprint_gripe_rulings_done
+- PR#95 `replaceable_validators`: `openVault({ validators })` and `VaultProvider` accept host schemas replacing ours (check only), `safebyok/validators` entry, new kind `lockbox_too_large`, `maxVaultBytes` — 20261015-sprint_gripe_rulings_done
+- PR#93 `damaged_boxes`: a bad lockbox lists as `{ boxlabel, damaged: true }`, `erase()` removes it, `store()` overwrites it except under a name today's validators refuse; `doListBoxes` now returns `{ boxlabel, lockbox }` pairs (breaking for adapter authors) — 20261015-sprint_gripe_rulings_done
+- PR#91 `dialog_wording`: "Locks on this device in 7 days" / "Locks again on this device in 7 days" via `Intl.RelativeTimeFormat` — 20261015-sprint_gripe_rulings_done
+- Size budgets raised under the Coach's standing approval: everything 24.5 to 26 kB, `openVault` 17 to 17.5 kB (17.45 used) — 20261015-sprint_gripe_rulings_done
+- Decided in YOLO: PR#91 fallback dropped (could never run); PR#92 sweeps old remembered unlocks (fails safe, not a migration); PR#95 throwing host schema carries no `cause`; box under a now-refused name is damaged and only erasable — 20261015-sprint_gripe_rulings_done
+- Sprint low_hanging_fruit merged nine PRs: #31 epoch ms, #32 provider open rejection, #33 docs sweep, #34 vault size cap, #35 label grammar report, #36 sandals, #40 explicit options, #43 boundary audit, #44 stale-write retry — 20261015-sprint_low_hanging_fruit_done
+- Open from that sprint: PR#42 size budgets in CI, PR#45 `store()` backoff 1-2 s then 2-4 s, PR#46 Convex cap 8,000 lockboxes and 7 MiB less 1 KiB with per-vault tally, PR#50 every error kind gets a family, PR#37 `mask` in `safebyok/utils` — 20261015-sprint_low_hanging_fruit_done
+- (Coach) ruled: apply #36's argument-forwarding fix to the root scripts — 20261015-sprint_low_hanging_fruit_done
+- (Coach) ruled `mask` contract: best-effort whiff of each end, safe in a log, no segmenter, too-small `maxLen` gives that many stars, strip invisibles and oddities, normalize last — 20261015-sprint_low_hanging_fruit_done
+- (Coach) ruled: `maxVaultBytes` stays abstract, every error kind listed in the core with its family, Convex enforces a cap server-side — 20261015-sprint_low_hanging_fruit_done
+- (Coach) ruled in TODO.md: a pluggable label validator brings a label-tuple stringifier that handles `:`, and `user_id` gets replaceable validation — 20261015-sprint_low_hanging_fruit_done
+- (Coach) ruled: `store()` waits a long random, doubling interval before each retry, three attempts in all — 20261015-sprint_low_hanging_fruit_done
+- Mistake fixed on Coach's yes: thread 13's branch inherited #46's upstream and its push fast-forwarded #46; #46 reset to `c519073` with a lease, #50 is thread 13 alone — 20261015-sprint_low_hanging_fruit_done
+- Sprint pr_releases: PR#15 (`safebyok-react` publishable), PR#16 (core under `packages/safebyok`), PR#22 (changesets releases with empty changeset) restacked on main and merged by the Coach — 20261015-sprint_pr_releases_done
+- Coach enabled Actions to create PRs and froze `refs/tags/safebyok*@*` as well as `v*`; this PR also changed the /sprint skill so the sprint doc mirrors every whiteboard file, one tab per thread — 20261015-sprint_pr_releases_done
+- Sprint second_harvest: core validation moved to `zod/mini` cutting `openVault` from 30 kB to about 16 kB; failed `openVault` cleans up; error families; shortened reentry setting at next open; lock beats a racing unlock (PR#55); `lockSoon()` (PR#60) — 20261015-sprint_second_harvest_done
+- Second harvest: stored times are bounded whole epoch ms (`FarFuture` 2255, `FarPast` 1981, PR#57), host clock checked, `Infinity` coerced at the door (PR#64), pluggable logger with console fallback (PR#65) — 20261015-sprint_second_harvest_done
+- Merge stack of 16 PRs with every base `main`; merging top PR#63 with a merge commit marks all merged; Coach merged PR#51 so 1-9 are in main — 20261015-sprint_second_harvest_done
+- Answered at closeout: PR#49 and PR#63 go on the stack; CLAUDE.md's console line now names the fallback logger; logger everywhere ready to start; older questions moved to TODO.md; PR#38 is the Coach's to close — 20261015-sprint_second_harvest_done
+- (Coach) ruled: no backward compatibility until 1.0.0; validate the host clock; coerce `Infinity` at first opportunity then refuse; values inside our interface possess final form; no deployed vaults; `lockSoon()` on a bad clock warns and locks at once; console is the fallback logger — 20261015-sprint_second_harvest_done
+- Strict configs: IDE/tsc split was `dist/` not strictness; one `tsconfig.base.json` holds all strictness, `@safebyok/source` condition via tsdown `devExports`, every eslint config cut from the core's (merged as PR#29) — 20261015-strict_configs
+- Caught `exactOptionalPropertyTypes` on `Lockbox.note`: `.exactOptional()` would have refused existing IndexedDB lockboxes, reverted and a test pins reading `note: undefined` — 20261015-strict_configs
+- Decided: tests stay on `dist/`; each public package's `prepublishOnly` runs `scripts/require-pnpm.ts` (refuses non-pnpm; `npm publish <tarball>` runs no script so CI untouched) — 20261015-strict_configs
+- Lint shush for fake salt `no-hardcoded-passwords` approved, lives once in core's `bundleOf`; `safebyok/testing` entry added (`testDeriver`, `fakeCiphered`, `scopeOf`, `bundleOf`, `boxOf`, `describeVaultDB`), changeset `safebyok` minor, recorded in `notes/security.md` (PR#38) — 20261015-strict_configs
+- Sprint gripes_part2 built four threads reviewed at medium on a five-PR line (top PR#100; PR#104 validators_tightening, PR#103 test_hygiene, PR#102 convex_setup_check, PR#101 docs_rulings) from the Coach's `proceed` rows — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Default checks refuse lone surrogates (and control characters in notes) and refusals say which rule failed; a misspelt validator field is refused everywhere via exported `checkValidators`; a forgotten validators bag no longer applies defaults (PR#104) — 20261016-sprint_gripes_part2_done PR#100 (open)
+- `safebyok/validators` no longer pulls in the record schemas (8.36 to 3.86 kB) (PR#104) — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Bug found and fixed: changing a passphrase or passkey ignored a host's wider checks (PR#104) — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Convex checks `getUserId` and its component when the host builds it, not at first request (PR#102); test helpers no longer hide leaks or double-record and the demo's tests clean up (PR#103); `TODO.md` holds the written-down questions and `STYLE.md` the `expect*` rule (PR#101) — 20261016-sprint_gripes_part2_done PR#100 (open)

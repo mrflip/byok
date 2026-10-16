@@ -1,0 +1,66 @@
+# wins: gripes_1_doc
+
+Read from Claude Doc "Sprint gripe_rulings" (4hntXg3RfnSFQYuJgCtQkA): tabs Open Matters, Part 2 status, and the others as listed below.
+
+- (Coach) Ruled on the comment width rule PR#81: leave until version 1.0.0-pre (state: noted) — Open Matters, "#81, the comment width rule"
+- (Coach) Will delete the leftover directories himself when things settle down (state: noted) — Open Matters, "For you: delete leftover directories"
+- Four-thread gripes_part2 sprint cut from main at b60e516, review at medium, filed as PR#101-104 with sprint PR#100 — Part 2 status, intro and Round 1
+- Round 1 restacked into one line main to PR#104, #103, #102, #101, #100; `pnpm justify` and `pnpm size` green at the top — Part 2 status, Round 1
+- Closing note written (human/20261016-sprint_gripes_part2_done.md); each open question became a drafting row in Open Matters — Part 2 status, Round 1
+- PR#99 merged under the line; stack restacked onto main at 5090c1a with no conflicts, justify and size green — Part 2 status, Round 2
+- Thread 1 validators_tightening filed (PR#104) — Part 2 status, row 1
+- Thread 2 convex_setup_check filed (PR#102) — Part 2 status, row 2
+- Thread 3 test_hygiene filed (PR#103) — Part 2 status, row 3
+- Thread 4 docs_rulings filed (PR#101) — Part 2 status, row 4
+- Swept without a thread: `Ckeys` stays public; old remembered unlocks behave as now; `lockbox_too_large` kept — Part 2 status, "Swept without a thread"
+- Swept: old-contract adapters get no back-compat; `openVault` headroom already raised; `withUnlockedVault` keeps PR#98's way — Part 2 status, "Swept without a thread"
+- Rebase agent's note went into thread 4's TODO heading plus one matter — Part 2 status, "Swept without a thread"
+- Convex sanitizer strips the cause from any Convex failure that is not one of our refusals; `not_permitted` and `vault_full` keep their kinds (PR#117) — Open Matters, "Convex drops every foreign error's cause"
+- `unlocklabel` is checked when a way in is added, with the vault's first label `passphrase` exempt and an empty label always refused (PR#117) — Open Matters, "unlocklabel is checked when a way in is added"
+- Sprint gripe_rulings (2026-10-15) ran as one merge line #83 > #92 > #95 > #93 > #91 > #90, done, with a closing note — Plan, Status; Closing note
+- Thread 1 damaged_boxes (PR#93): a bad lockbox lists as { boxlabel, damaged: true } named by its ckey; openVault and refresh() no longer refuse over one — Progress, thread 1
+- erase() removes a damaged box from any handle; store() erases then writes it afresh; read()/use() still refuse (PR#93) — Progress, thread 1
+- Breaking for adapter authors: doListBoxes returns { boxlabel, lockbox } pairs (PR#93) — Closing note; Progress, thread 1
+- PR#93 review fixed the demo Enter-key bypass, security note names the two store-over-damaged races, docs wording corrected (ed42ce5) — Progress, thread 1
+- Thread 2 dialog_wording (PR#91): "Locks on this device in 7 days" while creating, "Locks again…" otherwise, via Intl.RelativeTimeFormat('en'); ForeverMs reads "Stays unlocked on this device until you lock it" — Progress, thread 2
+- (Coach) Yes on Intl.RelativeTimeFormat; answered in chat across target platforms — Plan, Thread 2 and For the Coach
+- YOLO decision: PR#91's planned NumberFormat fallback dropped because no engine could use it; dialog is DOM-only — Closing note, YOLO decisions
+- Commit prefix for safebyok-react is client:, not react: (PROCESS.md) — Progress, thread 2
+- Thread 3 tuple_ckeys (PR#92): ckeys are JSON.stringify([kind, applabel, user_id, vaultlabel(, boxlabel)]) from public Ckeys module (bundle, box, unlock, boxPrefix, isBoxIn, isUnlock) — Progress, thread 3
+- Coach's colon/JSON question answered: about 12 bytes more per ckey, listing no slower; JSON text chosen over IndexedDB array keys (PR#92) — Progress, thread 3
+- Stored-format change: vaults under idbVaultDB or localVaultDB read as absent after upgrade (PR#92) — Closing note, PR list
+- YOLO decision: PR#92 sweeps old remembered unlock rows unread (wrapped vaultKey outliving lock()); eraseUnlock deletes the scope's own unlock first — Closing note; Progress thread 3
+- Thread 4 replaceable_validators (PR#95): host schemas replace ours for every name and the note, no floor, check never transform, one seam src/names.ts — Progress, thread 4
+- safebyok/validators entry added; records weighed against maxRecordBytes (new kind lockbox_too_large) and vault against maxVaultBytes (PR#95) — Progress, thread 4
+- PR#95 review fixed: absent_box no longer quotes the boxlabel; a throwing host schema's error carries no cause — Progress, thread 4; Closing note YOLO
+- YOLO decision: a box under a name today's validators refuse is damaged and only erasable; store() there refuses bad_label (PR#93 restack) — Closing note, YOLO decisions
+- Restacked into one line #83 > #92 > #95 > #93 > #91 > #90; justify and size run once at top; history tagged sprint/20261015-gripe_rulings — Progress, orchestrator note
+- Size budgets raised under Coach's standing approval: everything 24.5 to 26 kB, openVault 17 to 17.5 kB — Closing note
+- Sprint PR#90 carries TODO.md's three new entries and the sprint records, squashed on top of the line — Closing note
+- listBoxes returns (LockboxSummary | DamagedLockbox)[]; a record failing ListedLockbox or naming another boxlabel lists damaged; only a damaged bundle stops an open (PR#93) — Thread 1 damaged_boxes, Built
+- Adapter contract: doListBoxes resolves to StoredLockbox[] ({ boxlabel, lockbox }); string store, idb and Convex updated; string store hands up a not-JSON row as text (PR#93) — Thread 1, Built
+- store() over a damaged box is erase-then-write via readBoxOrDamaged, with a new registered_at; ensureBoxStands uses the same reader (PR#93) — Thread 1, Built
+- DamagedLockbox and StoredLockbox types exported; VaultSnapshot.boxes takes the union; demo dashboard shows damaged rows with replace/delete only (PR#93) — Thread 1, Built
+- TH.summaryOf(box) added to safebyok/testing; new damaged-lockbox tests across adapters and vault.test.ts (PR#93) — Thread 1, Built
+- Decision: boxlabel of a damaged box comes from where the row is stored; one list with a damaged discriminant; damaged box carries only its boxlabel (PR#93) — Thread 1, Decisions taken
+- PR#93 docs: both READMEs, VOCABULARY.md damaged row, notes/security.md, changeset (safebyok, safebyok-convex minor); justify green — Thread 1, Built
+- PR#93 restack onto PR#95: Ckeys.boxlabelOf replaces boxlabelOfCkey; listedOrDamaged(rules, stored) replaces checkStoredBox; a box under a refused name lists damaged, erase reaches it; store refuses bad_label; read refuses bad_label — Thread 1, Restack onto #95
+- PR#93 second review fixed: Ckeys.boxlabelOf names a label only for exact Ckeys.box text (a38ac3d); docs say a damaged box's boxlabel is its stored text (751b1a3) — Thread 1, Restack onto #95
+- PR#91 PassphraseModal uses Intl.RelativeTimeFormat(Locale, { numeric: 'always', style: 'long' }) with whole days, else hours, else minutes; windowCount splits unit choice from unlockedFor — Thread 2 dialog_wording, Built
+- PR#91 decisions: numeric always ("in 1 day"); two whole sentences for the i18n thread; Locale = 'en' one constant; fallback and counted() helper removed — Thread 2, Decisions taken
+- PR#91 tests cover both phrasings; react README and patch changeset updated; justify green — Thread 2, Built
+- PR#92 added packages/safebyok/src/ckeys.ts (Ckeys.bundle, box, unlock, boxPrefix, isBoxIn) exported from main entry; scopePath, bundleCkey, boxCkey, isBoxCkeyOf and unlockCkey removed — Thread 3 tuple_ckeys, Built
+- PR#92 idbDeviceDB.eraseAll() is now clear() on the unlocks-only shelf; MapVaultDB in vault-db.test.ts uses Ckeys (its /-join was ambiguous) — Thread 3, Built
+- PR#92 tests: tests/ckeys.test.ts and a describeVaultDB case for user ids differing by : " \ , [ ]; old-format rows read as absent for localVaultDB, idbVaultDB, idbDeviceDB — Thread 3, Built
+- PR#92 decisions: JSON text everywhere not IDB array keys (0.38 vs 3.9 ms at 2,020 rows); prefix only, no JSON.parse on listing; Ckeys public (0.10 kB); kind first in tuple — Thread 3, Decisions taken
+- PR#92 README "Your own storage adapter", notes/security.md entry and minor changeset added — Thread 3, Built
+- PR#92 sweep: idbDeviceDB readUnlock/eraseUnlock delMany every ckey Ckeys.isUnlock refuses, never reading old values (spy test); lock() still forgets every unlock — Thread 3, Review follow-up
+- PR#92 second review fixed: eraseUnlock deletes the scope's own unlock before sweeping; sweep rings the bell; eraseAll test fixed; isUnlock/sweep/isBoxIn doc blocks (d1b8549, b6a48a1, 82fc581, dd1ffa2, 8ae0dc2) — Thread 3, Review follow-up
+- PR#95 openVault({ validators }) and VaultProvider take a VaultValidators bag; omitted fields keep DefaultValidators; unknown field or non-schema is bad_option (strictObject catches typos like boxLabel) — Thread 4, Built; Decisions
+- PR#95 src/validators.ts is the safebyok/validators entry (Label, UserId, LockboxNote, DefaultValidators, AnyTextValidators, MaxLabelChars, LabelPattern, MaxUserIdChars, MaxNoteChars), all also in main entry — Thread 4, Built
+- PR#95 src/names.ts is the one internal seam (rulesOf, admits, check, checkScope); every public VaultDB verb takes validators? last; DeviceDB needs none — Thread 4, Built; Decisions
+- PR#95 sizes: updateBox weighs record against maxRecordBytes (new kind lockbox_too_large); store() weighs vault against maxVaultBytes via lockboxWeight/ensureRoomFor (LockboxFixedBytes = 512); equal-or-lighter replacement always lands — Thread 4, Built; Decisions
+- PR#95 lockbox_too_large chosen as new kind, not vault_full (remedy does not fit); AnyTextValidators made public — Thread 4, Decisions taken
+- PR#95 describeVaultDB has two OddLabels cases for every adapter; Convex test wrapper and demo OutageVaultDB forward the bag — Thread 4, Built
+- PR#95 size budget raised in its own commit (everything 25.5 kB, openVault 17.5 kB); after review everything 25.31, openVault 17.36 — Thread 4, Built; Review
+- PR#95 review fixed: bbd20c3 absent_box no longer quotes the boxlabel; a5428ba throwing host schema refused with no cause — Thread 4, Review

@@ -1,0 +1,51 @@
+# wins: todo_gripes
+
+Read: TODO.md as on origin/main (with merged PR#115) and as on origin/20261016-docs_rulings (open PR#101), plus both PRs' TODO.md diffs. "both" means main and PR#101.
+
+- (Coach) Ruled revocation: rotate the vaultKey, no server signing; designed in `whiteboard/20261016-rotation/rotation-design.md`, built as sprint matters' threads 14 and 18-20 (PR#101's branch still lists it open) — Open from big_feats, main (PR#115)
+- (Coach) Ruled the first-emit deviation of `watchVault` accepted as built; `whiteboard/20261014-convex/design.md` records why (PR#101's branch still lists it open) — Roadmapped 2, main (PR#115)
+- PR#115 struck the `watchVault` first-emit item and replaced the revocation open question with the ruling, and added "Lock out a device" to Not yet — TODO.md diff, main (PR#115)
+- (Coach) Ruled `Ckeys` stays public; its JSON-tuple encoding is a contract — Rulings from gripes_part2, PR#101
+- (Coach) Ruled old remembered unlocks are swept as now ("yes, leave as is") — Rulings from gripes_part2, PR#101
+- (Coach) Ruled `lockbox_too_large` stays its own error kind: "error messages should be as fine grained as reasonable" — Rulings from gripes_part2, PR#101
+- (Coach) Ruled adapters written to an old contract fail as they do; no back-compat before 1.0 — Rulings from gripes_part2, PR#101
+- (Coach) Ruled refused text reaching `snapshot.boxes` (damaged labels, #93) stays as is ("no changes"); a host renders a damaged label as text, never markup — Soonish, validators question, PR#101
+- (Coach) Ruled the storing-over-a-damaged-box race a TODO to close at the contract tightening party once all adapters share a test suite — Soonish, PR#101
+- The default note check refuses control characters now: C0 (CR included), DEL and C1, except tab and newline (#104) — Soonish, validators question, PR#101
+- `UserId`, `LockboxNote` and every `AnyTextValidators` field refuse lone surrogates now: label as `bad_label`, note as `bad_option` (#104) — Soonish, PR#101
+- A `VaultDB` verb called without a validators bag admits any well-formed text instead of the defaults (#104) — Soonish, PR#101
+- Convex setup now checks at once that the host supplied a `getUserId` — Soonish, PR#101
+- `unlock_epoch` rename built (#84); each store declares `maxLockboxes`, enforced by Postgres on the server (#89) — Open from big_feats, both
+- `addPasskey` checks its proof first and the IndexedDB channel has `unref` and catch (#88); `TH.perUser` in `safebyok/testing` and package names in CLAUDE.md (#86) — Open from big_feats, both
+- Ruled: passkey HKDF `info` gains `vault_id` and the scope, and every derivation and cipher binding swept for an unbound written field (sprint matters thread 1) — Open from big_feats, both
+- Ruled: pnpm `minimumReleaseAge` is a repo-wide seven-day rule (sprint matters thread 2) — Open from big_feats, both
+- Ruled: `addPasskey`'s function-argument shape is kept as built — Open from big_feats, both
+- Ruled: the epoch revocation note in `notes/security.md` is part of the revocation matter — Open from big_feats, both
+- (Coach) Said yes to "a logger everywhere" as ready to start (VaultLogger, #65 exists) — Open from second_harvest, both
+- Sprint pr_releases landed (#15, #16, #22; sprint doc #23); PROCESS.md *Releases* is the contract — Roadmapped 1, both
+- Sprint convex_vaultdb landed (#17 to #21): storage verbs with versioned updates, the component, `convexVaultDB(client, api.safebyok)`, README stating what is stored; CI covers the package — Roadmapped 2, both
+- The bundle holds a list of unlock envelopes, built in #71 (sprint big_feats), with several passphrases; `passphrase_epoch` renamed `unlock_epoch` — Roadmapped 3, both
+- Ruled: lockbox `whisper_schema_version` defaults to 1 — Roadmapped 3, both
+- Ruled: every field the library writes is bound ("our name on the delivery truck"); built for lockboxes in #97, which binds the whole public header — Roadmapped 3, both
+- Ruled and built: every time is UTC epoch milliseconds, an integer (STYLE.md; second_harvest thread 6) — Roadmapped 3, both
+- Timestamps named for the event built: lockbox `registered_at` and `changed_at` (moves only when the serialized whisper differs), bundle `registered_at`; `created_at`/`updated_at` gone — Roadmapped 3, both
+- Ruled: the `public` bag has no cap of its own; `maxWhisperBytes` measures whisper plus bag, both unpadded — Roadmapped 3, both
+- Device record's `expires_at` renamed `ask_passphrase_at` (built) — Roadmapped 3, both
+- Settled: `safebyok/idb` moves before the release, `idbVaultDB` to its own package (#77) — Roadmapped 3, both
+- Ruled in `whiteboard/20261014-crypto/rulings.md`: the unlock window and expiry model, `askPassphraseAt` and `shutVaultAt` named for their consequence — Roadmapped 5, both
+- `vault.lockSoon(graceSeconds = 5)` built, at most 60 s, with the core README's screen-lock recipe; every lock erases the device record (second_harvest thread 5) — Roadmapped 5, both
+- hash-wasm Argon2id key deriver built as its own package (#74), same `argon2id_web_v1` label — Roadmapped 6, both
+- zod/mini migration built (second_harvest thread 1): every entry fell about 14 kB brotlied, bare `stableJsonify` from 25 kB to 2.3 kB — Roadmapped 7, both
+- The size budget in CI merged (#42), the before-and-after for zod/mini — Roadmapped 7, both
+- Fingerprint unlock (passkeys, hardware keys via WebAuthn PRF) built (#76) — Roadmapped 8, both
+- IndexedDB vault store as its own package `safebyok-indexeddb` built (#77) — Side quests, both
+- Postgres vault store `safebyok-postgres` built (#73) — Side quests, both
+- IndexedDB `versionedUpdate` made truly atomic in one transaction (#77) — Side quests, both
+- GraphQL vault store (urql) built (#78) — Side quests, both
+- Dependabot runtime-dependency changeset gate exists (#72) — Side quests, both
+- Settled: padding is trailing whitespace on serialized JSON inside the encryption, PADME or power-of-two buckets, 64-byte minimum, no stored-format change — Soonish, both
+- (Coach) Ruled a pluggable label validator must come with a label-tuple stringifier that handles `:`; the `:`-join stays the default (the #35 report found colon is the one char ckeys cannot take) — Soonish, both
+- (Coach) Ruled `user_id` gets some validation and that validation is replaceable — Soonish, both
+- (Coach) Ruled the conflict-handler hook comes "with the retry work"; the retry exists (#44) — Soonish, both
+- Decided three lines of `setTimeout` stay for `store()` retry rather than a retry library (#45) — RAGEBAIT, both
+- `argon2idDeriver(spec)` exists (#68) — Soonish, Others, both

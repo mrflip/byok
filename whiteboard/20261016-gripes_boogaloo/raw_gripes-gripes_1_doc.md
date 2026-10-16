@@ -1,0 +1,69 @@
+# raw gripes: gripes_1_doc
+
+Read from Claude Doc "Sprint gripe_rulings" (4hntXg3RfnSFQYuJgCtQkA): tabs Open Matters, Part 2 status, and the others as listed below.
+
+- Redo the comment width rule (PR#81) from its recipe after the gripe and big_feats lines merge/restack, and hold trailing comments to 100 columns too — Open Matters, "#81, the comment width rule"
+- Decide how comments trailing code are treated by the comment width rule — Open Matters, "#81, the comment width rule"
+- Reconcile STYLE.md's "two more spaces" with the four spaces in use — Open Matters, "#81, the comment width rule"
+- (Coach) Delete six unregistered leftover directories (byok-comment_width, gripe_rulings, kdf_configs, replaceable_validators, test_helpers, vault_amendments) and run `git worktree prune` — Open Matters, "For you: delete leftover directories"
+- Decide whether Convex's sanitizer should keep dropping the cause of every foreign error (PR#117), since a host can no longer tell an outage from a missing function; Rec: keep dropping all — Open Matters, "Convex drops every foreign error's cause"
+- Decide whether `unlocklabel` stays checked only when a way in is added, not on read (PR#117); Rec: entry-only, fold read-side questions into re-examining pluggable validators — Open Matters, "unlocklabel is checked when a way in is added"
+- Merge sprint PR#100 with a merge commit so the restacked line (PR#104 to PR#100) lands — Part 2 status, Round 1
+- Finish thread 5 matters_followups, stacked on PR#101: sanitizer module, erase's single lookup, read()/use() docs, unlocklabel slot, close() twice, size-check doc note — Part 2 status, thread table row 5
+- Add TODO entries for KDF follow-ups, re-examine the validators interface, and a pluggable sanitizer — Part 2 status, thread 5 row
+- Add the TODO entries the Coach asked for and the `expect*` rule in STYLE.md (thread 4 docs_rulings, PR#101) — Part 2 status, thread table row 4
+- Tighten validators: lone surrogates, control characters in notes, lighter `safebyok/validators` entry, forgotten validators bag, provider's misspelt field (thread 1, PR#104) — Part 2 status, row 1
+- Check Convex's `getUserId` at setup (thread 2 convex_setup_check, PR#102) — Part 2 status, row 2
+- Land the test hygiene batch (thread 3 test_hygiene, PR#103) — Part 2 status, row 3
+- Return `withUnlockedVault` to the Coach as a matter, having been overtaken by PR#98 — Part 2 status, "Swept without a thread"
+- (Coach) Mark a bad lockbox as removable: listing must tolerate a bad row (damaged: true) instead of throwing corrupt_record from listBoxes, locking the vault out of openVault/refresh() — Plan, Thread 1 damaged_boxes
+- (Coach) store() over a borked/damaged lockbox should overwrite it as a fresh store; erase() should remove any damaged row; read()/use() keep refusing corrupt_record — Plan, Thread 1 damaged_boxes
+- erase() can report corrupt_record after its own delete lands (found in PR#87 review) — Plan, Thread 1 gloss
+- React demo and safebyok-react should show a damaged box as removable — Plan, Thread 1 damaged_boxes
+- notes/security.md should say what an attacker who can write storage gains from a tampered row now listing as damaged — Plan, Thread 1 damaged_boxes
+- (Coach) Use Intl.RelativeTimeFormat for PassphraseModal's unlock-window line, with a fallback to old wording where missing — Plan, Thread 2 dialog_wording
+- Add an i18n thread; dialog locale is hard-coded 'en' for now — Plan, Thread 2 gloss
+- (Coach) Replace the ":"-joined ckeys (scopePath/bundleCkey/boxCkey/isBoxCkeyOf, device-db/idb unlockCkey) with an unambiguous tuple encoding; measure key bytes and listing speed in the PR — Plan, Thread 3 tuple_ckeys
+- Stored-format change from tuple ckeys needs a changeset saying old rows read as absent — Plan, Ground rules and Thread 3
+- (Coach) Full replacement of name validators, no floor: openVault({ validators: { applabel, vaultlabel, boxlabel, userId, note } }) and VaultProvider take host schemas — Plan, Thread 4 replaceable_validators
+- (Coach) Labels must allow mixed Hebrew/Arabic/Thai/English and unbounded sizes (1password-replacement use) — Plan, Thread 4
+- Validators must check, never transform; refusals are ours (bad_label, bad_option) and never quote input or host schema issues — Plan, Thread 4
+- Validators must run everywhere a name is checked, including VaultDB/DeviceDB verbs; the Convex server must accept any string — Plan, Thread 4
+- Replace the static 2 KiB LockboxFieldsBytes / ensureLimitsFit allowance with measuring records against the adapter's maxRecordBytes; keep maxWhisperBytes and maxLockboxes — Plan, Thread 4 Sizes
+- (Coach) Export things other libraries find useful: a safebyok/validators entry with default schemas and constants (MaxUserIdChars, label and note bounds, Label, UserId, LockboxNote), no z re-export; Standard Schema later — Plan, Thread 4 Exports
+- React should build the validators bag once and say so in docs, or have the provider depend on each field — Plan, Thread 4
+- Update VOCABULARY.md ("a label is lowercase words" becomes "by default"), both READMEs, notes/security.md, .size-limit.json for validators; say how much budget bump — Plan, Thread 4
+- Settle TODO.md Soonish items: Pluggable label validator, Validating the user id, A lockbox row that breaks the listing locks the vault out — Plan, Read first
+- Thread 1 will conflict with threads 3 and 4 in vault-db.ts and vault.ts; resolve at restack; boxlabelOfCkey and listings conflict with thread 3; NameableLockbox and listedOrDamaged should take thread 4's validators — Plan merge line; Progress, thread 1
+- Decide whether refused text reaching the snapshot (a box under a now-refused name lists as damaged with that name, so storage writers can put text into snapshot.boxes) should be capped/hidden/opaque handle; Rec: keep (PR#93) — Closing note, Needs your word
+- Decide whether Ckeys stays public as an encoding contract for adapter authors (boxlabelOf, isUnlock); Rec: keep public (PR#92) — Closing note, Needs your word
+- Decide whether writeUnlock should sweep old unlocks too, given keys() call per read/erase, evicting other-tab older-version unlocks, and permanent code for an old shape (PR#92) — Closing note; Progress thread 3
+- Decide whether lockbox_too_large stays a new kind or folds into vault_full (PR#95) — Closing note, Needs your word
+- Decide whether AnyTextValidators should refuse lone surrogates, which Convex refuses as storage_unavailable (PR#95) — Closing note, Needs your word
+- Close the store-over-damaged race with another device's write: needs a revision-guarded erase in the adapter contract (PR#93) — Closing note, Minor; Progress thread 1
+- A JS adapter on the old doListBoxes contract lists every box as damaged (PR#93) — Closing note, Minor
+- Erase of a refused name reads twice, and the host's validator check can run four times per verb (PR#93) — Closing note, Minor
+- A third-party wrapper that forgets the validators bag falls back to defaults silently (PR#95) — Closing note, Minor
+- VaultProvider quietly drops a misspelt validators field (PR#95) — Closing note, Minor
+- JSON escapes can trip vault_full early under exactly tight limits; Convex weighs a record about 11 bytes heavier (PR#95) — Closing note, Minor
+- The safebyok/validators entry re-exports Whisper and EpochMillis (PR#95) — Closing note, Minor
+- An absurd unlock window just under ForeverMs reads "in 288,000,000,000 minutes" (PR#91) — Closing note, Minor
+- An engine without Intl.RelativeTimeFormat throws to the error boundary, and the unit matrix tests only the creating wording (PR#91) — Progress, thread 2
+- Delete leftover directories /workspace/byok-vault_amendments and /workspace/byok-replaceable_validators — Closing note, Housekeeping
+- Close or resolve PR#66, still open with nothing to merge — Closing note, Housekeeping
+- Add a changeset/doc line on what hosts see: old-contract adapters (doListBoxes pairs) are breaking for adapter authors (PR#93) — Closing note, PR list
+- Damage the listing cannot see (altered ciphertext, missing whisper) still lists as sound and shows only at read(); decide whether listing should detect it (PR#93) — Thread 1 damaged_boxes, Discoveries
+- A failure between store()'s erase and write over a damaged box leaves the box erased; documented only (PR#93) — Thread 1 damaged_boxes, Decisions
+- Decide whether refused-name text reaching snapshot.boxes is acceptable; erase of a box under a now-refused name must work (PR#93 restack) — Thread 1, Restack onto #95; Thread 4 For thread 1
+- checkStandingBoxlabel calls Names.check only for its error, and read()'s doc block does not mention bad_label (PR#93) — Thread 1 damaged_boxes, Restack onto #95
+- Hosts reading snapshot.boxes[i].note must check damaged first, and a host's own VaultDB must map its listing to { boxlabel, lockbox } (breaking, pre-1.0 minor) — Thread 1 damaged_boxes, For the Coach
+- Size budget nearly spent (everything 24.45 of 24.5 kB, openVault 17.45 of 17.5 kB after restack); more features need a bump — Thread 1 damaged_boxes, For the Coach
+- The demo's fake auth (account:${applabel}:${userlabel}) still colon-joins; left alone as demo grammar, not a vault ckey (PR#92) — Thread 3 tuple_ckeys, Discoveries
+- Add label cases to describeVaultDB (vaultlabel/boxlabel holding : " \ , [ ]) once validators lift the gate (PR#92) — Thread 3 tuple_ckeys, For thread 4
+- Two versions open at once on one origin evict each other's unlocks via the sweep; sweep is permanent code for an old shape (PR#92) — Thread 3, For the Coach
+- Upgrading a host on idbVaultDB or localVaultDB strands users' vaults as absent; old vault rows hold only ciphertext and stay, changeset must say how to wipe them (PR#92) — Thread 3, For the Coach
+- Decide whether narrowing validators later strands existing boxes as corrupt_record (PR#95), and whether erase() by name of a box under a refused name is right — Thread 4 For the Coach; For thread 1
+- Coach to approve surface beyond the plan in PR#95: AnyTextValidators, LabelPattern, MaxLabelChars, MaxNoteChars, and size bump +0.84 kB everything, +0.73 kB openVault — Thread 4, For the Coach
+- A wrapper calling another VaultDB's public verbs (demo's OutageVaultDB, Convex test perUser) loses the validators bag unless it forwards it (PR#95) — Thread 4, Discoveries
+- Convex refuses strings with unpaired surrogates (README says so) while AnyTextValidators admits them (PR#95) — Thread 4, Discoveries
+- Decide whether to rely on the open-time size check as a plan at LockboxFieldsBytes while write-time weighing holds the line (PR#95) — Thread 4, Decisions

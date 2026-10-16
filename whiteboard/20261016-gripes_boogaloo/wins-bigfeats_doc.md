@@ -1,0 +1,107 @@
+# wins: bigfeats_doc
+
+Read all 16 tabs of the Claude Doc "Sprint big_feats" (C9kDnwzjidkbmfmjsivjYF): Open Matters first, then the three Matter tabs, Sprint matters, Plan, Progress, Done, Rulings, Paused and Threads 1 to 6.
+
+- (Coach) Housekeeping survey acknowledged: "will do", row set to noted — Open Matters, "For you: housekeeping"
+- (Coach) Ruled: move rotation/other-ways-in matter to a TODO section and land best-for-now (row set to proceed) — Open Matters, "What rotation does with the other ways in (#105)"
+- Rotation design recorded: keeps only ways in proven during rotation (also locks out a lost phone's passkey) — Open Matters, "What rotation does with the other ways in (#105)"
+- (Coach) Ruled: combine device-retention question and NOTYET back into TODO.md NOTYET (proceed) — Open Matters, "device identifier for a later lock-out (#105)"
+- Design records random per-vault-per-device device_id on each envelope so the backend can't link vaults — Open Matters, "device identifier for a later lock-out (#105)"
+- (Coach) Ruled "yes": whoever edits a stored record's schema (a safebyok developer, core PR) bumps format — Open Matters, "Who bumps format (#115, merged)"
+- format is a Z.literal('safebyok-vault-v1') in packages/safebyok/src/types.ts, one each for vault, unlock and lockbox; adapters never define shapes (#115 merged) — Open Matters, "Who bumps format (#115)"
+- (Coach) Ruled (b) for Convex client-pairing tests: ship fake deployment as safebyok-convex/testing entry — Open Matters, "Where Convex's client-pairing tests live (#111)"
+- Thread 15 began option (b) locally, then paused with nothing pushed; PR #111 still as filed — Open Matters, "Where Convex's client-pairing tests live (#111)"
+- Core openVault maxLockboxes refuses new lockbox past app's number, defaulting to min(100, store limit); asking for more than the store declares is refused at open with bad_option — Matter: Postgres vault cap, What's built
+- Every store declares maxLockboxes: localVaultDB and IndexedDB Infinity, Convex 8000 (MaxVaultLockboxes), Postgres 1000, GraphQL browser 1000 — Matter: Postgres vault cap, What's built
+- Postgres guarantees the limit on the server with a lockbox_count column + trigger, FOR UPDATE row lock and StillFullSql second read (PR#89); README promise became "every write is one statement" with a recount statement — Matter: Postgres vault cap
+- (Coach) Stated purpose of cap: alarm bell for the implementor, and hard capacity limit for some stores like Convex; guarantee is the store's choice — Matter: Postgres vault cap, What the cap is for
+- Unlock envelopes (PR#71) and passkeys (PR#76) built: one vault key per vault, one envelope per way in; removing a way in deletes its envelope and bumps unlock_epoch — Matter: revocation, What's built
+- Server never sees the vault key and does no cryptography; its checks are signed-in identity and the versioned update (unlock_epoch, vault_id) — Matter: revocation, What's built
+- (Coach) Ruled: "Yes, do (a)", rotate vault key on way-in removal — Matter: revocation, Your thoughts
+- Recommendation recorded: server signing (c) not recommended (adds a server key, no secrecy) — Matter: revocation, Recommendation
+- (Coach) Ruled LGTM on store base class recommendation; design first in whiteboard/ — Matter: store base class, Your thoughts
+- (Coach) Ruled yes on listBoxRecords built in the base from common verbs; base can implement fetch/update from list/replace/delete — Matter: store base class
+- (Coach) Ruled the base's size is not a concern at present; priority is easy adapter authorship — Matter: store base class
+- VaultDB is already an abstract class in packages/safebyok/src with protected do* methods per adapter; VaultError carries a kind callers branch on — Matter: store base class, What's built
+- hkdf_info thread merged: every written field bound, passkey's HKDF info first (PR#97) — Sprint matters, thread 1
+- release_age thread merged: pnpm seven-day minimumReleaseAge (PR#96) — Sprint matters, thread 2
+- passkey_button_ux merged: failure behaviour of passkey button and dialog (PR#98) — Sprint matters, thread 3
+- small_sweep and size_rule merged: flaky demo test, Supabase, TODO, justify:root, Coach's rounded budget rule (PR#99) — Sprint matters, threads 4 and 8
+- rotation_design merged: vault-key rotation design and the per-device NOTYET data (PR#105) — Sprint matters, thread 13
+- identity_revoked merged: adapters say identity_revoked; one policy decides lock or stay (PR#106) — Sprint matters, thread 10
+- vaultdb_contract merged: Coach's Postgres manifesto as the VaultDB contract (PR#107) — Sprint matters, thread 11
+- damaged_bundle merged: a damaged vault gets its own calm message (PR#108) — Sprint matters, thread 9
+- indexeddb_fixes merged: no null cause, key ranges, closing the bell (PR#109) — Sprint matters, thread 7
+- late_unlock merged: closes the newer dialog after a late unlock (PR#110) — Sprint matters, thread 16
+- postgres_soft_cap merged: one-statement soft cap, DDL and locks removed (PR#113) — Sprint matters, thread 12
+- vaultdb_battery merged: every adapter against the contract, battery grown (PR#114) — Sprint matters, thread 5
+- damaged_erase merged: erase a damaged vault, never a newer one (PR#115) — Sprint matters, thread 21
+- flake_fixes filed in review (PR#118) — Sprint matters, thread 22
+- Error boundary decision: skip react-error-boundary (about 8% of React installs, no major framework depends on it, call sites no shorter, its onError would hand us the error object) — Sprint matters, Part 2 answered without a thread
+- safebyok is already a peer dependency of every adapter on main; nothing to do — Sprint matters, Part 2 answered without a thread
+- Convex's react dev dependency kept; e2e question became an Open Matters row — Sprint matters, Part 2 answered without a thread
+- Dialog's swap to a notice kept, as the Coach said — Sprint matters, Part 2 answered without a thread
+- Thread 1 argon2_wasm filed (PR#74): safebyok-argon2-wasm over hash-wasm Argon2id; review fixed lone-surrogate case, Buffer hex, exports index test, security.md line; equivalence held — Plan, thread 1
+- Thread 2 unlock_envelopes filed (PR#71): bundle unlocks list of envelopes, unlockId aimed unlock refuses absent_unlock, malformed salt_b64 refuses corrupt_record, blank proof passphrase refused — Plan, thread 2
+- Thread 3 passkey_unlock filed (PR#76): WebAuthn PRF passkey envelope with HKDF (RFC 5869); demo "Add fingerprint" fix — Plan, thread 3
+- Thread 4 indexeddb_package filed (PR#77): safebyok-indexeddb; idbVaultDB removed from safebyok/idb with no shim; bell no longer calls an unsubscribed listener — Plan, thread 4
+- Thread 5 postgres_vaultdb filed (PR#73): safebyok-postgres with host-passed query fn, PGlite tests, not_permitted scope check; PGlite listen doc and credential-in-cause security note added — Plan, thread 5
+- Thread 6 graphql_vaultdb filed (PR#78): safebyok-graphql server SDL+resolvers and urql client; fixed subscriber leak via reader cancel; README says server and host share one graphql copy — Plan, thread 6
+- Six PRs restacked into one line #82 -> #71 -> #76 -> #73 -> #78 -> #74 -> #77; #82 since merged — Plan, Status / Amendments
+- (Coach) Ruled: no backward compatibility, the only available versions are deprecated; old record fails safe and changeset says what a host sees — Plan, Amendments ground rules
+- (Coach) Ruled: restacks justify at the top, push all and let CI check — Plan, Amendments ground rules
+- (Coach) Ruled: storage adapters store records field by field, each public field its own typed column, ciphered values opaque columns, never one blob per record — Plan, Ground rules
+- (Coach) Ruled yes to hash-wasm as runtime dependency and urql @urql/core as peer — Plan, Ground rules
+- (Coach) Ruled yes: rename passphrase_epoch to unlock_epoch across all five adapters and core (thread 7) — Plan, thread 7 epoch_rename
+- (Coach) Ruled store limits: stores without limits declare a large number (1_200_300_400_500_600 if Infinity won't do), not offered from core; Postgres enforces vault_full in the insert — Plan, thread 8 store_vault_cap
+- (Coach) Ruled yes to naming packages safebyok-{graphql,postgres,etc} and updating guidance docs incl. CLAUDE.md; test helpers like TH.perUser may live in safebyok/testing — Plan, thread 10 docs_housekeeping
+- YOLO decision: base is #63's tip (top of second_harvest stack) not origin/main; passphrase_epoch not renamed in the first sprint — Plan, Decisions taken in YOLO
+- (Coach) Ruled adapters store field by field: one opaque jsonb column per ciphered value or structured public payload; plan's Ground rules updated, thread 5 rebases onto thread 2 — Progress, Adapters store field by field
+- gripe_fixes restacked into one line on main (top #82 7bf5a4b, since merged); thread 2's worker replayed all six big_feats branches onto it, justified once at the top — Progress, The restack
+- Thread 2 handed later threads the bundle shape { format, applabel, user_id, vaultlabel, vault_id, passphrase_epoch, unlocks, registered_at } with unlocks as 1 to 8 envelopes in one jsonb column; envelope binding is [format, scope, vault_id, purpose-per-method, header] with epoch out — Progress, Thread 2 what later threads inherit
+- Thread 4's base is PR#70 vaultdb_validation: private idb-opts.ts parser, VaultDB write verbs validate before do*, openVault duck-types vaultDB — Progress, Thread 4's base
+- Thread 5 notes: change channel safebyok_vault_changes with scope JSON payload; README route recipe tested in tests/route-recipe.test.ts — Progress, Thread 5 for thread 6
+- hash-wasm Argon2id derives argon2id_web_v1 in ~130 ms vs noble's 580 ms (Node 24), byte-for-byte equal and both meet the Argon2id reference test vector — Progress, Thread 1 argon2_wasm ready
+- second_harvest stack merged (main is #63's merge 0152367); thread 2 rebased onto main cleanly before filing PR#71 — Progress, second_harvest stack has merged
+- Thread 4 made every IndexedDB write verb one readwrite transaction, with four race tests that fail against the old adapter (versionedUpdate truly atomic) — Progress, Thread 4 indexeddb_package ready
+- Sprint big_feats built six items: unlock envelopes (PR#71), passkeys via WebAuthn PRF (PR#76), hash-wasm Argon2id ~4x faster than noble (PR#74), safebyok-indexeddb (PR#77), safebyok-postgres (PR#73), safebyok-graphql (PR#78); filed in docs PR#79 — Done, summary
+- Every big_feats thread reviewed at medium; every review came back fixed, none flagged — Done, summary
+- Review fixes: aimed unlock on destroyed vault no longer makes a new one (PR#71); PGlite listen and driver-error-quotes-row doc errors (PR#73); lone-surrogate/index/hex/zeroing note (PR#74); late listener call and epoch-less bundle passing expectation (PR#77); demo orphaned passkey (PR#76); departed subscriber kept LISTEN alive (PR#78) — Done, The PRs table
+- Small follow-ups ordered at filing: salt checks and blank-proof refusal (PR#71), 400 for malformed route body (PR#73), doc lines on orphaned passkeys (PR#76), one copy of graphql (PR#78) — Done, Decisions taken in YOLO
+- (Coach) Ruled: any way in proves any change; with a fingerprint you can change the passphrase, add/remove a passkey; a vault still keeps at least one passphrase — Rulings, Your rulings
+- (Coach) Ruled: other-device reading is right: any ways-in change moves the epoch; other devices' remembered unlocks lapse at next refresh and lock; the changing device stays unlocked — Rulings, Your rulings
+- (Coach) Ruled: hash-wasm has no published audit, noted in notes/security.md — Rulings, Your rulings
+- (Coach) Ruled: rename passphrase_epoch to unlock_epoch in the core and all five adapters — Rulings, Your rulings
+- (Coach) Ruled: Coach will try Chrome, Safari and a security key once #76 merges — Rulings, Your rulings
+- (Coach) Ruled: each store sets its own vault limit, core offers no constant; every VaultDB declares maxLockboxes; openVault refuses larger; Postgres enforces in the insert with vault_full — Rulings, Your rulings
+- (Coach) Ruled: TH.perUser moves into safebyok/testing; helpers core tests don't use are fine if they need no new dependency — Rulings, Your rulings
+- (Coach) Ruled package names safebyok-postgres, -graphql, -indexeddb, -argon2-wasm with CLAUDE.md and guidance docs updated — Rulings, Your rulings
+- (Coach) Ruled no backward compatibility: every published version is deprecated; safebyok/idb loses its exports with no re-export — Rulings, Your rulings
+- (Coach) Rulings recorded on Smaller ones: leave the 4.8 s unaimed unlock; keep new public surface; keep graphql optional peer; pin two dev deps two weeks old; leave bad_label for taken unlocklabel; fix addPasskey proof-first and IndexedDB channel in amendments — Rulings, Smaller ones
+- Restack recipe agreed: main -> #71 -> #76 -> #73 -> #78, then #74 (needs #68) and #77 (needs #70) — Rulings, The restack
+- Sprint paused at 10:18 UTC at the Coach's word (session near limit) and resumed at 11:19 UTC with the three stopped agents resumed in place — Paused
+- safebyok-argon2-wasm built: argon2idWasmDeriver(spec) and argon2idWasmWebV1Deriver over hash-wasm 4.12.0, safebyok as peer, README, changeset, security note, two size budgets (9.38 kB, 15.06 kB) (PR#74) — Thread 1: argon2_wasm
+- Byte-for-byte tests: supplied spec vs argon2idWebV1Deriver, Argon2id reference vector through both derivers, eleven cheap specs vs argon2idDeriver, cross-opening vaults; a one-extra-pass mutation fails 15 tests (PR#74) — Thread 1: argon2_wasm
+- Timing at argon2id_web_v1 (Node 24): ~130 ms wasm vs 580 ms noble; at 1 GiB with 64 KiB salt 0.9 s vs 3.0 s, bytes match — Thread 1: argon2_wasm
+- Core exports parseKeyDeriverSpec (doc block and tests); refusal message now "Argon2id cannot run that keyDeriverSpec"; a bundle of it alone carries no noble — Thread 1: argon2_wasm, Decisions taken (PR#74)
+- No WebAssembly (Hermes) raises bad_option; WebAssembly.CompileError (CSP) raises bad_option with cause; empty passphrase raises wrong_passphrase — Thread 1: argon2_wasm, Decisions taken (PR#74)
+- Stored bundle reshaped: unlocks is 1 to MaxUnlocks (8) UnlockEnvelopes as a discriminated union on method, no repeated unlock_id or unlocklabel; format stays safebyok-vault-v1 — Thread 2: unlock_envelopes, Built (PR#71)
+- Vault gains addPassphrase, removeUnlock, changePassphrase, unlock(passphrase, { unlockId? }) all via one reviseUnlocks (epoch + 1, versioned write); snapshot gains unlocks: UnlockSummary[] listed while locked — Thread 2: unlock_envelopes, Built (PR#71)
+- New error kinds absent_unlock, too_many_unlocks, last_unlock (conditions); taken unlocklabel is bad_label — Thread 2: unlock_envelopes, Built (PR#71)
+- Unlock cost recorded: unaimed 570-620 ms per Argon2id per envelope, ~4.8 s worst case at 8; cap enforced on read; { unlockId } aims at one derivation — Thread 2: unlock_envelopes, Decisions taken (PR#71)
+- Reviewer fix ca94bf5: aimed unlock on a vault destroyed elsewhere now refuses absent_unlock; bad salt_b64 refuses corrupt_record at unlock in envelope.ts (not schema, to save ~1 kB/entry from @scure/base) (PR#71) — Thread 2: unlock_envelopes, Added at filing
+- Passkey envelope built: { method: 'passkey', unlock_id, unlocklabel, credential_id, prf_salt_b64, vault_key_wrapped }; HKDF-SHA256 over 32-byte PRF output with info = cipherBinding(format, 'vault_key_passkey_wrapped', credential_id); RFC 5869 A.3 tested (PR#76) — Thread 3: passkey_unlock, Built
+- Vault verbs take PasskeyProof or passphrase; addPasskey(proof, passkey, { unlocklabel }) new; errors wrong_passkey and passkey_unavailable; safebyok/utils exports toB64/fromB64; testing gains passkeyOf, passkeyEnvelopeOf (PR#76) — Thread 3: passkey_unlock, Built
+- safebyok-react gains passkey.ts (createPasskey, askPasskey, passkeysAvailable), PasskeyUnlockButton, installFakeAuthenticator test helper; demo "Add fingerprint" (PR#76) — Thread 3: passkey_unlock, Built
+- WebAuthn choices recorded: userVerification required, random 16-byte user handle, residentKey discouraged, Ed25519/ES256/RS256, dismissal resolves null, SecurityError is bad_option — Thread 3: passkey_unlock, Decisions taken (PR#76)
+- Test shows a removed passkey is not revoked against a copy of an old bundle — Thread 3: passkey_unlock, Discoveries (PR#76)
+- safebyok-indexeddb built: idbVaultDB({ dbName }), inspectIdbVaultDB, KV-template layout (ckeys.ts, idb-vault-db.ts, bell.ts as the three places an author types), README "Writing an adapter of your own"; core safebyok/idb keeps idbDeviceDB and inspectIdbDeviceDB only (PR#77) — Thread 4: indexeddb_package
+- Every IndexedDB write verb is now one readwrite transaction via idb-keyval UseStore; four race tests fail on the old adapter and pass; stored layout unchanged so existing vaults read on (PR#77) — Thread 4: indexeddb_package, Decisions taken
+- IndexedDB bell fixes: a write opens the BroadcastChannel itself, each listener called on its own microtask, inOneTransaction aborts when work throws (PR#77) — Thread 4: indexeddb_package, Deviations
+- safebyok-postgres built: vault-tables.sql / VaultTablesSql (a column per field, jsonb for ciphered, FK cascade, RLS on with no policy, NOTIFY trigger on safebyok_vault_changes), columns.ts one row mapper compiler-checked both ways, postgresVaultDB({ client, userId, listen }) with every verb one statement (PR#73) — Thread 5: postgres_vaultdb
+- Postgres statement races closed: create via ON CONFLICT DO UPDATE RETURNING, first lockbox via INSERT...SELECT with FK violation 23503 resolving false, updateBundle requires matching vault_id; bigints read as float8, jsonb as text (PR#73) — Thread 5: postgres_vaultdb, Decisions taken
+- Postgres thread 5: not_permitted for another user's scope before any query; maxRecordBytes 1 MiB, no vault limit at the time; postgres coverage 100% lines, 98.8% branches (PR#73) — Thread 5: postgres_vaultdb
+- Postgres columns moved to the unlocks shape (one jsonb column) at filing; README route recipe guards body with postedCall so malformed body answers 400 (PR#73) — Thread 5: postgres_vaultdb, Changed at filing
+- safebyok-graphql built: browser graphqlVaultDB(client) and server VaultSchemaSdl + vaultResolvers({ vaultDBFor }) over a ServedVaultDB; fields.ts one mapper; tests run describeVaultDB over urql execute exchange and a Yoga recipe with PGlite behind (PR#78) — Thread 6: graphql_vaultdb
+- GraphQL decisions: unlocks as opaque JSON scalar list; refusal crosses as fresh GraphQLError with extensions.kind and attached cause (Yoga masks otherwise); ReadableStream subscription queue; typesVersions for ./server; ssr.resolve.conditions fix for test realms (PR#78) — Thread 6: graphql_vaultdb, Decisions taken
+- Discovered graphql 17's mapAsyncIterable needs the stream's own iterator returned; urql cacheExchange adds __typename, which recordOf drops (PR#78) — Thread 6: graphql_vaultdb, Discoveries

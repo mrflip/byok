@@ -1,0 +1,140 @@
+# wins: prs_80_main
+
+Read: body, conversation comments, review bodies and inline comments of the merged PRs #82-99, 105-110, 112-116, 118 of mrflip/safebyok. Note: many "comment by mrflip" are agent code-review reports posted under the Coach's login; only real Coach rulings carry (Coach).
+
+- The gripes list (whiteboard/20261015-gripes) committed with the Coach's dispositions; closed entries moved under Addressed, NOTYET/ragebait under Deferred by design, each FIX entry names its PR — PR#82 body
+- Sprint gripe_fixes plan, progress record and closing note (human/20261015-sprint_gripe_fixes_done.md) filed; PRs restacked into one line, #81 held out for the Coach's reflow — PR#82 body
+- /sprint skill: sprint PR filed as a draft at planning time, sprint doc mirrored at milestones, wrap-up restacks threads into one line on main (justify once at top), tags the branch tip and squashes — PR#83 body
+- TODO.md entry for the listing lockout that #87's review found; closing note human/20261015-sprint_gripe_followups_done.md gathers open questions — PR#83 body
+- Plan documents for gripe_followups threads: vault_amendments (user_id cap, erase of corrupt box, default times) and validation_overrides — PR#83 body
+- passphrase_epoch renamed unlock_epoch across core and five adapters (types, vault-db, vault.ts, testing bundleOf, indexeddb, convex, postgres, graphql), no alias or migration; prose follows incl. VOCABULARY — PR#84 body
+- Old-name bundles and remembered unlocks fail validation (VaultBundle refuses; remembered unlock reads as none and is erased); review added two fail-safe tests — PR#84 body, comment by mrflip (review)
+- Review fixed the unlock_epoch changeset to say what each store shows (Postgres storage_unavailable until ALTER RENAME, Convex refuses schema at deploy, GraphQL mismatch storage_unavailable) — PR#84 comment by mrflip (review)
+- Review fixed outrun's doc block "its passphrase changed" wording — PR#84 comment by mrflip (review)
+- Orchestrator: the alignment and "passphrase" wording findings are taken up by the worker before filing — PR#84 comment by mrflip (review)
+- Write-up whiteboard/20261015-gripe_followups/validation-overrides.md answers the Coach's question: how validation is accepted today (hosts tune only maxWhisperBytes, maxLockboxes, forcePassphraseReentryHours) with file:line per validator — PR#85 body
+- Recommended validators design: fixed floor checked everywhere plus replaceable policy via openVault({ validators: { boxlabel?, userId?, note? } }), check-only Z.core.$ZodType<string>, defaults in safebyok/validators, no z re-export — PR#85 body
+- (Coach) Question that prompted the write-up: let the customer override a bag of defaults, giving them z and a base set in a slashed export — PR#85 body
+- safebyok/testing gains perUser; core runs the shared suite through it plus five unit tests; Postgres, GraphQL and Convex suites use it and their three copies are gone — PR#86 body
+- Review fixed perUser tests: limits test now catches a wrong answer; new test routes updateBundle/subscribe/eraseBox/eraseVault for a second user — PR#86 body, comment by mrflip (review)
+- CLAUDE.md Layout lists all seven packages with naming rule; PROCESS.md gets a Packages section; core README lists every storage adapter — PR#86 body
+- notes/security.md: new "hash-wasm has no published audit" entry; two older entries corrected to say noble's Argon2id audit left argon2 out of scope — PR#86 body
+- graphql-yoga pinned 5.24.1 and @graphql-tools/schema 10.1.3 (newest at least two weeks old); review confirmed both pins — PR#86 body, comment by mrflip (review)
+- (Coach) Ruled: "cap user_id as min(1).max(100)"; "yes erase can remove a corrupt box"; "Yes expose the default times" — PR#87 body
+- UserId (1 to 100 chars) exported from types.ts; openVault and every VaultDB verb refuse longer with bad_label without quoting the id; LockboxFieldsBytes heaviest fields 1638 bytes measured — PR#87 body
+- erase() now removes a damaged lockbox when the listing stays readable (altered ciphertext, missing whisper, record naming another boxlabel); read/use/background refresh leave it; noted in notes/security.md — PR#87 body
+- vault.reentryWindowMs exposes forcePassphraseReentryHours as resolved (ms, Infinity as exported ForeverMs); PassphraseModal reads it from the vault and loses its reentryHours prop — PR#87 body
+- Review fixed (73ded50) the changeset: a vault under a longer userId no longer opens (bad_label before any read); erase() new only for records failing validation; a listing-breaking row still stops openVault — PR#87 body, comment by mrflip (review)
+- Review checked erase() still refuses a locked vault, bad label, absent box and stale write, and swallows only corrupt_record; unwrapped doc line and double blank line fixed by worker in c62479c — PR#87 comment by mrflip (review)
+- addPasskey's second argument is now a maker function and it resolves string | null; the vault calls the maker only after label, room and proof checks pass, so a mistyped passphrase leaves no orphan passkey — PR#88 body
+- reviseUnlocks' revise may resolve null to abandon a proven change; non-function maker refused as bad_option; docs, READMEs, createPasskey doc and demo updated — PR#88 body
+- notes/security.md records the proven vaultKey's extractable handle held across the WebAuthn prompt and why acceptable — PR#88 body
+- safebyok-indexeddb's bell unref()s its BroadcastChannel (Node/Bun can exit) and catches throwing listeners after calling the others; real Node child-process test proves exit 0 — PR#88 body
+- A passkey envelope crosses safebyok-graphql unchanged; end-to-end test adds a passkey over the wire and unlocks another device with it — PR#88 body
+- openVault size budget raised 19 to 19.5 kB (this change adds about 70 B) — PR#88 body
+- Review fixed (tests): lock() during the maker's await tested; throwing-listener tests check the listener was called; worker adds security note and drops the `made` holder — PR#88 comment by mrflip (review)
+- Assembly note: conflict with thread 7's rename in reviseUnlocks resolved and checked with git merge-file — PR#88 body
+- (Coach) Ruled: "stores without limits can specify a large number... Don't offer that constant from core, because each store should set their own" — PR#89 body
+- Every VaultDB declares maxLockboxes (number or Infinity); openVault refuses an adapter declaring none or a larger maxLockboxes (bad_option); default is min(MaxLockboxes 100, adapter's) — PR#89 body
+- localVaultDB and idbVaultDB declare Infinity; convexVaultDB declares the component's 8,000; graphqlVaultDB(client, { maxLockboxes }) declares what the server enforces (default 1000) — PR#89 body
+- postgresVaultDB({ maxLockboxes }) (default 1000) enforces on the server with vault_full via lockbox_count and a row trigger, insert locking the bundle row FOR UPDATE; recount statement documented — PR#89 body
+- Postgres race fix: a refusal for count costs one fresh read (StillFullSql) so a stale writer gets stale_write and store() retries; eraseBox locks the bundle row first to avoid deadlock — PR#89 body, comment by mrflip (review)
+- Review fixes for #89: empty // removed, changeset covers erase failures on old tables, StillFullSql (2dce081), recount-while-idle note (9ee6b34), core vault_full message reworded — PR#89 comment by mrflip (review)
+- Orchestrator (YOLO) directed fix (a): one read-only follow-up query on the full path only — PR#89 comment by mrflip (review)
+- openVault size limit raised 19 to 19.5 kB (measured 19.02 kB) — PR#89 body
+- Sprint gripe_rulings plan/progress docs, TODO entries and closing note filed for four threads (tuple_ckeys #92, replaceable_validators #95, damaged_boxes #93, dialog_wording #91); justify and size green — PR#90 body
+- The unlock dialog words the window with Intl.RelativeTimeFormat: "Locks again on this device in 7 days", "Locks on this device in 7 days" while creating, "Stays unlocked on this device until you lock it" at ForeverMs — PR#91 body
+- Review fixed Locale's doc block (be64dd3); orchestrator dropped the RelativeTimeFormat fallback (YOLO), split creating vs again wording, wrapped long lines (dd1cee3); PassphraseModal doc and react README updated (09255c1) — PR#91 comment by mrflip (review)
+- Ckeys module (src/ckeys.ts, exported): rows filed under JSON.stringify of a tuple (["vault",...], ["box",...], ["unlock",...]) in localVaultDB, idbVaultDB, idbDeviceDB, memoryDeviceDB; any text in any name, no collisions — PR#92 body
+- Ckeys.boxPrefix, isBoxIn, isUnlock added; scopePath, bundleCkey, boxCkey, isBoxCkeyOf and both unlockCkeys removed; old-format rows read as absent (no migration) — PR#92 body
+- (Coach) Question answered: the JSON-encoded tuple is not meaningfully worse (+10-12 bytes/row, listing no slower, benchmark table); chosen over percent-escaping and native IndexedDB array keys — PR#92 body
+- idbDeviceDB readUnlock/eraseUnlock sweep old unlock: rows without reading them (spy test proves); eraseUnlock deletes own unlock first and sweep rings the shelf's bell — PR#92 body, comment by mrflip (review)
+- tests/ckeys.test.ts (29) with 17 near-twin pairs and all 220 cuts; shared describeVaultDB test that users differing by : " \ , [ ] never list/erase each other's lockboxes; mutation-checked — PR#92 body
+- README "Your own storage adapter" says to file rows under Ckeys; MapVaultDB test adapter now does; notes/security.md entry added — PR#92 body
+- Review fixed README snippet (30176c8), changeset eraseAll dbName advice (2203182), Ckeys doc listing memoryDeviceDB (82e5696); sweep directed as YOLO (5134767); changeset/security note timing claims corrected — PR#92 comment by mrflip (review)
+- (Coach) Ruled: "mark a bad lockbox as removeable" and "allow store to overwrite a borked box" — PR#93 body
+- Listing marks, never refuses: a lockbox failing the listing check lists as { boxlabel, damaged: true }; snapshot.boxes and VaultDB.listBoxes hold LockboxSummary | DamagedLockbox; openVault no longer throws corrupt_record for one bad row — PR#93 body
+- doListBoxes now resolves StoredLockbox[] ({ boxlabel, lockbox }); the boxlabel comes from the ckey (new public Ckeys.boxlabelOf) or Convex column so even a not-JSON row is named and erasable — PR#93 body
+- erase() removes a damaged lockbox from any handle and no longer reports corrupt_record after its delete; store() starts afresh over any unreadable record; read()/use() still refuse with corrupt_record — PR#93 body
+- Boxes stranded by narrowed validators list as damaged; store() refuses a refused name with bad_label — PR#93 body
+- Demo shows damaged rows with only replace and delete; docs: README Damaged lockboxes section, React README, VOCABULARY damaged, notes/security.md, changeset — PR#93 body
+- Review fixed: demo Enter shares the knock gate (f938aba), security note names store-over-damaged races (1cbb502), docs say which records store() starts afresh over (ed42ce5); everything budget raised to 26 kB — PR#93 body, comment by mrflip (review)
+- Second review fixed Ckeys.boxlabelOf to name a label only for text Ckeys.box writes (a38ac3d), and docs say a damaged box's boxlabel is stored text to render as text (751b1a3) — PR#93 comment by mrflip (review)
+- New skill /turbochat: open questions as an Open Matters tab in a Claude Doc with states drafting, proceed, explain, elevate; agents act only on flipped rows on "go"; the Coach's "Your notes" table; one PROCESS.md line — PR#94 body
+- (Coach) Ruled: full replacement of validators, no floor; labels and notes in any script, of any size; export what other libraries will find useful — PR#95 body
+- openVault({ validators }) and VaultProvider take a VaultValidators bag (applabel, vaultlabel, boxlabel, userId, note) of Zod 4 schemas that replace ours; unknown field or non-schema refused bad_option — PR#95 body
+- A validator only checks: stored value is what the host passed, never the schema's output; refusals are bad_label/bad_option naming the field, never quoting names; throwing schema carries no cause — PR#95 body
+- src/names.ts (Names.rulesOf, admits, check, checkScope) is the one seam; every VaultDB verb takes validators as optional last argument; checkStoredBox on read — PR#95 body
+- New entry point safebyok/validators (Label, UserId, LockboxNote, DefaultValidators, AnyTextValidators, MaxLabelChars, LabelPattern, MaxUserIdChars, MaxNoteChars, Whisper, EpochMillis); no z re-export — PR#95 body
+- New error kind lockbox_too_large: updateBox weighs each record as UTF-8 JSON bytes against maxRecordBytes; store() weighs vault total against maxVaultBytes and refuses vault_full, replacements no heavier always land — PR#95 body
+- VaultProvider depends on each schema, not the bag, so inline validators do not reopen the vault; describeVaultDB gains two OddLabels cases (colon/quote/backslash, Hebrew, Arabic, Thai) across all adapters — PR#95 body
+- Review fixed absent_box quoting the boxlabel (bbd20c3); a throwing host schema now carries no cause (a5428ba, orchestrator-directed); budgets raised to 25.5 and 17.5 kB — PR#95 body, comment by mrflip (review)
+- pnpm-workspace.yaml sets minimumReleaseAge 10080 (7 days) with minimumReleaseAgeStrict: the frozen-lockfile install in CI enforces it; nine direct dependency floors lowered and lockfile re-resolved — PR#96 body
+- One recorded exception convex-test@0.0.61 (excluded by name and exact version, notes/security.md); PROCESS.md Dependencies gets the hot-release policy; graphql-yoga and @graphql-tools/schema hand pins are ranges again; Dependabot cooldown 7 days — PR#96 body
+- Review confirmed enforcement empirically (base tree fails ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION; new tree fails only on convex-test@0.0.61 without the exclusion); fixed security.md heading to "once past 2026-10-16T23:01Z" (9fbe68d) — PR#96 comment by mrflip (review)
+- (Coach) Ruled on the passkey HKDF info: "Make everything verifiable unless there's a good reason not to. We do not need to maintain backwards compatability" — PR#97 body
+- passkeyKey's HKDF info is now the full binding (format, scope, vault_id, registered_at, purpose, envelope header incl. credential_id, prf_salt_b64, unlock_id, unlocklabel); every unlock envelope binds registered_at — PR#97 body
+- A lockbox binds its whole public header (note, registered_at, changed_at included) so a backend alteration makes read() refuse corrupt_record; a remembered unlock binds ask_passphrase_at under tag safebyok-unlock-v1 — PR#97 body
+- notes/security.md new entry says what stays unbound and why (unlock_epoch, unlocks list, Argon2 derivation, PRF salt, ciphertexts/IVs); old vaults refuse as wrong_passphrase/wrong_passkey/corrupt_record, destroy() clears them — PR#97 body
+- Review (crypto) found no correctness bugs: encoding injective; fixed security.md sweep entry naming method (cafee17) and changeset/READMEs naming unlock_epoch and unlocks make-up as the deliberate exceptions (fb3e82e) — PR#97 comment by mrflip (review)
+- PassphraseModal and PasskeyUnlockButton no longer throw to the host's error boundary: modal shows "Something went wrong" with a focused Close (onDone(false)); passkey button removes itself and hands onGripe a message — PR#98 body
+- Each component keeps its own small error boundary (src/boundary.tsx) so React reports the error through onCaughtError; README shows hooking an error tracker — PR#98 body
+- withUnlockedVault settles every call: overlapping calls share one dialog, a dialog open when its vault goes closes and resolves null, a late unlock settles only its own dialog; six new provider tests — PR#98 body
+- Accessibility: gripe is role="alert", focus returns to passphrase field, notice is an alertdialog closed by Escape; README "When an unlock fails", security note, TH.renderReporting — PR#98 body
+- (Coach) Ruled: dialog swaps its form for a notice on a failure not the user's to mend ("LGTM"); skip react-error-boundary by the library rubric (~8% of React installs, no major framework depends on it, onError would hand us the error object) and keep the hand-written class — PR#98 body
+- Second review of PR#98 clean: each showing is an Asking with its own waiters, endAsking closes only the still-showing dialog — PR#98 comment by mrflip (review)
+- Flaky demo test fixed: the passphrase dialog's absence is awaited with waitFor in test-helpers.test.tsx; review confirmed assertion no looser — PR#99 body, comment by mrflip (review)
+- Postgres README says plainly the package has not been run against Supabase — PR#99 body
+- justify:root runs lint, typecheck and test all three and fails if any failed — PR#99 body
+- TODO.md tidied: e2e-testing question added, HKDF info and minimumReleaseAge rulings and addPasskey-kept-as-built recorded, Sand in the sandals cleared of items main fixed — PR#99 body
+- .size-limit.json budgets set by a written rule (measured + 3 kB at 5 kB and over, +50% min 1 kB under, rounded up to two significant figures; everything 30 kB, openVault 23) now in PROCESS.md Size budgets; sprint skill carries the guidance — PR#99 body
+- (Coach) Ruled on revocation: "Yes, do (a)" (rotate the vaultKey when a way in is removed); per-device invalidation "should be a NOTYET, but let's make sure the data we need is in there" — PR#105 body
+- Design whiteboard/20261016-rotation/rotation-design.md: rotation re-seals only ways in proven during it (which also locks out a lost device), one atomic bundle write then a resumable lockbox walk, a LockboxExpectation under the standing vault_key_epoch, rollback mark, case table, thread breakdown — PR#105 body
+- TODO.md gets a NOT YET entry "Lock out a device: every way in it added"; #99's revocation bullet points at the design; Convex first-emit deviation struck as ruled — PR#105 body
+- (Coach) Ruled: storage adapters send fine-grained "identity_revoked"; consolidate a policy module deciding whether it implies lock, delete, etc. — PR#106 body
+- New error kind identity_revoked and openVault option whenIdentityRevoked: 'lock' | 'stay' (default lock; VaultProvider passes it through); Convex/Postgres/GraphQL say identity_revoked where they said not_permitted for a signed-out or different user (breaking) — PR#106 body
+- src/refusal-policy.ts: decide() says what each storage refusal makes the vault do, heed() wraps adapter verbs (background refresh included); default lock drops vaultKey, erases remembered unlock, cuts lockSoon, defeats an unlock under way, notifies; nothing stored erased — PR#106 body
+- Convex ConvexClient failed watchVault now makes the vault look again so a sign-out in another tab locks an idle vault; docs (core README "When the user signs out", adapter READMEs, notes/security.md superseded entry) updated — PR#106 body
+- Review fixed an open resolving unlocked after a mid-open revocation (rememberedUnlock yields to any shut) with a new test, and widened heed's pass-through tests to all eight verbs — PR#106 body, comment by mrflip (review)
+- Mismatched user is identity_revoked, not not_permitted, since a server cannot tell user changed from wrong user opened, and locking is safe for both — PR#106 body
+- packages/safebyok/VAULTDB.md: the VaultDB contract with 26 numbered lines (the Coach's manifesto expanded: adapter owns atomic compare-and-write, vault owns read before/retry after), shipped in the package and linked from README and VaultDB doc block — PR#107 body
+- describeVaultDB retitled per contract line ("<adapter>, as a VaultDB, 3.3: ..."), gains makeVaultDBFor and makeCappedVaultDB options, new tests for lines lacking one, and a drift test keeping TH.VaultDBContract equal to VAULTDB.md bold lines — PR#107 body
+- #106's identity_revoked lines written into the contract (5.4-5.7, 6.2) with battery tests via makeVaultDBFor for postgres, graphql, convex and servingOnly — PR#107 body
+- VaultDB.maxLockboxes doc and notes/security.md say the limit is best effort; thread 12's one-statement Postgres insert meets the contract at READ COMMITTED on three conditions — PR#107 body
+- Review fixed 4.2 test to compare the whole vault around vault_full (4.4 retitled "Under the limit, a new lockbox lands", 5.3's duplicate groups merged); broke the smallest adapter ten ways and each failed its line — PR#107 body, comment by mrflip (review)
+- Review corrected the Postgres verdict: at REPEATABLE READ count-then-insert racers do not fail with 40001, only SERIALIZABLE conflicts — PR#107 comment by mrflip (review)
+- (Coach) Ruled: "yes, use fine-grained error messages; if there become too many we can group them"; Argon2: "leave the settings out ... relegate to security.md" — PR#108 body
+- New error kinds damaged_bundle, damaged_unlock, damaged_lockbox replace corrupt_record at openVault (bundle), read()/use() (lockbox) and askPasskey (damaged passkey); stored format unchanged; corrupt_record stays the VaultDB's word — PR#108 body
+- A passphrase that opens no envelope stays wrong_passphrase with message adding the vault may be damaged; a damaged passphrase envelope is passed over and the rest tried; unlock refuses damaged_unlock when every candidate is damaged — PR#108 body
+- Docs for damaged kinds: core README errors table, React README, VaultProvider doc, demo dashboard, notes/security.md (Argon2 floor sentence, can/can't be told apart entry), changeset — PR#108 body
+- Refused: telling wrong passphrase from altered envelope by re-encrypting the vaultKey (a construction of our own); recorded in security.md — PR#108 body
+- Review fixed messaging when another deriver made the remaining envelopes (d4a2745) and askPasskey omitting a passkey whose salt is not 32 bytes (76e276f); no secret leaks found — PR#108 body, comment by mrflip (review)
+- safebyok-indexeddb listBoxes and eraseVault read a key range over the vault's lockbox prefix (boxRange on Ckeys.boxPrefix) instead of every row; erase is store.delete(range) then the bundle in one transaction — PR#109 body
+- IndexedDB failed requests keep the browser's own error as the storage_unavailable cause; no-error aborts reject with an Error "failed for an unknown reason", never null — PR#109 body
+- IndexedDB bell's channel closes when the last listener leaves (vault close()); a write with no listener opens one to notify other tabs and closes it — PR#109 body
+- Review fixed settle discarding the real ConstraintError/AbortError (045e7a5) with a new shelf test; key range verified to hold exactly this vault's lockboxes — PR#109 comment by mrflip (review)
+- VaultProvider closes a dialog the vault unlocks under (hears snapshot changes to unlocked) and settles its waiters as unlocked so they retry; sign-out or lock still ends with null — PR#110 body
+- Resolves #98's "late unlock leaves newer dialog asking over an unlocked vault" question; review fixed effect comment (6d80e4a) and added two negative tests (bbbe16c) — PR#110 body, comment by mrflip (review)
+- scripts/git-survey.sh and /branch-sweep: tag merged threads' branches closed/<branch> (annotated), point branches at merged head via update-ref compare-and-swap, remove clean idle worktrees, behind --apply; verdicts close/done/active/stray/weird — PR#112 body
+- git-survey never pushes, deletes branches or forces; strays left to scripts/git-attic on the Coach's "attic"; Bash 3.2-safe with no jq; skill forked on Sonnet; manual in notes/housekeeping.md — PR#112 body
+- tests/scripts/git-survey.test.ts has 22 tests against throwaway repos (each verdict, apply, tag message, rerun, retag, worktree removal/keep, refusals); live dry run: 58 closed, 20 active, 7 weird — PR#112 body
+- Postgres insert is one lock-free statement counting lockboxes at its own start, classifying misses (landed, vault stood, boxlabel taken, full) from the same snapshot; vault_full vs stale_write incl. 23503; lockbox_count, trigger, FOR UPDATE and second read removed — PR#113 body
+- (Coach) Question answered: a one-statement counting insert does meet the contract at READ COMMITTED (lines 4.2-4.5), racers may overshoot — PR#113 body
+- Postgres push is opt-in: VaultTablesSql is tables, keys and RLS only; new VaultNotifySql / vault-notify.sql holds the NOTIFY trigger; README states guarantee and isolation level and offers an unsupported tested hard-cap trigger — PR#113 body
+- Review fixed hard-cap docs (READ COMMITTED only, d5ae4c3; refusal kinds with limit set to the trigger's number, a1d1248), test order dependence (827ba8c), InsertBoxSql comment (62e47e1); no SQL interpolates input — PR#113 comment by mrflip (review)
+- describeVaultDB battery gains tests moved from adapters: exact text/no normalization (1.1, 1.2), concurrent bundle updates/first writes/replacements (3.2, 3.3), erase vs replace (3.4), vault erase vs write (3.5) — PR#114 body
+- describeVaultDB option pushes: true runs 6.1 push tests, wired for localVaultDB, idbVaultDB, postgresVaultDB (with listen) and graphqlVaultDB; makeVaultDBFor wired for Postgres route and GraphQL Yoga recipes — PR#114 body
+- Adapter tests trimmed to what is their own (IndexedDB races/push, Postgres normalization, GraphQL refusals, core colon-user test); reviewer confirmed nothing lost and each new test catches a scratch break — PR#114 body, comment by mrflip (review)
+- (Coach) Ruled earlier: yes to an erase path for a damaged bundle (delivered here as thread 21) — PR#115 body
+- eraseDamagedVault(opts) (core) erases a damaged vault's bundle, lockboxes and the device's remembered unlock; refuses a sound vault (bad_option), a record too damaged to show vault_id (damaged_bundle), and one a newer safebyok may have written — PR#115 body
+- New base-class verb VaultDB.eraseDamagedVault(scope, validators?) reads the bundle as stored, aims doEraseVault at its vault_id (a vault made anew survives as stale_write); adapters inherit it — PR#115 body
+- localVaultDB and idbVaultDB now erase a whole vault on vault_id alone (VAULTDB.md 3.5), no longer requiring a readable unlock_epoch — PR#115 body
+- safebyok-react useVault() gains eraseDamagedVault(); demo dashboard offers "Erase and start over" after a confirm; docs and notes/security.md updated; changeset minor core/react, patch indexeddb — PR#115 body
+- First review's flag resolved in YOLO: the hatch refuses what may be newer; rule "any stored-shape change bumps format" sent to the Coach; second review confirmed newer-versus-damaged holds while the rule holds and declining RefusalPolicy.heed is sound — PR#115 comment by mrflip (review)
+- scripts/clear-ds-store.sh deletes git-ignored regular .DS_Store files in the current worktree only (takes no arguments; no symlinks, -xdev, skips .git and node_modules; keeps tracked/un-ignored ones); manual in notes/housekeeping.md — PR#116 body
+- tests/scripts/clear-ds-store.test.ts has 9 tests against throwaway repos (depth, subfolder, other worktrees, symlinks, lookalikes, tracked, .git/node_modules, args, outside worktree) — PR#116 body
+- Convex 1365-lockbox test gets a 120 s ceiling (was 30 s default against 31-34 s under CI coverage) — PR#118 body
+- VaultProvider race fixed: the open effect's cleanup now ends the dialog (beside handle.close()), so a dialog an action opened in between is no longer closed after the commit; new layout-effect test fails on old code — PR#118 body
+- Review fixed a regression: awaitUnlock resolves null at once while there is no vault, so a held vault_locked refusal across a sign-out no longer leaves a dialog over the next user's vault; new test, changeset sentence — PR#118 body, comment by mrflip (review)
+- Demo Testing Library wait raised 1 s to 5 s and per-test 5 s to 15 s; stress runs of 30-80 copies went from ~5/60 (react), 4/60 and 3/30 (demo) failing to 0 — PR#118 body
+- Review reworded the Convex ceiling comment (filling the vault is ~93% of the time, not signing) — PR#118 comment by mrflip (review)
