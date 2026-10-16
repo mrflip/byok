@@ -210,7 +210,7 @@ register(t)
 
 `safebyok-convex/testing` is a Convex deployment in memory that the real Convex clients talk to,
 for the tests of anything that holds one: this adapter, a binding, your app. `fakeDeployment(host)`
-takes the host app you built with `convex-test` (`defineTestApp(...).defineModules(...)`, as above)
+takes a host app built with `convex-test`'s `defineTestApp(...).defineModules(...)`, as below,
 and answers a client's queries and mutations over a fake WebSocket, running your functions and the
 component under them. `deployment.client(subject)` is a signed-in `ConvexClient`;
 `deployment.connectWith(subject, make)` connects any other, such as a `ConvexReactClient`. It
@@ -218,7 +218,18 @@ imports `convex` and nothing else. Its doc block says what it cannot prove: the 
 server, among them.
 
 ```ts
+import { defineSchema } from 'convex/server'
+import { defineTestApp } from 'convex-test'
+import { convexVaultDB } from 'safebyok-convex'
+import { SafebyokComponent } from 'safebyok-convex/server'
+import { register } from 'safebyok-convex/test'
 import { fakeDeployment } from 'safebyok-convex/testing'
+
+// Your app as convex/safebyok.ts serves it: the component installed, its functions authenticated.
+const app = defineTestApp({ schema: defineSchema({}), components: { safebyok: { register } } })
+const host = app.defineModules({ safebyok: new SafebyokComponent(app.components.safebyok).api({
+  getUserId: async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null,
+}) })
 
 const deployment = fakeDeployment(host)
 const vaultDB = convexVaultDB(deployment.client('u1'), deployment.api.safebyok)
