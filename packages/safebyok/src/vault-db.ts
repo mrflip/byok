@@ -283,7 +283,7 @@ export abstract class VaultDB {
    * reads, as `safebyok-graphql`'s: there a damaged record is the backend's own to clear.
    */
   async eraseDamagedVault(scope: VaultScope, validators?: VaultValidators): Promise<void> {
-    const asked = Names.checkScope(Names.rulesOf(validators), scope)
+    const asked = Names.checkScope(rulesFor(validators), scope)
     const raw = await readStoredBundle(() => this.doReadBundle(asked))
     if (raw === null || raw === undefined) { return }
     if (isSoundBundle(raw, asked)) {

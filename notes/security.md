@@ -787,4 +787,6 @@ security expert who knows what questions to ask.
   name the vault's own checks passed. The vault passes its bag to every verb (a test spies each
   one); it had left it off `updateBundle`, so a host with a wider `userId` check could not change
   a passphrase. Before the change, a server calling the verbs bare got the default checks; it now
-  gets text-only checks, which is what the shipped server recipes already passed.
+  gets text-only checks, which is what the shipped server recipes already passed. The same holds
+  for `eraseDamagedVault` and its verb. A `damaged_lockbox` refusal no longer quotes the boxlabel,
+  as `absent_box` already did not.

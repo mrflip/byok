@@ -16,3 +16,7 @@
 **A `VaultDB` verb handed no `validators` admits any well-formed text** (`AnyTextValidators`) rather than applying the defaults, so a wrapper that forgets to forward the vault's bag no longer refuses a well-formed name the vault's own checks passed (a host's own check that admits a lone surrogate is still refused there). A host calling the verbs directly that wants the default checks passes `DefaultValidators`.
 
 **A host with a wider `userId` (or label) check can change its passphrases again.** The vault left its validators off one call, so adding, removing or changing a passphrase or passkey refused a user id or label the defaults refuse with `bad_label`.
+
+**`eraseDamagedVault` takes the same bag.** It refuses a misspelt `validators` field as `openVault` does, and hands the VaultDB's `eraseDamagedVault` verb the vault's checks; that verb, handed none, admits any well-formed text like the others.
+
+**A `damaged_lockbox` refusal no longer quotes the boxlabel**: "That lockbox is damaged ...", as `absent_box` already said, since a host's checks may admit any text as a name, a mistaken paste among it.

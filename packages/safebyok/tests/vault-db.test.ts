@@ -442,7 +442,7 @@ describe("the abstract VaultDB, erasing a vault whose bundle is damaged", () => 
       protected override doReadBundle(): Promise<unknown> { return Promise.reject(new Error('connection reset')) }
     }
     await TH.expectRefusal(new DownVaultDB().eraseDamagedVault(TH.scopeOf('u1')), 'storage_unavailable')
-    await TH.expectRefusal(new MapVaultDB().eraseDamagedVault({ ...TH.scopeOf('u1'), applabel: 'not-a-label' }), 'bad_label')
+    await TH.expectRefusal(new MapVaultDB().eraseDamagedVault({ ...TH.scopeOf('u1'), applabel: 'not-a-label' }, DefaultValidators), 'bad_label')
   })
 })
 

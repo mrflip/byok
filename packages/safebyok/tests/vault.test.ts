@@ -891,6 +891,21 @@ describe("the times a vault keeps", () => {
     expect(world.dbStore.read(u1BundleCkey)).to.eq(bundle)
   })
 
+  it("never quotes the boxlabel of a damaged lockbox it refuses, which a host's checks may let be any text", async () => {
+    const world = makeWorld({ validators: AnyTextValidators })
+    const vault = await world.openUnlocked('pw')
+    const pasted = 'sk-ant-fake-pasted-as-a-label'
+    await vault.store(pasted, 'sk-fake')
+    await vault.store('other', 'sk-fake-two')
+    const row = storedRowOf(world, pasted)
+    world.dbStore.write(u1BoxCkey(pasted), JSON.stringify({ ...row, changed_at: world.clock.now() + 0.5 }))
+    const storedDamaged = await TH.expectRefusal(vault.read(pasted), 'damaged_lockbox')
+    // The other lockbox's ciphertext, moved under this boxlabel: it will not open here.
+    world.dbStore.write(u1BoxCkey(pasted), JSON.stringify({ ...row, whisper_ciphered: storedRowOf(world, 'other')['whisper_ciphered'] }))
+    const unopened = await TH.expectRefusal(vault.read(pasted), 'damaged_lockbox')
+    expect(TH.thrownText(storedDamaged) + TH.thrownText(unopened)).to.not.include('sk-ant-fake')
+  })
+
   it("refuses a stored lockbox from before its times were renamed, leaving it as it is", async () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
@@ -1715,6 +1730,17 @@ describe("eraseDamagedVault", () => {
     expect(await world.rememberedUnlock()).to.not.be.null
   })
 
+  it("hands the vault's validators to the VaultDB's verb, and refuses a misspelt bag as openVault does", async () => {
+    const world = await damagedVaultWorld()
+    const longUserId = ZClassic.string().min(1).max(300)
+    const verb = vi.spyOn(world.vaultDB, 'eraseDamagedVault')
+    await TH.expectRefusal(eraseDamagedVault(world.optsWith({ validators: { userID: longUserId } as unknown as OpenVaultOpts['validators'] })), 'bad_option')
+    expect(verb).not.toHaveBeenCalled()
+    await eraseDamagedVault(world.optsWith({ validators: { userId: longUserId } }))
+    expect((verb.mock.calls[0]?.at(-1) as VaultValidators | undefined)?.userId).to.eq(longUserId)
+    expect(rowsOf(world, 'u1')).to.deep.equal([])
+  })
+
   it("takes the options openVault took, and refuses misuse before touching storage", async () => {
     const world = await damagedVaultWorld()
     await TH.expectRefusal(eraseDamagedVault(world.optsWith({ applabel: 'not-a-label' })), 'bad_label')
@@ -2012,7 +2038,7 @@ describe("tampering", () => {
     expect(world.dbStore.read(u1BundleCkey)).to.eq('{"format":"not-a-vault"}')
   })
 
-  it("a lockbox that will not open under the vault's own key is named as damaged, with the remedy", async () => {
+  it("a lockbox that will not open under the vault's own key is called damaged, with the remedy, never quoting its boxlabel", async () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
     await vault.store('anthropic', 'sk-fake')
@@ -2020,7 +2046,8 @@ describe("tampering", () => {
     row.whisper_ciphered.ciphertext_b64 = TH.tweakB64(row.whisper_ciphered.ciphertext_b64)
     world.dbStore.write(u1BoxCkey('anthropic'), JSON.stringify(row))
     const err = await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
-    expect(err.message).to.include("The lockbox 'anthropic' is damaged")
+    expect(err.message).to.include('That lockbox is damaged')
+    expect(err.message).to.not.include('anthropic')
     expect(err.message).to.include('erase it')
     await vault.erase('anthropic')
     expect(boxlabelsOf(vault)).to.deep.equal([])
