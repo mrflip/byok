@@ -130,6 +130,14 @@ export class OutageVaultDB extends VaultDB {
     return true
   }
 
+  // The one public verb this adapter hands on itself: erasing a vault whose bundle is damaged
+  // needs the record as stored, which this adapter's own doReadBundle never sees, as the inner
+  // verbs refuse it. The inner adapter does the checking and the erasing.
+  override async eraseDamagedVault(scope: VaultScope): Promise<void> {
+    this.refuseWhileDown()
+    await this.inner.eraseDamagedVault(scope, AnyTextValidators)
+  }
+
   protected override doSubscribe(scope: VaultScope, onChange: () => void): () => void {
     return this.inner.subscribe(scope, onChange, AnyTextValidators)
   }

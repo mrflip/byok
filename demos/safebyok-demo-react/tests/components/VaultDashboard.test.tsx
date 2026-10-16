@@ -51,6 +51,43 @@ describe("VaultDashboard, opening", () => {
   })
 })
 
+/** A world whose `u1` vault has had its stored bundle spoiled, over a store the test can read. */
+const damagedWorld = async () => {
+  const store = memoryStore()
+  const world = TH.makeWorld({ vaultDB: localVaultDB(store) })
+  await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+  const bundleCkey = Ckeys.bundle(TH.scopeOf('u1'))
+  const bundle = JSON.parse(store.read(bundleCkey) ?? 'null') as object
+  store.write(bundleCkey, JSON.stringify({ ...bundle, unlock_epoch: 'one' }))
+  return { store, world }
+}
+
+describe("VaultDashboard, a vault stored damaged", () => {
+  it("erases it and opens a fresh one, once the user confirms", async () => {
+    const { store, world } = await damagedWorld()
+    const confirming = vi.spyOn(globalThis, 'confirm').mockReturnValue(false)
+    world.renderInVault(<VaultDashboard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Erase and start over' }))
+    expect(confirming).toHaveBeenCalledWith("Erase this vault and start over? Every lockbox in it is lost for good.")
+    expect(store.ckeys()).to.have.lengthOf(2)
+    confirming.mockReturnValue(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Erase and start over' }))
+    expect(await screen.findByText(/No lockboxes yet/)).to.not.be.null
+    expect(store.ckeys()).to.deep.equal([])
+  })
+
+  it("says why the erase failed, and keeps offering it", async () => {
+    const { world } = await damagedWorld()
+    vi.spyOn(world.vaultDB, 'eraseDamagedVault').mockRejectedValueOnce(new VaultError('storage_unavailable', 'The vault storage could not be reached: try again shortly.'))
+    vi.spyOn(globalThis, 'confirm').mockReturnValue(true)
+    world.renderInVault(<VaultDashboard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Erase and start over' }))
+    await screen.findByText(/could not be reached/)
+    fireEvent.click(screen.getByRole('button', { name: 'Erase and start over' }))
+    expect(await screen.findByText(/No lockboxes yet/)).to.not.be.null
+  })
+})
+
 describe("VaultDashboard, its lockboxes", () => {
   it("adds a lockbox, asking for a new vault's passphrase on the way", async () => {
     const world = TH.makeWorld()

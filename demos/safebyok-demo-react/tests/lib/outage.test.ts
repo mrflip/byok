@@ -55,6 +55,33 @@ describe("OutageVaultDB, while up", () => {
   })
 })
 
+/** An outage-switched adapter over a store holding `u1`'s vault, its bundle damaged but for its vault_id. */
+const damagedOver = async () => {
+  const store = memoryStore()
+  const outage = makeOutage()
+  const vaultDB = new OutageVaultDB(localVaultDB(store), outage)
+  await vaultDB.createBundle(bundle)
+  await vaultDB.updateBox(scope, TH.boxOf('openai', 'two'), TH.noBoxYet)
+  store.write(Ckeys.bundle(scope), JSON.stringify({ ...bundle, unlock_epoch: 'one' }))
+  return { store, outage, vaultDB }
+}
+
+describe("OutageVaultDB, erasing a damaged vault", () => {
+  it("hands the erase to its inner adapter, which reads the record as stored", async () => {
+    const { store, vaultDB } = await damagedOver()
+    await TH.expectRefusal(vaultDB.readBundle(scope), 'corrupt_record')
+    await vaultDB.eraseDamagedVault(scope)
+    expect(store.ckeys()).to.deep.equal([])
+  })
+
+  it("refuses while the pretend backend is down, erasing nothing", async () => {
+    const { store, outage, vaultDB } = await damagedOver()
+    outage.setDown(true)
+    await TH.expectRefusal(vaultDB.eraseDamagedVault(scope), 'storage_unavailable')
+    expect(store.ckeys()).to.have.lengthOf(2)
+  })
+})
+
 // Each refusal is checked against the host's own copy of the package too: the provider branches
 // on isVaultError, which goes by class.
 describe("OutageVaultDB, while down", () => {
