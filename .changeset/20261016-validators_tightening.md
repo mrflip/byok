@@ -13,6 +13,6 @@
 
 **A misspelt `validators` field is refused everywhere.** The new `checkValidators(bag)` refuses, as `bad_option`, a bag with a field other than applabel, vaultlabel, boxlabel, userId and note, or one that is not a Zod schema. `openVault` runs it as before; `VaultProvider` now runs it too, throwing to the nearest error boundary, where it used to drop a misspelt field (`boxLabel`) without a word.
 
-**A `VaultDB` verb handed no `validators` admits any well-formed text** (`AnyTextValidators`) rather than applying the defaults, so a wrapper that forgets to forward the vault's bag no longer refuses a name the vault's own checks passed. A host calling the verbs directly that wants the default checks passes `DefaultValidators`.
+**A `VaultDB` verb handed no `validators` admits any well-formed text** (`AnyTextValidators`) rather than applying the defaults, so a wrapper that forgets to forward the vault's bag no longer refuses a well-formed name the vault's own checks passed (a host's own check that admits a lone surrogate is still refused there). A host calling the verbs directly that wants the default checks passes `DefaultValidators`.
 
 **A host with a wider `userId` (or label) check can change its passphrases again.** The vault left its validators off one call, so adding, removing or changing a passphrase or passkey refused a user id or label the defaults refuse with `bad_label`.
