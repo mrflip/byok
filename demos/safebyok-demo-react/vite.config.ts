@@ -9,6 +9,9 @@ export default defineConfig({
   test: {
     include:     ['tests/**/*.test.{ts,tsx}'],
     environment: 'node',
+    // Above the 5 s asyncUtilTimeout that tests/setup.ts gives each wait, so that a wait that
+    // never ends fails with its own message, and not as the test's timeout.
+    testTimeout: 15_000,
     // Every spy and stubbed global is put back before each test, and tests/setup.ts unmounts
     // each test's render.
     restoreMocks:  true,
