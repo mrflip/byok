@@ -733,7 +733,7 @@ security expert who knows what questions to ask.
   GCM's structure, needs the vaultKey's bytes, and is a construction of our own. A bundle that
   fails its checks cannot be destroyed through a vault handle (`openVault` refuses it, and `destroy()`
   needs a handle); it is left in place, as every damaged remote record is, until the host calls
-  `eraseDamagedVault` (next entry).
+  `eraseDamagedVault` (the entry below).
 * 2026-10-16: `postgresVaultDB`'s lockbox limit is a best effort (VaultDB contract, lines 4.2 to
   4.5), not a guarantee: the insert counts the vault's lockboxes in a `count(*)` over its own
   statement's snapshot, with no lock and no counter, so writers racing for the last places under
