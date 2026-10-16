@@ -61,7 +61,9 @@ const vaultDB = postgresVaultDB({ client: pool, userId: session.userId })
 * **`userId`** is the user your own auth signed in for this request -- from its verified session,
   never from anything the browser sends -- or `null` when no one is. The VaultDB reaches only that
   user's vaults: a verb naming any other user's scope, or any at all while signed out, refuses
-  with a `VaultError` of kind `not_permitted` before the database is asked anything.
+  with a `VaultError` of kind `identity_revoked` before the database is asked anything, and the
+  browser's vault, opened for a user no longer signed in, locks itself. A refusal of your own for
+  a user who is signed in but may not make a call is kind `not_permitted`, which locks nothing.
 * **`client`** is anything with `query(text, params)` resolving to `{ rows }`: a `pg` Pool,
   Client or PoolClient, or a PGlite, as they stand. postgres.js takes a wrapper:
   `{ query: async (text, params) => ({ rows: await sql.unsafe(text, params) }) }`.
@@ -333,7 +335,7 @@ shape of table, copy it, and keep to what makes it right:
   `unlock_epoch` and `revision_id`. `src/columns.ts` names each record's columns once, the
   compiler holding the list to the record's fields both ways, and builds every statement from it.
 * **Authorize in the adapter**: made per request for one user, it refuses every other user's
-  scope with `not_permitted`.
+  scope with `identity_revoked`.
 * **Enforce the lockbox limit in the write itself.** A count read in one statement and checked
   in the next lets two writes race past it, and so does a `count(*)` inside the insert: under
   READ COMMITTED, each statement counts from its own snapshot. Here a trigger keeps the count on
