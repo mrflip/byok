@@ -62,7 +62,9 @@ never write to either. Before touching code:
    - **Prove.** `pnpm justify`, repairing until green.
    - **Push** the reviewer's commits with yours; after a catch-up rebase, with
      `--force-with-lease=<branch>:<the sha you last pushed>`. Bring the PR's body up to date.
-   - **Clean up**: `git -C <main checkout> worktree remove <root>`. Then report `filed`.
+   - **Clean up**: `cd <root> && scripts/clear-ds-store.sh` first (a Finder `.DS_Store` left in a
+     folder stops the removal half done), then `git -C <main checkout> worktree remove <root>`.
+     Then report `filed`.
 
 ## Significant questions
 
