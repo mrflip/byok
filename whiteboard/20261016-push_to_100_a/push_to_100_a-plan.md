@@ -190,9 +190,19 @@ handoff carries it whole. Below, the orchestrator's gloss.
 
 ### 10. `secure_floor` -- the Coach's three Soonish lines
 
-* **Touches**: `vault.ts` (`openVault`'s secure-context check, `minPassphraseChars`), `errors.ts`
-  (`insecure_context`, `weak_passphrase`), the React README.
-* **Model**: sonnet. **Depends on**: 4.
+* **Touches**: `vault.ts` (`openVault`'s secure-context check, the strength test), `errors.ts`
+  (`insecure_context`, `weak_passphrase`), `safebyok/browser`, the React README.
+* **Model**: opus (it now adds a runtime dependency and an exported option). **Depends on**: 4.
+* **Changed by the Coach's ruling** (*Coach rulings during the sprint*): in place of the
+  preplan's `minPassphraseChars` alone, `openVault({ passphraseStrengthTest })`, a host callback
+  run at `create`, `addPassphrase` and `changePassphrase` (never at `unlock`), refusing
+  `weak_passphrase` with the callback's reason; the default in core is the NIST length floor (12
+  characters, no composition rules). `safebyok/browser` exports a zxcvbn-backed test built on
+  `@zxcvbn-ts/core` (the Coach's yes), as its own named export so an app that does not import it
+  does not bundle it, and **not** folded into `browserOpts` unless its measure is small: the
+  dictionaries are large, so measure first and say what each choice costs. Check the release is
+  over seven days old (PROCESS.md, *Dependencies*). Its size-limit line is appended at the end of
+  `.size-limit.json`. No meter UI anywhere.
 * **Note**: the three Soonish lines become rows the orchestrator sweeps; the worker writes their
   settlement in its thread file.
 
@@ -220,6 +230,16 @@ From the sprint doc's *Open Matters*, as rows are swept:
 
 * **`user_id` characters** (thread 1): yes, letters, digits and `-_.:@+|`, 1 to 100.
 * **Standard Schema** (G497): stays NOT YET.
+* **The adapters' logger option** (thread 5): `logger`, in every adapter.
+* **A hint on the whisper field** (thread 7): yes, a host `placeholder`, none by default. And a
+  new NOTYET: "Option to let the user add a hint on their passphrase".
+* **Password strength** (thread 10), the Coach's words: "The 'don't let customers shoot
+  themselves in the foot' rule says we should not offer a bullshit password meter. Add a
+  pluggable callback `passphraseStrengthTest()` to the entry point. Have `safebyok/browser`
+  export `@zxcvbn-ts/core` as a tree-shakeable default." This is the Coach's yes to
+  `@zxcvbn-ts/core` as a runtime dependency of `safebyok` (thread 10's gloss has the shape). And a
+  new NOTYET: "Break out dependencies, including -fastkey, into a -utils or -bestpractices
+  package".
 
 ## Decisions taken in YOLO
 
