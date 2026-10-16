@@ -7,7 +7,7 @@
 * **Issued by**: flip (the Coach), through the Open Matters tab of the gripe_rulings sprint doc
   (`/turbochat`): each thread below gathers rows they set to `proceed`, quoted with their answer
   verbatim. The Coach: "sprint gripes_sprint part 2, normal mode".
-* **Status**: threads 1, 2, 3 underway; 4 filed (#101)
+* **Status**: threads 1 underway, 3 in review; 2 filed (#102), 4 filed (#101)
 
 ## Read first
 
