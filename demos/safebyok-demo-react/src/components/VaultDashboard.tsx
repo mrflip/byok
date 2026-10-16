@@ -94,6 +94,19 @@ export const VaultDashboard = () => {
           </thead>
           <tbody>
             {snapshot.boxes.map((box) => {
+              // A damaged lockbox can't be read, used or edited -- only deleted, or stored over afresh.
+              if (box.damaged) {
+                return (
+                  <tr key={box.boxlabel} className="damaged">
+                    <td><code>{box.boxlabel}</code></td>
+                    <td colSpan={3} className="gripe">{"damaged: its stored record can't be read"}</td>
+                    <td className="row">
+                      <button className="mini" onClick={() => { setForm({ editing: box.boxlabel, boxlabelText: box.boxlabel, whisperText: '', noteText: '' }) }}>replace</button>
+                      <button className="mini danger" onClick={() => { void erase(box.boxlabel) }}>delete</button>
+                    </td>
+                  </tr>
+                )
+              }
               const viewed = shown[box.boxlabel]
               return (
                 <tr key={box.boxlabel}>

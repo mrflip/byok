@@ -1,5 +1,5 @@
 import { VaultDB, VaultError, VaultScope } from 'safebyok'
-import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle } from 'safebyok'
+import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, StoredLockbox, VaultBundle } from 'safebyok'
 import * as Columns from './columns'
 import { BundleColumns, ListedLockboxColumns, LockboxColumns } from './columns'
 import { VaultChangeChannel } from './vault-tables'
@@ -269,10 +269,11 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
     return rows.length === 0 ? null : Columns.recordOf(rows[0], LockboxColumns)
   }
 
-  protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
+  // Each row is stored under its own boxlabel column, so that is the boxlabel it is listed under.
+  protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
     this.mustReach(scope)
     const { rows } = await this.client.query(ListBoxesSql, scopeParams(scope))
-    return rows.map((row) => Columns.recordOf(row, ListedLockboxColumns))
+    return rows.map((row) => ({ boxlabel: (row as { boxlabel: string }).boxlabel, lockbox: Columns.recordOf(row, ListedLockboxColumns) }))
   }
 
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
@@ -306,10 +307,11 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
   async listBoxRecords(scope: VaultScope): Promise<unknown[]> {
     const checked = VaultScope.safeParse(scope)
     if (! checked.success) {
-      throw new VaultError('bad_label', 'A vault scope is an applabel and a vaultlabel that meet the label rules, and a non-empty user_id.')
+      throw new VaultError('bad_label', 'A vault scope is an applabel, a user_id and a vaultlabel, each text.')
     }
     try {
-      return await this.doListBoxes(checked.data)
+      const listed = await this.doListBoxes(checked.data)
+      return listed.map((stored) => stored.lockbox)
     } catch (err) {
       if (err instanceof VaultError) { throw err }
       throw new VaultError('storage_unavailable', "The vault's storage could not be reached, or failed partway: try again shortly. The storage adapter's own error is this error's cause.", { cause: err })

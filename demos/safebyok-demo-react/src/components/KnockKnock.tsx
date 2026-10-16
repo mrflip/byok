@@ -27,6 +27,8 @@ export const KnockKnock = () => {
 
   if (vault === null) { return null }
   const keyBox = snapshot.boxes.find((box) => box.boxlabel === ApiKeyBoxlabel)
+  // The button and the Enter key alike: a sound key, someone at the door, and no joke underway.
+  const canKnock = ! telling && whosThere.trim() !== '' && keyBox !== undefined && ! keyBox.damaged
 
   const knock = async () => {
     setTelling(true)
@@ -56,22 +58,25 @@ export const KnockKnock = () => {
           placeholder="Banana"
           value={whosThere}
           onChange={(evt) => { setWhosThere(evt.target.value) }}
-          onKeyDown={(evt) => { if (evt.key === 'Enter' && whosThere.trim()) { void knock() } }}
+          onKeyDown={(evt) => { if (canKnock && evt.key === 'Enter') { void knock() } }}
         />
-        <button disabled={telling || ! whosThere.trim() || keyBox === undefined} onClick={() => { void knock() }}>
+        <button disabled={! canKnock} onClick={() => { void knock() }}>
           (( {whosThere.trim() || '…'} Who? ))
         </button>
       </div>
       {telling && <p className="quiet">Claude is clearing its throat…</p>}
       {joke !== null && <blockquote className="joke">{joke}</blockquote>}
       {gripe !== null && <p className="gripe">{gripe}</p>}
-      <ApiKeySlot haveKeyBox={keyBox !== undefined} changedAt={keyBox?.changed_at} />
+      <ApiKeySlot haveKeyBox={keyBox !== undefined} damaged={keyBox?.damaged === true} changedAt={keyBox?.damaged === false ? keyBox.changed_at : undefined} />
     </section>
   )
 }
 
-/** The facility for entering (or replacing) the Anthropic API key, stored as a lockbox. */
-const ApiKeySlot = ({ haveKeyBox, changedAt }: { haveKeyBox: boolean, changedAt?: number | undefined }) => {
+/**
+ * The facility for entering (or replacing) the Anthropic API key, stored as a lockbox. A damaged
+ * key lockbox -- its stored record unreadable -- is offered for replacing: storing over it writes it afresh.
+ */
+const ApiKeySlot = ({ haveKeyBox, damaged, changedAt }: { haveKeyBox: boolean, damaged: boolean, changedAt?: number | undefined }) => {
   const { vault, withUnlockedVault } = useVault()
   const [editing, setEditing] = useState(false)
   const [keyText, setKeyText] = useState('')
@@ -84,6 +89,14 @@ const ApiKeySlot = ({ haveKeyBox, changedAt }: { haveKeyBox: boolean, changedAt?
       <p className="api-key-slot quiet">
         No Anthropic API key yet -- the machine won&apos;t knock without one.{' '}
         <button className="mini" onClick={() => { setEditing(true) }}>add your key</button>
+      </p>
+    )
+  }
+  if (damaged && ! editing) {
+    return (
+      <p className="api-key-slot gripe">
+        {"The stored Anthropic key is damaged and can't be read."}{' '}
+        <button className="mini" onClick={() => { setEditing(true) }}>replace it</button>
       </p>
     )
   }

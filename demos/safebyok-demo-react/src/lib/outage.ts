@@ -1,4 +1,4 @@
-import { VaultDB, VaultError, type BundleExpectation, type EraseExpectation, type Lockbox, type LockboxExpectation, type VaultBundle, type VaultScope } from 'safebyok'
+import { AnyTextValidators, VaultDB, VaultError, isVaultError, type BundleExpectation, type EraseExpectation, type Lockbox, type LockboxExpectation, type StoredLockbox, type VaultBundle, type VaultScope } from 'safebyok'
 
 /**
  * DEMO JANK: a pretend backend outage, switched on and off from the backend inspection panel, so
@@ -43,7 +43,8 @@ export const makeOutage = (): Outage => {
  * A VaultDB that hands every call through to `inner`, except while `outage` is down: then every
  * read and write refuses as `storage_unavailable`, as a real adapter does when its backend cannot
  * be reached. Watching for changes carries on through an outage, as a live query's socket would
- * reconnect.
+ * reconnect. Its own verbs check every name with the vault's validators, so it hands each call on
+ * with `AnyTextValidators`, letting through to `inner` whatever they passed.
  *
  * @example
  *   const vaultDB = new OutageVaultDB(idbVaultDB({ dbName: 'safebyok_demo' }), outage)
@@ -70,57 +71,67 @@ export class OutageVaultDB extends VaultDB {
 
   protected async doReadBundle(scope: VaultScope): Promise<unknown> {
     this.refuseWhileDown()
-    return await this.inner.readBundle(scope)
+    return await this.inner.readBundle(scope, AnyTextValidators)
   }
 
   protected async doCreateBundle(bundle: VaultBundle): Promise<unknown> {
     this.refuseWhileDown()
-    return await this.inner.createBundle(bundle)
+    return await this.inner.createBundle(bundle, AnyTextValidators)
   }
 
   // The inner adapter's public verbs refuse a failed expectation as stale_write themselves, and a
   // VaultError passes through this adapter's verbs untouched: so reaching the end means it landed.
   protected async doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation): Promise<boolean> {
     this.refuseWhileDown()
-    await this.inner.updateBundle(bundle, expected)
+    await this.inner.updateBundle(bundle, expected, AnyTextValidators)
     return true
   }
 
   protected async doReadBox(scope: VaultScope, boxlabel: string): Promise<unknown> {
     this.refuseWhileDown()
-    return await this.inner.readBox(scope, boxlabel)
+    return await this.inner.readBox(scope, boxlabel, AnyTextValidators)
   }
 
   // The inner list hands back public summaries, without the `format` this adapter's own list
   // verb checks for, so each lockbox is read whole; one erased between the list and its read is
-  // simply gone.
-  protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
+  // simply gone. One the inner verbs refuse as damaged goes up as a stand-in that no lockbox
+  // matches, so this adapter's own list marks it damaged too.
+  protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
     this.refuseWhileDown()
-    const summaries = await this.inner.listBoxes(scope)
-    const lockboxes = await Promise.all(summaries.map((summary) => this.inner.readBox(scope, summary.boxlabel)))
-    return lockboxes.filter((lockbox) => lockbox !== null)
+    const listed = await this.inner.listBoxes(scope, AnyTextValidators)
+    const stored = await Promise.all(listed.map(async ({ boxlabel }) => ({ boxlabel, lockbox: await this.wholeOrDamaged(scope, boxlabel) })))
+    return stored.filter(({ lockbox }) => lockbox !== null)
+  }
+
+  private async wholeOrDamaged(scope: VaultScope, boxlabel: string): Promise<unknown> {
+    try {
+      return await this.inner.readBox(scope, boxlabel, AnyTextValidators)
+    } catch (err) {
+      if (! isVaultError(err, 'corrupt_record')) { throw err }
+      return 'damaged'
+    }
   }
 
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
     this.refuseWhileDown()
-    await this.inner.updateBox(scope, lockbox, expected)
+    await this.inner.updateBox(scope, lockbox, expected, AnyTextValidators)
     return true
   }
 
   protected async doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
     this.refuseWhileDown()
-    await this.inner.eraseBox(scope, boxlabel, expected)
+    await this.inner.eraseBox(scope, boxlabel, expected, AnyTextValidators)
     return true
   }
 
   protected async doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
     this.refuseWhileDown()
-    await this.inner.eraseVault(scope, expected)
+    await this.inner.eraseVault(scope, expected, AnyTextValidators)
     return true
   }
 
   protected override doSubscribe(scope: VaultScope, onChange: () => void): () => void {
-    return this.inner.subscribe(scope, onChange)
+    return this.inner.subscribe(scope, onChange, AnyTextValidators)
   }
 
   private refuseWhileDown(): void {

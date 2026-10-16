@@ -1,10 +1,12 @@
 // fake-indexeddb installs a Node-side indexedDB global before the store loads: these tests
 // exercise real IndexedDB semantics (structured clone included) without a browser.
 import 'fake-indexeddb/auto'
+import { createStore, set } from 'idb-keyval'
 import { describe, expect, it, vi } from 'vitest'
 import { idbDeviceDB, inspectIdbDeviceDB, type IdbOpts } from '../src/idb'
 import * as Entry from '../src/idb'
 import { VaultError } from '../src/errors'
+import * as Ckeys from '../src/ckeys'
 import * as TH from './test-helpers'
 
 // Each test gets its own database, so tests never see each other's rows.
@@ -42,6 +44,79 @@ describe("the IndexedDB device store's options", () => {
   }
 })
 
+describe("idbDeviceDB", () => {
+  it("sweeps an unlock filed under an earlier version's ckey at the first read, never reading it", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    await set(['unlock', 'acme', 'u1', 'main'], await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
+    const gets = vi.spyOn(IDBObjectStore.prototype, 'get')
+    const getAlls = vi.spyOn(IDBObjectStore.prototype, 'getAll')
+    const cursors = vi.spyOn(IDBObjectStore.prototype, 'openCursor')
+    try {
+      expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+      expect(gets.mock.calls.map(([ckey]) => ckey)).to.deep.equal([Ckeys.unlock(TH.scopeOf('u1'))])
+      expect(getAlls).to.have.callCount(0)
+      expect(cursors).to.have.callCount(0)
+    } finally {
+      vi.restoreAllMocks()
+    }
+    const rows = await inspectIdbDeviceDB({ dbName }).rows()
+    expect(rows.map((row) => row.ckey)).to.deep.equal([Ckeys.unlock(TH.scopeOf('u2'))])
+  })
+
+  it("sweeps them at an erase too, keeping every unlock it filed", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
+    await deviceDB.eraseUnlock(TH.scopeOf('u3'))
+    expect(await deviceDB.readUnlock(TH.scopeOf('u2'))).to.not.be.null
+    const rows = await inspectIdbDeviceDB({ dbName }).rows()
+    expect(rows.map((row) => row.ckey)).to.deep.equal([Ckeys.unlock(TH.scopeOf('u2'))])
+  })
+
+  it("rings the device shelf's bell when a read sweeps, so an inspector stops showing the swept rows", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    let heardCount = 0
+    const unsubscribe = inspectIdbDeviceDB({ dbName }).subscribe(() => { heardCount += 1 })
+    await deviceDB.readUnlock(TH.scopeOf('u2'))
+    expect(heardCount).to.equal(1)
+    await deviceDB.readUnlock(TH.scopeOf('u2'))
+    expect(heardCount).to.equal(1)
+    unsubscribe()
+  })
+
+  it("forgets the scope's own unlock at an erase even when the sweep fails", async () => {
+    const dbName = TH.freshDbName()
+    const deviceDB = idbDeviceDB({ dbName })
+    await deviceDB.writeUnlock(await TH.unlockOf('u1'))
+    vi.spyOn(IDBObjectStore.prototype, 'getAllKeys').mockImplementation(() => { throw new Error('the shelf will not list') })
+    try {
+      await expect(deviceDB.eraseUnlock(TH.scopeOf('u1'))).rejects.toThrow('the shelf will not list')
+    } finally {
+      vi.restoreAllMocks()
+    }
+    expect(await inspectIdbDeviceDB({ dbName }).rows()).to.have.lengthOf(0)
+  })
+
+  it("clears the whole shelf at eraseAll, an unlock filed under the colon-joined ckey of 0.2 and before included", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
+    await deviceDB.eraseAll()
+    expect(await inspectIdbDeviceDB({ dbName }).rows()).to.have.lengthOf(0)
+  })
+})
+
 describe("inspectIdbDeviceDB", () => {
   it("shows the raw rows of the device shelf, hears writes, and wipes it clean", async () => {
     const dbName = TH.freshDbName()
@@ -52,7 +127,7 @@ describe("inspectIdbDeviceDB", () => {
 
     await deviceDB.writeUnlock(await TH.unlockOf('u1'))
     const rows = await inspector.rows()
-    expect(rows.map((row) => row.ckey)).to.deep.equal(['unlock:acme:u1:main'])
+    expect(rows.map((row) => row.ckey)).to.deep.equal(['["unlock","acme","u1","main"]'])
     await vi.waitFor(() => { expect(heardCount).to.be.greaterThan(0) })
 
     await inspector.wipe()

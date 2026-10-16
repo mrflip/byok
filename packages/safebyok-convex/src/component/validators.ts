@@ -3,9 +3,11 @@ import { v } from 'convex/values'
 /**
  * Convex validators for safebyok's stored records, field for field with the core's Zod records
  * (`Lockbox`, `VaultBundle`, `Ciphered`, `VaultScope` in `safebyok`). They check what Convex can:
- * which fields, their types, which are optional, and each record's `format`. The finer rules -- the
- * label grammar, non-empty strings, a positive whole `unlock_epoch`, a note's length, each
- * time's bounds as epoch milliseconds -- are the client's, checked by the core's Zod records on every write and every read.
+ * which fields, their types, which are optional, and each record's `format`. Every name and note
+ * is any text here, as in the core's records: what text each may be is the vault's validators' to
+ * say, and the server never sees them. The finer rules -- non-empty strings, a positive whole
+ * `unlock_epoch`, each time's bounds as epoch milliseconds -- are the client's, checked by the
+ * core's Zod records on every write and every read.
  *
  * A new record format widens its `format` union: an additive deploy, shipped with this package.
  */

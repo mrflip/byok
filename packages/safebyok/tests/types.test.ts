@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import * as ZClassic from 'zod'
-import { EpochMillis, FarFuture, FarPast, Label, Lockbox, LockboxNote, LockboxSummary, MaxUnlocks, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { DeviceUnlock, EpochMillis, FarFuture, FarPast, ForeverMs, Lockbox, LockboxSummary, MaxUnlocks, VaultBundle, VaultScope, Whisper } from '../src/types'
 import * as TH from './test-helpers'
 
 const WhisperCases = [
@@ -33,40 +32,15 @@ describe("Whisper", () => {
   })
 })
 
-const LabelCases = [
-  // regular usage:
-  ["anthropic_api_key",  true,   'lowercase words joined by underscores'],
-  ["anthropic",          true,   'a plain lowercase word'],
-  ["ab",                 true,   'two characters is enough'],
-  ["a2",                 true,   'may end in a digit'],
-  ["a_1_b_2",            true,   'digits may follow each underscore'],
-  // edge cases:
-  ["a",                  false,  'one character is too short'],
-  ["2fast",              false,  'must start with a letter'],
-  ["dev_",               false,  'may not end in an underscore'],
-  ["_dev",               false,  'may not start with an underscore'],
-  ["dev__key",           false,  'underscores come one at a time'],
-  ["ANTHROPIC_API_KEY",  false,  'lowercase only'],
-  ["anthropic key",      false,  'no spaces'],
-  ["anthropic-key",      false,  'no hyphens'],
-  ["",                   false,  'never empty'],
-  ["x".repeat(41),       false,  'forty-one characters is one too many'],
-  ["x".repeat(40),       true,   'forty characters is the ceiling'],
-] as const
-
-describe("Label", () => {
-  for (const [candidate, expected, blurb] of LabelCases) {
-    it(blurb, () => { expect(Label.safeParse(candidate).success).to.eq(expected) })
-  }
-})
-
 const ScopeCases = [
   // regular usage:
   [TH.scopeOf('u1'),                                  true,   'an applabel, a user_id and a vaultlabel'],
   [TH.scopeOf('user|2fJ8:google'),                    true,   'a user_id in whatever form the host app issues'],
+  [TH.scopeOf('u'.repeat(101)),                       true,   'a user_id of any length: what a name may be is the validators\' to say'],
+  [{ ...TH.scopeOf('u1'), applabel: 'Acme: Ünïcode' },  true,   'an applabel of any text'],
+  [{ ...TH.scopeOf('u1'), user_id: '' },              true,   'even empty text, which the default UserId refuses'],
   // refused:
-  [{ ...TH.scopeOf('u1'), user_id: '' },              false,  'an empty user_id names no one'],
-  [{ ...TH.scopeOf('u1'), applabel: 'Acme' },         false,  'an applabel outside the label grammar'],
+  [{ ...TH.scopeOf('u1'), applabel: 42 },             false,  'an applabel that is not text'],
   [{ applabel: 'acme', user_id: 'u1' },              false,  'a scope missing its vaultlabel'],
 ] as const
 
@@ -98,6 +72,8 @@ const BundleCases = [
   [{ ...TH.bundleOf('u1'), unlock_epoch: 0 },                false,  'an epoch starts at one'],
   [{ ...TH.bundleOf('u1'), unlock_epoch: 1.5 },              false,  'an epoch is a whole number'],
   [{ ...TH.bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
+  [TH.bundleOf('u'.repeat(101)),                            true,   'a user_id of any length: the validators check names, not the record'],
+  [{ ...TH.bundleOf('u1'), vaultlabel: null },               false,  'a vaultlabel that is not text'],
   [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase', { vault_key_wrapped: { cipher_iv_b64: 'iv' } as never })] }, false, 'an envelope missing its ciphertext'],
   [{ ...TH.bundleOf('u1'), registered_at: 1_792_022_400 },   false,  'a registered_at in epoch seconds'],
   [{ ...TH.bundleOf('u1'), registered_at: Infinity },        false,  'a registered_at that never comes'],
@@ -126,7 +102,7 @@ const UnlockListCases = [
   [[TH.passkeyEnvelopeOf('laptop'), TH.passkeyEnvelopeOf('phone', { credential_id: 'cred-laptop' })], false, 'two passkey envelopes for the same credential'],
   [[TH.passkeyEnvelopeOf('laptop', { credential_id: '' })],               false,  'a passkey with an empty credential_id'],
   [[TH.passkeyEnvelopeOf('laptop', { prf_salt_b64: '' })],                false,  'a passkey with an empty salt'],
-  [[TH.envelopeOf('Not_a_label')],                                         false,  'an unlocklabel outside the label grammar'],
+  [[TH.envelopeOf('Not_a_label')],                                         true,   'an unlocklabel outside the label grammar: the vault checks the grammar when it adds a way in, and a stored record only needs text'],
   [[TH.envelopeOf('passphrase', { salt_b64: '' })],                        false,  'an empty salt'],
   [[TH.envelopeOf('passphrase', { unlock_id: '' })],                       false,  'an empty unlock_id'],
 ] as const
@@ -154,7 +130,9 @@ const LockboxCases = [
   [{ ...notelessBox, note: undefined },                    true,   'a lockbox an earlier version stored with an undefined note'],
   // refused, as a damaged or foreign record:
   [{ ...notelessBox, note: null },                         false,  'a null note'],
-  [{ ...notelessBox, note: 'n'.repeat(257) },              false,  'a note over 256 characters'],
+  [{ ...notelessBox, note: 'n'.repeat(257) },              true,   'a note of any length: the validators check notes, not the record'],
+  [{ ...notelessBox, boxlabel: 'Ключ API: מפתח' },        true,   'a boxlabel of any text'],
+  [{ ...notelessBox, note: 42 },                           false,  'a note that is not text'],
   [{ ...notelessBox, format: 'safebyok-lockbox-v2' },      false,  'a format this version does not know'],
   [{ ...notelessBox, changed_at: FarFuture + 1 },          false,  'a changed_at past FarFuture'],
   [{ ...notelessBox, registered_at: Infinity },            false,  'a registered_at that never comes'],
@@ -168,25 +146,6 @@ describe("Lockbox", () => {
   for (const [candidate, expected, blurb] of LockboxCases) {
     it(blurb, () => { expect(Lockbox.safeParse(candidate).success).to.eq(expected) })
   }
-})
-
-const NoteCases = [
-  // regular usage:
-  ["work account",         true,   'a few words'],
-  ["",                     true,   'even empty text'],
-  ["n".repeat(256),        true,   'two hundred fifty-six characters is the ceiling'],
-  // refused:
-  ["n".repeat(257),        false,  'two hundred fifty-seven is one too many'],
-  [null,                   false,  'null: a lockbox with no note stores no note field'],
-  [42,                     false,  'a number is not a note'],
-] as const
-
-describe("LockboxNote", () => {
-  for (const [candidate, expected, blurb] of NoteCases) {
-    it(blurb, () => { expect(LockboxNote.safeParse(candidate).success).to.eq(expected) })
-  }
-
-  it("hands a note back as it is", () => { expect(LockboxNote.parse('work account')).to.eq('work account') })
 })
 
 const { format: _format, lockbox_key_wrapped: _wrapped, whisper_ciphered: _ciphered, ...notelessSummary } = notelessBox
@@ -204,13 +163,15 @@ describe("LockboxSummary", () => {
     it(blurb, () => { expect(LockboxSummary.parse(candidate).note).to.eq(expected) })
   }
 
-  it("refuses a note over 256 characters, as a stored lockbox does", () => {
-    expect(LockboxSummary.safeParse({ ...notelessSummary, note: 'n'.repeat(257) }).success).to.be.false
+  it("takes a note of any length, as a stored lockbox does, and refuses one that is not text", () => {
+    expect(LockboxSummary.safeParse({ ...notelessSummary, note: 'n'.repeat(257) }).success).to.be.true
+    expect(LockboxSummary.safeParse({ ...notelessSummary, note: 42 }).success).to.be.false
   })
 
-  it("strips the two ciphered fields and the format from a whole lockbox", () => {
+  it("strips the two ciphered fields and the format from a whole lockbox, and marks it undamaged", () => {
     const summary = LockboxSummary.parse(TH.boxOf('anthropic_api_key', 'a1'))
-    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'registered_at', 'changed_at'])
+    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'registered_at', 'changed_at', 'damaged'])
+    expect(summary.damaged).to.be.false
   })
 })
 
@@ -229,6 +190,21 @@ describe("FarFuture", () => {
     const shown = (askPassphraseAt: number): string => (askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toISOString())
     expect(shown(FarFuture)).to.eq('until locked')
     expect(shown(Date.UTC(2026, 9, 22))).to.eq('2026-10-22T00:00:00.000Z')
+  })
+})
+
+describe("ForeverMs", () => {
+  it("runs from FarPast to FarFuture, as its examples show", () => {
+    expect(ForeverMs).to.eq(FarFuture - FarPast)
+    expect(FarPast + ForeverMs).to.eq(FarFuture)
+  })
+})
+
+describe("DeviceUnlock", () => {
+  it("takes a user_id of any length, and refuses one that is not text", async () => {
+    const unlock = await TH.unlockOf('u'.repeat(1000))
+    expect(DeviceUnlock.safeParse(unlock).success).to.be.true
+    expect(DeviceUnlock.safeParse({ ...unlock, user_id: 42 }).success).to.be.false
   })
 })
 
@@ -283,20 +259,5 @@ describe("EpochMillis", () => {
     expect(EpochMillis.safeParse(1_792_022_400_000_000).success).to.be.false
     expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.false
     expect(EpochMillis.safeParse(Infinity).success).to.be.false
-  })
-})
-
-describe("the exported validators, inside a host's own Zod", () => {
-  // A host on classic Zod holds them in its own schemas, as a form checking a lockbox might.
-  const BoxForm = ZClassic.object({ scope: VaultScope, boxlabel: Label, note: ZClassic.optional(LockboxNote) })
-
-  it("compose into a classic Zod schema and check as they do alone", () => {
-    const form = { scope: TH.scopeOf('u1'), boxlabel: 'anthropic_api_key', note: 'work account' }
-    expect(BoxForm.parse(form)).to.deep.equal(form)
-  })
-
-  it("refuse inside a classic Zod schema what they refuse alone", () => {
-    expect(BoxForm.safeParse({ scope: TH.scopeOf('u1'), boxlabel: 'ANTHROPIC' }).success).to.be.false
-    expect(BoxForm.safeParse({ scope: TH.scopeOf('u1'), boxlabel: 'anthropic', note: 'n'.repeat(257) }).success).to.be.false
   })
 })

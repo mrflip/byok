@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault } from 'safebyok'
+import { AnyTextValidators, VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault, type VaultValidators } from 'safebyok'
 import * as TH from 'safebyok/testing'
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
@@ -162,7 +162,7 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
     fireEvent.click(screen.getByText('put'))
     await screen.findByPlaceholderText('vault passphrase')
-    expect(screen.queryByText('Stays unlocked on this device for 15 minutes.')).to.not.be.null
+    expect(screen.queryByText('Locks on this device in 15 minutes.')).to.not.be.null
   })
 
   it("the dialog promises seven days when the vault was opened with the default window", async () => {
@@ -171,7 +171,7 @@ describe("VaultProvider", () => {
     await waitFor(() => { expect(screen.getByTestId('state').textContent).to.eq('absent') })
     fireEvent.click(screen.getByText('put'))
     await screen.findByPlaceholderText('vault passphrase')
-    expect(screen.queryByText('Stays unlocked on this device for 7 days.')).to.not.be.null
+    expect(screen.queryByText('Locks on this device in 7 days.')).to.not.be.null
   })
 
   it("once unlocked, further actions run without the dialog", async () => {
@@ -242,6 +242,27 @@ describe("VaultProvider", () => {
     // One lockbox fills the vault: a second is refused for room.
     await vault.store('openai_api_key', 'sk')
     await TH.expectRefusal(vault.store('mistral_api_key', 'sk'), 'vault_full')
+  })
+
+  it("passes the validators through, reopening for a changed check but not for a bag rebuilt around the same ones", async () => {
+    const { Grab, latest, opened } = grabber()
+    const { props } = makeWorld()
+    // A bag written in the props, as a host might: new at every render, around the same schemas.
+    const tree = (boxlabelCheck: VaultValidators['boxlabel']) => (
+      <VaultProvider {...props} userId="u1" validators={{ boxlabel: boxlabelCheck }}>
+        <Grab />
+      </VaultProvider>
+    )
+    const { rerender } = render(tree(AnyTextValidators.boxlabel))
+    const first = await opened()
+    await first.unlock('correct horse battery staple')
+    await first.store('Anthropic API key', 'sk-fake')
+    rerender(tree(AnyTextValidators.boxlabel))
+    expect(latest().vault).to.eq(first)
+    // Another schema, admitting as much: a new check, so a new vault handle.
+    rerender(tree(AnyTextValidators.note))
+    await waitFor(() => { expect(latest().vault).to.not.be.null.and.not.eq(first) })
+    expect(latest().vault?.getSnapshot().boxes.map((summary) => summary.boxlabel)).to.deep.equal(['Anthropic API key'])
   })
 
   it("passes the logger through: what the vault has nobody to throw to reaches it", async () => {

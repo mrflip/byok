@@ -84,26 +84,30 @@ wrong or has been tampered with, decryption fails.
 
 ## Names, records and times
 
-How a vault is addressed, what the storage layer holds, and when. A label (`Label`) is lowercase
-words of letters and digits joined by single underscores, such as `anthropic_api_key`.
+How a vault is addressed, what the storage layer holds, and when. A label is, by default
+(`Label`), lowercase words of letters and digits joined by single underscores, such as
+`anthropic_api_key`; a host may check its labels, user ids and notes with its own `validators`
+instead, which admit what they will.
 
 | Name                            | What it is                                                                                                                                                                  |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **applabel**                    | Your app's own label, so several apps can share one backend without colliding. Stored as `applabel`.                                                                        |
 | **vaultlabel**                  | The label of one of a user's vaults, such as `main`. Stored as `vaultlabel`.                                                                                                |
 | **boxlabel**                    | The label of a lockbox within its vault: what you pass to `store`, `read`, `use` and `erase`. Stored as `boxlabel`.                                                         |
-| **userId**                      | The signed-in user's id from your own auth, the one name in a scope that is not a label. Stored as `user_id`.                                                               |
+| **userId**                      | The signed-in user's id from your own auth, the one name in a scope that is not a label: by default text of 1 to 100 characters (`UserId`). Stored as `user_id`.            |
 | **scope**                       | An applabel, a userId and a vaultlabel together: it names one vault (`VaultScope`).                                                                                         |
-| **note**                        | A lockbox's public text, up to 256 characters, which your UI may show while the vault is locked. It is never encrypted: never put a secret in it.                           |
+| **note**                        | A lockbox's public text, by default up to 256 characters (`LockboxNote`), which your UI may show while the vault is locked. It is never encrypted: never put a secret in it. |
+| **damaged**                     | Said of a lockbox whose stored record does not read back as one. The snapshot lists it as `{ boxlabel, damaged: true }` (`DamagedLockbox`) beside the sound ones; `erase()` removes it, `store()` writes a fresh lockbox over it, and `read()` refuses it. A lockbox stored under a name or note the vault's validators now refuse is damaged too; `store()` refuses a refused name, and only `erase()` reaches a lockbox under one. |
 | **bundle**                      | The one record per vault that every device syncs (`VaultBundle`): the vaultId, unlockEpoch, and its unlocks, each an unlock envelope. Nothing in it opens without a passphrase. |
 | **device unlock**               | (Also a remembered unlock.) What a device keeps to unlock without the passphrase (`DeviceUnlock`): the localUnlockKey, the vaultKeyLocalWrapped, the vaultId, the unlockEpoch and the askPassphraseAt. It stays on the device. |
 | **vaultDB**                     | The storage plug-in for what syncs: bundles and lockboxes, ciphertext only (`VaultDB`; `localVaultDB`, `idbVaultDB` and `convexVaultDB` are supplied).                      |
 | **deviceDB**                    | The storage plug-in for this device's device unlock (`DeviceDB`; `memoryDeviceDB` and `idbDeviceDB` are supplied).                                                          |
 | **registeredAt**, **changedAt** | When a lockbox was first stored, and when its whisper last changed; the bundle has a registeredAt too: when the vault was made. Stored as `registered_at` and `changed_at`. |
 | **askPassphraseAt**             | The instant from which a device stops honoring its device unlock and asks for the passphrase again (`ask_passphrase_at` in the record). `FarFuture` means "until it is locked". |
-| **forcePassphraseReentryHours** | The `openVault` option for how long a device stays unlocked after the passphrase is entered. The default is 168 (`ForcePassphraseReentryHours`); `Infinity` means until it is locked. |
+| **forcePassphraseReentryHours** | The `openVault` option for how long a device stays unlocked after the passphrase is entered. The default is 168 (`ForcePassphraseReentryHours`); `Infinity` means until it is locked. A vault reports the window it was opened with as `reentryWindowMs`, in milliseconds; `Infinity` reads as `ForeverMs`. |
 | **EpochMillis**                 | Every time safebyok keeps: whole UTC milliseconds since 1970, from `FarPast` (1981) to `FarFuture` (2255). The bounds catch seconds and microseconds passed by mistake.      |
 | **format**                      | The tag at the head of every stored record (`safebyok-vault-v1`, `safebyok-lockbox-v1`, `safebyok-unlock-v1`). It is also the first part of the cipherAdditionalData.        |
+| **validators**                  | The `openVault` option holding a host's own checks for its labels, user id and note (`VaultValidators`), each replacing safebyok's default. A check only checks: what passes is kept as given. |
 | **clock**, **logger**           | Two options your app may pass to `openVault`: a source of the time (`Clock`), and a place for the vault to say what it has no one to throw to (`VaultLogger`).             |
 
 ## Other credentials

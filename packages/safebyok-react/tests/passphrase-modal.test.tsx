@@ -1,15 +1,24 @@
 import { Component, type ReactNode } from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { VaultError, type Vault } from 'safebyok'
+import { ForeverMs, ForcePassphraseReentryHours, VaultError, openVault, type Vault } from 'safebyok'
+import * as TH from 'safebyok/testing'
 import { PassphraseModal } from '../src/passphrase-modal'
 
-/** Just enough of a Vault for the dialog to read its state; it never unlocks one here. */
-const vaultInState = (state: 'absent' | 'locked') => ({ getSnapshot: () => ({ state }) }) as unknown as Vault
+/** The window, in milliseconds, of a vault opened with the default forcePassphraseReentryHours. */
+const DefaultWindowMs = ForcePassphraseReentryHours * 3_600_000
+
+/**
+ * Just enough of a Vault for the dialog to read its state and window (the default, unless given);
+ * it never unlocks one here.
+ */
+const vaultInState = (state: 'absent' | 'locked', reentryWindowMs = DefaultWindowMs) => (
+  { getSnapshot: () => ({ state }), reentryWindowMs }
+) as unknown as Vault
 
 /** A locked Vault whose unlock runs `unlock`, which gets the passphrase the dialog submits. */
 const vaultUnlockingWith = (unlock: (passphrase: string) => Promise<void>) => (
-  { getSnapshot: () => ({ state: 'locked' }), unlock } as unknown as Vault
+  { getSnapshot: () => ({ state: 'locked' }), reentryWindowMs: DefaultWindowMs, unlock } as unknown as Vault
 )
 
 /** The dialog's `onDone` for tests that never submit. */
@@ -120,33 +129,50 @@ describe("PassphraseModal", () => {
   describe("how long it says an unlock lasts", () => {
     const WindowCases = [
       // regular usage:
-      [undefined,         "Stays unlocked on this device for 7 days.",         'the default window is seven days'],
-      [24,                "Stays unlocked on this device for 1 day.",          'one day is singular'],
-      [72,                "Stays unlocked on this device for 3 days.",         'whole days read as days'],
-      [8,                 "Stays unlocked on this device for 8 hours.",        'hours that do not make a day read as hours'],
-      [1,                 "Stays unlocked on this device for 1 hour.",         'one hour is singular'],
-      [36,                "Stays unlocked on this device for 36 hours.",       'a day and a half reads as hours'],
-      [0.25,              "Stays unlocked on this device for 15 minutes.",     'a fraction of an hour reads as minutes'],
+      [undefined,         "Locks on this device in 7 days.",         'the default window is seven days'],
+      [24,                "Locks on this device in 1 day.",          'one day is singular'],
+      [72,                "Locks on this device in 3 days.",         'whole days read as days'],
+      [8,                 "Locks on this device in 8 hours.",        'hours that do not make a day read as hours'],
+      [1,                 "Locks on this device in 1 hour.",         'one hour is singular'],
+      [36,                "Locks on this device in 36 hours.",       'a day and a half reads as hours'],
+      [0.25,              "Locks on this device in 15 minutes.",     'a fraction of an hour reads as minutes'],
       [Infinity,          "Stays unlocked on this device until you lock it.",  'Infinity means until locked'],
       // edge cases:
-      [1 / 60,            "Stays unlocked on this device for 1 minute.",       'one minute is singular'],
-      [0.0001,            "Stays unlocked on this device for 1 minute.",       'a window under a minute rounds up to one'],
-      [1.5,               "Stays unlocked on this device for 90 minutes.",     'an hour and a half reads as minutes'],
+      [1 / 60,            "Locks on this device in 1 minute.",       'one minute is singular'],
+      [0.0001,            "Locks on this device in 1 minute.",       'a window under a minute rounds up to one'],
+      [1.5,               "Locks on this device in 90 minutes.",     'an hour and a half reads as minutes'],
       [1e9,               "Stays unlocked on this device until you lock it.",  'a window longer than the vault can count means until locked'],
     ] as const
 
+    // A real vault that has not been created reads 'Locks on', no 'again'. Each is from a vault
+    // opened with the hours given, so the dialog reads what openVault made of them.
     for (const [hours, expected, blurb] of WindowCases) {
-      it(blurb, () => {
-        render(<PassphraseModal vault={vaultInState('locked')} reentryHours={hours} onDone={noop} />)
+      it(blurb, async () => {
+        const vault = await openVault(TH.memoryVaultOpts({ forcePassphraseReentryHours: hours }))
+        render(<PassphraseModal vault={vault} onDone={noop} />)
         expect(screen.queryByText(expected)).to.not.be.null
+        vault.close()
       })
     }
 
-    for (const hours of [0, -1, NaN]) {
-      it(`refuses ${String(hours)} hours, which no vault could have been opened with`, () => {
-        render(<Catcher><PassphraseModal vault={vaultInState('locked')} reentryHours={hours} onDone={noop} /></Catcher>)
-        expect(screen.queryByText(/caught: .*reentryHours is a number of hours greater than zero/)).to.not.be.null
-      })
-    }
+    it("reads ForeverMs, the longest window a vault keeps, as until locked", () => {
+      render(<PassphraseModal vault={vaultInState('locked', ForeverMs)} onDone={noop} />)
+      expect(screen.queryByText("Stays unlocked on this device until you lock it.")).to.not.be.null
+    })
+
+    it("drops the 'again' while the dialog creates the vault", () => {
+      render(<PassphraseModal vault={vaultInState('absent')} onDone={noop} />)
+      expect(screen.queryByText("Locks on this device in 7 days.")).to.not.be.null
+    })
+
+    it("keeps the 'again' on an ordinary unlock", () => {
+      render(<PassphraseModal vault={vaultInState('locked')} onDone={noop} />)
+      expect(screen.queryByText("Locks again on this device in 7 days.")).to.not.be.null
+    })
+
+    it("reads a millisecond short of ForeverMs as a count, not as until locked", () => {
+      render(<PassphraseModal vault={vaultInState('locked', ForeverMs - 1)} onDone={noop} />)
+      expect(screen.queryByText(/Locks again on this device in [\d,]+ minutes\./)).to.not.be.null
+    })
   })
 })

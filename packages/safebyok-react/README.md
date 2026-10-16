@@ -12,9 +12,10 @@ otherwise write itself.
   `retryOpen()` for an open that failed (below).
 * `useVaultSnapshot()` -- the live snapshot via `useSyncExternalStore`.
 * `PassphraseModal` -- the default dialog: unstyled markup under `modal-scrim` / `modal` class
-  names for the host's stylesheet to dress. It says how long an unlock lasts on the device -- "for
-  7 days", "for 15 minutes", "until you lock it" -- from the `forcePassphraseReentryHours` the
-  provider opened the vault with (a hand-rendered dialog takes it as `reentryHours`). A wrong
+  names for the host's stylesheet to dress. It says how long an unlock lasts on the device -- "Locks
+  again on this device in 7 days", "in 15 minutes", "Stays unlocked ... until you lock it"
+  ("Locks on this device ..." while it creates the vault) -- read from the vault itself (its
+  `reentryWindowMs`, the `forcePassphraseReentryHours` it was opened with). A wrong
   passphrase, or any other condition the unlock meets (storage out of reach), shows in the dialog
   in place; misuse is thrown while rendering, to your error boundary. For a vault with a passkey,
   it offers "Use a passkey" beside the passphrase field.
@@ -48,7 +49,9 @@ app answers like any other, `keyDeriver` and `deviceDB`; `vaultDB` is your backe
 answers the same bag on every call, so it is safe in a render: the provider reopens the vault
 whenever a prop changes identity. So define a `logger` or a `clock` once, outside the component (or
 memoize it): an object literal written in the props is a new one at every render, and reopens
-the vault each time.
+the vault each time. `validators` is the one exception: the provider watches each schema in the
+bag rather than the bag, so `validators={{ boxlabel: BoxlabelCheck }}` is fine in the props, so
+long as `BoxlabelCheck` itself is built once, at module level.
 
 ## When opening fails
 
@@ -57,9 +60,11 @@ What happens when `openVault` rejects depends on the error's family (safebyok's
 kind, its family, and what it means.
 
 **A condition stays in place.** Storage that cannot be reached (`storage_unavailable`), a user
-storage will not serve (`not_permitted`, as when signed out of the backend) or a stored record
-that fails verification (`corrupt_record`) arrives as `openError`, a `VaultError`, with `vault`
-still null. Show it where the vault's UI would be, and offer `retryOpen()`, which clears it and
+storage will not serve (`not_permitted`, as when signed out of the backend) or a stored vault
+bundle that fails verification (`corrupt_record`) arrives as `openError`, a `VaultError`, with
+`vault` still null. (A damaged lockbox never stops the open: the snapshot lists it with
+`damaged: true`, for your UI to offer `erase()` or a fresh `store()`; see the `safebyok`
+README's *Damaged lockboxes*.) Show it where the vault's UI would be, and offer `retryOpen()`, which clears it and
 opens again; a failed open leaves no storage watch behind, so retrying costs nothing:
 
 ```tsx

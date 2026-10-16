@@ -7,6 +7,43 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-15: a lockbox row that fails the listing's check (not JSON, a malformed note or time, a
+  record naming another boxlabel than the ckey it sits under, an unknown `format`) is listed as
+  `{ boxlabel, damaged: true }` instead of making `listBoxes` -- so every `refresh()` and
+  `openVault` -- refuse `corrupt_record`. The boxlabel comes from where the row is stored (a
+  `VaultDB`'s `doListBoxes` now hands up `{ boxlabel, lockbox }` pairs; the in-tree adapters read
+  it from the ckey, Convex from its column), never from the damaged record, and nothing else of
+  the record reaches the snapshot. A row whose boxlabel or note the vault's `validators` refuse --
+  stored under other checks, before a host narrowed them -- lists as damaged too, and `erase()`
+  reaches it by its stored name: for a box that already stands, erase checks the boxlabel only as
+  text (the ckey it rebuilds is still this scope's own). So the snapshot carries a damaged box's
+  boxlabel as stored, text the host's check refuses: one who can write storage can put any text
+  there, as a name a host renders. `store()` checks every boxlabel against
+  the host's check, so it refuses a refused name (`bad_label`, writing nothing) even over a box
+  standing under it; over a box whose note alone is refused, it writes afresh. `store()` over a
+  lockbox whose record fails validation (any listed as damaged, and one whose ciphered fields are
+  missing or malformed) now erases it (`eraseBox`, expecting only the `vault_id`) and then writes
+  a fresh lockbox expecting no revision, carrying neither its note nor its `registered_at`; two
+  steps, so a failure between them leaves the box erased. Since that erase names no revision, it
+  also removes a sound lockbox another device stored under the boxlabel after this store read the
+  damaged one (this store's write then stands in its place, as a retried store's would, but should
+  the write fail, neither stands), and an erase of the damaged box elsewhere does not stop this
+  store. What one who can write storage could already do -- erase or replace any row -- is
+  unchanged; what is new is that planting junk under a boxlabel shows the user a damaged box where
+  a refused open used to show, and that the user's next `store()` to that boxlabel clears the junk
+  rather than refusing. `read()` and `use()` still refuse a damaged box.
+
+* 2026-10-15: `erase(boxlabel)` removes a lockbox whose stored record fails validation or
+  verification (`corrupt_record`), rather than refusing it: it reads the record only to tell an
+  absent box (`absent_box`) from a present one, and a damaged record counts as present. It still
+  needs the vault unlocked, still names the boxlabel the caller gave, and still lands only in the
+  vault this device holds keys for (its `vault_id` expectation). `read()`, `use()` and the
+  background refresh still leave a damaged record in place; only an explicit erase of that
+  boxlabel deletes it.
+* 2026-10-15: a scope's `user_id` is text of 1 to 100 characters (`UserId`), checked at
+  `openVault`, by every `VaultDB` verb, and in every stored record that names a scope; a refusal
+  names the bound and never quotes the id. The Convex component's validators and its `getUserId`
+  check do not bound it themselves: the client's `VaultDB` refuses a longer one before a call is made.
 * 2026-10-15: `mask` (`safebyok/utils`) takes a whisper and returns text meant for display: its
   first and last few characters (two and four by default, at the caller's choice) and, up to
   `maxLen` (15 by default), its length. Beyond `maxLen` the result is fixed-width
@@ -222,6 +259,24 @@ security expert who knows what questions to ask.
   and erasing a vault now take only ckeys whose remainder after the prefix is a bare boxlabel
   (no colon); before, a prefix match alone listed a colon-holding user's lockboxes in another
   user's vault. Exact ckeys cannot collide.
+* 2026-10-15: the string-keyed adapters (`localVaultDB`, `idbVaultDB`, `idbDeviceDB`,
+  `memoryDeviceDB`) file rows under the JSON text of a tuple -- the row's kind, the applabel,
+  `user_id` and vaultlabel, and a lockbox's boxlabel -- from one module, `Ckeys`, now exported for
+  adapter authors. This replaces the colon-joined ckeys of the entry above. `JSON.stringify`
+  quotes and escapes every string, so two different tuples never share a ckey whatever their
+  names hold, and a vault's box prefix (its tuple's JSON up to the comma before the boxlabel)
+  begins no other vault's ckeys; tests cover every split of a string of separators into four names.
+  A name is encoded as given, never normalized: two Unicode spellings of one name are two vaults,
+  as they are two cipher bindings. Rows under the old ckeys are never read or moved: a vault
+  stored before reads as absent, and its rows, ciphertext only, stay in storage. An old remembered
+  unlock (a localUnlockKey and the vaultKey wrapped under it) would otherwise linger in IndexedDB
+  beyond the reach of `lock()` and of any expiry, so `idbDeviceDB` sweeps it: `readUnlock` and
+  `eraseUnlock` list the device shelf's ckeys and delete, unread, every one that is not an unlock
+  tuple (`Ckeys.isUnlock`). An open that finds the vault does it, and so does every lock; under
+  `idbVaultDB` or `localVaultDB`, whose first open after an upgrade finds no vault (so reads no
+  unlock), the old row waits for the first lock or the next open after an unlock. A test proves
+  no old value is fetched. `eraseAll()` clears the whole shelf. `memoryDeviceDB` keeps nothing past the
+  page, so it needs no sweep.
 * 2026-10-15: the Convex component (`packages/safebyok-convex`) authenticates in the host app,
   not inside the component (where `ctx.auth` does not exist): `SafebyokComponent.api({ getUserId })`
   builds the nine public functions the host re-exports, and each refuses unless the host's
@@ -571,3 +626,29 @@ security expert who knows what questions to ask.
   first, or it may deadlock with `eraseVault`; the DDL's comments and the README say so, and give
   the recount statement for a count gone astray. The refusal's message names the limit, never a
   boxlabel or a record.
+* 2026-10-15: a host's own checks replace ours for every name and the note
+  (`openVault({ validators })`, any Zod 4 schema), with no floor beneath them, since the ckeys
+  (JSON tuples) and the cipher binding (a JSON array) take any text. What holds: **a check only
+  checks** -- what the host passed is what is stored and bound, never the schema's output, so a
+  trimming or lowercasing schema cannot move a user to another vault or strand ciphertext; **the
+  refusal is ours**, `bad_label` or `bad_option`, naming the field and never quoting the name or
+  the schema's issues; a schema that is async or throws is refused as misuse, never taken as a
+  pass, and the refusal carries nothing of what it threw (no `cause`), as a refine that throws
+  may quote the name or note, and any text, a pasted key among it, may now be one.
+  **Every name is checked everywhere**: the vault and every `VaultDB` verb check with the same
+  bag, records read back included, so a stored row whose name or note the vault's checks refuse
+  is `corrupt_record`, not trusted; the bag never reaches storage or the Convex server, which take
+  any text. The stored records (`Lockbox`, `VaultBundle`, `DeviceUnlock`, `VaultScope`) now check
+  names only as text, as does an unlock envelope's `unlocklabel`: the `Label` grammar holds when a
+  way in is added (`addPassphrase`, `addPasskey`), and a stored envelope under another label still
+  opens, since the host's validators have no slot for it. A host's schema runs on names and the note only, never on a whisper or a
+  passphrase. A host that admits any text (`AnyTextValidators`) shows its users labels that may
+  carry bidirectional or invisible characters, a spoofing risk in its UI that is the host's to
+  mind. **Sizes**: with names and notes unbounded, the static 2 KiB allowance no longer bounds a
+  lockbox's other fields. It stays only as openVault's plan for `maxLockboxes` at the default
+  checks; `updateBox` now weighs each lockbox with its scope as the UTF-8 bytes of its JSON and
+  refuses one over the adapter's `maxRecordBytes` (`lockbox_too_large`), and each `store()`
+  refuses a lockbox heavier than the one it replaces when the vault, each lockbox counted at twice
+  `maxWhisperBytes`, 512 bytes for its fixed-size fields and its measured names and note, would
+  pass `maxVaultBytes` (`vault_full`). The vault's total is reckoned from the snapshot's listing,
+  so a vault another device filled meanwhile is caught by the backend's own limit, as before.

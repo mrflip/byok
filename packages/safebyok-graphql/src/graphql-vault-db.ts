@@ -1,5 +1,5 @@
 import { VaultDB, VaultError, VaultErrorKindVals } from 'safebyok'
-import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultErrorKind, VaultScope } from 'safebyok'
+import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, StoredLockbox, VaultBundle, VaultErrorKind, VaultScope } from 'safebyok'
 import type { AnyVariables, Client, CombinedError, OperationResult } from '@urql/core'
 import { BundleFields, ListedLockboxFields, LockboxFields, ScopeFields, recordOf, selectionOf } from './fields'
 
@@ -161,9 +161,13 @@ class UrqlVaultDB extends VaultDB {
     return recordOf(safebyokReadBox, LockboxFields)
   }
 
-  protected async doListBoxes(scope: VaultScope): Promise<unknown[]> {
+  // Each row is stored under its own boxlabel, which the server's listing carries as a field.
+  protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
     const { safebyokListBoxes } = await this.asked(ListBoxesDoc, { scope: scopeOut(scope) })
-    return (safebyokListBoxes as unknown[]).map((listed) => recordOf(listed, ListedLockboxFields))
+    return (safebyokListBoxes as unknown[]).map((listed) => {
+      const lockbox = recordOf(listed, ListedLockboxFields)
+      return { boxlabel: (lockbox as { boxlabel: string }).boxlabel, lockbox }
+    })
   }
 
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {

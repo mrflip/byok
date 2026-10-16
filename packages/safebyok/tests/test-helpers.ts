@@ -15,9 +15,10 @@ import type { VaultError, VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import { memoryStore } from '../src/string-store'
-import type { DeviceUnlock, Lockbox, PasskeyEnvelope, PasskeyProof, PassphraseEnvelope, VaultBundle, VaultScope } from '../src/types'
+import type { DamagedLockbox, DeviceUnlock, Lockbox, LockboxSummary, PasskeyEnvelope, PasskeyProof, PassphraseEnvelope, VaultBundle, VaultScope } from '../src/types'
 import type { OpenVaultOpts } from '../src/vault'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
+import { AnyTextValidators } from '../src/validators'
 
 /** A Lockbox as the core writes one: a note, or no note field at all, never an undefined one. */
 type WrittenLockbox = Omit<Lockbox, 'note'> & { note?: string }
@@ -183,6 +184,28 @@ export const boxOf = (boxlabel: string, tag: string, overrides: Partial<WrittenL
   changed_at:          Date.UTC(2026, 9, 14),
   ...overrides,
 })
+
+/**
+ * Labels the default grammar refuses and a host's validators may admit: ones differing only by a
+ * colon, a quote, a backslash, a comma or a bracket, ones that would close a JSON string early,
+ * and Hebrew, Arabic, Thai and mixed text.
+ */
+export const OddLabels = Object.freeze([
+  'main', 'main:', 'main"', String.raw`main\\`, 'main,', 'main[', 'main]', 'main","x',
+  'מפתח העבודה', 'مفتاح العمل', 'กุญแจงาน', 'Mixed: English, עברית, العربية, ไทย',
+] as const)
+
+/**
+ * A listed lockbox as the summary it should be: undefined stays undefined, and one listed as
+ * damaged fails the test, naming its boxlabel. For a test reading a summary's fields out of a
+ * listing or a snapshot, where TypeScript would otherwise have it ask after damage first.
+ *
+ * @example expect(TH.summaryOf(vault.getSnapshot().boxes[0])?.note).to.eq('work account')
+ */
+export const summaryOf = (box: LockboxSummary | DamagedLockbox | undefined): LockboxSummary | undefined => {
+  if (box?.damaged === true) { throw new Error(`The lockbox '${box.boxlabel}' is listed as damaged, where a summary was expected.`) }
+  return box
+}
 
 /**
  * What a write into {@link bundleOf}('u1')'s vault expects when its lockbox is not there yet:
@@ -587,6 +610,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
         note:          'a test box',
         registered_at: Date.UTC(2026, 9, 14),
         changed_at:    Date.UTC(2026, 9, 14),
+        damaged:       false,
       })
     })
 
@@ -596,7 +620,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await vaultDB.updateBox(scopeOf('u1'), noteless, noBoxYet)
       expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(noteless)
       const [summary] = await vaultDB.listBoxes(scopeOf('u1'))
-      expect(summary?.note).to.be.null
+      expect(summaryOf(summary)?.note).to.be.null
     })
 
     it("keeps each scope to itself: same boxlabel, two users, no collision", async () => {
@@ -609,6 +633,52 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       expect(oneBox?.revision_id).to.eq('rev-one')
       expect(twoBox?.revision_id).to.eq('rev-two')
       expect(await vaultDB.listBoxes(scopeOf('u2'))).to.have.lengthOf(1)
+    })
+
+    it("keeps apart users whose ids differ only by a colon, a quote, a backslash, a comma or a bracket", async () => {
+      const vaultDB = await makeVaultDB()
+      const userIds = ['u1', 'u1:', 'u1"', String.raw`u1\\`, 'u1,', 'u1[', 'u1]', 'u1","main']
+      for (const [ii, userId] of userIds.entries()) {
+        await vaultDB.createBundle(bundleOf(userId))
+        await vaultDB.updateBox(scopeOf(userId), boxOf('anthropic', `of-${String(ii)}`), { vault_id: `vault-id-${userId}`, revision_id: null })
+      }
+      const listEach = () => Promise.all(userIds.map((userId) => vaultDB.listBoxes(scopeOf(userId))))
+      const before = await listEach()
+      expect(before.map((listing) => listing.map((box) => summaryOf(box)?.revision_id))).to.deep.equal(userIds.map((_userId, ii) => [`rev-of-${String(ii)}`]))
+      await vaultDB.eraseVault(scopeOf('u1'), thisVault)
+      const after = await listEach()
+      expect(after.map((listing) => listing.length)).to.deep.equal([0, 1, 1, 1, 1, 1, 1, 1])
+    })
+
+    it("keeps apart vaults and boxes whose labels differ only by a colon, a quote, a backslash, a comma or a bracket, or are in any script", async () => {
+      const vaultDB = await makeVaultDB()
+      const scopes = OddLabels.map((vaultlabel) => scopeOf('u1', vaultlabel))
+      for (const [ii, scope] of scopes.entries()) {
+        await vaultDB.createBundle(bundleOf('u1', { ...scope, vault_id: `vault-id-${String(ii)}` }), AnyTextValidators)
+        await vaultDB.updateBox(scope, boxOf(OddLabels[ii] ?? '', `of-${String(ii)}`), { vault_id: `vault-id-${String(ii)}`, revision_id: null }, AnyTextValidators)
+      }
+      const listEach = () => Promise.all(scopes.map((scope) => vaultDB.listBoxes(scope, AnyTextValidators)))
+      const before = await listEach()
+      expect(before.map((listing) => listing.map((box) => [box.boxlabel, summaryOf(box)?.revision_id]))).to.deep.equal(OddLabels.map((label, ii) => [[label, `rev-of-${String(ii)}`]]))
+      await vaultDB.eraseVault(scopes[0] ?? scopeOf('u1'), { vault_id: 'vault-id-0' }, AnyTextValidators)
+      const after = await listEach()
+      expect(after.map((listing) => listing.length)).to.deep.equal(OddLabels.map((_label, ii) => (ii === 0 ? 0 : 1)))
+    })
+
+    it("keeps boxes of one vault apart, by any labels, reading back each under its own", async () => {
+      const vaultDB = await withBundle()
+      for (const [ii, boxlabel] of OddLabels.entries()) {
+        await vaultDB.updateBox(scopeOf('u1'), boxOf(boxlabel, `of-${String(ii)}`), noBoxYet, AnyTextValidators)
+      }
+      const summaries = await vaultDB.listBoxes(scopeOf('u1'), AnyTextValidators)
+      expect(summaries.map((box) => box.boxlabel)).to.have.members([...OddLabels])
+      for (const [ii, boxlabel] of OddLabels.entries()) {
+        const lockbox = await vaultDB.readBox(scopeOf('u1'), boxlabel, AnyTextValidators)
+        expect(lockbox?.revision_id).to.eq(`rev-of-${String(ii)}`)
+      }
+      await vaultDB.eraseBox(scopeOf('u1'), 'main"', thisVault, AnyTextValidators)
+      const remaining = await vaultDB.listBoxes(scopeOf('u1'), AnyTextValidators)
+      expect(remaining).to.have.lengthOf(OddLabels.length - 1)
     })
 
     it("refuses a write expecting another user's vault_id", async () => {
@@ -699,6 +769,8 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await expectRefusal(vaultDB.readBox(scopeOf('u1'), 'not:a:label'), 'bad_label')
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('Not_a_label', 'one'), noBoxYet), 'bad_label')
       await expectRefusal(vaultDB.eraseBox({ ...scopeOf('u1'), user_id: '' }, 'anthropic', thisVault), 'bad_label')
+      const overlongScope = scopeOf('u'.repeat(101))
+      await expectRefusal(vaultDB.listBoxes(overlongScope), 'bad_label')
     })
 
     it("refuses a malformed record or expectation, or a bundle under another vault_id, before storage sees it", async () => {
@@ -742,15 +814,15 @@ export const perUser = (vaultDBFor: (userId: string) => VaultDBVerbs): VaultDBVe
     maxRecordBytes: anyone.maxRecordBytes,
     maxVaultBytes:  anyone.maxVaultBytes,
     maxLockboxes:   anyone.maxLockboxes,
-    readBundle:     (scope) => as(scope).readBundle(scope),
-    createBundle:   (bundle) => as(bundle).createBundle(bundle),
-    updateBundle:   (bundle, expected) => as(bundle).updateBundle(bundle, expected),
-    readBox:        (scope, boxlabel) => as(scope).readBox(scope, boxlabel),
-    listBoxes:      (scope) => as(scope).listBoxes(scope),
-    updateBox:      (scope, lockbox, expected) => as(scope).updateBox(scope, lockbox, expected),
-    eraseBox:       (scope, boxlabel, expected) => as(scope).eraseBox(scope, boxlabel, expected),
-    eraseVault:     (scope, expected) => as(scope).eraseVault(scope, expected),
-    subscribe:      (scope, onChange) => as(scope).subscribe(scope, onChange),
+    readBundle:     (scope, validators) => as(scope).readBundle(scope, validators),
+    createBundle:   (bundle, validators) => as(bundle).createBundle(bundle, validators),
+    updateBundle:   (bundle, expected, validators) => as(bundle).updateBundle(bundle, expected, validators),
+    readBox:        (scope, boxlabel, validators) => as(scope).readBox(scope, boxlabel, validators),
+    listBoxes:      (scope, validators) => as(scope).listBoxes(scope, validators),
+    updateBox:      (scope, lockbox, expected, validators) => as(scope).updateBox(scope, lockbox, expected, validators),
+    eraseBox:       (scope, boxlabel, expected, validators) => as(scope).eraseBox(scope, boxlabel, expected, validators),
+    eraseVault:     (scope, expected, validators) => as(scope).eraseVault(scope, expected, validators),
+    subscribe:      (scope, onChange, validators) => as(scope).subscribe(scope, onChange, validators),
   }
 }
 

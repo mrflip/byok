@@ -1,5 +1,5 @@
 import { GraphQLError } from 'graphql'
-import { VaultError } from 'safebyok'
+import { AnyTextValidators, VaultError } from 'safebyok'
 import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultDB, VaultScope } from 'safebyok'
 import { BundleFields, LockboxFields, ScopeFields, recordOf } from './fields'
 
@@ -91,6 +91,9 @@ export const vaultResolvers = <ContextT>(opts: VaultResolversOpts<ContextT>): Va
   if (typeof vaultDBFor !== 'function') {
     throw new VaultError('bad_option', "vaultResolvers needs a `vaultDBFor`: (context) => the VaultDB for that request's signed-in user, such as postgresVaultDB({ client, userId }).")
   }
+  // Every verb below names AnyTextValidators: the server takes a name to be any text. The browser's
+  // vault checks names with whichever validators it was opened with, and reads back as damaged a row
+  // they refuse; the server's job is to keep each user to their own vault, whatever the names.
   /** A resolver calling `verb` on the request's VaultDB, any refusal made one a wire can carry. */
   const served = (verb: (vaultDB: ServedVaultDB, args: VaultFieldArgs) => Promise<unknown>): VaultFieldResolver<ContextT> => (
     async (_parent, args, context) => {
@@ -103,27 +106,27 @@ export const vaultResolvers = <ContextT>(opts: VaultResolversOpts<ContextT>): Va
   )
   return {
     Query: {
-      safebyokReadBundle: served((vaultDB, args) => vaultDB.readBundle(scopeIn(args))),
-      safebyokReadBox:    served((vaultDB, args) => vaultDB.readBox(scopeIn(args), args.boxlabel as string)),
+      safebyokReadBundle: served((vaultDB, args) => vaultDB.readBundle(scopeIn(args), AnyTextValidators)),
+      safebyokReadBox:    served((vaultDB, args) => vaultDB.readBox(scopeIn(args), args.boxlabel as string, AnyTextValidators)),
       // As stored records, which the browser's VaultDB validates: not listBoxes' summaries.
       safebyokListBoxes:  served((vaultDB, args) => vaultDB.listBoxRecords(scopeIn(args))),
     },
     Mutation: {
-      safebyokCreateBundle: served((vaultDB, args) => vaultDB.createBundle(bundleIn(args))),
+      safebyokCreateBundle: served((vaultDB, args) => vaultDB.createBundle(bundleIn(args), AnyTextValidators)),
       safebyokUpdateBundle: served(async (vaultDB, args) => {
-        await vaultDB.updateBundle(bundleIn(args), bundleExpectationIn(args))
+        await vaultDB.updateBundle(bundleIn(args), bundleExpectationIn(args), AnyTextValidators)
         return true
       }),
       safebyokUpdateBox: served(async (vaultDB, args) => {
-        await vaultDB.updateBox(scopeIn(args), recordOf(args.lockbox, LockboxFields) as Lockbox, lockboxExpectationIn(args))
+        await vaultDB.updateBox(scopeIn(args), recordOf(args.lockbox, LockboxFields) as Lockbox, lockboxExpectationIn(args), AnyTextValidators)
         return true
       }),
       safebyokEraseBox: served(async (vaultDB, args) => {
-        await vaultDB.eraseBox(scopeIn(args), args.boxlabel as string, eraseExpectationIn(args))
+        await vaultDB.eraseBox(scopeIn(args), args.boxlabel as string, eraseExpectationIn(args), AnyTextValidators)
         return true
       }),
       safebyokEraseVault: served(async (vaultDB, args) => {
-        await vaultDB.eraseVault(scopeIn(args), eraseExpectationIn(args))
+        await vaultDB.eraseVault(scopeIn(args), eraseExpectationIn(args), AnyTextValidators)
         return true
       }),
     },
@@ -180,7 +183,7 @@ const changesOf = (vaultDB: ServedVaultDB, scope: VaultScope): AsyncIterableIter
       unsubscribe = vaultDB.subscribe(scope, () => {
         // Room only while none waits; none, too, once the stream has closed.
         if ((controller.desiredSize ?? 0) > 0) { controller.enqueue(scope) }
-      })
+      }, AnyTextValidators)
     },
     cancel: () => { unsubscribe() },
   })

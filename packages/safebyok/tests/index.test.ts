@@ -2,18 +2,30 @@ import { fileURLToPath } from 'node:url'
 import { Rolldown } from 'tsdown'
 import { describe, expect, it } from 'vitest'
 import * as safebyok from '../src/index'
+import * as Validators from '../src/validators'
 
 describe("the package's entry point", () => {
   it("exports exactly the public surface", () => {
     expect(Object.keys(safebyok)).to.have.members([
       'Argon2idWebV1', 'argon2idDeriver', 'argon2idWebV1Deriver', 'parseKeyDeriverSpec',
       'openVault',
-      'Ciphered', 'EpochMillis', 'FarFuture', 'FarPast', 'ForcePassphraseReentryHours', 'Label', 'Lockbox', 'LockboxNote', 'LockboxSummary', 'MaxLockboxes', 'MaxUnlocks', 'MaxWhisperBytes', 'PasskeyEnvelope', 'PasskeySaltBytes', 'PassphraseEnvelope', 'UnlockEnvelope', 'UnlockMethodVals', 'VaultBundle', 'VaultScope', 'Whisper', 'wallClock',
+      'Ciphered', 'EpochMillis', 'FarFuture', 'FarPast', 'ForcePassphraseReentryHours', 'ForeverMs', 'Lockbox', 'LockboxSummary', 'MaxLockboxes', 'MaxUnlocks', 'MaxWhisperBytes', 'PasskeyEnvelope', 'PasskeySaltBytes', 'PassphraseEnvelope', 'UnlockEnvelope', 'UnlockMethodVals', 'VaultBundle', 'VaultScope', 'Whisper', 'wallClock',
+      'AnyTextValidators', 'DefaultValidators', 'Label', 'LabelPattern', 'LockboxNote', 'MaxLabelChars', 'MaxNoteChars', 'MaxUserIdChars', 'UserId',
       'VaultError', 'VaultErrorFamilyForKind', 'VaultErrorFamilyVals', 'VaultErrorKindVals', 'isVaultCondition', 'isVaultError',
-      'VaultDB', 'localVaultDB', 'memoryDeviceDB',
+      'VaultDB', 'Ckeys', 'localVaultDB', 'memoryDeviceDB',
       'domStore', 'memoryStore',
       'stableJsonify',
     ])
+  })
+
+  it("exports every check and bound safebyok/validators does, as the same objects", () => {
+    for (const [exportname, exported] of Object.entries(Validators)) {
+      expect(safebyok[exportname as keyof typeof safebyok], exportname).to.eq(exported)
+    }
+  })
+
+  it("exports the ckeys an adapter over a key-value store files rows under, as one namespace", () => {
+    expect(Object.keys(safebyok.Ckeys)).to.have.members(['bundle', 'box', 'unlock', 'boxPrefix', 'isBoxIn', 'boxlabelOf', 'isUnlock'])
   })
 })
 

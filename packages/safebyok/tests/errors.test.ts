@@ -91,6 +91,7 @@ const FamilyCases = [
   ["absent_vault",        "condition", 'a vault never made is made by the first unlock'],
   ["absent_unlock",       "condition", 'a passphrase removed on another device is a fact of syncing'],
   ["whisper_too_large",   "condition", "an oversized whisper is the user's value, not the code"],
+  ["lockbox_too_large",   "condition", "a lockbox too heavy for one record is the user's whisper and note, not the code"],
   ["vault_full",          "condition", 'a full vault tells the user to erase a lockbox'],
   ["too_many_unlocks",    "condition", 'a vault holding its limit of passphrases tells the user to remove one'],
   ["last_unlock",         "condition", 'removing the last passphrase is refused, and the user told why'],

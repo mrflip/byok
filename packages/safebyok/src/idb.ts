@@ -1,6 +1,6 @@
-import { createStore, del, entries, get, keys, set, clear, type UseStore } from 'idb-keyval'
-import { DeviceUnlock, type VaultScope } from './types'
-import { scopePath } from './vault-db'
+import { createStore, del, delMany, entries, get, keys, set, clear, type UseStore } from 'idb-keyval'
+import { DeviceUnlock } from './types'
+import * as Ckeys from './ckeys'
 import type { DeviceDB } from './device-db'
 import { parseDbName, type IdbOpts } from './idb-opts'
 import { VaultError } from './errors'
@@ -55,15 +55,14 @@ const onBell = (dbName: string, listener: () => void): (() => void) => {
   return () => { ringers.delete(listener) }
 }
 
-const unlockCkey = (scope: VaultScope) => `unlock:${scopePath(scope)}`
-
 /**
  * DeviceDB over this browser's IndexedDB: the real device storage. IndexedDB keeps the
  * DeviceUnlock record by structured clone, which is the only way a browser persists the
  * non-extractable localUnlockKey -- as a handle, never as bytes.
  *
  * A record that will not read back (damaged, or written by another version) reads as "no
- * remembered unlock" and is dropped: losing the convenience is the safe failure. Kind
+ * remembered unlock" and is dropped: losing the convenience is the safe failure. A row filed
+ * under an earlier version's ckey is deleted unread at the next read or erase. Kind
  * 'bad_option' for a `dbName` that is not non-empty text.
  *
  * @example
@@ -75,13 +74,25 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
   const shelf = () => shelfStore(dbName)
   const ring = () => { ringBell(dbName) }
 
+  // A row under any ckey but an unlock's is one an earlier version filed (`unlock:acme:u1:main`
+  // before the tuple ckeys), which nothing else would ever reach, expire or erase. It is deleted
+  // unread, so an old remembered unlock never outlives the lock that should forget it.
+  const sweepStrays = async () => {
+    const ckeys = await keys(shelf())
+    const strays = ckeys.filter((ckey) => ! Ckeys.isUnlock(ckey))
+    if (strays.length === 0) { return }
+    await delMany(strays, shelf())
+    ring()
+  }
+
   return {
     readUnlock: async (scope) => {
-      const raw: unknown = await get(unlockCkey(scope), shelf())
+      await sweepStrays()
+      const raw: unknown = await get(Ckeys.unlock(scope), shelf())
       if (raw === undefined || raw === null) { return null }
       const checked = DeviceUnlock.safeParse(raw)
       if (! checked.success) {
-        await del(unlockCkey(scope), shelf())
+        await del(Ckeys.unlock(scope), shelf())
         ring()
         return null
       }
@@ -89,20 +100,21 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
     },
 
     writeUnlock: async (unlock) => {
-      await set(unlockCkey(unlock), unlock, shelf())
+      await set(Ckeys.unlock(unlock), unlock, shelf())
       ring()
     },
 
+    // The scope's own unlock goes first, so a sweep that fails never keeps a lock from forgetting it.
     eraseUnlock: async (scope) => {
-      await del(unlockCkey(scope), shelf())
+      await del(Ckeys.unlock(scope), shelf())
       ring()
+      await sweepStrays()
     },
 
+    // The shelf holds remembered unlocks and nothing else, so forgetting them all is clearing it:
+    // any row an earlier version filed under another ckey goes too.
     eraseAll: async () => {
-      const ckeys = await keys(shelf())
-      for (const ckey of ckeys) {
-        if (typeof ckey === 'string' && ckey.startsWith('unlock:')) { await del(ckey, shelf()) }
-      }
+      await clear(shelf())
       ring()
     },
   }
