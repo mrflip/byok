@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: thread 4 underway; 1 rebuilding to a Coach ruling; 8 and 11 in review; 3, 6 and 7 filed; 5b cleared, cut once 4 files.
+**Status**: thread 4 underway; 1 rebuilding to a Coach ruling; 11 in review; 3, 6, 7 and 8 filed; 5b cleared, cut once 4 files.
 
 ## Status
 
@@ -14,7 +14,7 @@
 | 5b | store_base build | on 4 (restacked) | pending: 4 | |
 | 6 | crypto_small | main | filed #126 | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | main | filed #129 | [#129](https://github.com/mrflip/safebyok/pull/129) |
-| 8 | ci_release | main | in review | [#130](https://github.com/mrflip/safebyok/pull/130) |
+| 8 | ci_release | main | filed #130 | [#130](https://github.com/mrflip/safebyok/pull/130) |
 | 9 | sweep_small | top of the line | pending | |
 | 10 | secure_floor | on 4 | pending | |
 | 11 | pg_container | main | in review | [#131](https://github.com/mrflip/safebyok/pull/131) |
@@ -137,6 +137,12 @@
   iterator-to-array` and `prefer-promise-with-resolvers` are off in every config. G517 closed in
   part (three limits stated in the doc block). Needs the Coach's hands: the `node-compat (22)`
   ruleset entry, the Dependabot secret check, CLAUDE.md's stale *Commands* lines.
+  *Review:* `clean`, nothing changed by the reviewer. Folded in at filing: whole race schedules
+  get their own 10 s hang deadline, `ScheduleHungMs` (a single held move keeps 2 s), so the
+  real-Postgres battery (11) has room; `peerDependenciesMeta` compared with `safe-stable-stringify`
+  (a root devDependency now). **At the restack**: `ScheduleHungMs` becomes `ScheduleHungMillis`
+  (thread 3's rename). Left: the Dependabot Contents API PUT doesn't check the tip is still
+  `HEAD_SHA`; Dependabot recognized by author email only; `entriesOf` casts manifest fields.
 * *Orchestrator:* **Thread 11** (ready, [#131](https://github.com/mrflip/safebyok/pull/131)): the
   `postgres` CI job runs `e2e/tests/postgres/` (battery, eight-device races, foreign key, the
   README's hard-cap trigger at three isolation levels) on `postgres:17`; `OnRealPostgres` lists
