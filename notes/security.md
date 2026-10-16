@@ -445,7 +445,7 @@ security expert who knows what questions to ask.
   handle writes no record (erasing one it already wrote) and throws `vault_closed`. The timer is
   per handle and per tab, like the counter.
 * 2026-10-15: `VaultProvider` hands a stored record that fails verification at open
-  (`corrupt_record`) to the app in place, as `openError`, rather than throwing it to the error
+  (`corrupt_record`; since 2026-10-16, `damaged_bundle`) to the app in place, as `openError`, rather than throwing it to the error
   boundary: it is a condition, as are `storage_unavailable` and `not_permitted`. A tampered or
   damaged bundle therefore reaches the app's own UI, beside a `retryOpen` that cannot mend it; the
   React README tells hosts to branch on `openError.kind`, and the error's message carries no
@@ -529,7 +529,7 @@ security expert who knows what questions to ask.
   entry below, the wrap's whole additional data); the wrap's additional
   data is the format, scope, `vault_id`, purpose `vault_key_passkey_wrapped` and the envelope's
   public header, as for a passphrase envelope. A stored salt that is not base64url of 32 bytes
-  refuses as `corrupt_record`, checked at unlock rather than in the schema (the size budget, as for
+  refuses as `corrupt_record` (since 2026-10-16, `damaged_unlock`: see that entry), checked at unlock rather than in the schema (the size budget, as for
   passphrase salts). The core never calls WebAuthn and never stores the answer; the answer passes
   through host JavaScript as a `Uint8Array` the vault does not wipe.
 * 2026-10-15: what a passkey way in rests on. The PRF answer is a long-term secret as strong as a
@@ -567,7 +567,9 @@ security expert who knows what questions to ask.
   put Argon2's associated data into the host-pluggable `KeyDeriver` seam and every stand-in
   behind a label, for no added check; the PRF salt, which is random and already bound; and the
   stored ciphertexts and IVs, which the AEAD tag covers. An adapter's own columns are never in a
-  record, so never bound.
+  record, so never bound. Were an Argon2 setting ever to go in, it would be as a difficulty
+  measure -- a floor on the cost a vault accepts from its stored deriver label -- not as a binding
+  (the Coach, 2026-10-16).
 * 2026-10-15: any way in proves any change. A passkey's answer is accepted as proof by
   `addPassphrase`, `addPasskey` and `removeUnlock`, so whoever holds one passkey can set a new
   passphrase and remove the user's others: the vault is as strong as its weakest way in. A vault
@@ -731,3 +733,22 @@ security expert who knows what questions to ask.
   makes its users retype the passphrase (the READMEs say to open only once signed in);
   (4) an adapter that says `identity_revoked` for a passing fault locks the vault needlessly --
   the `VaultDB` contract says to use `storage_unavailable` for those.
+* 2026-10-16: **a damaged vault is said only as far as the vault can know it** (the Coach:
+  "fine-grained error messages"). AES-GCM fails alike for a wrong key and for altered
+  additional data or ciphertext, so a passphrase that opens no envelope is still
+  `wrong_passphrase`, and a passkey's answer for its envelope's own salt that does not open it is
+  still `wrong_passkey`, even when the bundle was altered in storage: each message now says the
+  stored vault may be damaged, and claims no tampering. Told apart, each its own kind: a bundle
+  that fails its schema or names another scope (`damaged_bundle`, mapped by the vault from
+  storage's `corrupt_record`, which stays `VaultDB`'s word, the original as `cause`); an envelope
+  whose salt its deriver could not have made (`damaged_unlock`); and a lockbox that fails its
+  schema, or will not open under the vault's vaultKey, or opens to no whisper (`damaged_lockbox`)
+  -- knowable because that vaultKey was proven by the way in that gave it. **A damaged envelope
+  is passed over, no longer refused for the whole vault**: the others are tried as ever (no
+  derivation is spent on it, and the outcome still does not hang on order), and
+  `safebyok-react`'s `askPasskey` likewise offers only the passkeys it can ask. Considered and
+  refused: telling a wrong passphrase from an altered envelope by re-encrypting a held vaultKey
+  under the derived key with the stored IV and comparing ciphertexts -- it works only against
+  GCM's structure, needs the vaultKey's bytes, and is a construction of our own. A bundle that
+  fails its checks cannot be destroyed through a vault handle (`openVault` refuses it, and `destroy()`
+  needs a handle); it is left in place, as every damaged remote record is.
