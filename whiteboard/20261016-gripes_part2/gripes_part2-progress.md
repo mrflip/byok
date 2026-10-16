@@ -8,8 +8,16 @@
 | 2   | convex_setup_check    | filed #102 |
 | 3   | test_hygiene          | filed #103 |
 | 4   | docs_rulings          | filed #101 |
+| 5   | matters_followups     | underway |
 
 ## What the threads have taught
+
+*Orchestrator (round 2):* #99 (the matters sprint's small_sweep: size budgets by rule,
+`justify:root`, TODO) merged under the line; restacked onto main at `5090c1a` with no conflicts,
+`pnpm justify` and `pnpm size` green at the top. The Coach answered every matter row: thread 5
+gathers the builds; `withUnlockedVault` keeps #98's behaviour; the directories wait for the Coach.
+The matters sprint's own line (#105 to #115) now edits `vault.ts`, `vault-db.ts`, `errors.ts`, the
+test helpers, Convex's refusals and `TODO.md` heavily: whichever line merges second restacks.
 
 *Orchestrator:* **restacked** into one line, biggest first: main (`b60e516`) → #104 → #103 → #102
 → #101 → #100. No conflicts; `pnpm justify` and `pnpm size` green once, at the top.
