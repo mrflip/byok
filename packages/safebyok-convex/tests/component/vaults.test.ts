@@ -585,7 +585,7 @@ describe("a large vault, within Convex's per-transaction limits", () => {
     const { t, filledCount } = await fillVault(1365, 2048)
     expect(filledCount).to.eq(1365)
     expect(await listWatchErase(t)).to.deep.equal({ listedCount: 1365, watchedCount: 1365, erased: true, leftCount: 0 })
-  }, 30_000)
+  }, 120_000) // 4 s alone, 31-34 s under CI's coverage: signing 1365 lockboxes is the work, so the allowance is sized to it
 
   it("refuses the largest lockboxes past its weight limit, and erases the vault so filled beside a bundle of a whole document", async () => {
     const { t, filledCount } = await fillVault(200, 40_444, wholeDocumentBundle())
