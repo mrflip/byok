@@ -64,3 +64,23 @@ a status tab linking to these files, not a full copy: the doc takes only inline 
 re-sending the plan whole costs more than the Coach's token budget wants. After inserting rows,
 their cells' ids follow the row id in order (row r: cells r+1, r+3, r+6; their paragraphs one
 after each), so the fill needs no read.
+
+*Orchestrator:* **housekeeping, for the Coach.** The Coach approved a first pass, but this
+session's permission check refused the deletion, so a read-only survey (2026-10-16 00:46Z) found
+what is certainly safe. Run from the Mac's or container's shell:
+
+```sh
+git -C /workspace/byok worktree remove /workspace/byok-convex
+git -C /workspace/byok worktree remove /workspace/byok-staged-publish
+git -C /workspace/byok worktree remove /workspace/byok-whisper-cap
+rm -rf /workspace/byok-comment_width /workspace/byok-convex_component /workspace/byok-unlock_envelopes /workspace/byok-react_publishable
+git -C /workspace/byok worktree prune
+```
+
+Not certain, so kept: `byok-strict_configs` (on `20261015-testing_entry`, PR #38 closed; four
+local commits not on origin, two differing in patch-id from their rebased copies);
+`byok-passkey_unlock` (work reachable only from local `*-prerestack2` tags); `byok-rebase` (matches
+no branch); `byok-test_helpers` and `byok-storage_verbs` (older committed versions only, probably
+safe); `byok-kdf_configs`, `byok-gripe_rulings`, `byok-replaceable_validators`, `byok-hkdf_info`,
+`byok-vault_amendments` (touched within six hours, or the gripes session's). Never
+`byok-restack`, `byok-docs_housekeeping` (yours, from the Mac) or `triquet`.
