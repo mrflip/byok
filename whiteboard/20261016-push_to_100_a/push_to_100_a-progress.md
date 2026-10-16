@@ -44,7 +44,9 @@
   swept (G116, G117, G119, G120, G121, G498, G140, G122, G134, G136, G137, G139, G141-G148, G522,
   G063, G513, G514, G212, G489); G499 annotated (settled by VAULTDB.md, for the Coach: sweep or
   keep on NOT YET), G516 annotated (first part settled; the `rolled_back` message still names
-  `eraseMark`, and the rest stands). The Gripefest doc stands at 132 matters.
+  `eraseMark`, and the rest stands). Thread 14 (#134): no rows of its own. Thread 10 (#136): the
+  Coach's three bullets atop the Soonish tab swept (http, passkey passcode, password strength);
+  G032 had no row left (gone with thread 6's sweep). The Gripefest doc stands at 132 matters.
 * *Orchestrator:* **Rulings carried back** (the sprint skill's §3, new this sprint): the Coach's
   rulings are in `20261016-push_to_100_a-resolutions.md` in full, and a `→ *Coach:*` line goes
   beside each question in its PR (done for #126-#130; #131's worker did its own). Lines owed to
