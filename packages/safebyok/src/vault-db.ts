@@ -2,7 +2,7 @@ import * as Z from 'zod/mini'
 import { Lockbox, LockboxSummary, MaxUnlocks, UnlockMethodVals, VaultBundle, VaultScope, type DamagedLockbox } from './types'
 import { VaultError, isVaultError } from './errors'
 import * as Names from './names'
-import type { VaultValidators } from './validators'
+import { AnyTextValidators, type VaultValidators } from './validators'
 import type { StringStore } from './string-store'
 import * as Ckeys from './ckeys'
 
@@ -90,10 +90,11 @@ export type StoredLockbox = { boxlabel: string, lockbox: unknown }
  * whole contract, line by line, and `describeVaultDB` (from `safebyok/testing`) tests it so.
  *
  * Each public verb takes the vault's `validators` last, as openVault was given them, and checks
- * every name and note with them, going in and coming back; left out, it checks with ours
- * (`DefaultValidators`). Your `do*` methods never see them: they take any text as a name. One
- * that hands each call on to another VaultDB's public verbs passes them `AnyTextValidators`, as
- * its own verbs have checked every name already.
+ * every name and note with them, going in and coming back. Left out, they are `AnyTextValidators`:
+ * any well-formed text passes. So a VaultDB that hands each call on to another VaultDB's public
+ * verbs need pass nothing, its own verbs having checked every name already, and one that forgets
+ * to never has a name refused that the vault's own checks passed. Your `do*` methods never see
+ * them: they take any text as a name.
  */
 export abstract class VaultDB {
   /**
@@ -141,7 +142,7 @@ export abstract class VaultDB {
 
   /** The vault's bundle, validated, or null when the vault has never been created. */
   async readBundle(scope: VaultScope, validators?: VaultValidators): Promise<VaultBundle | null> {
-    const asked = Names.checkScope(Names.rulesOf(validators), scope)
+    const asked = Names.checkScope(rulesFor(validators), scope)
     const raw = await fromStorage(() => this.doReadBundle(asked))
     if (raw === null || raw === undefined) { return null }
     return checkBundle(raw, asked)
@@ -152,7 +153,7 @@ export abstract class VaultDB {
    * the given one, or the one another device got in first with.
    */
   async createBundle(bundle: VaultBundle, validators?: VaultValidators): Promise<VaultBundle> {
-    const asked = Names.checkScope(Names.rulesOf(validators), bundle)
+    const asked = Names.checkScope(rulesFor(validators), bundle)
     const outgoing = checkOutgoing(VaultBundle, bundle, 'vault bundle')
     const raw = await fromStorage(() => this.doCreateBundle(outgoing))
     return checkBundle(raw, asked)
@@ -165,7 +166,7 @@ export abstract class VaultDB {
    * must carry the one in `expected`: kind 'bad_option' otherwise.
    */
   async updateBundle(bundle: VaultBundle, expected: BundleExpectation, validators?: VaultValidators): Promise<void> {
-    Names.checkScope(Names.rulesOf(validators), bundle)
+    Names.checkScope(rulesFor(validators), bundle)
     const outgoing = checkOutgoing(VaultBundle, bundle, 'vault bundle')
     const expectation = checkOutgoing(BundleExpectation, expected, 'bundle expectation')
     if (outgoing.vault_id !== expectation.vault_id) {
@@ -179,7 +180,7 @@ export abstract class VaultDB {
 
   /** One lockbox, validated, or null when there is none under that boxlabel. */
   async readBox(scope: VaultScope, boxlabel: string, validators?: VaultValidators): Promise<Lockbox | null> {
-    const rules = Names.rulesOf(validators)
+    const rules = rulesFor(validators)
     const asked = Names.checkScope(rules, scope)
     const label = Names.check(rules, 'boxlabel', boxlabel)
     const raw = await fromStorage(() => this.doReadBox(asked, label))
@@ -200,7 +201,7 @@ export abstract class VaultDB {
    * {@link DamagedLockbox} rather than refused, so one bad record never hides the rest.
    */
   async listBoxes(scope: VaultScope, validators?: VaultValidators): Promise<(LockboxSummary | DamagedLockbox)[]> {
-    const rules = Names.rulesOf(validators)
+    const rules = rulesFor(validators)
     const asked = Names.checkScope(rules, scope)
     const stored = await fromStorage(() => this.doListBoxes(asked))
     return stored
@@ -218,7 +219,7 @@ export abstract class VaultDB {
    * backend's `maxRecordBytes` is refused with kind `lockbox_too_large` before storage sees it.
    */
   async updateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation, validators?: VaultValidators): Promise<void> {
-    const rules = Names.rulesOf(validators)
+    const rules = rulesFor(validators)
     const asked = Names.checkScope(rules, scope)
     Names.check(rules, 'boxlabel', LabelledBox.safeParse(lockbox).data?.boxlabel)
     const outgoing = checkOutgoing(Lockbox, lockbox, 'lockbox')
@@ -241,7 +242,7 @@ export abstract class VaultDB {
    * nothing.
    */
   async eraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation, validators?: VaultValidators): Promise<void> {
-    const rules = Names.rulesOf(validators)
+    const rules = rulesFor(validators)
     const asked = Names.checkScope(rules, scope)
     const label = Names.check(rules, 'boxlabel', boxlabel)
     const expectation = checkOutgoing(EraseExpectation, expected, 'erase expectation')
@@ -255,7 +256,7 @@ export abstract class VaultDB {
    * otherwise -- including when the scope holds no bundle -- and erases nothing.
    */
   async eraseVault(scope: VaultScope, expected: EraseExpectation, validators?: VaultValidators): Promise<void> {
-    const asked = Names.checkScope(Names.rulesOf(validators), scope)
+    const asked = Names.checkScope(rulesFor(validators), scope)
     const expectation = checkOutgoing(EraseExpectation, expected, 'erase expectation')
     const landed = await fromStorage(() => this.doEraseVault(asked, expectation))
     if (! landed) { throw staleErase() }
@@ -302,7 +303,7 @@ export abstract class VaultDB {
    * regardless, so all it loses is news of *other* devices' writes.
    */
   subscribe(scope: VaultScope, onChange: () => void, validators?: VaultValidators): () => void {
-    const asked = Names.checkScope(Names.rulesOf(validators), scope)
+    const asked = Names.checkScope(rulesFor(validators), scope)
     checkListener(onChange)
     try {
       return this.doSubscribe(asked, onChange)
@@ -392,6 +393,12 @@ const listedOrDamaged = (rules: Names.NameRules, { boxlabel, lockbox }: StoredLo
     && (checked.data.note === undefined || Names.admits(rules, 'note', checked.data.note))
   return sound ? LockboxSummary.parse(checked.data) : { boxlabel, damaged: true }
 }
+
+/**
+ * The checks a public verb runs, from the `validators` it was handed: any well-formed text where
+ * it was handed none, so that a caller forgetting the vault's bag refuses nothing the vault passed.
+ */
+const rulesFor = (validators: VaultValidators | undefined): Names.NameRules => Names.rulesOf(validators ?? AnyTextValidators)
 
 /**
  * The adapter's half of a verb, with anything it throws that is not already a VaultError turned

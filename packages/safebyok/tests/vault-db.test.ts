@@ -6,6 +6,7 @@ import { VaultDB, jsonBytes, localVaultDB, type BundleExpectation, type EraseExp
 import { VaultError } from '../src/errors'
 import type { Lockbox, VaultBundle, VaultScope } from '../src/types'
 import * as Ckeys from '../src/ckeys'
+import { DefaultValidators } from '../src/validators'
 import * as TH from './test-helpers'
 
 /**
@@ -230,7 +231,7 @@ describe("the abstract VaultDB, around an adapter's half", () => {
     it(`lists ${blurb}`, async () => {
       const vaultDB = new MapVaultDB()
       vaultDB.rows.set(Ckeys.box(TH.scopeOf('u1'), boxlabel), record)
-      const listed = await vaultDB.listBoxes(TH.scopeOf('u1'))
+      const listed = await vaultDB.listBoxes(TH.scopeOf('u1'), DefaultValidators)
       expect(listed.map((box) => [box.boxlabel, box.damaged])).to.deep.equal(expected)
     })
   }
@@ -292,7 +293,7 @@ describe("the abstract VaultDB, around an adapter's half", () => {
 
   it("refuses to subscribe to a malformed scope", () => {
     const vaultDB = new MapVaultDB()
-    expect(() => vaultDB.subscribe({ ...TH.scopeOf('u1'), applabel: 'Acme' }, unheard)).to.throw(VaultError, /applabel/).with.property('kind', 'bad_label')
+    expect(() => vaultDB.subscribe({ ...TH.scopeOf('u1'), applabel: 'Acme' }, unheard, DefaultValidators)).to.throw(VaultError, /applabel/).with.property('kind', 'bad_label')
   })
 
   it("refuses an onChange that is not a function, so no later write meets it", () => {
@@ -307,8 +308,9 @@ const RefusedWrites = [
   // the records:
   ['bad_option', (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), unlock_epoch: 1.5 }),                              'a bundle with a fractional unlock_epoch'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), unlocks: [omit(TH.envelopeOf('passphrase'), ['vault_key_wrapped'])] } as VaultBundle), 'a bundle whose envelope is missing its wrapped vaultKey'],
-  ['bad_label',  (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), applabel: 'Acme' }),                               'a bundle whose applabel breaks the label rules'],
-  ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { note: 'n'.repeat(257) }), TH.noBoxYet), 'a lockbox whose note no read would accept'],
+  ['bad_label',  (vaultDB: VaultDB) => vaultDB.createBundle({ ...TH.bundleOf('u1'), applabel: 'Acme' }, DefaultValidators),            'a bundle whose applabel breaks the label rules'],
+  ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { note: 'n'.repeat(257) }), TH.noBoxYet, DefaultValidators), 'a lockbox whose note no read would accept'],
+  ['bad_label',  (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('key\u{D83D}', 'one'), TH.noBoxYet),                  'a lockbox whose boxlabel is half of an emoji, whatever the checks'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { changed_at: 1_792_022_400 }), TH.noBoxYet), 'a lockbox time in epoch seconds'],
   ['bad_label',  (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), undefined as unknown as Lockbox, TH.noBoxYet),               'no lockbox at all'],
   // the expectations:
@@ -520,21 +522,31 @@ describe("the abstract VaultDB, with the vault's validators", () => {
     expect(await vaultDB.readBundle(scriptScope, AnyScript)).to.be.null
   })
 
-  it("checks with ours when handed none, refusing those same names before its adapter's half sees them", async () => {
+  it("checks with ours when handed them, refusing those same names before its adapter's half sees them", async () => {
     const vaultDB = new MapVaultDB()
-    await TH.expectRefusal(vaultDB.readBundle(scriptScope), 'bad_label')
-    await TH.expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'مفتاح العمل'), 'bad_label')
-    await TH.expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('مفتاح العمل', 'one'), TH.noBoxYet), 'bad_label')
+    await TH.expectRefusal(vaultDB.readBundle(scriptScope, DefaultValidators), 'bad_label')
+    await TH.expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'مفتاح العمل', DefaultValidators), 'bad_label')
+    await TH.expectRefusal(vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('مفتاح العمل', 'one'), TH.noBoxYet, DefaultValidators), 'bad_label')
     expect(vaultDB.rows.size).to.eq(0)
+  })
+
+  it("admits any well-formed text when handed none, so a wrapper that forgets the vault's bag refuses nothing the vault passed", async () => {
+    const vaultDB = new MapVaultDB()
+    await vaultDB.createBundle({ ...TH.bundleOf('u1'), ...scriptScope })
+    await vaultDB.updateBox(scriptScope, TH.boxOf('مفتاح العمل', 'one', { note: 'n'.repeat(500) }), TH.noBoxYet)
+    const lockbox = await vaultDB.readBox(scriptScope, 'مفتاح العمل')
+    expect(lockbox?.note).to.have.lengthOf(500)
+    expect(await vaultDB.listBoxes(scriptScope)).to.have.lengthOf(1)
+    await TH.expectRefusal(vaultDB.readBox(scriptScope, 'مفتاح\u{D800}'), 'bad_label')
   })
 
   it("refuses, as 'corrupt_record', a stored lockbox whose note the validators refuse when read, and lists it as damaged", async () => {
     const vaultDB = new MapVaultDB()
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { note: 'n'.repeat(500) }), TH.noBoxYet, AnyScript)
-    const err = await TH.expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'anthropic'), 'corrupt_record')
+    const err = await TH.expectRefusal(vaultDB.readBox(TH.scopeOf('u1'), 'anthropic', DefaultValidators), 'corrupt_record')
     expect(err.message).to.include('validators')
-    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.deep.equal([{ boxlabel: 'anthropic', damaged: true }])
+    expect(await vaultDB.listBoxes(TH.scopeOf('u1'), DefaultValidators)).to.deep.equal([{ boxlabel: 'anthropic', damaged: true }])
     // AnyScript admits that note, but no empty boxlabel: a box stored under one lists as damaged.
     const [admitted] = await vaultDB.listBoxes(TH.scopeOf('u1'), AnyScript)
     expect(TH.summaryOf(admitted)?.note).to.have.lengthOf(500)

@@ -66,9 +66,10 @@ makes for itself. Any option you pass after the spread replaces the default it n
   window onto its rows for a debug panel. The IndexedDB vault store, `idbVaultDB`, is a package
   of its own, `safebyok-indexeddb`.
 * `safebyok/validators` -- the checks for names and notes (`Label`, `UserId`, `LockboxNote`,
-  `DefaultValidators`, `AnyTextValidators`), their bounds (`MaxLabelChars`, `LabelPattern`,
-  `MaxUserIdChars`, `MaxNoteChars`) and the `Whisper` and `EpochMillis` schemas, for a form, a
-  server or another library to check what the vault will. All are in the main entry too.
+  `DefaultValidators`, `AnyTextValidators`) and their bounds (`MaxLabelChars`, `LabelPattern`,
+  `MaxUserIdChars`, `MaxNoteChars`), for a form, a server or another library to check what the
+  vault will, at a few kB. All are in the main entry too, with the record schemas (`Whisper`,
+  `EpochMillis` and the rest).
 
 `openVault` takes its `keyDeriver` and `deviceDB` from you, with no default behind them. A
 default would be imported by `openVault` itself, so every app would ship it, used or not: a
@@ -82,8 +83,10 @@ marked `sideEffects: false`: what you never import never ships.
 
 By default a label (`applabel`, `vaultlabel`, `boxlabel`) is lowercase words of letters and
 digits joined by single underscores, 2 to 40 characters (`Label`); a `userId` is text of 1 to 100
-characters (`UserId`); and a note is text of at most 256 characters (`LockboxNote`). That suits
-API keys. A host that wants more -- labels in Hebrew, Arabic or Thai, a password manager's
+characters (`UserId`); and a note is text of at most 256 characters, with no control characters
+but tab and newline (`LockboxNote`). That suits API keys. Every default, `AnyTextValidators`
+included, refuses text that is not well-formed Unicode: a lone surrogate, half of a character such
+as an emoji, which text cut off mid-character holds and which storage such as Convex refuses. A host that wants more -- labels in Hebrew, Arabic or Thai, a password manager's
 long notes, its own auth's id shape -- passes its own Zod schemas as `validators`, and each
 **replaces** ours outright:
 
@@ -105,8 +108,13 @@ await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team acc
   makes of it: a name is bound into the ciphertext and names its rows, so a schema that trims or
   lowercases would otherwise send the same user to another vault.
 * **The refusal is the vault's own**: kind `bad_label` (`bad_option` for a note), naming the
-  field, never quoting the name or your schema's issues. A schema must check synchronously; one
-  that is async or throws is refused as `bad_option`, carrying nothing of what it threw.
+  field, never quoting the name or your schema's issues. Where one of our checks refused, it says
+  what was wrong (too long, a control character, not well-formed); your schema's, it names only.
+  A schema must check synchronously; one that is async or throws is refused as `bad_option`,
+  carrying nothing of what it threw.
+* **A misspelt field is refused**, as `bad_option`: `boxLabel` would otherwise leave the default
+  check quietly in place. `checkValidators(bag)` runs that check alone, for a binding or wrapper
+  that takes the bag apart (`VaultProvider` does).
 * **Every name is checked everywhere**, records read back included. Narrow a check later and a
   lockbox stored under a name or note the new one refuses is listed as damaged (see *Damaged
   lockboxes*). `erase()` still reaches it by the name it was stored under; `store()` refuses a
@@ -142,8 +150,9 @@ are part of the stored format: use these, not a join of your own, and every vers
 rows.
 
 Your `do*` methods take any text as a name: the public verbs check every name and note, with the
-vault's `validators`, which each takes as its last argument. An adapter that hands its calls on
-to another VaultDB's public verbs passes them `AnyTextValidators`, as its own have checked.
+vault's `validators`, which each takes as its last argument. Handed none, a verb admits any
+well-formed text (`AnyTextValidators`), so an adapter that hands its calls on to another VaultDB's
+public verbs need pass nothing, its own having checked.
 
 ## Key derivation
 
