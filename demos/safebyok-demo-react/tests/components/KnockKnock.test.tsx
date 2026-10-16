@@ -41,8 +41,7 @@ describe("KnockKnock", () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
     // Unlocked on this device first, so a save would need no passphrase dialog to land.
-    const outside = await world.openUnlocked()
-    outside.close()
+    await world.openUnlocked()
     world.renderInVault(<KnockKnock />)
     fireEvent.click(await screen.findByRole('button', { name: 'replace it' }))
     fireEvent.change(screen.getByPlaceholderText('sk-ant-…'), { target: { value: 'sk-ant-test-replaced' } })
@@ -53,7 +52,6 @@ describe("KnockKnock", () => {
     const vault = await world.open()
     expect(vault.getSnapshot().state).to.eq('unlocked')
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
-    vault.close()
   })
 
   it("tells the joke Claude tells, the key going to Anthropic and nowhere on the page", async () => {
