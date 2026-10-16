@@ -1,8 +1,7 @@
 # Thread 13: rotation_design (2026-10-16)
 
 Branch `20261016-rotation_design`, PR [#105](https://github.com/mrflip/safebyok/pull/105), cut
-from main at `b60e516` (the gripes line landed; the worktree was fast-forwarded to it after an
-interruption). Documents only. Justify: green; every package's suite passes (core 1132, convex
+from main at `b60e516`, then stacked on #97 (the line main → #96 → #99 → #98 → #97) at filing. Documents only. Justify: green; every package's suite passes (core 1132, convex
 282, postgres 162, graphql 159, demo 131, root 123, indexeddb 108, react 73, argon2-wasm 44).
 
 * **Built**:
@@ -18,7 +17,7 @@ interruption). Documents only. Justify: green; every package's suite passes (cor
     * the rollback check;
     * an API sketch;
     * the NOTYET with the platform rules;
-    * the thread breakdown (threads 14 to 17);
+    * the thread breakdown (threads 14 and 18 to 20, as the orchestrator numbered them);
     * the security notes the build owes;
     * open questions.
   * `TODO.md`:
@@ -62,10 +61,11 @@ interruption). Documents only. Justify: green; every package's suite passes (cor
     agents don't edit. Nothing was struck.
   * The first-emit ruling's design.md is `whiteboard/20261014-convex/design.md`, not under
     `packages/safebyok-convex`.
-  * [#99](https://github.com/mrflip/safebyok/pull/99) adds a *Revocation and server signing*
-    bullet to TODO's *Open from big_feats*. Once both have landed, that bullet should point at
-    this design: whoever lands second rewrites it in one line.
+  * [#99](https://github.com/mrflip/safebyok/pull/99)'s *Revocation and server signing* bullet in
+    TODO's *Open from big_feats* now points at this design (a `plan:` commit at filing, once
+    stacked on it).
 * **For the Coach**:
-  * the design's open questions 1 (keep only the proven ways in, or a key pair per way in) and 7
+  * the design's open questions 1 (keep only the proven ways in, or a key pair per way in; it
+    goes to the Coach as an Open Matters row and gates thread 19, not this PR) and 7
     (the reading of Apple's and Google's identifier rules);
   * the new names (5) and the `rolled_back` kind (3).

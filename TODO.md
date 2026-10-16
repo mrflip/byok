@@ -108,9 +108,8 @@ package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
   the sprint doc's Open Matters tab:
   <https://claude.ai/code/artifact/5a4d1c6c-b0ef-4483-becd-1a4dde21fc94>.
 * **Revocation and server signing.** Removing an unlock envelope is not revocation today (the vaultKey
-  never rotates; `notes/security.md`); what revocation should mean, and whether the server signs,
-  are open. This matter is under discussion in the sprint doc's Open Matters tab:
-  <https://claude.ai/code/artifact/5a4d1c6c-b0ef-4483-becd-1a4dde21fc94>.
+  never rotates; `notes/security.md`). Ruled: rotate the vaultKey, no server signing; designed in
+  `whiteboard/20261016-rotation/rotation-design.md`, built as sprint matters' threads 14 and 18-20.
 * **`listBoxRecords`** ([#73](https://github.com/mrflip/safebyok/pull/73), used by
   [#78](https://github.com/mrflip/safebyok/pull/78)): the recommendation is to move it into the
   `VaultDB` base class, so no store writes it (`human/20261015-sprint_big_feats_rulings.md`). It
@@ -502,7 +501,7 @@ implementation.
   compromised one: its passkeys removed, its remembered unlock void, and nothing it holds reading
   what is written next. Vault-key rotation does the cryptography (designed in
   `whiteboard/20261016-rotation/rotation-design.md`, built as sprint matters' threads 14 and
-  on); what waits is the UX, a device list, and, if the Coach wants rotation not to sign every
+  18-20); what waits is the UX, a device list, and, if the Coach wants rotation not to sign every
   other device out, a key pair per way in (that design's open question 1). The data it needs goes
   in with rotation: a random `device_id` per vault per device (never derived from the device,
   as Apple's and Google's rules require), recorded on every envelope it adds.

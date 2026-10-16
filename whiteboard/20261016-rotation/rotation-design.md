@@ -2,9 +2,9 @@
 
 2026-10-16, sprint matters thread 13 (documents only). Written against main at `b60e516`: the
 gripes line has landed (rows keyed by tuple ckeys, #92; damaged lockboxes, #93; host validators,
-#95). Its thread breakdown (section 11) becomes threads 14 and on of sprint matters.
+#95). Its thread breakdown (section 11) becomes threads 14 and 18 to 20 of sprint matters.
 
-**Who reads this.** The builder of threads 14 to 17 should read all of it. The Coach can stop
+**Who reads this.** The builder of threads 14 and 18 to 20 should read all of it. The Coach can stop
 after section 2, which holds the one decision this design takes that the matter row didn't
 foresee. Thread 11's author (the `VaultDB` contract) needs section 5. Thread 10's author
 (`identity_revoked`) needs the last two rows of the table in section 7.
@@ -76,7 +76,7 @@ here. It can be added later as a new envelope field without undoing anything thi
 These are pre-1.0 changes, so they come with no compatibility: a vault written before them reads
 as corrupt (CLAUDE.md, *What the package promises*), and the changeset says so. Every new field in
 an envelope's or a lockbox's header is bound by #97's whole-header binding as soon as it exists.
-That needs no change to the binding code, provided #97 has landed first (it is still open).
+That needs no change to the binding code, provided #97 has landed first (this design stands on it in the stack).
 
 | Record | New field | What it is |
 | --- | --- | --- |
@@ -237,7 +237,7 @@ anew) starts a new mark. Bundles can't be ordered across vaults, so a server ser
 destroyed vault in place of the current one is not caught. That is a security.md entry, not a
 fix.
 
-## 9. API sketch (thread 16 settles the details)
+## 9. API sketch (thread 19 settles the details)
 
 ```ts
 /**
@@ -328,10 +328,10 @@ per device, kept only in the deviceDB.** It is never derived from anything about
   the new key for every device that stays, so a lockout wouldn't sign every other device out.
 * **A `lockOutDevice(deviceId, keep)` sugar** over `rotateVaultKey`.
 
-## 11. Thread breakdown (threads 14 and on)
+## 11. Thread breakdown (threads 14 and 18 to 20)
 
 Each thread is cut after the one before it files. All of them come after the gripes line (landed)
-and after #97 (whole-header binding, still open). Thread 14 also comes after thread 11 (the
+and after #97 (whole-header binding; this PR is stacked on it). Thread 14 also comes after thread 11 (the
 contract).
 
 * **14. rotation_shape (opus).** The core changes in section 3, plus the expectation in section 5,
@@ -347,19 +347,19 @@ contract).
   No rotation verb yet: every vault stays at epoch 1, but every field and check is in place. It
   also updates the VOCABULARY.md names, the security.md entries (section 12) and a changeset
   (stored shape: old vaults read as corrupt). `vault:` / `storage:` / `crypto:`.
-* **15. rotation_adapters (sonnet).** Stacked on 14. The one comparison in section 5.2 in each of
+* **18. rotation_adapters (sonnet).** Stacked on 14. The one comparison in section 5.2 in each of
   IndexedDB, Convex (in its component's mutations and schema), Postgres (its `WHERE`, any
   migration text) and GraphQL (its resolver recipe and README), with the battery green for each.
   Thread 14 can mark the new battery test `.todo` for these four while it stands alone, or the two
   threads file as one stack. Watch for thread 12 (Postgres soft cap) and wave 2 (threads 5 to 7)
   touching the same adapters. `storage:`.
-* **16. rotation_verb (opus).** `rotateVaultKey` (section 9), the walk and its resumption on
+* **19. rotation_verb (opus).** `rotateVaultKey` (section 9), the walk and its resumption on
   unlock and refresh, and reads through the prior key (section 6). Every row of section 7 gets a
   test, using a fault-injecting `VaultDB` for crashes partway, two handles over one store for the
   races, and a stale handle whose write must be refused. There is also a test that a removed
   passphrase, given the old bundle, opens no lockbox written or re-encrypted after the commit.
   `vault:` / `crypto:`.
-* **17. rotation_docs (sonnet).** The core README gets *Rotating the vaultKey*: what it promises,
+* **20. rotation_docs (sonnet).** The core README gets *Rotating the vaultKey*: what it promises,
   what it doesn't (copied ciphertext; replace the API key itself), and that every other device
   asks again. Also: the adapter author's note on `vault_key_epoch`, a demo button ("remove and
   lock out") over the passphrase dialog, and the React README. `docs:` / `demo:`.
@@ -383,7 +383,7 @@ contract).
 
 ## 13. Open questions
 
-1. **(For the Coach, significant for thread 16.)** Should rotation keep only the ways in proven
+1. **(For the Coach, significant for thread 19.)** Should rotation keep only the ways in proven
    during it (recommended, and designed here), or should every way in carry a key pair, so that
    rotation re-wraps for all of them unasked (HPKE, a new construction, section 2)?
 2. Should `removeUnlock` gain a `{ rotate: true }` option, or stay the cheap, non-revoking removal
