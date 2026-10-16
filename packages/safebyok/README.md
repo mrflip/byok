@@ -444,7 +444,7 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
 | `not_permitted`       | the storage backend refused the signed-in user, still the vault's own, this one call | Tell the user they may not; signing in again will not help |
 | `identity_revoked`    | the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in. The vault has locked itself (see *When the user signs out*) | Have the user sign in again, then open the vault for whoever that is |
-| `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause` |
+| `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause`, unless it may quote the call (Convex's) |
 
 `openVault` itself can refuse with `bad_option`, `bad_label`, and, as it reads the vault from
 storage, `storage_unavailable`, `not_permitted`, `identity_revoked` or `damaged_bundle` (a

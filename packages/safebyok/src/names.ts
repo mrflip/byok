@@ -1,5 +1,6 @@
 import * as Z from 'zod/mini'
 import { VaultError } from './errors'
+import * as Sanitizer from './sanitizer'
 import { VaultScope } from './types'
 import { AnyTextValidators, DefaultValidators, type NameValidator, type VaultValidators } from './validators'
 
@@ -108,8 +109,8 @@ export const checkScope = (rules: NameRules, scope: unknown): VaultScope => {
 const verdictOf = (rules: NameRules, field: NameField, candidate: string) => {
   try {
     return Z.safeParse(rules[field], candidate)
-  } catch {
-    throw new VaultError('bad_option', `The ${field} check in openVault's validators threw rather than answering: each must be a Zod schema that checks synchronously, and returns its refusals rather than throwing them.`)
+  } catch (err) {
+    throw Sanitizer.refusalFor(err, 'bad_option', `The ${field} check in openVault's validators threw rather than answering: each must be a Zod schema that checks synchronously, and returns its refusals rather than throwing them.`)
   }
 }
 

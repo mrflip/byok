@@ -106,8 +106,9 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
 * **Refusals** are `VaultError`s, of the kinds in the *Errors* tables of the
   [`safebyok` README](../safebyok/README.md), which say what each means and what a host does.
   The Convex functions throw two, `identity_revoked` and `vault_full`; a write that came too late is
-  a `stale_write`; and `storage_unavailable` is anything else Convex reported, with Convex's own
-  error as its `cause`.
+  a `stale_write`; and `storage_unavailable` is anything else Convex reported. It carries nothing
+  of Convex's own error, which on a dev deployment may quote the call's arguments (names, notes,
+  ciphertext): your deployment's logs have it.
 * **Offline, a call waits** for the connection, as every Convex call does, rather than failing.
   Convex resends a mutation when it reconnects, so a write may land after any timeout you set:
   show progress, but don't report it failed.

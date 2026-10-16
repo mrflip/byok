@@ -12,7 +12,7 @@ describe("the package's entry point", () => {
       'Ciphered', 'EpochMillis', 'FarFuture', 'FarPast', 'ForcePassphraseReentryHours', 'ForeverMs', 'Lockbox', 'LockboxSummary', 'MaxLockboxes', 'MaxUnlocks', 'MaxWhisperBytes', 'PasskeyEnvelope', 'PasskeySaltBytes', 'PassphraseEnvelope', 'UnlockEnvelope', 'UnlockMethodVals', 'VaultBundle', 'VaultScope', 'Whisper', 'wallClock',
       'AnyTextValidators', 'DefaultValidators', 'Label', 'LabelPattern', 'LockboxNote', 'MaxLabelChars', 'MaxNoteChars', 'MaxUserIdChars', 'UserId', 'checkValidators',
       'VaultError', 'VaultErrorFamilyForKind', 'VaultErrorFamilyVals', 'VaultErrorKindVals', 'isVaultCondition', 'isVaultError',
-      'VaultDB', 'Ckeys', 'localVaultDB', 'memoryDeviceDB',
+      'VaultDB', 'Ckeys', 'Sanitizer', 'localVaultDB', 'memoryDeviceDB',
       'domStore', 'memoryStore',
       'stableJsonify',
     ])
@@ -26,6 +26,10 @@ describe("the package's entry point", () => {
 
   it("exports the ckeys an adapter over a key-value store files rows under, as one namespace", () => {
     expect(Object.keys(safebyok.Ckeys)).to.have.members(['bundle', 'box', 'unlock', 'boxPrefix', 'isBoxIn', 'boxlabelOf', 'isUnlock'])
+  })
+
+  it("exports the sanitizer an adapter throws through in place of a foreign error, as one namespace", () => {
+    expect(Object.keys(safebyok.Sanitizer)).to.have.members(['refusalFor'])
   })
 })
 

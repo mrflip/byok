@@ -790,3 +790,14 @@ security expert who knows what questions to ask.
   gets text-only checks, which is what the shipped server recipes already passed. The same holds
   for `eraseDamagedVault` and its verb. A `damaged_lockbox` refusal no longer quotes the boxlabel,
   as `absent_box` already did not.
+* 2026-10-16: **a foreign error that may quote stays behind.** `Sanitizer.refusalFor`
+  (`src/sanitizer.ts`, exported as `Sanitizer`) is the one place that decides what of a foreign
+  error rides along on the refusal thrown in its place: today, nothing -- no `cause`, no text, no
+  property. Two callers: a host's schema that throws (`bad_option`, as since #95), and
+  `convexVaultDB`, which now throws every Convex failure that is not one of safebyok's own
+  refusals as `storage_unavailable` carrying nothing of Convex's error. That error is a plain
+  `Error` whose text, on a dev deployment, quotes the call's arguments (scope, names, notes,
+  ciphertext; never plaintext or keys), and the client cannot tell a validator's refusal from any
+  other server error but by its text, so all of them are dropped. The cost is debugging: the
+  deployment's logs keep the full error. The other adapters still carry their client's error as
+  `cause`, as above.
