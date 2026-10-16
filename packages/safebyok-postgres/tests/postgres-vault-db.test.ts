@@ -17,8 +17,8 @@ TH.bootDatabaseFirst()
 const devicesOverPGlite: TH.MakeVaultDBDevices = async (turnstile) => {
   const db = await TH.emptyDatabase()
   return ({ maxLockboxes }) => {
-    const client = TH.throughTurnstile(turnstile, db, ['query'])
-    return TH.perUser((userId) => postgresVaultDB({ client, userId, listen: TH.listenOn(db), maxLockboxes }))
+    const client = TH.throughTurnstile(turnstile, db, ['query', 'listen'])
+    return TH.perUser((userId) => postgresVaultDB({ client, userId, listen: (channel, onNotify) => client.listen(channel, onNotify), maxLockboxes }))
   }
 }
 
@@ -561,17 +561,31 @@ describe("postgresVaultDB, in trouble", () => {
 })
 
 const throwsClosed = () => { throw new Error('already closed') }
+const unlistened = () => undefined
 const rejectsClosed = () => Promise.reject(new Error('already closed'))
 
 /** Listens whose unlisten fails, at once or later. */
 const UnlistenCases: PostgresListen[] = [() => throwsClosed, () => rejectsClosed]
 
 describe("postgresVaultDB, subscribe", () => {
+  it("calls onChange once as its listen begins, so its subscriber reads what landed meanwhile", async () => {
+    const gate = TH.makeGate()
+    const listen: PostgresListen = async () => {
+      await gate.pass()
+      return unlistened
+    }
+    const { heard, onChange } = TH.changeCounter()
+    const unsubscribe = postgresVaultDB({ client: TH.failingClient(new Error('unused')), userId: 'u1', listen }).subscribe(u1, onChange)
+    await gate.reached
+    expect(heard.count).to.eq(0)
+    gate.release()
+    await TH.eventually(() => heard.count === 1)
+    unsubscribe()
+  })
+
   it("calls onChange after a write to the vault from another request, and not after its unsubscribe", async () => {
     const db = await TH.emptyDatabase()
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.requestFor(db, 'u1').subscribe(u1, onChange)
-    await TH.wakeupAtNextTick()
+    const { heard, unsubscribe } = await TH.liveWatch(TH.requestFor(db, 'u1'), u1)
     await TH.requestFor(db, 'u1').createBundle(TH.bundleOf('u1'))
     await TH.eventually(() => heard.count === 1)
     unsubscribe()
@@ -582,9 +596,7 @@ describe("postgresVaultDB, subscribe", () => {
 
   it("hears nothing of another user's vault, nor of another vault of the same user", async () => {
     const db = await TH.emptyDatabase()
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.requestFor(db, 'u1').subscribe(u1, onChange)
-    await TH.wakeupAtNextTick()
+    const { heard, unsubscribe } = await TH.liveWatch(TH.requestFor(db, 'u1'), u1)
     await TH.requestFor(db, 'u2').createBundle(TH.bundleOf('u2'))
     await TH.requestFor(db, 'u1').createBundle({ ...TH.bundleOf('u1'), ...TH.scopeOf('u1', 'spare') })
     await TH.requestFor(db, 'u1').createBundle(TH.bundleOf('u1'))
@@ -613,9 +625,7 @@ describe("postgresVaultDB, subscribe", () => {
   it("calls onChange on an empty notification: a scope too long for a payload", async () => {
     const db = await TH.emptyDatabase()
     const longUserId = 'u'.repeat(8000)
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.requestFor(db, longUserId).subscribe(TH.scopeOf(longUserId), onChange, AnyTextValidators)
-    await TH.wakeupAtNextTick()
+    const { heard, unsubscribe } = await TH.liveWatch(TH.requestFor(db, longUserId), TH.scopeOf(longUserId), AnyTextValidators)
     await TH.requestFor(db, longUserId).createBundle(TH.bundleOf(longUserId), AnyTextValidators)
     await TH.eventually(() => heard.count > 0)
     expect(heard.count).to.eq(1)

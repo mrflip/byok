@@ -268,7 +268,8 @@ works whole without either.
 * **Without them** (the baseline), `subscribe` never calls. The vault refreshes after its own
   writes, and learns of another device's writes the next time it reads.
 * **With them**, `subscribe` calls each subscriber after every write to their vault, from any
-  server and any device. Run **`VaultNotifySql`** (also shipped as `vault-notify.sql`) once, after
+  server and any device, and once as its listen begins, so a write made while it was starting is
+  read too. Run **`VaultNotifySql`** (also shipped as `vault-notify.sql`) once, after
   `VaultTablesSql`, and hand `postgresVaultDB` a `listen`:
 
 ```ts

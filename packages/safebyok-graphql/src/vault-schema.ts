@@ -151,7 +151,7 @@ type Mutation {
 }
 
 type Subscription {
-  """The vault's scope, after every write to the vault, from any server and any device."""
+  """The vault's scope whenever the vault may have changed: after every write to it, from any server and any device."""
   safebyokVaultChanged(scope: SafebyokVaultScopeInput!): SafebyokVaultScope!
 }
 `

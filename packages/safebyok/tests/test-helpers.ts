@@ -1498,11 +1498,11 @@ export const vaultDBTimingChecks = (makeVaultDB: () => VaultDBVerbs | Promise<Va
     if (! makeCappedVaultDB) { throw new Error('vaultDBTimingChecks ran a lockbox limit check with no makeCappedVaultDB.') }
     return await makeCappedVaultDB(maxLockboxes)
   }
-  /** Two devices over one fresh backend, its turnstile never held: for a check that is no race. */
-  const twoDevices = async (deviceOpts: VaultDBDeviceOpts = {}): Promise<[VaultDBVerbs, VaultDBVerbs]> => {
+  /** Two devices over one fresh backend, through `turnstile` (by default one never held): for a check that is no race. */
+  const twoDevices = async (turnstile: Turnstile = openTurnstile): Promise<[VaultDBVerbs, VaultDBVerbs]> => {
     if (! makeDevices) { throw new Error('vaultDBTimingChecks ran a check across devices with no makeDevices.') }
-    const deviceFor = await makeDevices(openTurnstile)
-    return [deviceFor(deviceOpts), deviceFor(deviceOpts)]
+    const deviceFor = await makeDevices(turnstile)
+    return [deviceFor({}), deviceFor({})]
   }
   /** A watcher and a writer over one fresh backend: one adapter as both. */
   const sameAdapterTwice = async (): Promise<[VaultDBVerbs, VaultDBVerbs]> => {
@@ -1731,6 +1731,24 @@ export const vaultDBTimingChecks = (makeVaultDB: () => VaultDBVerbs | Promise<Va
       runs:  pushes && devices,
       check: () => expectEachWriteHeard(twoDevices),
     },
+    push_from_the_start: {
+      line:  '6.1',
+      title: `hears a write made ${devices ? 'on another device ' : ''}while its watch is still starting, a watch that starts late calling once it is live`,
+      runs:  pushes,
+      check: async () => {
+        const keeper = makeTurnstile()
+        const [watcher, writer] = await (devices ? twoDevices(keeper.turnstile) : sameAdapterTwice())
+        await writer.createBundle(bundleOf('u1'))
+        // A watch whose start is a round trip is held there while the write lands; one that starts
+        // as subscribe returns, or not through the turnstile, never comes to the gate.
+        const gate = keeper.holdAt(1)
+        const watch = readingWatch(watcher)
+        await Promise.race([gate.reached, ticks(WatchStartTicks)])
+        keeper.holdNone()
+        await expectHeard(watch, writer, () => writer.updateBox(scopeOf('u1'), boxOf('anthropic', 'anthropic'), noBoxYet), gate.release)
+        watch.unsubscribe()
+      },
+    },
     push_ends_on_unsubscribe: {
       line:  '6.1',
       title: "calls an unsubscribed onChange no more, through several writes, however often it unsubscribes, while another watch hears each",
@@ -1842,19 +1860,23 @@ const readingWatch = (watcher: VaultDBVerbs) => {
   return { tally, reads, unsubscribe }
 }
 
+/** How many ticks a watch has to come to the turnstile as it starts, for a check to hold it there. */
+const WatchStartTicks = 20
+
 /** How long a watch has to hear a write before a push test calls it unheard. */
 const HeardWithinMs = 2000
 
 /**
  * That a write made by `write`, through `writer`, is heard by `watch`: some call made after the
- * write began reads the vault as it stands after it. A call before the write, or one whose read
+ * write began reads the vault as it stands after it. `onWritten` runs once the write has landed. A call before the write, or one whose read
  * ran before the write landed, never finds that, since each write in a push test leaves the vault
  * unlike it ever stood before.
  */
-const expectHeard = async (watch: ReturnType<typeof readingWatch>, writer: VaultDBVerbs, write: () => Promise<unknown>) => {
+const expectHeard = async (watch: ReturnType<typeof readingWatch>, writer: VaultDBVerbs, write: () => Promise<unknown>, onWritten = unheard) => {
   watch.tally.writesBegun += 1
   const begun = watch.tally.writesBegun
   await write()
+  onWritten()
   const after = await glimpseOf(writer)
   await vi.waitFor(() => {
     expect(watch.reads.filter((read) => read.after >= begun).map((read) => read.found), 'no call to onChange read the vault as the write left it').to.deep.include(after)

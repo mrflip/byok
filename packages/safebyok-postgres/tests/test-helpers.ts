@@ -2,6 +2,7 @@ import { beforeAll } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
 import { postgresVaultDB } from '../src/index'
 import type { PostgresClient, PostgresListen } from '../src/index'
+import type { VaultDB, VaultScope, VaultValidators } from 'safebyok'
 import { VaultNotifySql, VaultTablesSql } from '../src/vault-tables'
 
 // Everything the core's tests use too, so a test here star-imports this one module as TH.
@@ -115,6 +116,21 @@ export const eventually = async (check: () => boolean): Promise<void> => {
 export const changeCounter = () => {
   const heard = { count: 0 }
   return { heard, onChange: () => { heard.count += 1 } }
+}
+
+/**
+ * A watch on `scope` through `vaultDB`, once it is live, its calls counted from then: a
+ * postgresVaultDB with a listen calls once as the listen begins, and this resolves after that
+ * call, the count back at zero.
+ *
+ * @example const { heard, unsubscribe } = await TH.liveWatch(TH.requestFor(db, 'u1'), TH.scopeOf('u1'))
+ */
+export const liveWatch = async (vaultDB: Pick<VaultDB, 'subscribe'>, scope: VaultScope, validators?: VaultValidators) => {
+  const heard = { count: 0 }
+  const unsubscribe = vaultDB.subscribe(scope, () => { heard.count += 1 }, validators)
+  await eventually(() => heard.count > 0)
+  heard.count = 0
+  return { heard, unsubscribe }
 }
 
 /** The postgresVaultDB a request for `userId` makes over `db`, listening there. */
