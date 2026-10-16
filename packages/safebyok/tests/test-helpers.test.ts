@@ -814,6 +814,8 @@ type RoundTripOpts = {
   countsApart?:     boolean
   /** Lists no more lockboxes than its limit: a listing cut short. */
   listsToLimit?:    boolean
+  /** Writes a new lockbox into a full vault, then refuses it as full all the same: a refusal that leaves its lockbox behind. */
+  keepsRefused?:    boolean
   /** Rings only its own subscribers, so no device hears another's writes. */
   ringsOnlyItself?: boolean
   /** Round trips it makes before each write, as a device fetching a session first does. */
@@ -875,7 +877,10 @@ class RoundTripVaultDB extends VaultDB {
     }
     const meets = (rows: Rows) => {
       if (! vaultIs(rows, scope, expected) || ((rows.get(ckey) as Lockbox | undefined)?.revision_id ?? null) !== expected.revision_id) { return false }
-      if (! this.opts.countsApart && full(rows)) { throw vaultFull() }
+      if (! this.opts.countsApart && full(rows)) {
+        if (this.opts.keepsRefused) { rows.set(ckey, lockbox) }
+        throw vaultFull()
+      }
       return true
     }
     return await this.step({ check: meets, write: (rows) => { rows.set(ckey, lockbox) } })
@@ -1040,6 +1045,10 @@ describe("vaultDBTimingChecks, against adapters that do not guard", () => {
 
   it("fails a listing cut short at the limit, once a roomier device has taken the vault past it", async () => {
     await expect(checksOver({ stepping: inOneStep, listsToLimit: true }).past_limit_from_roomier_device.check()).rejects.toThrow(/to have the same members/)
+  })
+
+  it("fails a crowd for the last place whose refused racers leave their lockboxes behind", async () => {
+    await expect(checksOver({ stepping: inOneStep, keepsRefused: true }).crowd_for_last_place.check()).rejects.toThrow(/^Under the schedule "made together": expected /)
   })
 
   it("takes a vault past its limit, for real, when racers' counts are apart from their writes", async () => {
