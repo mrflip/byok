@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { AnyTextValidators, VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, openVault, type KeyDeriver, type Vault, type VaultValidators } from 'safebyok'
 import * as TH from 'safebyok/testing'
-import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useEffect, useLayoutEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
 
 /** A probe component exercising the binding the way a host app would. */
@@ -284,6 +284,24 @@ describe("VaultProvider", () => {
       await screen.findByPlaceholderText('vault passphrase')
       unmount()
       expect(await reading).to.be.null
+    })
+
+    it("keeps a dialog an action opens in the very commit that gave the provider its vault", async () => {
+      const world = await lockedWorld()
+      const eager: { reading: { outcome: unknown } } = { reading: { outcome: 'pending' } }
+      // A layout effect runs in the commit itself, before React's passive effects -- among them the
+      // provider's cleanup from the render before, the one with no vault yet -- have had their turn.
+      const Eager = () => {
+        const { vault, withUnlockedVault } = useVault()
+        useLayoutEffect(() => {
+          if (vault !== null) { eager.reading = watched(withUnlockedVault(() => vault.read('anthropic_api_key'))) }
+        }, [vault, withUnlockedVault])
+        return null
+      }
+      render(<VaultProvider {...world.props} userId="u1"><Eager /></VaultProvider>)
+      fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+      fireEvent.click(screen.getByText('Unlock'))
+      await waitFor(() => { expect(eager.reading.outcome).to.eq('sk-fake') })
     })
 
     it("resolves null when another user signs in, and shows that user no dialog", async () => {
