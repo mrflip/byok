@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: 5b underway, cut from 10's restacked tip; 15 (#138) in review; the line main → 1 (#128) → 2 (#133) → 3 (#127) → 4 (#132) → 13 (#137) → 10 (#136) is restacked; 6 (#126), 7 (#129), 8 (#130), 11 (#131), 14 (#134) filed, restack at wrap-up; then 9, and 12 after 23:01Z
+* **Status**: 5b underway, cut from 10's restacked tip; 15 (#138) flagged, waiting on the Coach (a fix whose edit the permission check refused); the line main → 1 (#128) → 2 (#133) → 3 (#127) → 4 (#132) → 13 (#137) → 10 (#136) is restacked; 6 (#126), 7 (#129), 8 (#130), 11 (#131), 14 (#134) filed, restack at wrap-up; then 9, and 12 after 23:01Z
 
 ## Read first
 
@@ -320,6 +320,13 @@ handoff carries it whole. Below, the orchestrator's gloss.
   deriver's output; at the restack it may move into the base class's one method. Put the
   base-class design in the thread file before building it, as a short sketch with the method
   names, so the reviewer can check it against the Coach's words.
+
+* *Review* (`flagged`, #138): the facade is the one the Coach asked for, but an override of
+  `deriveKeyBytes` skips the 32-byte check (a 16-byte return gave an AES-128 key, confirmed; a
+  regression from `envelope.ts`'s check). The fix, a `keyBytesOf` helper on both sides, was
+  refused to the reviewer by the tool permission check, so the orchestrator did not route it to
+  another agent: #138 waits unfiled on the Coach's word. Also rows: label shadowing (getters over
+  a frozen spec), a `WeakSet` brand for lookalikes, the size lines.
 
 ### 14. `uncontrolled_fields` -- cleared by the Coach; underway, cut from 7 (3d62fc04)
 

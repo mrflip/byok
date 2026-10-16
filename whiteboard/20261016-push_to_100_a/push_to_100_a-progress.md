@@ -21,7 +21,7 @@
 | 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
 | 13 | epoch_expectation | on 4 (f6d424ef), restacked | filed (tip f89b0c42) | [#137](https://github.com/mrflip/safebyok/pull/137) |
 | 14 | uncontrolled_fields | on 7 (3d62fc04) | filed | [#134](https://github.com/mrflip/safebyok/pull/134) |
-| 15 | deriver_shim | on 6 (adc94772) | in review [#138](https://github.com/mrflip/safebyok/pull/138) | |
+| 15 | deriver_shim | on 6 (adc94772) | flagged: waits on the Coach [#138](https://github.com/mrflip/safebyok/pull/138) | |
 
 ## What the threads have taught
 
