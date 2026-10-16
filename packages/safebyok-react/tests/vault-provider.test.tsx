@@ -702,6 +702,23 @@ describe("VaultProvider", () => {
         expect(shownState()).to.eq('absent')
       })
 
+      for (const [kind, blurb] of [['bad_option', 'it reads sound now'], ['stale_write', 'it was made anew']] as const) {
+        it(`opens again, and still rejects, when the erase finds storage changed: ${blurb}`, async () => {
+          const { vaultDB, props } = await damagedWorld()
+          vi.spyOn(vaultDB, 'eraseDamagedVault').mockRejectedValueOnce(new VaultError(kind, 'Storage changed.'))
+          // The vault is mended behind the provider's back: the reopen finds it sound.
+          const reads = vi.spyOn(vaultDB, 'readBundle')
+          const { Grab, latest } = grabber()
+          render(<VaultProvider {...props} userId="u1"><Grab /><Probe /></VaultProvider>)
+          await expectShown('open error: damaged_bundle')
+          reads.mockResolvedValueOnce(null)
+          await act(async () => {
+            await expect(latest().eraseDamagedVault()).rejects.toMatchObject({ kind })
+          })
+          await expectShown('absent')
+        })
+      }
+
       it("rejects with storage's refusal, leaving the damaged openError in place", async () => {
         const { vaultDB, props } = await damagedWorld()
         vi.spyOn(vaultDB, 'eraseDamagedVault').mockRejectedValueOnce(unreachable())
