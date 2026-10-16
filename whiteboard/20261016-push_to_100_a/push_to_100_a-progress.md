@@ -35,7 +35,14 @@
   locales half stays NOT YET and is recorded nowhere else. The answers that went with swept rows
   are in `matters/`. Thread 8 (#130): 25 rows swept; G517 annotated (part closed), G417 and
   G448 annotated rather than swept (each waits on the Coach's hands: the required check, the
-  Dependabot secret). The Gripefest doc stands at 180 matters.
+  Dependabot secret). Thread 1 (#128): 20 rows swept from the Validators tab (G172, G061, G074,
+  G118, G123, G173-G176, G179, G181-G185, G476, G232, G289, T02, T03); G177 annotated (its note
+  half goes with thread 2); no joiner row stood. The Gripefest doc stands at 160 matters; thread
+  11's sweep (G203, G288; G524 annotated) is under way.
+* *Orchestrator:* **Rulings carried back** (the sprint skill's §3, new this sprint): the Coach's
+  rulings are in `20261016-push_to_100_a-resolutions.md` in full, and a `→ *Coach:*` line goes
+  beside each question in its PR. Lines owed to filed threads' files and `human/` entries are
+  added at the restack: the list follows when the PR pass reports.
 * *Orchestrator:* **Coach rulings, mid-sprint** (the plan's *Coach rulings* has their words):
   the key delimiter is fixed at `^`, with no option (thread 1 rebuilds); `lockSoon()` is soft,
   `whenIdentityRevoked` goes, a `read()` refuses when a hard lock landed during its awaits, and
