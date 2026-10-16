@@ -21,7 +21,7 @@
 | 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
 | 13 | epoch_expectation | restacking onto 4 (f6d424ef) | filed, restacking | [#137](https://github.com/mrflip/safebyok/pull/137) |
 | 14 | uncontrolled_fields | on 7 (3d62fc04) | filed | [#134](https://github.com/mrflip/safebyok/pull/134) |
-| 15 | deriver_shim | on 6 (adc94772) | underway | |
+| 15 | deriver_shim | on 6 (adc94772) | in review [#138](https://github.com/mrflip/safebyok/pull/138) | |
 
 ## What the threads have taught
 
@@ -61,6 +61,13 @@
   `passphraseStrengthTest` through `VaultProvider` to `openVault` (its `satisfies` check will
   demand it) and default the dialog's `passphraseAdvice` to advice built from it; thread 14's file
   says how.
+* *Orchestrator:* **Thread 15** (#138) **for the restack**: `KeyDeriver` is an abstract class;
+  test derivers written as spreads (`{ ...TH.testDeriver, deriveKeyBytes }`) no longer
+  type-check: write `new TH.TestDeriver({}, derivation)`, or `new TH.TestDeriver({ key_deriver_label })`.
+  That hits thread 10's all-zero tests, threads 7 and 14's `vault-provider.test.tsx` and thread
+  14's demo deriver. Thread 10's `isAllZero` moves into `KeyDeriver.deriveKeyBytes`, straight
+  after the length check. `argon2idWebV1Deriver` and fastkey's `argon2idWasmWebV1Deriver` now
+  carry Zod (11.45 and 15.73 kB measured alone).
 * *Orchestrator:* **Thread 2's second review** (#133), for later threads: `store()` carries a
   bag and `registered_at` forward only from a record that deciphers (`openedWhisperOf`), and a
   lockbox's `public_json` must equal its stable re-serialization. For the rotation thread: a

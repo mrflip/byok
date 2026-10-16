@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: 15 underway; 3 (#127) and 4 (#132) restacked onto 2; 13 (#137) restacking onto 4, then 10 (#136) onto 13, then 5b is cut from 10 (YOLO 16); 1 (#128), 2 (#133), 6 (#126), 7 (#129), 8 (#130), 10 (#136), 11 (#131), 13 (#137), 14 (#134) filed; then 9, and 12 after 23:01Z
+* **Status**: 15 (#138) in review; 3 (#127) and 4 (#132) restacked onto 2; 13 (#137) restacking onto 4, then 10 (#136) onto 13, then 5b is cut from 10 (YOLO 16); 1 (#128), 2 (#133), 6 (#126), 7 (#129), 8 (#130), 10 (#136), 11 (#131), 13 (#137), 14 (#134) filed; then 9, and 12 after 23:01Z
 
 ## Read first
 
