@@ -8,14 +8,14 @@
 | 2 | release_age       | filed #96                  |
 | 3 | passkey_button_ux | filed #98                  |
 | 4 | small_sweep       | filed #99                  |
-| 5 | vaultdb_battery   | review clean; files after 12 |
+| 5 | vaultdb_battery   | filing onto #113           |
 | 6 | race_helper       | waiting on thread 5        |
 | 7 | indexeddb_fixes   | filed #109 (on #108)       |
 | 8 | size_rule         | filed #99 (commits on it)  |
 | 9 | damaged_bundle    | filed #108 (on #107)       |
 | 10 | identity_revoked | filed #106 (on #105)        |
 | 11 | vaultdb_contract | filed #107 (on #106)       |
-| 12 | postgres_soft_cap | filing onto #110          |
+| 12 | postgres_soft_cap | filed #113 (on #110)      |
 | 13 | rotation_design  | filed #105 (on #97)        |
 | 14 | rotation_shape   | waits on 11, #97 landing   |
 | 18 | rotation_adapters | waits on 14               |
@@ -35,7 +35,7 @@
   byte-identical. The "mainly main" ruleset requires test-build, lint-typecheck and both CodeQL
   checks, with **strict up-to-date**: every PR goes BEHIND whenever main moves, and merging the top
   takes all. #107's test-build hit the Convex timeout flake twice; rerun requested. **Line's top
-  now: #110.**
+  now: #113.**
 
 * **Thread 21 (#115), damaged_erase.** `eraseDamagedVault(opts)` erases a vault `openVault` refuses
   as `damaged_bundle`, and the device's remembered unlock; a sound vault is refused (`bad_option`),
