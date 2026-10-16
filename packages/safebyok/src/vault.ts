@@ -375,12 +375,17 @@ export type Vault = {
    * The whisper in `boxlabel`. Requires unlocked; kind 'absent_box' when there is none, and
    * 'damaged_lockbox' when its stored record fails its checks, or will not open under the vault's
    * key: `erase()` it, or `store()` over it.
+   * A boxlabel the vault's check refuses is kind 'bad_label', a malformed name and also one a
+   * lockbox stands under, stored under other checks, which the snapshot lists as damaged:
+   * `erase()` clears that lockbox, by the name it was stored under.
    */
   read(boxlabel: string): Promise<Whisper>
   /**
    * Hand the whisper to `callback` and return its result: the shape that discourages parking a
    * secret in state. Requires unlocked; kind 'bad_option', before anything is read, for a
-   * `callback` that is not a function.
+   * `callback` that is not a function. Refuses `boxlabel` as `read()` does: 'absent_box',
+   * 'corrupt_record', and 'bad_label' for a name the vault's check refuses, even one a lockbox
+   * listed as damaged stands under, which `erase()` clears.
    *
    * @example await vault.use('anthropic_api_key', (whisper) => callAnthropic(whisper))
    */
