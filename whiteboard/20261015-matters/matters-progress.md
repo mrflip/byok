@@ -10,7 +10,7 @@
 | 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | underway (on #107)         |
 | 6 | race_helper       | waiting on thread 5        |
-| 7 | indexeddb_fixes   | filing onto #108           |
+| 7 | indexeddb_fixes   | filed #109 (on #108)       |
 | 8 | size_rule         | filed #99 (commits on it)  |
 | 9 | damaged_bundle    | filed #108 (on #107)       |
 | 10 | identity_revoked | filed #106 (on #105)        |
@@ -22,7 +22,7 @@
 | 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
 | 20 | rotation_docs    | waits on 19                |
 | 15 | e2e_home         | review clean; files after 16 |
-| 16 | late_unlock      | review fixed; files after 7 |
+| 16 | late_unlock      | filing onto #109           |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | underway (on #108)         |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
@@ -114,8 +114,8 @@ worktree shares -- now a ground rule against it.
   `reentryHours` prop for `vault.reentryWindowMs`, so #98's three bad-`reentryHours` tests went with
   the prop. `.size-limit.json`: main's two new entries (validators 8.5 kB, DefaultValidators 4 kB)
   predate the rule; validators measures 8.15 kB, so a thread that grows it widens it by the rule
-  (about 12 kB). **New threads stack on the line's top: now #108** (main, with #96 and #99 merged, →
-  #98 → #97 → #105 → #106 → #107 → #108). Local tags `<branch>-prerestack3` hold the old tips.
+  (about 12 kB). **New threads stack on the line's top: now #109** (main, with #96 and #99 merged, →
+  #98 → #97 → #105 → #106 → #107 → #108 → #109). Local tags `<branch>-prerestack3` hold the old tips.
 
 *Orchestrator (2026-10-16 ~01:35Z):* the previous orchestrator session ended mid-sprint; threads
 9, 10, 11 and 13 stopped with nothing committed (9 and 10 left work in progress in their
