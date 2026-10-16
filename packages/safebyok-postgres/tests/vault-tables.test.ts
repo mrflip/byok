@@ -1,10 +1,10 @@
 import { readFileSync } from 'node:fs'
 import path from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
 import * as TH from './test-helpers'
 import { BundleColumns, LockboxColumns } from '../src/columns'
-import { VaultChangeChannel, VaultTablesSql } from '../src/vault-tables'
+import { VaultChangeChannel, VaultNotifySql, VaultTablesSql } from '../src/vault-tables'
 
 /** A column as information_schema describes it: its name and its type. */
 type DescribedColumn = { column_name: string, data_type: string }
@@ -21,6 +21,20 @@ const describedColumns = async (db: PGlite, table: string) => {
 
 TH.bootDatabaseFirst()
 
+/** A PGlite of its own with VaultTablesSql run in it and nothing else, made once per file. */
+const tablesOnly: { db?: Promise<PGlite> } = {}
+const tablesOnlyDatabase = async (): Promise<PGlite> => {
+  tablesOnly.db ??= (async () => {
+    const db = new PGlite()
+    await db.exec(VaultTablesSql)
+    return db
+  })()
+  const db = await tablesOnly.db
+  await db.exec('TRUNCATE safebyok_lockboxes, safebyok_bundles; DROP TRIGGER IF EXISTS safebyok_lockboxes_capped ON safebyok_lockboxes')
+  return db
+}
+beforeAll(async () => { await tablesOnlyDatabase() }, TH.BootMs)
+
 describe("VaultTablesSql", () => {
   it("is the package's vault-tables.sql, word for word", () => {
     const shipped = readFileSync(path.join(import.meta.dirname, '..', 'vault-tables.sql'), 'utf8')
@@ -34,12 +48,9 @@ describe("VaultTablesSql", () => {
     expect(await TH.requestFor(db, 'u1').readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
   })
 
-  it("makes a bundle's columns exactly as the adapter writes them, in order, then the vault's lockbox count", async () => {
+  it("makes a bundle's columns exactly as the adapter writes them, in order, and no more", async () => {
     const db = await TH.database()
-    expect(await describedColumns(db, 'safebyok_bundles')).to.deep.equal([
-      ...BundleColumns.map(([field, kind]) => [field, TypeForKind[kind]]),
-      ['lockbox_count', 'bigint'],
-    ])
+    expect(await describedColumns(db, 'safebyok_bundles')).to.deep.equal(BundleColumns.map(([field, kind]) => [field, TypeForKind[kind]]))
   })
 
   it("makes a lockbox's columns exactly as the adapter writes them, after its vault's scope and vault_id", async () => {
@@ -51,24 +62,14 @@ describe("VaultTablesSql", () => {
     ])
   })
 
-  it("sets a count gone astray right with the recount its comments and the README give", async () => {
-    const recount = "UPDATE safebyok_bundles AS bundle SET lockbox_count = (SELECT count(*) FROM safebyok_lockboxes AS box WHERE (box.applabel, box.user_id, box.vaultlabel, box.vault_id) = (bundle.applabel, bundle.user_id, bundle.vaultlabel, bundle.vault_id));"
-    const readme = readFileSync(path.join(import.meta.dirname, '..', 'README.md'), 'utf8')
-    expect(VaultTablesSql).to.include(recount)
-    expect(readme).to.include(recount)
-    const db = await TH.emptyDatabase()
-    const vaultDB = TH.requestFor(db, 'u1')
-    await vaultDB.createBundle(TH.bundleOf('u1'))
-    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('openai', 'sk-fake'), { vault_id: 'vault-id-u1', revision_id: null })
-    await db.exec('TRUNCATE safebyok_lockboxes')
-    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-u1', revision_id: null })
-    await db.exec(recount)
-    const { rows } = await db.query('SELECT lockbox_count FROM safebyok_bundles')
-    expect(rows).to.deep.equal([{ lockbox_count: 1 }])
-  })
-
-  it("notifies the channel the adapter listens on", () => {
-    expect(VaultTablesSql).to.include(`pg_notify('${VaultChangeChannel}'`)
+  it("makes tables and their keys, and no function, trigger or table beyond the two", async () => {
+    const db = await tablesOnlyDatabase()
+    const { rows: triggers } = await db.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal")
+    const { rows: functions } = await db.query("SELECT proname FROM pg_proc JOIN pg_namespace ON pg_namespace.oid = pronamespace WHERE nspname = 'public'")
+    const { rows: tables } = await db.query("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename")
+    expect(triggers).to.deep.equal([])
+    expect(functions).to.deep.equal([])
+    expect(tables).to.deep.equal([{ tablename: 'safebyok_bundles' }, { tablename: 'safebyok_lockboxes' }])
   })
 
   it("keeps every row from a role that is not the tables' owner", async () => {
@@ -84,6 +85,65 @@ describe("VaultTablesSql", () => {
     } finally {
       await db.exec('RESET ROLE; DROP OWNED BY stranger; DROP ROLE stranger')
     }
+  })
+})
+
+describe("VaultNotifySql", () => {
+  it("is the package's vault-notify.sql, word for word", () => {
+    const shipped = readFileSync(path.join(import.meta.dirname, '..', 'vault-notify.sql'), 'utf8')
+    expect(VaultNotifySql).to.eq(shipped)
+  })
+
+  it("notifies the channel the adapter listens on", () => {
+    expect(VaultNotifySql).to.include(`pg_notify('${VaultChangeChannel}'`)
+  })
+
+  it("can be run again over the triggers it made", async () => {
+    const db = await TH.database()
+    await db.exec(VaultNotifySql)
+    await db.exec(VaultNotifySql)
+    const { rows } = await db.query("SELECT tgname FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgname")
+    expect(rows).to.deep.equal([{ tgname: 'safebyok_bundles_changed' }, { tgname: 'safebyok_lockboxes_changed' }])
+  })
+
+  it("is what push needs: a vault over tables without it never hears another request's write, and works whole", async () => {
+    const db = await tablesOnlyDatabase()
+    const { heard, onChange } = TH.changeCounter()
+    const unsubscribe = TH.requestFor(db, 'u1').subscribe(TH.scopeOf('u1'), onChange)
+    await TH.wakeupAtNextTick()
+    await TH.requestFor(db, 'u1').createBundle(TH.bundleOf('u1'))
+    await TH.requestFor(db, 'u1').updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-u1', revision_id: null })
+    await TH.wakeupAtNextTick()
+    expect(heard.count).to.eq(0)
+    expect(await TH.requestFor(db, 'u1').listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(1)
+    unsubscribe()
+  })
+})
+
+describe("the README's hard cap, vaya con dios", () => {
+  const readme = readFileSync(path.join(import.meta.dirname, '..', 'README.md'), 'utf8')
+  const note = /```sql\n([\s\S]*?safebyok_lockboxes_capped[\s\S]*?)```/.exec(readme)?.[1]?.replaceAll(/^ {2}/gm, '')
+
+  it("is in the README as a block of SQL", () => {
+    expect(note).to.be.a('string')
+  })
+
+  it("refuses the lockbox past its limit, one vault at a time, and lets a vault below it take another", async () => {
+    const db = await tablesOnlyDatabase()
+    await db.exec(String(note).replaceAll('>= 1000', '>= 2'))
+    const vaultDB = TH.requestFor(db, 'u1')
+    const u1 = TH.scopeOf('u1')
+    const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null }
+    await vaultDB.createBundle(TH.bundleOf('u1'))
+    await vaultDB.createBundle({ ...TH.bundleOf('u1'), vaultlabel: 'other' })
+    await vaultDB.updateBox(u1, TH.boxOf('openai', 'sk-fake'), noBoxYet)
+    await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet)
+    const refusal = await TH.refusalOf(vaultDB.updateBox(u1, TH.boxOf('mistral', 'sk-fake'), noBoxYet))
+    expect(refusal.kind).to.eq('storage_unavailable')
+    expect(await vaultDB.listBoxes(u1)).to.have.lengthOf(2)
+    await vaultDB.updateBox({ ...u1, vaultlabel: 'other' }, TH.boxOf('mistral', 'sk-fake'), noBoxYet)
+    await vaultDB.eraseBox(u1, 'openai', { vault_id: 'vault-id-u1' })
+    await vaultDB.updateBox(u1, TH.boxOf('mistral', 'sk-fake'), noBoxYet)
   })
 })
 

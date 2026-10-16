@@ -30,20 +30,8 @@ await pool.query(VaultTablesSql)    // pg runs several statements in one query w
 await pglite.exec(VaultTablesSql)   // PGlite
 ```
 
-**Each vault's count of lockboxes** sits on its bundle's row (`lockbox_count`), kept by a trigger
-whatever statement adds or removes a lockbox, your own SQL included. Two things it asks of that
-SQL:
-
-* **Lock the bundle's row before deleting lockboxes** (`SELECT ... FROM safebyok_bundles WHERE
-  ... FOR UPDATE`, in the same transaction), as the adapter does: otherwise the trigger may
-  deadlock with an erase of the whole vault.
-* **Never `TRUNCATE` the lockboxes alone**, as a truncate fires no row trigger. If a count goes
-  astray, after that or after a restore with triggers off, this sets every vault's right. Run
-  it while nothing writes to these tables: a lockbox stored while it runs may go uncounted.
-
-```sql
-UPDATE safebyok_bundles AS bundle SET lockbox_count = (SELECT count(*) FROM safebyok_lockboxes AS box WHERE (box.applabel, box.user_id, box.vaultlabel, box.vault_id) = (bundle.applabel, bundle.user_id, bundle.vaultlabel, bundle.vault_id));
-```
+That is tables, columns, keys and row-level security, and nothing more: no trigger, no function, no
+extra table, nothing to keep in step. Push between devices is opt-in; see *Hearing other writes*.
 
 ## Where it runs
 
@@ -68,14 +56,15 @@ const vaultDB = postgresVaultDB({ client: pool, userId: session.userId })
   Client or PoolClient, or a PGlite, as they stand. postgres.js takes a wrapper:
   `{ query: async (text, params) => ({ rows: await sql.unsafe(text, params) }) }`.
 * **Every write is one statement**, atomic as Postgres makes every statement, so it asks no
-  transaction of your driver: a write lands only while what it expects still stands, and refuses
-  with kind `stale_write` otherwise. A new lockbox refused for a full vault costs one read more.
-* **Isolation**: every write holds under READ COMMITTED, Postgres's default. Under REPEATABLE
-  READ or SERIALIZABLE, any two writes that add or remove a lockbox in one vault at once may fail
-  with a serialization error, as `storage_unavailable`, since each moves the count on the vault's
-  bundle row, and the call may simply be tried again.
-* **`maxLockboxes`**, 1000 unless you say otherwise, is the most lockboxes one vault holds: see
-  *A limit of the server's own*, below.
+  transaction of your driver, no lock and no retry: a write lands only while what it expects
+  still stands, and refuses with kind `stale_write` otherwise.
+* **Isolation**: every guarantee here holds under READ COMMITTED, Postgres's default. Above it --
+  a session default of REPEATABLE READ or SERIALIZABLE, or your own transaction around a call --
+  some races fail with a serialization error (`40001`) instead, which refuses as
+  `storage_unavailable` and may simply be tried again. Leave the isolation level alone, and no
+  verb needs a retry.
+* **`maxLockboxes`**, 1000 unless you say otherwise, is the most lockboxes one vault holds, as a
+  best effort: see *A limit of the server's own*, below.
 * **Trouble** refuses with kind `storage_unavailable`, your driver's own error as its `cause`.
   Every refusal is a `VaultError`, and its `kind` and message are safe to send to the browser;
   its `cause` is not, being your driver's, and may name your database.
@@ -215,20 +204,78 @@ const isKind = (kind: unknown): kind is VaultErrorKind => (VaultErrorKindVals as
   socket, server-sent events, or a GraphQL subscription (`safebyok-graphql`), fed by `listen`.
 * **A limit of the server's own.** As the Convex component does, this VaultDB holds every vault
   to a number of lockboxes, `maxLockboxes` (1000 unless you pass another), whatever the browser
-  asks: a new lockbox past it refuses with kind `vault_full`, checked in the statement that
-  inserts it, and a lockbox replacing one already there never does. Declare the same number as
-  the browser VaultDB's `maxLockboxes`, so that `openVault` refuses a larger one up front. For no
-  practical limit, pass both a large number, such as `1_200_300_400_500_600`: the server's goes
-  to Postgres as a bigint, where `Infinity` cannot. Nothing bounds a vault's bytes beyond that:
-  your framework's request-size limit bounds each record.
+  asks: a new lockbox past it refuses with kind `vault_full`, and a lockbox replacing one already
+  there never does. Declare the same number as the browser VaultDB's `maxLockboxes`, so that
+  `openVault` refuses a larger one up front. For no practical limit, pass both a large number,
+  such as `1_200_300_400_500_600`: the server's goes to Postgres as a bigint, where `Infinity`
+  cannot. Nothing bounds a vault's bytes beyond that: your framework's request-size limit bounds
+  each record. What the limit guarantees is
+  [the VaultDB contract's](https://github.com/mrflip/safebyok/blob/main/packages/safebyok/VAULTDB.md) (lines 4.2 to 4.5), and no more:
+  * **It is a best effort.** The check is a `count(*)` of the vault's lockboxes in the statement
+    that inserts, as of that statement's start. Writes made one after another never take a vault
+    past its limit. Writers racing for the last places may each count room and all land: with
+    `N` racers one place short of the limit, up to `N - 1` more than it, never an unbounded
+    number. That is what the limit is for -- stopping a runaway loop, and keeping a vault inside
+    what can be listed and erased -- and not for holding off a determined client, whose quota is
+    yours to meter like any other abuse.
+  * **A refused write stored nothing.** The refusal is the `WHERE` of one atomic statement.
+  * **No lockbox is lost.** Every lockbox that landed reads back by its boxlabel and appears in
+    the listing, past the limit as under it; erases bring the vault back under, and a new lockbox
+    lands again.
+  * **The count a write checks is the vault's, as of the start of its statement.** A write reports
+    no count; the vault learns it from the listing it reads after every write.
+  * **It costs the host nothing**: no column, trigger, lock or retry, and one `count(*)` over the
+    vault's primary-key prefix, at most about `maxLockboxes` index entries, since the limit stops
+    growth near it.
+
+  **For a hard cap**, *vaya con dios*: this is unsupported, and it costs what the package does not
+  ask of you -- a trigger of your own, and a row lock that makes lockbox inserts into one vault
+  take turns, so that racing writers can no longer overshoot. Its refusal is a database error, so
+  the adapter reports it as `storage_unavailable` rather than `vault_full`, and a first write
+  under a boxlabel already taken refuses the same way in a full vault. Put your number where
+  `1000` is, and `maxLockboxes` beside it; the package's tests run this on PGlite, one statement at a
+  time, and cannot race it.
+
+  ```sql
+  CREATE OR REPLACE FUNCTION safebyok_lockboxes_capped() RETURNS trigger LANGUAGE plpgsql AS $$
+  BEGIN
+    PERFORM 1 FROM safebyok_bundles
+      WHERE (applabel, user_id, vaultlabel, vault_id) = (NEW.applabel, NEW.user_id, NEW.vaultlabel, NEW.vault_id)
+      FOR UPDATE;
+    IF (SELECT count(*) FROM safebyok_lockboxes
+          WHERE (applabel, user_id, vaultlabel) = (NEW.applabel, NEW.user_id, NEW.vaultlabel)) >= 1000 THEN
+      RAISE EXCEPTION 'This vault holds its limit of lockboxes' USING ERRCODE = 'check_violation';
+    END IF;
+    RETURN NEW;
+  END
+  $$;
+
+  CREATE OR REPLACE TRIGGER safebyok_lockboxes_capped
+    BEFORE INSERT ON safebyok_lockboxes
+    FOR EACH ROW EXECUTE FUNCTION safebyok_lockboxes_capped();
+  ```
 
 ## Hearing other writes
 
-The tables' trigger sends a notification on the channel `VaultChangeChannel`
-(`safebyok_vault_changes`) after every write that changes a vault, its payload the vault's scope
-as JSON: no record, nothing ciphered. Hand `postgresVaultDB` a **`listen`**, and its `subscribe`
-calls each subscriber after every write to their vault, from any server and any device. Without
-one, it never calls.
+Push is opt-in: it needs a trigger in your database and a connection kept open, and a vault
+works whole without either.
+
+* **Without them** (the baseline), `subscribe` never calls. The vault refreshes after its own
+  writes, and learns of another device's writes the next time it reads.
+* **With them**, `subscribe` calls each subscriber after every write to their vault, from any
+  server and any device. Run **`VaultNotifySql`** (also shipped as `vault-notify.sql`) once, after
+  `VaultTablesSql`, and hand `postgresVaultDB` a `listen`:
+
+```ts
+import { VaultNotifySql } from 'safebyok-postgres'
+
+await pool.query(VaultNotifySql)    // once, as a migration: safe to run again
+```
+
+Its trigger sends a notification on the channel `VaultChangeChannel` (`safebyok_vault_changes`)
+after every write that changes a vault, its payload the vault's scope as JSON: no record, nothing
+ciphered. A `listen` without the trigger hears nothing; the trigger without a `listen` costs a
+notification nobody hears.
 
 `listen(channel, onNotify)` calls `onNotify` with each notification's payload and returns the
 unlisten (or a promise for it). A PGlite's own `listen` is one, called on its PGlite -- passed
@@ -277,7 +324,7 @@ encryption (all but the bundle's `unlock_epoch` and which envelopes its `unlocks
 
 | Table                | One row per | Primary key                                     | Columns                                                                                                |
 | -------------------- | ----------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `safebyok_bundles`   | vault       | `applabel`, `user_id`, `vaultlabel`             | every field of the `VaultBundle`, then `lockbox_count`, the vault's lockboxes as a trigger counts them |
+| `safebyok_bundles`   | vault       | `applabel`, `user_id`, `vaultlabel`             | every field of the `VaultBundle`                                                                       |
 | `safebyok_lockboxes` | lockbox     | `applabel`, `user_id`, `vaultlabel`, `boxlabel` | the vault's scope and `vault_id`, then every field of the `Lockbox`; a lockbox with no note, null      |
 
 * **Encrypted**: each whisper (`whisper_ciphered`), each lockbox's lockboxKey
@@ -336,15 +383,18 @@ shape of table, copy it, and keep to what makes it right:
   compiler holding the list to the record's fields both ways, and builds every statement from it.
 * **Authorize in the adapter**: made per request for one user, it refuses every other user's
   scope with `identity_revoked`.
-* **Enforce the lockbox limit in the write itself.** A count read in one statement and checked
-  in the next lets two writes race past it, and so does a `count(*)` inside the insert: under
-  READ COMMITTED, each statement counts from its own snapshot. Here a trigger keeps the count on
-  the bundle's row, and the insert locks that row (`FOR UPDATE`) before reading it, so racing
-  writes take turns, and a write that waited reads the count its forerunner left. Lock the
-  bundle first in an erase too, so the trigger and a waiting insert never deadlock. Only the
-  locked row is re-read: before refusing a full vault, look afresh at the vault and the boxlabel,
-  since the write you waited on may have stored it, or another erased a lockbox since, and either
-  way the writer is only stale.
+* **Enforce the lockbox limit in the write itself, as a best effort.** A count read in one
+  statement and checked in the next lets writes slip through between them; a `count(*)` inside
+  the insert narrows that to writers whose statements overlap, which may each count room and
+  all land. The contract allows that (line 4.2), and costs nothing. Have the insert answer, from
+  its one snapshot, why it missed -- the vault stood, the boxlabel was already taken, the vault
+  was full -- so that no second read is needed to tell a full vault from a stale writer. And
+  map a foreign key violation (`23503`) on the insert to `stale_write`: a vault erased after the
+  statement's snapshot, before its foreign key check, is only a stale writer.
+* **Read the bundle without a lock, and know what that sees.** The insert takes the bundle from
+  its snapshot, and the foreign key re-checks only `vault_id` against the bundle that stands now.
+  A write that must compare any other column of the bundle atomically with a lockbox write
+  would need that row read `FOR SHARE` in the same statement; none does today.
 * **Prove it with the shared suite**: `describeVaultDB` from `safebyok/testing` runs every verb,
   expectation and refusal against a fresh adapter. Its two users' vaults go through one adapter,
   so a per-request adapter answers it with one VaultDB per user, through `perUser` from
@@ -355,7 +405,7 @@ shape of table, copy it, and keep to what makes it right:
 `pnpm justify` here runs its lint, typecheck, tests and build, with publint and
 arethetypeswrong. The tests run against [PGlite](https://pglite.dev), a real Postgres compiled to
 WebAssembly and run in-process: no database server, and every statement exactly as Postgres
-runs it, the trigger, row-level security and foreign keys included. They build the core first
+runs it, row-level security and foreign keys included. They build the core first
 (`pnpm build:deps`) and read it through its `dist/`, as a consumer would; the typecheck and lint
 read it from source. `tests/route-recipe.test.ts` runs the README's route recipe, and changes
 with it.

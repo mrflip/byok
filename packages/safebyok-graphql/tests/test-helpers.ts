@@ -5,7 +5,7 @@ import { Client, cacheExchange } from '@urql/core'
 import { executeExchange } from '@urql/exchange-execute'
 import type { GraphQLSchema } from 'graphql'
 import type { VaultDB } from 'safebyok'
-import { VaultTablesSql, postgresVaultDB } from 'safebyok-postgres'
+import { VaultNotifySql, VaultTablesSql, postgresVaultDB } from 'safebyok-postgres'
 import type { PostgresClient, PostgresListen } from 'safebyok-postgres'
 import { graphqlVaultDB } from '../src/index'
 import { VaultSchemaSdl, vaultResolvers } from '../src/server'
@@ -28,6 +28,7 @@ export const database = (): Promise<PGlite> => {
 const madeDatabase = async (): Promise<PGlite> => {
   const db = new PGlite()
   await db.exec(VaultTablesSql)
+  await db.exec(VaultNotifySql)
   return db
 }
 

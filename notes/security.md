@@ -660,28 +660,9 @@ security expert who knows what questions to ask.
   `convexVaultDB` declares the component's 8,000; `graphqlVaultDB` declares what its host says the
   server enforces (default 1000), which only moves `openVault`'s check: the server's own refusal
   is the limit. `postgresVaultDB` enforces its `maxLockboxes` (default 1000; a host wanting none
-  passes a large safe integer) inside the one statement that inserts a new lockbox, against a
-  `lockbox_count` column on the bundle row that an `AFTER INSERT OR DELETE` row trigger on
-  `safebyok_lockboxes` keeps, so writes by any statement, the host's own SQL included, keep it
-  true (a `TRUNCATE` of the lockboxes alone does not). The insert locks the bundle row
-  (`FOR UPDATE`) and compares the count it locked: under READ COMMITTED, a statement that waited
-  for the lock is handed the row as its forerunner left it (Postgres re-reads a row it waited to
-  lock), so two inserts racing for the last place cannot both land; under REPEATABLE READ or
-  SERIALIZABLE, the waiter fails with a serialization error, refused as `storage_unavailable`. A
-  bare `count(*)` in the insert would not hold under READ COMMITTED, each statement counting from
-  its own snapshot. This is reasoned from Postgres's documented semantics; the tests run on PGlite,
-  one connection, and cannot race. `eraseBox` locks the bundle row before deleting, so an erase's
-  count update and a waiting insert cannot deadlock. Holding the lock also keeps the bundle, so the
-  insert no longer meets a foreign-key failure from a vault erased meanwhile. A replacement is never
-  refused for the count, nor is a first write whose boxlabel is already taken (it refuses as
-  `stale_write`): the insert re-reads only the locked bundle row, its view of the lockboxes being
-  the statement's snapshot, so a full vault is told from a stale writer by one fresh read of the
-  vault and that boxlabel before refusing. Under REPEATABLE READ or SERIALIZABLE, any two concurrent writes that
-  add or remove a lockbox in one vault can fail with a serialization error (`storage_unavailable`),
-  each moving the bundle row's count. A host's own SQL deleting lockboxes must lock the bundle row
-  first, or it may deadlock with `eraseVault`; the DDL's comments and the README say so, and give
-  the recount statement for a count gone astray. The refusal's message names the limit, never a
-  boxlabel or a record.
+  passes a large safe integer) as a best effort, inside the one statement that inserts a new
+  lockbox (see the 2026-10-16 entry below, which replaced a counter column and a row lock). The
+  refusal's message names the limit, never a boxlabel or a record.
 * 2026-10-15: a host's own checks replace ours for every name and the note
   (`openVault({ validators })`, any Zod 4 schema), with no floor beneath them, since the ckeys
   (JSON tuples) and the cipher binding (a JSON array) take any text. What holds: **a check only
@@ -752,3 +733,19 @@ security expert who knows what questions to ask.
   GCM's structure, needs the vaultKey's bytes, and is a construction of our own. A bundle that
   fails its checks cannot be destroyed through a vault handle (`openVault` refuses it, and `destroy()`
   needs a handle); it is left in place, as every damaged remote record is.
+* 2026-10-16: `postgresVaultDB`'s lockbox limit is a best effort (VaultDB contract, lines 4.2 to
+  4.5), not a guarantee: the insert counts the vault's lockboxes in a `count(*)` over its own
+  statement's snapshot, with no lock and no counter, so writers racing for the last places under
+  READ COMMITTED may each find room and all land, by at most one less than the number of racers.
+  A client that bypasses the library can add lockboxes without bound, which makes the limit an
+  alarm bell and a guard against a runaway loop, not an abuse quota: the host meters that, like
+  its request rates, and the README offers a trigger for a host that wants a hard cap. This
+  replaced the `lockbox_count` column, its trigger and a `FOR UPDATE` row lock, reasoned about
+  in `whiteboard/20261015-matters/thread-11-postgres_verdict.md`; what to check: that a refused
+  write inserted nothing (the `WHERE` of one atomic statement), that no lockbox lands in a vault
+  but its own (the foreign key, re-read against the bundle that stands now, whose violation
+  `23503` is mapped to `stale_write`), and that every lockbox that landed stays readable and
+  erasable. Above READ COMMITTED some races fail with `40001`, refused as `storage_unavailable`.
+  The notify trigger is no longer installed by `VaultTablesSql`: a host opts in with
+  `VaultNotifySql`, and without it nothing is pushed (the vault refreshes after its own writes).
+  Not run against concurrent connections: the tests are on PGlite, one statement at a time.

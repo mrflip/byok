@@ -108,8 +108,8 @@ vaultResolvers({ vaultDBFor: (context) => postgresVaultDB({ client: pool, userId
   GraphQL error's `cause`, for your own logs. Anything else a VaultDB throws crosses as
   `storage_unavailable`.
 * **`safebyokVaultChanged`** sends the vault's scope after every write to it, as the VaultDB's
-  `subscribe` hears them -- for `postgresVaultDB`, through its `listen`, one of which serves every
-  VaultDB your server makes -- and stops listening when the subscriber goes. Changes that come
+  `subscribe` hears them -- for `postgresVaultDB`, through its `listen` and the optional `VaultNotifySql` trigger, one
+  `listen` serving every VaultDB your server makes -- and stops listening when the subscriber goes. Changes that come
   while a subscriber is still busy with the last one go as one.
 
 ### In another GraphQL server

@@ -87,16 +87,19 @@ const DefaultMaxLockboxes = 1000
  * * **Every write is one statement**, atomic as Postgres makes every statement: a write lands only
  *   while what it expects still stands, and a failed expectation refuses with kind `stale_write`.
  * * **A full vault**: a new lockbox in a vault already holding `maxLockboxes` refuses with kind
- *   `vault_full`, checked in the statement that inserts it, so two writes racing for the last
- *   place cannot both land. A lockbox replacing one already there is never refused for the count.
- *   A refusal for the count costs one read more, to tell a full vault from a writer who missed a
- *   lockbox it would replace, or whose vault changed meanwhile (`stale_write`).
- * * **Isolation**: under READ COMMITTED, Postgres's default, every write holds as said. Under
- *   REPEATABLE READ or SERIALIZABLE, any two writes adding or removing a lockbox in one vault at
- *   once may fail with a serialization error, as `storage_unavailable` (each moves the count on
- *   the vault's bundle row), and the call may simply be tried again.
- * * **Other writes**: with `listen`, `subscribe` hears every write to the vault, from any server
- *   and any device, through the tables' trigger; without it, nothing is pushed.
+ *   `vault_full`, and the refused write stored nothing. The check is a best effort, made in the
+ *   statement that inserts, by counting the vault's lockboxes as of that statement's start, with
+ *   no lock and no counter kept: writes made one after another never take a vault past the limit,
+ *   but writers racing for the last places may each find room, and all land. A lockbox replacing
+ *   one already there is never refused for the count, and a stale writer is told from a full
+ *   vault by the same statement.
+ * * **Isolation**: every guarantee above holds under READ COMMITTED, Postgres's default. Under
+ *   REPEATABLE READ or SERIALIZABLE (a host's session default, or its own transaction around a
+ *   call), some races fail with a serialization error instead, as `storage_unavailable`, and
+ *   the call may simply be tried again.
+ * * **Other writes**: with `listen` and the optional triggers `VaultNotifySql` installs,
+ *   `subscribe` hears every write to the vault, from any server and any device; without either,
+ *   nothing is pushed.
  * * **Trouble**: anything the driver throws refuses with kind `storage_unavailable`, the driver's
  *   own error as its `cause`. Every refusal is a VaultError, whose `kind` a wire can carry.
  *
@@ -146,8 +149,8 @@ const LockboxParamsFrom = 4
 const ReadBundleSql = `SELECT ${Columns.selected(BundleColumns)} FROM safebyok_bundles WHERE ${ScopeIs}`
 
 // Another device's bundle may land between this statement's start and its insert: DO NOTHING
-// would then return no row, so a no-op update instead returns the bundle that stands. The trigger
-// sees nothing changed, and notifies no one.
+// would then return no row, so a no-op update instead returns the bundle that stands. Nothing
+// changes, so a notify trigger, if the host installed one, tells no one.
 const CreateBundleSql = `INSERT INTO safebyok_bundles (${Columns.names(BundleColumns)})
   VALUES (${Columns.placeholders(BundleColumns, 1)})
   ON CONFLICT (applabel, user_id, vaultlabel) DO UPDATE SET format = safebyok_bundles.format
@@ -166,41 +169,34 @@ const ListBoxesSql = `SELECT ${Columns.selected(ListedLockboxColumns)} FROM safe
 
 // A first lockbox under its boxlabel: inserted only beside a bundle of the expected vault_id, only
 // where no lockbox stands, and only while the vault holds fewer than $5 lockboxes. It answers one
-// row: whether it landed, and whether the vault it locked was full.
+// row that says why it did or did not land, all read from the one snapshot the statement began
+// with: whether it landed, whether the vault of that vault_id stood, whether the boxlabel was
+// already taken, and whether the vault was already at its limit.
 //
-// The count is the bundle's lockbox_count, which the tables' trigger keeps, and the bundle's row is
-// locked (FOR UPDATE) as it is read, so new lockboxes in one vault are written one at a time. Under
-// READ COMMITTED, Postgres's default, a statement that waited for the lock is handed the row as the
-// write before it left it -- Postgres re-reads a row it had to wait to lock -- so it counts that
-// write's lockbox too. Under REPEATABLE READ or SERIALIZABLE, it fails with a serialization error
-// instead, which refuses as storage_unavailable. Either way, two writes racing for the last place
-// never both land. The lock also holds the bundle in place, so no erase lands between the read and
-// the insert, and the foreign key never refuses it. Only the locked row is re-read: the lockboxes
-// are seen as the statement began, so whether a full vault already holds this boxlabel -- the
-// write it waited on may have stored it -- is StillFullSql's to say, afresh.
+// Nothing is locked and nothing is counted in advance: the limit is the count of the vault's
+// lockboxes at the start of this statement, a best effort. Under READ COMMITTED, Postgres's
+// default, writers racing for the last places each count from their own snapshot, may each find
+// room, and all land: the vault goes a few past its limit (by at most one less than the number of
+// racers), which the contract allows, and a refused write inserted nothing, since the refusal is
+// the WHERE of one atomic statement. The bundle is read from the snapshot too, so a vault erased
+// after it began is met by the foreign key, which reads the bundle that stands now: that failure
+// is catchable (see doUpdateBox), and no lockbox ever lands in a vault but its own.
 const InsertBoxSql = `WITH vault AS (
-    SELECT applabel, user_id, vaultlabel, vault_id, lockbox_count FROM safebyok_bundles
+    SELECT applabel, user_id, vaultlabel, vault_id FROM safebyok_bundles
     WHERE ${ScopeIs} AND vault_id = $4::text
-    FOR UPDATE
+  ), counted AS (
+    SELECT count(*) AS standing FROM safebyok_lockboxes WHERE ${ScopeIs}
   ), inserted AS (
     INSERT INTO safebyok_lockboxes (applabel, user_id, vaultlabel, vault_id, ${Columns.names(LockboxColumns)})
     SELECT applabel, user_id, vaultlabel, vault_id, ${Columns.placeholders(LockboxColumns, LockboxParamsFrom + 2)}
-    FROM vault WHERE lockbox_count < $5::bigint
+    FROM vault, counted WHERE counted.standing < $5::bigint
     ON CONFLICT (applabel, user_id, vaultlabel, boxlabel) DO NOTHING
     RETURNING 1
   )
-  SELECT EXISTS (SELECT 1 FROM inserted) AS landed, EXISTS (SELECT 1 FROM vault WHERE lockbox_count >= $5::bigint) AS full`
-
-// Whether the vault of that vault_id still stands full, with no lockbox under the boxlabel: asked
-// only after a first write found the vault full, as a statement of its own. Under READ COMMITTED, or
-// outside a transaction, it sees things as they stand now, and so it also sees a lockbox erased, or the vault erased, since
-// the insert let go of the bundle's row: either leaves the writer only stale. Inside a host's
-// REPEATABLE READ or SERIALIZABLE transaction it shares the insert's snapshot, which is still
-// current for this vault: the insert holds the bundle's row until the transaction ends, and would
-// have failed to lock it had any lockbox come or gone in the vault since the snapshot was taken.
-const StillFullSql = `SELECT 1 FROM safebyok_bundles
-  WHERE ${ScopeIs} AND vault_id = $5::text AND lockbox_count >= $6::bigint
-    AND NOT EXISTS (SELECT 1 FROM safebyok_lockboxes WHERE ${ScopeIs} AND boxlabel = $4::text AND vault_id = $5::text)`
+  SELECT EXISTS (SELECT 1 FROM inserted) AS landed,
+         EXISTS (SELECT 1 FROM vault) AS vault_stands,
+         EXISTS (SELECT 1 FROM safebyok_lockboxes WHERE ${ScopeIs} AND boxlabel = ${Columns.placeholderOf(LockboxColumns, 'boxlabel', LockboxParamsFrom + 2)}) AS box_stood,
+         (SELECT standing FROM counted) >= $5::bigint AS was_full`
 
 // A lockbox over the revision read. Its vault_id column is its bundle's (the foreign key holds
 // them together), so matching it is matching the bundle that stands.
@@ -209,16 +205,12 @@ const ReplaceBoxSql = `UPDATE safebyok_lockboxes SET (${Columns.names(LockboxCol
     AND boxlabel = ${Columns.placeholderOf(LockboxColumns, 'boxlabel', LockboxParamsFrom + 2)}
   RETURNING 1 AS landed`
 
-// Lands while the bundle of that vault_id stands, whether or not there was a lockbox to erase. The
-// bundle's row is locked before the lockbox's, as a first lockbox's insert locks them, so the
-// count's trigger never waits on an insert that waits on this erase.
-const EraseBoxSql = `WITH vault AS (
-    SELECT 1 FROM safebyok_bundles WHERE ${ScopeIs} AND vault_id = $5::text FOR UPDATE
-  ), erased AS (
+// Lands while the bundle of that vault_id stands, whether or not there was a lockbox to erase.
+const EraseBoxSql = `WITH erased AS (
     DELETE FROM safebyok_lockboxes WHERE ${ScopeIs} AND boxlabel = $4::text AND vault_id = $5::text
-      AND EXISTS (SELECT 1 FROM vault)
+      AND EXISTS (SELECT 1 FROM safebyok_bundles WHERE ${ScopeIs} AND vault_id = $5::text)
   )
-  SELECT 1 AS landed FROM vault`
+  SELECT 1 AS landed FROM safebyok_bundles WHERE ${ScopeIs} AND vault_id = $5::text`
 
 // The lockboxes go with their bundle, by the foreign key's cascade, in the same statement.
 const EraseVaultSql = `DELETE FROM safebyok_bundles WHERE ${ScopeIs} AND vault_id = $4::text RETURNING 1 AS landed`
@@ -284,15 +276,28 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
       const params = [...scopeParams(scope), expected.vault_id, expected.revision_id, ...boxParams]
       return landed(await this.client.query(ReplaceBoxSql, params))
     }
-    const { rows } = await this.client.query(InsertBoxSql, [...scopeParams(scope), expected.vault_id, this.maxLockboxes, ...boxParams])
-    const outcome = rows[0] as { landed: boolean, full: boolean }
-    if (! outcome.full) { return outcome.landed }
-    // A vault that holds this boxlabel after all, has room again, or is gone: the writer missed a
-    // lockbox it would replace (never refused for the count), or its vault moved under it, and it
-    // is only stale.
-    const { rows: stillFull } = await this.client.query(StillFullSql, [...scopeParams(scope), lockbox.boxlabel, expected.vault_id, this.maxLockboxes])
-    if (stillFull.length === 0) { return false }
+    const outcome = await this.insertBox([...scopeParams(scope), expected.vault_id, this.maxLockboxes, ...boxParams])
+    if (outcome === null) { return false }
+    if (outcome.landed) { return true }
+    // A vault gone or made anew, or a boxlabel already taken (a lockbox the writer missed, which
+    // it would replace, and which is never refused for the count), is a stale writer. Otherwise
+    // the vault was at its limit when the statement began; and if it was not, a writer racing for
+    // this boxlabel got in after the snapshot, and this one is only stale as well.
+    if (! outcome.vault_stands || outcome.box_stood || ! outcome.was_full) { return false }
     throw new VaultError('vault_full', `This vault already holds the ${String(this.maxLockboxes)} lockboxes its storage keeps in one vault: erase one before storing another.`)
+  }
+
+  // Runs InsertBoxSql and reads its one row; null for the one failure that is only a stale writer:
+  // its vault erased between the statement's snapshot and the foreign key's check, which reads the
+  // bundle as it stands then.
+  private async insertBox(params: unknown[]): Promise<InsertBoxOutcome | null> {
+    try {
+      const { rows } = await this.client.query(InsertBoxSql, params)
+      return rows[0] as InsertBoxOutcome
+    } catch (err) {
+      if ((err as { code?: unknown } | null)?.code === ForeignKeyViolation) { return null }
+      throw err
+    }
   }
 
   protected async doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation): Promise<boolean> {
@@ -344,6 +349,12 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
     }
   }
 }
+
+/** The one row {@link InsertBoxSql} answers: why a first lockbox write did, or did not, land. */
+type InsertBoxOutcome = { landed: boolean, vault_stands: boolean, box_stood: boolean, was_full: boolean }
+
+/** Postgres's error code for a foreign key violation: `23503`. */
+const ForeignKeyViolation = '23503'
 
 const scopeParams = (scope: VaultScope): string[] => [scope.applabel, scope.user_id, scope.vaultlabel]
 
