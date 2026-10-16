@@ -416,6 +416,21 @@ Straightforward, likely to be done, not needed yet. Each is a thread cut from `m
   the host's GraphQL server as well as a client, and no host's existing schema has our tables.
   Do the REST one first; GraphQL is the same recipe with more ceremony.
 
+* **One test container for every backend.** The Coach (2026-10-16): a big container serving
+  Convex (its local backend), Postgres, and each backend added later, used by CI as a service
+  container and by a contributor locally. It is what the race battery
+  ([#119](https://github.com/mrflip/safebyok/pull/119)) cannot do in-process: Postgres's
+  one-statement writes under concurrent connections (one `pg` pool per device) are reasoned in
+  thread 11, not tested, and Convex runs against `convex-test`, not a real deployment. Decide:
+  one image or a compose file of services; whether `e2e/` owns it; which suites run against it
+  in CI and which stay in-process so `pnpm justify` needs no Docker.
+* **A schema snapshot test for `format`.** Ruled 2026-10-16
+  ([#115](https://github.com/mrflip/safebyok/pull/115)): any change to what a stored record may
+  hold -- a field, a shape, or a range a check accepts -- bumps `format`. A test renders each
+  stored schema with Zod's own `toJSONSchema`, keyed by its `format` literal, and fails with
+  "bump `format`" when a schema changes under the same literal, so a loosened check (`.min(1)`
+  to `.min(0)`) cannot ship unmarked.
+
 ## Soonish
 
 Wanted; each has a design question to settle first, named here.
@@ -592,6 +607,22 @@ demand there is a function of this name? do we want a generic interface to reque
 might not be through the database". Decide whether identity is a core seam (a function the host
 passes to every adapter), and what the other adapters, which take a `user_id` in the scope, do.
 
+### Which ways in a rotation keeps
+
+From [#105](https://github.com/mrflip/safebyok/pull/105) (the rotation design, section 9). The
+first matter said rotation "re-wraps the remaining envelopes", but it can't: each way in's key
+comes from a passphrase or a passkey touch the vault never keeps, and any shortcut would hand the
+new vaultKey to the way in being removed. So the design keeps only the ways in the user proves
+during the rotation and removes the rest -- which is also what locks out a lost phone's passkey,
+and signs every other device out until it is asked again. The alternative, a key pair per way in
+so rotation can re-wrap every envelope unasked (HPKE), is a new construction (the design's open
+question 1).
+
+The Coach (2026-10-16): wants to understand this better; land the recommendation for now. **Landed
+as recommended**: thread 19 (`rotateVaultKey`, not yet built) keeps only the ways in proven during
+the rotation.
+Revisit before 1.0 if rotation signing every other device out is too blunt.
+
 ### `destroy()`'s edge cases
 
 From the Convex sprint ([#18](https://github.com/mrflip/safebyok/pull/18)): a handle that never
@@ -682,8 +713,19 @@ implementation.
   `whiteboard/20261016-rotation/rotation-design.md`, built as sprint matters' threads 14 and
   18-20); what waits is the UX, a device list, and, if the Coach wants rotation not to sign every
   other device out, a key pair per way in (that design's open question 1). The data it needs goes
-  in with rotation: a random `device_id` per vault per device (never derived from the device,
-  as Apple's and Google's rules require), recorded on every envelope it adds.
+  in with rotation: a random `device_id` per vault per device, recorded on every envelope it adds.
+  * **What we record now.** `device_id` is random, minted per vault per device, never derived from
+    the device, so the backend can't link one device's vaults to each other. That reading follows
+    Apple's ban on fingerprinting and Google's guidance to use a privately stored random ID; it is
+    the agents' reading, not legal advice, and the Coach is "pretty sure the device id is ok".
+  * **What is permitted to retain about devices -- open.** The Coach: are we allowed to store
+    "Bob's Awesome iPhone 11" for the user to know which device `a213423bcf` is? A device list
+    needs some label a person recognizes. Decide before building it: a label the user types (what
+    they chose to say, stored in the clear on the server, or encrypted under the vaultKey so the
+    server never sees it), a label taken from the platform (model name, user agent: the kind of
+    data the fingerprinting rules care about), or none (the device list shows when each was added
+    and last used). Encrypting a user-typed label inside the vault is the likely answer; check it
+    against the host app's privacy review, which owns what its users are told.
 * **A pluggable conflict handler for the weird cases**, beyond *A conflict-handler hook* above:
   for instance, "this lockbox is too damaged to know what epoch it is from, and I have a store
   request with a healthy lockbox: what do I do?" Today the vault decides (a damaged box is

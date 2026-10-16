@@ -463,6 +463,12 @@ The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes
 * **Ruled 2026-10-16**: Convex's own tests stay in `safebyok-convex`, the fake deployment shipped
   as a test-only `safebyok-convex/testing` entry; `e2e/` keeps only the `ConvexReactClient` half
   (#111, option b; thread 15 resumes).
+* **Ruled 2026-10-16 (second round)**: the broad `format` rule ("any change to what a stored record
+  may hold bumps `format`"), with a schema snapshot test to TODO's side quests; which ways in a
+  rotation keeps moved to TODO's Soonish with the recommendation landed (keep only the proven
+  ones; thread 19 ungated); the device-label question folded into TODO's NOT YET device lockout;
+  #111's option (b) confirmed; one test container for every backend to TODO's side quests (the
+  Coach: close out the PRs first, for the push to 1.0.0).
 * `addPasskey`'s shape: kept as built (the Coach: "LGTM"); thread 4 records it.
 
 ## For the Coach
