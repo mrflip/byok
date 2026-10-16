@@ -16,12 +16,12 @@
 | 7 | react_tidy | main | filed #129 | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | main | filed #130 | [#130](https://github.com/mrflip/safebyok/pull/130) |
 | 9 | sweep_small | top of the line | pending | |
-| 10 | secure_floor | on 4 (57cdb168) | second review | [#136](https://github.com/mrflip/safebyok/pull/136) |
+| 10 | secure_floor | on 4 (57cdb168) | filed | [#136](https://github.com/mrflip/safebyok/pull/136) |
 | 11 | pg_container | main | filed #131 | [#131](https://github.com/mrflip/safebyok/pull/131) |
 | 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
-| 13 | epoch_expectation | on 4 (57cdb168) | underway | |
+| 13 | epoch_expectation | on 4 (57cdb168) | in review | [#137](https://github.com/mrflip/safebyok/pull/137) |
 | 14 | uncontrolled_fields | on 7 (3d62fc04) | filed | [#134](https://github.com/mrflip/safebyok/pull/134) |
-| 15 | deriver_shim | on 6 | pending: a slot | |
+| 15 | deriver_shim | on 6 (adc94772) | underway | |
 
 ## What the threads have taught
 
@@ -56,6 +56,15 @@
   `passphraseStrengthTest` through `VaultProvider` to `openVault` (its `satisfies` check will
   demand it) and default the dialog's `passphraseAdvice` to advice built from it; thread 14's file
   says how.
+* *Orchestrator:* **Thread 13** (#137) **for the restack and 5b**: `describeVaultDB` no longer
+  takes `comparesVaultKeyEpoch` (line 3.8 now runs against every adapter), so delete that line
+  from thread 11's `e2e/tests/postgres/battery.test.ts` at the restack, or it will not compile.
+  5b carries thread 13's new IndexedDB expectation test rows into the core's `Expectations`
+  tests. The refresh queue is `oneAtATime` in `packages/safebyok/src/one-at-a-time.ts`.
+  Device-store failures stay `storage_unavailable`, with a message per verb.
+* *Orchestrator:* **Thread 10** (#136) filed after two reviews: the provider holds the strength
+  test in a ref (YOLO 13), and the all-zero check's doc gives a timing reason that holds. Thread
+  15's base class is designed so `isAllZero` moves into its one method at the restack.
 * *Orchestrator:* **Thread 4's review** (#132): `fixed`, one commit (`store()` over a damaged
   box the listing did not show yet no longer erases first). Left, all minor and in *Open
   Matters*: the refresh queue's library-first yes; a hard lock not stopping a store in flight;

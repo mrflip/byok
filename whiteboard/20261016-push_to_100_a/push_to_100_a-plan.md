@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: thread 13 underway; 2 (#133) and 10 (#136) in their second reviews; 1 (#128), 3 (#127), 4 (#132), 6 (#126), 7 (#129), 8 (#130), 11 (#131), 14 (#134) filed; 5b cut once 2 files and 3 → 4 are restacked onto it; 15 waits for a slot
+* **Status**: 15 underway; 13 (#137) in review; 2 (#133) in its second review; 1 (#128), 3 (#127), 4 (#132), 6 (#126), 7 (#129), 8 (#130), 10 (#136), 11 (#131), 14 (#134) filed; 5b cut once 2 files and 3 → 4 are restacked onto it; then 9, and 12 after 23:01Z
 
 ## Read first
 
@@ -240,6 +240,14 @@ handoff carries it whole. Below, the orchestrator's gloss.
   wipes the deriver's output after use, so a host deriver that caches it would hand back zeros.
 * **Note**: the three Soonish lines become rows the orchestrator sweeps; the worker writes their
   settlement in its thread file.
+* *Review* (`flagged`, then `fixed`, #136): the first review flagged that an inline
+  `passphraseStrengthTest` arrow reopened the vault on every parent render; YOLO 13 sent it back
+  (a ref plus one stable wrapper, four provider tests), and softened the all-zero check's
+  constant-time claim. The second review fixed two doc lines (`cb7fb3ea`, `03a75dec`) and left
+  three minors, each a row: a child's same-commit layout effect runs the previous test; the
+  provider copies the core's not-a-function check; three provider test gaps. Left from the first:
+  zxcvbn as hard dependencies (a row), whitespace in the length floor (a row), a host test's
+  throw passes through (a row), the `userInputs` reason never fires (a row). Filed at `3c0a63a3`.
 
 ### 11. `pg_container` -- the Postgres battery under real concurrency
 
