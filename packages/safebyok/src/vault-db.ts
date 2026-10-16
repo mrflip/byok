@@ -462,10 +462,11 @@ const newerBundle = () => new VaultError('damaged_bundle', "This vault's stored 
 
 /**
  * True when a record that fails this version's checks may be one a later version writes, which
- * is not damage: it names a `format` this version does not know (of any type), holds an unlock `method` it does
- * not know, or holds more unlocks than {@link MaxUnlocks}. These are all this version can tell
- * from damage; anything else that fails is taken for damage. Any change to the stored shape
- * therefore bumps `format`.
+ * is not damage: it names a `format` this version does not know (of any type), holds an unlock
+ * `method` it does not know, or holds more unlocks than {@link MaxUnlocks}. These are all this
+ * version can tell from damage; anything else that fails is taken for damage. Any change to what
+ * a stored record may hold -- a field, a shape, or a range a check accepts -- therefore bumps
+ * `format`.
  */
 const mayBeNewer = (raw: unknown): boolean => {
   if (typeof raw !== 'object' || raw === null) { return false }

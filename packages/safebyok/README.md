@@ -470,8 +470,9 @@ nothing erased: the backend's own tools can clear it. A record this version cann
 instead have been written by a **newer** safebyok, which opens it; so one in a `format` this
 version does not know, with an unlock `method` it does not know, or with more unlocks than
 `MaxUnlocks`, is refused the same way, nothing erased, with a message telling the user to update
-the app. That is all this version can tell from damage, which rests on a rule: **any change to the
-stored shape bumps `format`**, so an older build can tell "newer" from "damaged". Where it cannot
+the app. That is all this version can tell from damage, which rests on a rule: **any change to
+what a stored record may hold -- a field, a shape, or a range a check accepts -- bumps
+`format`**, so an older build can tell "newer" from "damaged". Where it cannot
 tell, it refuses rather than erases. So is any backend that checks a record before
 it hands it over, as `safebyok-graphql`'s server does: there a damaged row is the backend's to
 clear. `safebyok-react` hands `eraseDamagedVault()` down beside `retryOpen`. A `VaultDB` that

@@ -773,7 +773,7 @@ security expert who knows what questions to ask.
   `damaged_bundle`, a message to update the app, nothing erased) a record with a `format` this
   build does not know (of any type), an unlock `method` it does not know, or more unlocks than
   `MaxUnlocks`, and erases only what fails otherwise. **The rule this rests on, for the Coach to
-  confirm: any change to the stored shape bumps `format`**, so that an older build can tell newer
-  from damaged. Where it cannot tell, it refuses: the hatch fails safe. Not routed through
+  confirm: any change to what a stored record may hold -- a field, a shape, or a range a check
+  accepts -- bumps `format`**, so that an older build can tell newer from damaged. Where it cannot tell, it refuses: the hatch fails safe. Not routed through
   `RefusalPolicy.heed`: there is no handle to lock and no key in memory, so `whenIdentityRevoked`
   has nothing to act on, and the hatch's own last step is erasing the remembered unlock.

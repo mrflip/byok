@@ -1299,9 +1299,10 @@ export type EraseDamagedVaultOpts = Pick<OpenVaultOpts, 'applabel' | 'userId' | 
  *
  * A record this version cannot read may be one a newer safebyok wrote and opens, so a `format`,
  * unlock method or number of unlocks it does not know is refused too, as 'damaged_bundle' with
- * nothing erased and a message to update the app: any change to the stored shape bumps `format`,
- * so that newer can be told from damaged. There is no handle to lock, so a storage refusal such as
- * 'identity_revoked' is thrown as it comes, without `whenIdentityRevoked`'s action.
+ * nothing erased and a message to update the app: any change to what a stored record may hold --
+ * a field, a shape, or a range a check accepts -- bumps `format`, so that newer can be told from
+ * damaged. There is no handle to lock, so a storage refusal such as 'identity_revoked' is thrown
+ * as it comes, without `whenIdentityRevoked`'s action.
  *
  * @example
  *   try { await openVault(opts) } catch (err) {
