@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: threads 1, 3, 7 and 8 underway; 6 filed; 5a's design written, waiting on the Coach. Newer than the plan wherever they disagree.
+**Status**: threads 1, 7 and 8 underway; 3 in review; 6 filed; 5a's design written, waiting on the Coach. Newer than the plan wherever they disagree.
 
 ## Status
 
@@ -8,7 +8,7 @@
 |---|---|---|---|---|
 | 1 | names_and_keys | main | underway | |
 | 2 | public_bag | on 1 | pending | |
-| 3 | locks_and_expiry | main | underway | |
+| 3 | locks_and_expiry | main | in review | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 | pending | |
 | 5a | store_base design | -- | written: `store-base-design.md`; the Coach's row in *Open Matters* | |
 | 5b | store_base build | on 4 (restacked) | pending: the Coach's word on 5a | |
@@ -54,3 +54,20 @@
 * *Orchestrator:* **`matters/`** holds all fourteen tabs of the Gripefest doc as of the sprint's
   start. G247 (thread 5's Convex `vault_id` check) appears only in the strawman and Validators
   tabs; follow the preplan's wording.
+* *Orchestrator:* **Thread 3** (ready, [#127](https://github.com/mrflip/safebyok/pull/127)) --
+  what later threads inherit:
+  * `Ms` is `Millis` everywhere (`ForeverMillis`, `reentryWindowMillis`, `MinuteMillis`,
+    `MaxReentryHours` = 588). The far-future test is `>= ForeverMillis - MinuteMillis`; 3 already
+    changed that one line in `safebyok-react`'s `passphrase-modal.tsx` (thread 7: rebase onto it).
+  * One function, `deadlineFor(proof, call)`, sets every deadline; a passkey-proved change keeps
+    the standing deadline. Thread 6's passkey-proved `changePassphrase` goes through
+    `reviseUnlocks`, so the restack should be mechanical.
+  * **Thread 4**: unlocks go through `noteStart()` and `takeUpUnlock(..., started, until)`;
+    `destroy()` goes through `shut()` -> `forgetUnlock()`. `close()` locks nothing now.
+  * **Thread 2**: the device mark is `safebyok-mark-v2` (with `lock_generation`): list it in the
+    format-snapshot test.
+  * **`DeviceDB.writeUnlock(unlock, expected)`** is now conditional on the mark's generation (no
+    unconditional path); `writeMark` never lowers it. Host `DeviceDB`s change.
+  * **Tests**: every unlock arms a `setTimeout` (unref'd). A test spying on `setTimeout` filters
+    those (`delaysAsked` in `vault.test.ts`); `vi.runAllTimers()` locks the vault.
+  * openVault measured 22.21 kB on 3 alone.
