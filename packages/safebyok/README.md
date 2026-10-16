@@ -474,10 +474,9 @@ vault held is gone for good, so ask the user first.
 try {
   vault = await openVault(opts)
 } catch (err) {
-  if (isVaultError(err, 'damaged_bundle') && await userAgreesToStartOver()) {
-    await eraseDamagedVault(opts)
-    vault = await openVault(opts)   // absent: a new vault is made on the next unlock
-  }
+  if (! isVaultError(err, 'damaged_bundle') || ! await userAgreesToStartOver()) { throw err }
+  await eraseDamagedVault(opts)
+  vault = await openVault(opts)   // absent: a new vault is made on the next unlock
 }
 ```
 
