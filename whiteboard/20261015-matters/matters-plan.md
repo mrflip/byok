@@ -386,6 +386,21 @@ today the label grammar is checked only in the client, so a store reached by ano
 host's server code) can hold a label outside it; what each of Convex, Postgres and GraphQL could
 check, at what cost; no recommendation beyond what the section's own framing asks. `plan:`.
 
+#### 21. damaged_erase (sonnet) -- stacked on #108
+
+> **A damaged vault can't be deleted (#108).** When the stored vault itself fails its checks,
+> `openVault` refuses with `damaged_bundle`, and `destroy()` needs an opened handle, so an app has
+> no way to clear it and start over. Rec: a small `eraseVault`-style escape hatch (or `destroy`
+> reachable without a handle) for exactly this case, behind the same care as `destroy()`. The
+> Coach: "yes."
+
+*Gloss.* Cut from the line's top once #108 files. Give a host a way to erase a vault that
+`openVault` refuses as `damaged_bundle` -- and only that case: a narrow, documented call (say
+`eraseDamagedVault(opts)` or a `destroy` reachable from the refusal), taking the same scope and
+the same care `destroy()` takes (it erases the stored vault and the device's remembered unlock;
+nothing else), refusing if the bundle is in fact sound. New public surface: name it in the PR's
+open questions. `vault:`.
+
 ### Wave 2, freed
 
 The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes** at once;
