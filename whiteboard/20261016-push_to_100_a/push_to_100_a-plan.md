@@ -47,15 +47,10 @@ The sprint ran in one session until near its limit; the Coach restarts `/sprint`
   *Notes*), each conflict back to a fresh worker of that thread; if 15 still waits, it goes to
   the line's top later instead; (3) threads 16 and 17 from the line's top, side by side, then
   restack 17 onto 16; (4) thread 9 on top; (5) thread 12 after 2026-10-16T23:01Z; (6) wrap-up §5.
-* **Owed by the orchestrator**: the fifth batch's `→ *Coach (2026-10-16):*` lines in the PR bodies
-  ([#131](https://github.com/mrflip/safebyok/pull/131),
-  [#132](https://github.com/mrflip/safebyok/pull/132),
-  [#133](https://github.com/mrflip/safebyok/pull/133),
-  [#134](https://github.com/mrflip/safebyok/pull/134),
-  [#136](https://github.com/mrflip/safebyok/pull/136),
-  [#137](https://github.com/mrflip/safebyok/pull/137)) were not yet written when the session
-  ended: `restack-owed-rulings.md` lists them; the resolutions file has each in full. The doc
-  mirror of Plan, Progress and Resolutions is behind (the sprint doc's *Open Matters* is current).
+* **Owed by the orchestrator**: the fifth batch's ruling lines in the thread files, at the
+  restack (`restack-owed-rulings.md`; the PR bodies already carry them, but for nine raised only in
+  reviews). The doc mirror of Plan, Progress and Resolutions is current as of `77fd8c6f`; the
+  thread tabs for 5b, 13 and 15 and the restacked threads are behind.
 * **The sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98, Open
   Matters node `d50b4c27-347b`, matters table `mnkssgs7kk7.647`, state enum `a4555458-a970`
   (0 drafting, 1 proceed, 2 explain, 3 elevate, 4 noted). Read it `sinceRev` the last rev in the
