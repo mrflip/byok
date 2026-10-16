@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { localVaultDB, memoryStore } from 'safebyok'
 import { tellKnockKnockJoke } from '../src/lib/anthropic'
@@ -59,7 +59,7 @@ describe("answerPassphraseDialog", () => {
     fireEvent.click(screen.getByRole('button', { name: 'read' }))
     await TH.answerPassphraseDialog()
     await TH.expectProbeState('unlocked')
-    expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    await waitFor(() => { expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null })
   })
 
   it("types the passphrase it is given, so a wrong one leaves the dialog asking", async () => {

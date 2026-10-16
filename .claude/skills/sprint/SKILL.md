@@ -61,6 +61,18 @@ The Coach merges a sprint as **one linear line**: each PR rebased onto the one b
 PR's base still `main`, so merging the top merges them all. Restacking filed branches to make
 that line is your job, not the Coach's (§5).
 
+**Size budgets.** The sprint's PRs stack, and each worker that adds to a bundle would otherwise
+raise the same `.size-limit.json` line to its own number, a conflict at every restack. So
+monitor the budgets yourself. Run `pnpm size` when planning, estimate what each thread adds, and
+plan for the *first* thread to raise each budget to cover the sum, so every thread's edits agree:
+if a budget stands at 25 of 28 and the workers will add 1, 3 and 6, advance the cap to 38 once,
+at the root of the stack, and no one edits it again. Put the raise in that thread's text and
+look-ahead (the plan says which thread owns `.size-limit.json`). The rule for a budget (PROCESS.md,
+*Size budgets*) is the measure plus 3 kB, or plus 50% (at least 1 kB) under 5 kB, rounded *up* to a
+round number (2_500, not 2_431; 150_000, not 146_000): round numbers do not conflict. Early on you
+only guess the sprint's target, so guess generously and round; then plan a *late* thread to lower
+the budgets to the rule once the sprint's sizes are known (it need only re-derive and round up).
+
 **`<sprint_name>-progress.md`** -- yours alone: a one-line-per-thread *Status* table (`pending`
 each; then `underway`, `in review`, `filing`, `filed #N`, `blocked`, `waiting on a merge`), and a
 curated summary of what the threads have taught, newer than the plan wherever they disagree.
@@ -126,6 +138,13 @@ Your scratch files go in <scratchpad>/<label>/.
 
 Look-ahead from the orchestrator: <what later threads need from this one, if anything>.
 ```
+
+The thread that owns `.size-limit.json` (§1, *Size budgets*) raises the budgets to cover the
+sprint's sum; every other worker leaves them alone, and a worker whose thread would overshoot
+what it was given says so in its report, for you to carry to the plan, rather than editing the
+file. The late thread that lowers the budgets to the rule is the one exception, and it is yours to
+plan: its text says to re-derive each budget from `pnpm size` by PROCESS.md's *Size budgets*, and
+a lowering never goes below the rule's round number.
 
 Every agent you spawn shares this session's scratchpad, so give each thread a subdirectory of
 its own there. A background worker that reports its tools refused (a permission it could not
