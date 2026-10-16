@@ -1,6 +1,7 @@
 import { mutationGeneric, queryGeneric } from 'convex/server'
 import type { ApiFromModules, GenericDataModel, GenericQueryCtx, MutationBuilder, QueryBuilder } from 'convex/server'
 import { ConvexError, v } from 'convex/values'
+import { VaultError } from 'safebyok'
 import type { ComponentApi } from './component-api'
 import type { SafebyokErrorData } from './refusals'
 import {
@@ -59,8 +60,11 @@ export class SafebyokComponent {
    *
    * @param opts - `getUserId`: who is calling, from the host's own auth.
    * @returns The functions, to export under these names from one module of the host's `convex/`.
+   *   Kind 'bad_option', here and now rather than on the first request, for options that are not
+   *   a bag holding a `getUserId` function.
    */
-  api<DataModel extends GenericDataModel>({ getUserId }: SafebyokApiOpts<DataModel>) {
+  api<DataModel extends GenericDataModel>(opts: SafebyokApiOpts<DataModel>) {
+    const { getUserId } = checkedApiOpts<DataModel>(opts)
     const { vaults } = this.component
     // Convex's builders, typed by the host's data model, as its own codegen types them: each
     // handler's ctx is then the one the host's getUserId is written against.
@@ -160,6 +164,14 @@ export class SafebyokComponent {
  * the host re-exports {@link SafebyokComponent.api}'s functions from `convex/safebyok.ts`.
  */
 export type SafebyokApi = ApiFromModules<{ safebyok: ReturnType<SafebyokComponent['api']> }>['safebyok']
+
+/** The bag `api` was handed, once it holds a `getUserId` function: misuse, caught at setup. */
+const checkedApiOpts = <DataModel extends GenericDataModel>(opts: unknown): SafebyokApiOpts<DataModel> => {
+  if (typeof opts !== 'object' || opts === null || typeof (opts as { getUserId?: unknown }).getUserId !== 'function') {
+    throw new VaultError('bad_option', "SafebyokComponent.api takes { getUserId }, a function that answers who is signed in: async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null. It runs first in every safebyok function, so a missing one would otherwise show only at the first request.")
+  }
+  return opts as SafebyokApiOpts<DataModel>
+}
 
 const identityRevoked = (message: string) => (
   new ConvexError<SafebyokErrorData>({ kind: 'identity_revoked', message })

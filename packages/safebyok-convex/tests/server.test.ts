@@ -1,4 +1,8 @@
+import { defineSchema } from 'convex/server'
+import { defineTestApp } from 'convex-test'
 import { describe, expect, it } from 'vitest'
+import { SafebyokComponent } from '../src/server'
+import { register } from '../src/test'
 import * as TH from './test-helpers'
 
 const { api, createTest } = TH.hostWith(TH.bySubject)
@@ -135,5 +139,33 @@ describe("SafebyokComponent.api, with the host's getUserId", () => {
     expect(await t.query(host.api.safebyok.getBundle, { scope: TH.scopeOf('user|u1') })).to.deep.equal(TH.bundleOf('user|u1'))
     const refusal = await TH.convexRefusalOf(t.query(host.api.safebyok.getBundle, { scope: u1 }))
     expect(refusal.kind).to.eq('identity_revoked')
+  })
+})
+
+describe("SafebyokComponent.api, at setup", () => {
+  const app = defineTestApp({ schema: defineSchema({}), components: { safebyok: { register } } })
+  const component = new SafebyokComponent(app.components.safebyok)
+
+  const BadOptsCases = [
+    [undefined,                        'no options at all'],
+    [null,                             'null for options'],
+    [{},                               'a bag without getUserId'],
+    [{ getUserID: () => null },        'a misspelt getUserId'],
+    [{ getUserId: undefined },         'an undefined getUserId'],
+    [{ getUserId: 'u1' },              'a getUserId that is text, not a function'],
+    [{ getUserId: { subject: 'u1' } }, 'a getUserId that is an object, not a function'],
+  ] as const
+
+  for (const [opts, blurb] of BadOptsCases) {
+    it(`refuses ${blurb} with a bad_option that says what to pass`, () => {
+      expect(() => component.api(opts as never))
+        .to.throw(/\{ getUserId \}, a function that answers who is signed in/)
+        .with.property('kind', 'bad_option')
+    })
+  }
+
+  it("builds the functions when getUserId is a function, sync or async", () => {
+    expect(Object.keys(component.api({ getUserId: () => null }))).to.have.length(9)
+    expect(Object.keys(component.api({ getUserId: () => Promise.resolve('u1') }))).to.have.length(9)
   })
 })
