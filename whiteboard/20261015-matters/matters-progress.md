@@ -10,9 +10,9 @@
 | 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | underway (on #107)         |
 | 6 | race_helper       | waiting on thread 5        |
-| 7 | indexeddb_fixes   | review fixed; files after 9 |
+| 7 | indexeddb_fixes   | filing onto #108           |
 | 8 | size_rule         | filed #99 (commits on it)  |
-| 9 | damaged_bundle    | filing onto #107           |
+| 9 | damaged_bundle    | filed #108 (on #107)       |
 | 10 | identity_revoked | filed #106 (on #105)        |
 | 11 | vaultdb_contract | filed #107 (on #106)       |
 | 12 | postgres_soft_cap | underway (on #107)        |
@@ -24,7 +24,7 @@
 | 15 | e2e_home         | review clean; files after 16 |
 | 16 | late_unlock      | review fixed; files after 7 |
 | 17 | validation_note  | waits on #101 merging      |
-| 21 | damaged_erase    | waits on #108 filing       |
+| 21 | damaged_erase    | underway (on #108)         |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
@@ -37,7 +37,9 @@
   tests still catch a broken adapter. Left: no coverage report now measures `convex-vault-db.ts`
   (with the Coach's ruling on the move); stale comments listing only `packages/` and `demos/`.
   **A flake seen:** `safebyok-react`'s `vault-provider.test.tsx` ("an action through
-  withUnlockedVault summons the dialog...") failed once under a parallel justify, passing on rerun.
+  withUnlockedVault summons the dialog...") failed once under a parallel justify, passing on rerun;
+  and the demo's `answerPassphraseDialog` ("unlocks a locked vault through the dialog...") once
+  at thread 9's filing. Both are dialog tests under load: a candidate for a small thread.
 
 *Orchestrator (~02:10Z):* the Coach merged #99 (taking #96 with it); #98, #97, #105 and #106 sit
 above it, so they stay open until the Coach merges the line's top. **Filing is serialized**: each
@@ -112,8 +114,8 @@ worktree shares -- now a ground rule against it.
   `reentryHours` prop for `vault.reentryWindowMs`, so #98's three bad-`reentryHours` tests went with
   the prop. `.size-limit.json`: main's two new entries (validators 8.5 kB, DefaultValidators 4 kB)
   predate the rule; validators measures 8.15 kB, so a thread that grows it widens it by the rule
-  (about 12 kB). **New threads stack on the line's top: now #107** (main, with #96 and #99 merged, →
-  #98 → #97 → #105 → #106 → #107). Local tags `<branch>-prerestack3` hold the old tips.
+  (about 12 kB). **New threads stack on the line's top: now #108** (main, with #96 and #99 merged, →
+  #98 → #97 → #105 → #106 → #107 → #108). Local tags `<branch>-prerestack3` hold the old tips.
 
 *Orchestrator (2026-10-16 ~01:35Z):* the previous orchestrator session ended mid-sprint; threads
 9, 10, 11 and 13 stopped with nothing committed (9 and 10 left work in progress in their
