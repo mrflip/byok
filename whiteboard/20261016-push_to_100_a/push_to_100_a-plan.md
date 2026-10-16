@@ -7,9 +7,10 @@
 * **Issued by**: the Coach (flip), via `/sprint ... YOLO mode!!! /turbochat`, on the preplan the
   Coach and Fable wrote together (`20261016-push_to_100_a-preplan.md`, beside this file). The
   Coach: reason independently, and evolve the plan on what the threads discover.
-* **Sprint PR**: (filled in once filed)
-* **Sprint doc**: (filled in once born) -- *Open Matters* is its first tab
-* **Status**: planned
+* **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
+* **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
+  *Open Matters* is its first tab
+* **Status**: threads 1, 3, 6 and 5a underway
 
 ## Read first
 
@@ -166,7 +167,10 @@ handoff carries it whole. Below, the orchestrator's gloss.
   wire the presence check and name it in the README (the Coach's yes is an open row). The
   far-future rule is 3's (`>= FarFuture - MinuteMillis`): use it with a local constant if 3 has
   not landed, and say so. There is no `safebyok-react` size-limit entry today: report the
-  measure, and thread 8 adds the line.
+  measure, and thread 8 adds the line. The note's password-manager ignore attributes are
+  exported from `safebyok/utils` beside `mask` (framework-neutral; no new package), and the
+  React field spreads them; the whisper field takes a host `placeholder`, none by default (both
+  defaults of open rows in the sprint doc).
 
 ### 8. `ci_release` -- the release workflow's ruled changes and the CI leftovers
 
@@ -209,6 +213,13 @@ handoff carries it whole. Below, the orchestrator's gloss.
 * **Touches**: `safebyok-indexeddb`, `safebyok-convex`'s component, `safebyok-postgres`,
   `safebyok-graphql`'s recipe and README, the battery flag.
 * **Model**: opus. **Depends on**: 4.
+
+## Coach rulings during the sprint
+
+From the sprint doc's *Open Matters*, as rows are swept:
+
+* **`user_id` characters** (thread 1): yes, letters, digits and `-_.:@+|`, 1 to 100.
+* **Standard Schema** (G497): stays NOT YET.
 
 ## Decisions taken in YOLO
 
