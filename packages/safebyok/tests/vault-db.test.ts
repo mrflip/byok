@@ -14,16 +14,19 @@ import * as TH from './test-helpers'
  * What an adapter author writes; the validation around it comes from the base class. Given a
  * `maxLockboxes`, it refuses a new lockbox in a vault already holding that many, after the
  * expectation is checked, so a first write under a boxlabel already taken is stale, never full.
+ * Given `rows`, it shares them with every other MapVaultDB given the same: another device of one
+ * backend in this process.
  */
 class MapVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
   readonly maxVaultBytes = Infinity
   readonly maxLockboxes: number
-  readonly rows = new Map<string, unknown>()
+  readonly rows: Map<string, unknown>
 
-  constructor(maxLockboxes = Infinity) {
+  constructor(maxLockboxes = Infinity, rows = new Map<string, unknown>()) {
     super()
     this.maxLockboxes = maxLockboxes
+    this.rows = rows
   }
 
   private standingBundle(scope: VaultScope) { return this.rows.get(Ckeys.bundle(scope)) as VaultBundle | undefined }
@@ -97,9 +100,21 @@ class TroubledVaultDB extends MapVaultDB {
 
 const unheard = (): void => undefined
 
-TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()), { pushes: true })
+// Each adapter's devices share one store or Map, synchronous and in this process, so they make no
+// round trips for a turnstile to hold: the races interleave them at every await.
+TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()), {
+  pushes:      true,
+  makeDevices: () => {
+    const store = memoryStore()
+    return () => localVaultDB(store)
+  },
+})
 TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB(), {
   makeCappedVaultDB: (maxLockboxes) => new MapVaultDB(maxLockboxes),
+  makeDevices:       () => {
+    const rows = new Map<string, unknown>()
+    return ({ maxLockboxes }) => new MapVaultDB(maxLockboxes, rows)
+  },
 })
 
 // The ckeys u1's main vault is filed under, spelled out rather than computed: they are stored.

@@ -406,6 +406,284 @@ export const tallyWatches = (vaultDB: Pick<VaultDB, 'subscribe'>) => {
   return tally
 }
 
+// ------------------------------------------------------------------------- racing devices
+
+/**
+ * Where every round trip one backend's devices make passes, so that a race can stop a device just
+ * before one of them and run another device's write while it waits. A device's adapter awaits
+ * `pass()` before each call it makes to its backend -- each statement, each request, each
+ * transaction -- and goes straight on unless the race is holding that one. Wire it around a
+ * client's methods with {@link throughTurnstile}, or await `pass()` wherever a round trip begins.
+ */
+export type Turnstile = {
+  /** Resolves once this round trip may go: at once, unless the race is holding it. */
+  pass: () => Promise<void>
+}
+
+/** A turnstile, and the race's hold on it: stop the nth pass from now, or stop none. */
+const makeTurnstile = () => {
+  let armed: { untilHeld: number, gate: ReturnType<typeof makeGate> } | null = null
+  const pass = async () => {
+    if (armed === null) { return }
+    armed.untilHeld -= 1
+    if (armed.untilHeld > 0) { return }
+    const { gate } = armed
+    armed = null
+    await gate.pass()
+  }
+  const holdAt = (nth: number) => {
+    const gate = makeGate()
+    armed = { untilHeld: nth, gate }
+    return gate
+  }
+  const holdNone = () => { armed = null }
+  const turnstile: Turnstile = { pass }
+  return { turnstile, holdAt, holdNone }
+}
+
+/** A turnstile no race holds, for a test that makes devices without racing them. */
+const openTurnstile: Turnstile = { pass: () => Promise.resolve() }
+
+/**
+ * `target`, each of its `verbs` first awaiting `turnstile.pass()`, and the rest of it as it was: a
+ * device's backend client, for {@link DescribeVaultDBOpts.makeDevices}, each of whose round trips
+ * then passes the race's turnstile. Every method keeps `target` as its `this`.
+ *
+ * @param turnstile - The race's turnstile, as `makeDevices` is handed it.
+ * @param target - The client a device's adapter makes its round trips through.
+ * @param verbs - Its methods that are round trips, each returning a promise.
+ * @returns A stand-in for `target`, to hand the device's adapter in its place.
+ *
+ * @example postgresVaultDB({ client: TH.throughTurnstile(turnstile, pool, ['query']), userId })
+ * @example convexVaultDB(TH.throughTurnstile(turnstile, client, ['query', 'mutation']), api)
+ */
+export const throughTurnstile = <Target extends object>(turnstile: Turnstile, target: Target, verbs: readonly (AsyncVerbOf<Target> & string)[]): Target => (
+  new Proxy(target, {
+    get: (held, prop) => {
+      const val: unknown = Reflect.get(held, prop, held)
+      if (typeof val !== 'function') { return val }
+      const method = val as (...args: unknown[]) => unknown
+      if (! (verbs as readonly PropertyKey[]).includes(prop)) { return method.bind(held) }
+      return async (...args: unknown[]) => {
+        await turnstile.pass()
+        return method.apply(held, args)
+      }
+    },
+  })
+)
+
+/** How one move in a race settled: `landed`, with what it resolved to, or the kind it was refused with, with what it threw. */
+export type RaceOutcome = { kind: string, val: unknown }
+
+/** A race between devices over one backend, for {@link raceEveryWay}. */
+export type Race<DeviceT> = {
+  /** Fresh devices over one fresh, empty backend, each sharing nothing but the backend, each round trip of each passing `turnstile`. */
+  makeDevices: (turnstile: Turnstile) => (() => DeviceT) | Promise<() => DeviceT>
+  /** What stands before the race, made through the first device. */
+  setup?: ((first: DeviceT) => Promise<unknown>) | undefined
+  /** Each device's move, a device to each: the first move on the first device, and so on. Two or more. */
+  moves: readonly ((device: DeviceT) => Promise<unknown>)[]
+  /** What must hold after every schedule, given the moves' outcomes in order and the devices; throws when it does not. */
+  verdict: (outcomes: RaceOutcome[], devices: DeviceT[]) => unknown
+}
+
+/**
+ * Runs `race` under every schedule a test can make of it, each over fresh devices on a fresh
+ * backend, and checks its verdict after each. Two moves are made together; then one is started a
+ * few turns of the event loop after the other, each way round; then, for each round trip a move
+ * makes through the turnstile, that move is held just before it while the other runs to its end,
+ * each way round. More than two are made together, then each is held before its nth round trip
+ * in turn and all are let go at once, for every n. A device that cannot finish its move while
+ * another waits at the turnstile fails the race: the two share a lock, a queue or a connection
+ * that real devices would not, or the adapter holds a lock from one round trip to the next.
+ *
+ * The schedules interleave the moves at every await between round trips that the event loop
+ * reaches, and at every round trip through the turnstile; they cannot split a round trip itself,
+ * which is the backend's to make atomic.
+ *
+ * @param race - The devices, what stands before, each device's move, and the verdict.
+ * @returns The title of each schedule run, in order; it rejects, naming the schedule, on the
+ *   first verdict that fails or device that waits too long.
+ *
+ * @example
+ *   await TH.raceEveryWay({
+ *     makeDevices: (turnstile) => () => postgresVaultDB({ client: TH.throughTurnstile(turnstile, db, ['query']), userId: 'u1' }),
+ *     setup:       (first) => first.createBundle(TH.bundleOf('u1')),
+ *     moves:       [(one) => one.eraseVault(TH.scopeOf('u1'), TH.thisVault), (two) => two.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet)],
+ *     verdict:     async (outcomes, [one]) => { expect(await one.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0) },
+ *   })
+ */
+export const raceEveryWay = async <DeviceT>(race: Race<DeviceT>): Promise<string[]> => {
+  if (race.moves.length < 2) { throw new TypeError('raceEveryWay needs two moves or more to race.') }
+  const titles: string[] = []
+  const runUnder = async (title: string, schedule: Schedule) => {
+    titles.push(title)
+    return await runRaceOnce(race, title, schedule)
+  }
+  await runUnder('made together', together)
+  if (race.moves.length === 2) {
+    for (const [firstIdx, [first, second]] of [[0, ['one', 'two']], [1, ['two', 'one']]] as const) {
+      for (const count of MicrotaskOffsets) { await runUnder(`${second} started ${String(count)} microtasks after ${first}`, staggered(firstIdx, () => microtasks(count))) }
+      for (const count of TickOffsets) { await runUnder(`${second} started ${String(count)} ticks after ${first}`, staggered(firstIdx, () => ticks(count))) }
+      await sweepHolds((nth) => runUnder(`${first} held before its round trip ${String(nth)} while ${second} moved`, holding(firstIdx, nth)))
+    }
+  } else {
+    await sweepHolds((nth) => runUnder(`each held before its round trip ${String(nth)} in turn, then all let go`, crowding(nth)))
+  }
+  return titles
+}
+
+/**
+ * Runs a hold before round trip 1, 2, and on, until a run holds nothing -- its moves made no more
+ * round trips -- and refuses a move that makes more than {@link MostRoundTrips}, rather than leave
+ * the gaps past them unheld.
+ */
+const sweepHolds = async (runHeldAt: (nth: number) => Promise<boolean>) => {
+  for (let nth = 1; nth <= MostRoundTrips + 1; nth += 1) {
+    if (! await runHeldAt(nth)) { return }
+  }
+  throw new Error(`A move made more than ${String(MostRoundTrips)} round trips through the turnstile, so the race could not hold it before each. The VaultDB contract's baseline asks a small, fixed number of round trips of each verb: see whether the adapter, or something polling through its client, makes more.`)
+}
+
+/** Microtasks to start the second move after the first: for an adapter in this process, whose awaits are microtasks. */
+const MicrotaskOffsets = [1, 2, 3, 5, 8] as const
+/** Turns of the macrotask queue to start the second move after the first: for a backend that answers on a later turn. */
+const TickOffsets = [1, 2] as const
+/** The most round trips a race holds a move before; a move making more fails the race. */
+const MostRoundTrips = 12
+/** How long a device's move may take while another device waits at the turnstile before the race calls it a shared lock. */
+const WaitedTooLongMs = 2000
+
+/** The moves of a race, each started on its device. */
+type Start = () => Promise<RaceOutcome>
+/** One schedule: makes the moves in its own order, and says whether it held a move at the turnstile. */
+type Schedule = (starts: readonly Start[], keeper: ReturnType<typeof makeTurnstile>) => Promise<{ outcomes: RaceOutcome[], held: boolean }>
+
+/** Runs `race` once, under `schedule`, over fresh devices; says whether a move was held. Rejects, naming the schedule, if it fails. */
+const runRaceOnce = async <DeviceT>(race: Race<DeviceT>, title: string, schedule: Schedule): Promise<boolean> => {
+  const keeper = makeTurnstile()
+  try {
+    const deviceFor = await race.makeDevices(keeper.turnstile)
+    const entrants = race.moves.map((move) => {
+      const device = deviceFor()
+      return { device, start: () => outcomeOf(move(device)) }
+    })
+    const devices = entrants.map((entrant) => entrant.device)
+    if (race.setup && devices[0] !== undefined) { await race.setup(devices[0]) }
+    const { outcomes, held } = await schedule(entrants.map((entrant) => entrant.start), keeper)
+    await race.verdict(outcomes, devices)
+    return held
+  } catch (err) {
+    throw new Error(`Under the schedule "${title}": ${err instanceof Error ? err.message : String(err)}`, { cause: err })
+  }
+}
+
+/** How a move settled, never rejecting: `landed` and its value, or its refusal's kind (`unknown` for none) and the refusal. */
+const outcomeOf = async (move: Promise<unknown>): Promise<RaceOutcome> => {
+  try {
+    return { kind: 'landed', val: await move }
+  } catch (err) {
+    const { kind } = (err ?? {}) as { kind?: unknown }
+    return { kind: typeof kind === 'string' ? kind : 'unknown', val: err }
+  }
+}
+
+/** The two moves of a pair race, `firstIdx`'s first: the first device's and the second's, swapped for 1. */
+const pairOf = (starts: readonly Start[], firstIdx: 0 | 1): [Start, Start] => {
+  const [one, two] = starts
+  if (one === undefined || two === undefined) { throw new TypeError('A pair race has two moves.') }
+  return firstIdx === 0 ? [one, two] : [two, one]
+}
+
+/** Outcomes back in the moves' own order, from the order a schedule made them in. */
+const inMoveOrder = (firstIdx: 0 | 1, first: RaceOutcome, second: RaceOutcome): RaceOutcome[] => (firstIdx === 0 ? [first, second] : [second, first])
+
+const together: Schedule = async (starts) => ({ outcomes: await Promise.all(starts.map((start) => start())), held: false })
+
+/** The move of `firstIdx` started, then the other once `wait` resolves. */
+const staggered = (firstIdx: 0 | 1, wait: () => Promise<void>): Schedule => async (starts) => {
+  const [first, second] = pairOf(starts, firstIdx)
+  const firstMove = first()
+  await wait()
+  const secondMove = second()
+  return { outcomes: inMoveOrder(firstIdx, await firstMove, await secondMove), held: false }
+}
+
+/**
+ * The move of `firstIdx` held before its nth round trip while the other moves to its end, then let
+ * go. A move that ends before its nth round trip is let finish, and the other then moves: the
+ * moves one after another, the last schedule of the sweep.
+ */
+const holding = (firstIdx: 0 | 1, nth: number): Schedule => async (starts, keeper) => {
+  const [first, second] = pairOf(starts, firstIdx)
+  const gate = keeper.holdAt(nth)
+  const firstMove = first()
+  const arrived = await reachedBeforeEnd(gate, firstMove)
+  if (! arrived) {
+    keeper.holdNone()
+    const firstOutcome = await firstMove
+    return { outcomes: inMoveOrder(firstIdx, firstOutcome, await second()), held: false }
+  }
+  const secondMove = await inTime(second())
+  gate.release()
+  if (! secondMove.inTime) { throw waitedTooLong() }
+  return { outcomes: inMoveOrder(firstIdx, await firstMove, secondMove.val), held: true }
+}
+
+/** Each move held before its nth round trip in turn, so all are midway at once, then all let go together. */
+const crowding = (nth: number): Schedule => async (starts, keeper) => {
+  const gates: ReturnType<typeof makeGate>[] = []
+  const moves: Promise<RaceOutcome>[] = []
+  for (const start of starts) {
+    const gate = keeper.holdAt(nth)
+    const move = start()
+    moves.push(move)
+    const arrival = await inTime(reachedBeforeEnd(gate, move))
+    if (! arrival.inTime) {
+      for (const each of [...gates, gate]) { each.release() }
+      throw waitedTooLong()
+    }
+    if (arrival.val) { gates.push(gate) } else { keeper.holdNone() }
+  }
+  for (const gate of gates) { gate.release() }
+  return { outcomes: await Promise.all(moves), held: gates.length > 0 }
+}
+
+/** True once a move waits at `gate`, or false once `move` ends without coming to it. */
+const reachedBeforeEnd = (gate: ReturnType<typeof makeGate>, move: Promise<unknown>): Promise<boolean> => Promise.race([trueOnce(gate.reached), falseOnce(move)])
+const trueOnce = async (promise: Promise<unknown>) => {
+  await promise
+  return true
+}
+const falseOnce = async (promise: Promise<unknown>) => {
+  await promise
+  return false
+}
+
+/** What `promise` resolves to, if it does within {@link WaitedTooLongMs}. */
+const inTime = async <ValT>(promise: Promise<ValT>): Promise<{ inTime: true, val: ValT } | { inTime: false }> => {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const late = new Promise<{ inTime: false }>((resolve) => { timer = setTimeout(() => { resolve({ inTime: false }) }, WaitedTooLongMs) })
+  const timely = async () => ({ inTime: true as const, val: await promise })
+  const settled = await Promise.race([timely(), late])
+  clearTimeout(timer)
+  return settled
+}
+
+const waitedTooLong = () => new Error(
+  `a device's move did not finish within ${String(WaitedTooLongMs)} ms while another device waited at the turnstile, before a round trip to the backend. The devices share something that makes one wait for the other -- a lock, a queue, a connection -- that two real devices would not, or the adapter holds a lock from one round trip to the next, which the VaultDB contract's baseline rules out.`,
+)
+
+/** Resolves after `count` turns of the microtask queue. */
+const microtasks = async (count: number) => {
+  for (let ii = 0; ii < count; ii += 1) { await Promise.resolve() }
+}
+
+/** Resolves after `count` turns of the macrotask queue. */
+const ticks = async (count: number) => {
+  for (let ii = 0; ii < count; ii += 1) { await wakeupAtNextTick() }
+}
+
 /** Stands in for a resolver until the promise hands over its own. */
 const unresolved = () => { /* replaced before use */ }
 
@@ -586,7 +864,24 @@ export type DescribeVaultDBOpts = {
    * it out.
    */
   pushes?: boolean | undefined
+  /**
+   * A fresh, empty backend, as a way to make devices over it: for the races (lines 3.1 to 3.7 and
+   * 4.5) made from different devices, line 2.1 across devices, and 6.1's push from another device.
+   * Each device is an adapter of its own over that backend, sharing nothing else with the others --
+   * no adapter, client, connection, lock or queue -- held to `maxLockboxes` where the adapter takes a
+   * limit (as for `makeCappedVaultDB`), and passing `turnstile` before every round trip it makes to
+   * the backend ({@link throughTurnstile}), so a race can hold it there. An adapter over a backend in
+   * this process that answers synchronously makes no round trips, and leaves `turnstile` be.
+   * Without it, the races run through one adapter, as `makeVaultDB` makes it, and the rest is skipped.
+   */
+  makeDevices?: MakeVaultDBDevices | undefined
 }
+
+/** What a device of {@link DescribeVaultDBOpts.makeDevices} is made with: the limit to hold it to, where the adapter takes one. */
+export type VaultDBDeviceOpts = { maxLockboxes?: number | undefined }
+
+/** A fresh, empty backend, as a way to make devices over it, each round trip of each passing `turnstile`. */
+export type MakeVaultDBDevices = (turnstile: Turnstile) => ((deviceOpts: VaultDBDeviceOpts) => VaultDBVerbs) | Promise<(deviceOpts: VaultDBDeviceOpts) => VaultDBVerbs>
 
 /** The lockbox limit {@link describeVaultDB} asks a capped adapter for. */
 const CappedLockboxes = 3
@@ -617,7 +912,7 @@ const CappedLockboxes = 3
  *   })
  */
 export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDBVerbs | Promise<VaultDBVerbs>, opts: DescribeVaultDBOpts = {}) => {
-  const { makeCappedVaultDB, makeVaultDBFor, pushes = false } = opts
+  const { makeCappedVaultDB, makeVaultDBFor } = opts
 
   /** The title of a group of tests for one line of the contract. */
   const lineTitle = (line: VaultDBContractLine) => `${adapterTitle}, as a VaultDB, ${line}: ${VaultDBContract[line]}`
@@ -626,6 +921,15 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
   const capped = makeCappedVaultDB !== undefined
   // And who may reach a vault, only over an adapter that knows who is signed in.
   const signsIn = makeVaultDBFor !== undefined
+
+  // The races, the lines across devices and the push tests, each runnable on its own.
+  const timing = vaultDBTimingChecks(makeVaultDB, opts)
+  /** Each timing check of `line`, as a test, run where its adapter can give what it needs. */
+  const timingTestsOf = (line: VaultDBContractLine) => {
+    for (const check of Object.values(timing)) {
+      if (check.line === line) { it.runIf(check.runs)(check.title, () => expectToHold(check), TimingTestMs) }
+    }
+  }
 
   /** A fresh adapter whose `u1` scope holds a bundle, as every lockbox write needs. */
   const withBundle = async () => {
@@ -776,6 +1080,8 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault)
       expect(await revisionsNow()).to.deep.equal({ read: null, listed: [] })
     })
+
+    timingTestsOf('2.1')
   })
 
   describe(lineTitle('2.2'), () => {
@@ -826,15 +1132,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
     })
 
-    it("settles two devices creating at once on one bundle, which both get back", async () => {
-      const vaultDB = await makeVaultDB()
-      const [one, two] = await Promise.all([
-        vaultDB.createBundle({ ...bundleOf('u1'), vault_id: 'vault-id-one' }),
-        vaultDB.createBundle({ ...bundleOf('u1'), vault_id: 'vault-id-two' }),
-      ])
-      expect(one).to.deep.equal(two)
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(one)
-    })
+    timingTestsOf('3.1')
   })
 
   describe(lineTitle('3.2'), () => {
@@ -867,13 +1165,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
     })
 
-    it("lands one of two updates made at once over the same bundle, and refuses the other as stale_write", async () => {
-      const vaultDB = await withBundle()
-      const rivals = [bundleOf('u1', { unlock_epoch: 2, unlocks: [envelopeOf('one')] }), bundleOf('u1', { unlock_epoch: 2, unlocks: [envelopeOf('two')] })]
-      const outcomes = await Promise.all(rivals.map((rival) => settledKind(vaultDB.updateBundle(rival, { vault_id: 'vault-id-u1', unlock_epoch: 1 }))))
-      expect(outcomes.toSorted((one, two) => one.localeCompare(two))).to.deep.equal(['landed', 'stale_write'])
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(rivals[outcomes.indexOf('landed')])
-    })
+    timingTestsOf('3.2')
   })
 
   describe(lineTitle('3.3'), () => {
@@ -916,22 +1208,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u2', revision_id: null }), 'stale_write')
     })
 
-    it("lands one of two first writes of a lockbox made at once, and refuses the other as stale_write", async () => {
-      const vaultDB = await withBundle()
-      const rivals = [boxOf('anthropic', 'one'), boxOf('anthropic', 'two')]
-      const outcomes = await Promise.all(rivals.map((rival) => settledKind(vaultDB.updateBox(scopeOf('u1'), rival, noBoxYet))))
-      expect(outcomes.toSorted((one, two) => one.localeCompare(two))).to.deep.equal(['landed', 'stale_write'])
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(rivals[outcomes.indexOf('landed')])
-    })
-
-    it("lands one of two replacements made at once over the same revision, and refuses the other as stale_write", async () => {
-      const vaultDB = await withBundle()
-      await storeEach(vaultDB, ['anthropic'])
-      const rivals = [boxOf('anthropic', 'one'), boxOf('anthropic', 'two')]
-      const outcomes = await Promise.all(rivals.map((rival) => settledKind(vaultDB.updateBox(scopeOf('u1'), rival, { vault_id: 'vault-id-u1', revision_id: 'rev-anthropic' }))))
-      expect(outcomes.toSorted((one, two) => one.localeCompare(two))).to.deep.equal(['landed', 'stale_write'])
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(rivals[outcomes.indexOf('landed')])
-    })
+    timingTestsOf('3.3')
   })
 
   describe(lineTitle('3.4'), () => {
@@ -968,16 +1245,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await expectRefusal(vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault), 'stale_write')
     })
 
-    it("wins over a replacement made at once: the erase lands, and the lockbox is gone whichever came first", async () => {
-      const vaultDB = await withBundle()
-      await storeEach(vaultDB, ['anthropic'])
-      const erasing = vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault)
-      const writing = vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'next'), { vault_id: 'vault-id-u1', revision_id: 'rev-anthropic' })
-      const [erased, written] = await Promise.all([settledKind(erasing), settledKind(writing)])
-      expect(erased).to.eq('landed')
-      expect(['landed', 'stale_write']).to.include(written)
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
-    })
+    timingTestsOf('3.4')
   })
 
   describe(lineTitle('3.5'), () => {
@@ -1010,18 +1278,6 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
     })
 
-    it("leaves no lockbox behind a vault erased while one was written into it", async () => {
-      const vaultDB = await withBundle()
-      const erasing = vaultDB.eraseVault(scopeOf('u1'), thisVault)
-      const writing = vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
-      const [erased, written] = await Promise.all([settledKind(erasing), settledKind(writing)])
-      expect(erased).to.eq('landed')
-      expect(['landed', 'stale_write']).to.include(written)
-      expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
-      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
-      expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
-    })
-
     it("eraseDamagedVault leaves a vault that stands sound as it is, and is quiet where none stands", async () => {
       const vaultDB = await withBundle()
       await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
@@ -1032,6 +1288,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await vaultDB.eraseDamagedVault(scopeOf('u1'))
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
     })
+    timingTestsOf('3.5')
   })
 
   describe(lineTitle('3.6'), () => {
@@ -1055,25 +1312,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
   })
 
   describe(lineTitle('3.7'), () => {
-    it("lands every new lockbox written into one vault at once", async () => {
-      const vaultDB = await withBundle()
-      const boxlabels = ['anthropic', 'openai', 'mistral', 'gemini']
-      await Promise.all(boxlabels.map((boxlabel) => vaultDB.updateBox(scopeOf('u1'), boxOf(boxlabel, boxlabel), noBoxYet)))
-      const listed = await vaultDB.listBoxes(scopeOf('u1'))
-      expect(listed.map((box) => box.boxlabel)).to.have.members(boxlabels)
-    })
-
-    it("lands a replacement, a new lockbox and an erase of three different lockboxes made at once", async () => {
-      const vaultDB = await withBundle()
-      await storeEach(vaultDB, ['anthropic', 'openai'])
-      await Promise.all([
-        vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'next'), { vault_id: 'vault-id-u1', revision_id: 'rev-anthropic' }),
-        vaultDB.updateBox(scopeOf('u1'), boxOf('mistral', 'mistral'), noBoxYet),
-        vaultDB.eraseBox(scopeOf('u1'), 'openai', thisVault),
-      ])
-      const listed = await vaultDB.listBoxes(scopeOf('u1'))
-      expect(listed.map((box) => [box.boxlabel, summaryOf(box)?.revision_id])).to.deep.equal([['anthropic', 'rev-next'], ['mistral', 'rev-mistral']])
-    })
+    timingTestsOf('3.7')
   })
 
   describe(lineTitle('4.1'), () => {
@@ -1129,24 +1368,8 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
     })
   })
 
-  describe.runIf(capped)(lineTitle('4.5'), () => {
-    it("keeps every lockbox that landed when writers race for the last place, and leaves nothing of those refused", async () => {
-      const vaultDB = await cappedHolding(['anthropic', 'openai'])
-      const racers = ['mistral', 'gemini', 'cohere', 'groq']
-      const outcomes = await Promise.all(racers.map((boxlabel) => settledKind(vaultDB.updateBox(scopeOf('u1'), boxOf(boxlabel, boxlabel), noBoxYet))))
-      // However many found room -- one, where the adapter checks strictly; more, where it does
-      // not -- each landed or was refused as full, and at least one landed.
-      expect(outcomes.every((outcome) => outcome === 'landed' || outcome === 'vault_full')).to.be.true
-      const landed = racers.filter((_boxlabel, ii) => outcomes[ii] === 'landed')
-      expect(landed).to.not.have.lengthOf(0)
-      const found = await Promise.all(racers.map((boxlabel) => revisionIn(vaultDB, boxlabel)))
-      expect(found).to.deep.equal(racers.map((boxlabel, ii) => (outcomes[ii] === 'landed' ? `rev-${boxlabel}` : null)))
-      // Back under the limit, keeping one racer that landed: the listing is whole again.
-      const [kept, ...others] = landed
-      for (const boxlabel of ['anthropic', 'openai', ...others]) { await vaultDB.eraseBox(scopeOf('u1'), boxlabel, thisVault) }
-      const listed = await vaultDB.listBoxes(scopeOf('u1'))
-      expect(listed.map((box) => box.boxlabel)).to.deep.equal([kept])
-    })
+  describe(lineTitle('4.5'), () => {
+    timingTestsOf('4.5')
   })
 
   describe(lineTitle('5.1'), () => {
@@ -1215,42 +1438,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       unsubscribe()
     })
 
-    it.runIf(pushes)("calls onChange after each kind of write to the vault", async () => {
-      const vaultDB = await makeVaultDB()
-      const { heard, onChange } = changeCounter()
-      const unsubscribe = vaultDB.subscribe(scopeOf('u1'), onChange)
-      await watchSettled(vaultDB)
-      const writes = [
-        () => vaultDB.createBundle(bundleOf('u1')),
-        () => vaultDB.updateBundle(bundleOf('u1', { unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }),
-        () => vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet),
-        () => vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault),
-        () => vaultDB.eraseVault(scopeOf('u1'), thisVault),
-      ]
-      for (const write of writes) {
-        const heardBefore = heard.count
-        await write()
-        await vi.waitFor(() => { expect(heard.count).to.be.greaterThan(heardBefore) })
-      }
-      unsubscribe()
-    })
-
-    it.runIf(pushes)("calls an unsubscribed onChange no more, however often it unsubscribes, while another watch still hears", async () => {
-      const vaultDB = await makeVaultDB()
-      const gone = changeCounter()
-      const stays = changeCounter()
-      const unsubscribe = vaultDB.subscribe(scopeOf('u1'), gone.onChange)
-      const unsubscribeStays = vaultDB.subscribe(scopeOf('u1'), stays.onChange)
-      await watchSettled(vaultDB)
-      unsubscribe()
-      unsubscribe()
-      const [goneBefore, staysBefore] = [gone.heard.count, stays.heard.count]
-      await vaultDB.createBundle(bundleOf('u1'))
-      await vi.waitFor(() => { expect(stays.heard.count).to.be.greaterThan(staysBefore) })
-      await wakeupAtNextTick()
-      expect(gone.heard.count).to.eq(goneBefore)
-      unsubscribeStays()
-    })
+    timingTestsOf('6.1')
   })
 
   describe(lineTitle('7.1'), () => {
@@ -1269,6 +1457,431 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
   })
 }
 
+/** The longest a race or push test may take: a race runs a score of schedules, each over a fresh backend. */
+const TimingTestMs = 60_000
+
+/** One of {@link vaultDBTimingChecks}: the contract line it proves, its title, whether its adapter can run it, and the check, which rejects when it fails. */
+export type VaultDBTimingCheck = { line: VaultDBContractLine, title: string, runs: boolean, check: () => Promise<void> }
+
+/**
+ * The tests of {@link describeVaultDB} that are about when -- the races between devices, what one
+ * device sees of another's writes, and what subscribe hears -- each runnable on its own, so a test
+ * can show that one fails against an adapter that breaks it. `describeVaultDB` runs each in its
+ * line's group, where `runs`. Each race runs under every schedule of {@link raceEveryWay}, its
+ * devices from `makeDevices`, or else every move through one adapter from `makeVaultDB` (or
+ * `makeCappedVaultDB`, for the limit's).
+ *
+ * @param makeVaultDB - A fresh, empty adapter, as `describeVaultDB` takes it.
+ * @param opts - `describeVaultDB`'s options.
+ * @returns Each check, by a handle naming what it races or watches.
+ *
+ * @example await TH.vaultDBTimingChecks(() => new MyVaultDB(), { makeDevices }).rival_first_writes.check()
+ */
+export const vaultDBTimingChecks = (makeVaultDB: () => VaultDBVerbs | Promise<VaultDBVerbs>, opts: DescribeVaultDBOpts = {}) => {
+  const { makeCappedVaultDB, makeDevices, pushes = false } = opts
+  const capped = makeCappedVaultDB !== undefined
+  const devices = makeDevices !== undefined
+  // Titles say what the moves come from, so a race through one adapter claims no more than it proves.
+  const fromTwo = devices ? 'from two devices' : 'through one adapter'
+  const fromEach = devices ? 'each from its own device' : 'all through one adapter'
+
+  /** Devices over one fresh backend for a race, held to `maxLockboxes` if given: from `makeDevices`, or else one adapter for every move. */
+  const devicesFor = (maxLockboxes?: number) => async (turnstile: Turnstile): Promise<() => VaultDBVerbs> => {
+    if (makeDevices) {
+      const deviceFor = await makeDevices(turnstile)
+      return () => deviceFor({ maxLockboxes })
+    }
+    const shared = await (maxLockboxes === undefined ? makeVaultDB() : cappedAdapter(maxLockboxes))
+    return () => shared
+  }
+  const cappedAdapter = async (maxLockboxes: number) => {
+    if (! makeCappedVaultDB) { throw new Error('vaultDBTimingChecks ran a lockbox limit check with no makeCappedVaultDB.') }
+    return await makeCappedVaultDB(maxLockboxes)
+  }
+  /** Two devices over one fresh backend, its turnstile never held: for a check that is no race. */
+  const twoDevices = async (deviceOpts: VaultDBDeviceOpts = {}): Promise<[VaultDBVerbs, VaultDBVerbs]> => {
+    if (! makeDevices) { throw new Error('vaultDBTimingChecks ran a check across devices with no makeDevices.') }
+    const deviceFor = await makeDevices(openTurnstile)
+    return [deviceFor(deviceOpts), deviceFor(deviceOpts)]
+  }
+  /** A watcher and a writer over one fresh backend: one adapter as both. */
+  const sameAdapterTwice = async (): Promise<[VaultDBVerbs, VaultDBVerbs]> => {
+    const vaultDB = await makeVaultDB()
+    return [vaultDB, vaultDB]
+  }
+  return {
+    seen_across_devices: {
+      line:  '2.1',
+      title: "shows a write made on one device to the very next read and listing on another, and an erase likewise",
+      runs:  devices,
+      check: async () => {
+        const [one, two] = await twoDevices()
+        expect(one, 'makeDevices made one adapter for both devices').to.not.eq(two)
+        await one.createBundle(bundleOf('u1'))
+        expect(await two.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
+        await one.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
+        expect({ read: await revisionIn(two, 'anthropic'), listed: await listedRevisions(two) }).to.deep.equal({ read: 'rev-one', listed: ['rev-one'] })
+        await two.eraseBox(scopeOf('u1'), 'anthropic', thisVault)
+        expect({ read: await revisionIn(one, 'anthropic'), listed: await listedRevisions(one) }).to.deep.equal({ read: null, listed: [] })
+        await two.eraseVault(scopeOf('u1'), thisVault)
+        expect(await one.readBundle(scopeOf('u1'))).to.be.null
+      },
+    },
+    rival_creates: {
+      line:  '3.1',
+      title: `settles two creates of one vault made at once ${fromTwo} on one bundle, which both get back, however they interleave`,
+      runs:  true,
+      check: async () => {
+        await raceEveryWay({
+          makeDevices: devicesFor(),
+          moves:       [(one) => one.createBundle(bundleOf('u1', { vault_id: 'vault-id-one' })), (two) => two.createBundle(bundleOf('u1', { vault_id: 'vault-id-two' }))],
+          verdict:     async (outcomes, racers) => {
+            expect(kindsOf(outcomes)).to.deep.equal(['landed', 'landed'])
+            const [first, second] = outcomes
+            expect(first?.val).to.deep.equal(second?.val)
+            for (const racer of racers) { expect(await racer.readBundle(scopeOf('u1'))).to.deep.equal(first?.val) }
+          },
+        })
+      },
+    },
+    rival_bundle_updates: {
+      line:  '3.2',
+      title: `lands one of two updates of one bundle made at once ${fromTwo}, and refuses the other as stale_write, however they interleave`,
+      runs:  true,
+      check: async () => {
+        const rivals = [bundleOf('u1', { unlock_epoch: 2, unlocks: [envelopeOf('one')] }), bundleOf('u1', { unlock_epoch: 2, unlocks: [envelopeOf('two')] })]
+        await raceEveryWay({
+          makeDevices: devicesFor(),
+          setup:       withBundleFirst,
+          moves:       rivals.map((rival) => (racer: VaultDBVerbs) => racer.updateBundle(rival, { vault_id: 'vault-id-u1', unlock_epoch: 1 })),
+          verdict:     async (outcomes, racers) => {
+            expect(kindsOf(outcomes)).to.deep.equal(['landed', 'stale_write'])
+            const winner = rivals[outcomes.findIndex((outcome) => outcome.kind === 'landed')]
+            for (const racer of racers) { expect(await racer.readBundle(scopeOf('u1'))).to.deep.equal(winner) }
+          },
+        })
+      },
+    },
+    rival_first_writes: {
+      line:  '3.3',
+      title: `lands one of two first writes of a lockbox made at once ${fromTwo}, and refuses the other as stale_write, however they interleave`,
+      runs:  true,
+      check: async () => {
+        const rivals = [boxOf('anthropic', 'one'), boxOf('anthropic', 'two')]
+        await raceEveryWay({
+          makeDevices: devicesFor(),
+          setup:       withBundleFirst,
+          moves:       rivals.map((rival) => (racer: VaultDBVerbs) => racer.updateBox(scopeOf('u1'), rival, noBoxYet)),
+          verdict:     async (outcomes, racers) => {
+            expect(kindsOf(outcomes)).to.deep.equal(['landed', 'stale_write'])
+            const winner = rivals[outcomes.findIndex((outcome) => outcome.kind === 'landed')]
+            for (const racer of racers) { expect(await racer.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(winner) }
+          },
+        })
+      },
+    },
+    rival_replacements: {
+      line:  '3.3',
+      title: `lands one of two replacements of one revision made at once ${fromTwo}, and refuses the other as stale_write, however they interleave`,
+      runs:  true,
+      check: async () => {
+        const rivals = [boxOf('anthropic', 'one'), boxOf('anthropic', 'two')]
+        await raceEveryWay({
+          makeDevices: devicesFor(),
+          setup:       holdingFirst(['anthropic']),
+          moves:       rivals.map((rival) => (racer: VaultDBVerbs) => racer.updateBox(scopeOf('u1'), rival, over('rev-anthropic'))),
+          verdict:     async (outcomes, racers) => {
+            expect(kindsOf(outcomes)).to.deep.equal(['landed', 'stale_write'])
+            const winner = rivals[outcomes.findIndex((outcome) => outcome.kind === 'landed')]
+            for (const racer of racers) { expect(await racer.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(winner) }
+          },
+        })
+      },
+    },
+    erase_beats_replacement: {
+      line:  '3.4',
+      title: `lands an erase made at once ${fromTwo} with a replacement of its lockbox, which is gone afterwards, however they interleave`,
+      runs:  true,
+      check: async () => {
+        await raceEveryWay({
+          makeDevices: devicesFor(),
+          setup:       holdingFirst(['anthropic']),
+          moves:       [(one) => one.eraseBox(scopeOf('u1'), 'anthropic', thisVault), (two) => two.updateBox(scopeOf('u1'), boxOf('anthropic', 'next'), over('rev-anthropic'))],
+          verdict:     async ([erased, written], racers) => {
+            expect(erased?.kind).to.eq('landed')
+            expect(['landed', 'stale_write']).to.include(written?.kind)
+            for (const racer of racers) { expect(await racer.readBox(scopeOf('u1'), 'anthropic')).to.be.null }
+          },
+        })
+      },
+    },
+    vault_erase_beats_write: {
+      line:  '3.5',
+      title: `leaves no lockbox behind a vault erased while a lockbox was written into it ${fromTwo}, however they interleave`,
+      runs:  true,
+      check: async () => {
+        await raceEveryWay({
+          makeDevices: devicesFor(),
+          setup:       withBundleFirst,
+          moves:       [(one) => one.eraseVault(scopeOf('u1'), thisVault), (two) => two.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)],
+          verdict:     async ([erased, written], racers) => {
+            expect(erased?.kind).to.eq('landed')
+            expect(['landed', 'stale_write']).to.include(written?.kind)
+            for (const racer of racers) { expect(await standingVault(racer, ['anthropic'])).to.deep.equal({ bundle: null, listed: [], lockboxes: [null] }) }
+          },
+        })
+      },
+    },
+    apart_new_lockboxes: {
+      line:  '3.7',
+      title: `lands two new lockboxes written into one vault at once ${fromTwo}, however they interleave, neither waiting on the other`,
+      runs:  true,
+      check: async () => {
+        await raceEveryWay({
+          makeDevices: devicesFor(),
+          setup:       withBundleFirst,
+          moves:       [(one) => one.updateBox(scopeOf('u1'), boxOf('anthropic', 'anthropic'), noBoxYet), (two) => two.updateBox(scopeOf('u1'), boxOf('openai', 'openai'), noBoxYet)],
+          verdict:     async (outcomes, racers) => {
+            expect(kindsOf(outcomes)).to.deep.equal(['landed', 'landed'])
+            for (const racer of racers) { expect(await listedRevisions(racer)).to.deep.equal(['rev-anthropic', 'rev-openai']) }
+          },
+        })
+      },
+    },
+    apart_replace_and_erase: {
+      line:  '3.7',
+      title: `lands a replacement of one lockbox and an erase of another made at once ${fromTwo}, however they interleave, neither waiting on the other`,
+      runs:  true,
+      check: async () => {
+        await raceEveryWay({
+          makeDevices: devicesFor(),
+          setup:       holdingFirst(['anthropic', 'openai']),
+          moves:       [(one) => one.updateBox(scopeOf('u1'), boxOf('anthropic', 'next'), over('rev-anthropic')), (two) => two.eraseBox(scopeOf('u1'), 'openai', thisVault)],
+          verdict:     async (outcomes, racers) => {
+            expect(kindsOf(outcomes)).to.deep.equal(['landed', 'landed'])
+            for (const racer of racers) {
+              const listed = await racer.listBoxes(scopeOf('u1'))
+              expect(listed.map((box) => [box.boxlabel, summaryOf(box)?.revision_id])).to.deep.equal([['anthropic', 'rev-next']])
+            }
+          },
+        })
+      },
+    },
+    crowd_for_last_place: {
+      line:  '4.5',
+      title: `keeps every lockbox that landed when four writers race for the last place, ${fromEach}, and leaves nothing of those refused, however they interleave`,
+      runs:  capped,
+      check: async () => {
+        const racers = ['mistral', 'gemini', 'cohere', 'groq']
+        await raceEveryWay({
+          makeDevices: devicesFor(CappedLockboxes),
+          setup:       holdingFirst(['anthropic', 'openai']),
+          moves:       racers.map((boxlabel) => (racer: VaultDBVerbs) => racer.updateBox(scopeOf('u1'), boxOf(boxlabel, boxlabel), noBoxYet)),
+          verdict:     async (outcomes, [first]) => {
+            if (! first) { throw new Error('A crowd race had no devices.') }
+            // However many found room -- one, where the adapter checks strictly; more, where its
+            // count and its insert are apart -- each landed or was refused as full, and one landed.
+            expect(outcomes.every((outcome) => outcome.kind === 'landed' || outcome.kind === 'vault_full')).to.be.true
+            const landed = racers.filter((_boxlabel, ii) => outcomes[ii]?.kind === 'landed')
+            expect(landed).to.not.have.lengthOf(0)
+            const found = await Promise.all(racers.map((boxlabel) => revisionIn(first, boxlabel)))
+            expect(found).to.deep.equal(racers.map((boxlabel, ii) => (outcomes[ii]?.kind === 'landed' ? `rev-${boxlabel}` : null)))
+            // Back under the limit, keeping one racer that landed: the listing is whole again.
+            const [kept, ...others] = landed
+            for (const boxlabel of ['anthropic', 'openai', ...others]) { await first.eraseBox(scopeOf('u1'), boxlabel, thisVault) }
+            const listed = await first.listBoxes(scopeOf('u1'))
+            expect(listed.map((box) => box.boxlabel)).to.deep.equal([kept])
+          },
+        })
+      },
+    },
+    past_limit_from_roomier_device: {
+      line:  '4.5',
+      title: "keeps every lockbox of a vault past its limit -- filled by a device allowed more -- readable, refuses a new one as full, replaces one, and lists it whole once erases bring it back under",
+      runs:  capped && devices,
+      check: async () => {
+        if (! makeDevices) { throw new Error('vaultDBTimingChecks ran a check across devices with no makeDevices.') }
+        const deviceFor = await makeDevices(openTurnstile)
+        const tight = deviceFor({ maxLockboxes: CappedLockboxes })
+        const roomy = deviceFor({ maxLockboxes: CappedLockboxes + 2 })
+        expect(tight.maxLockboxes, 'makeDevices made a device not held to the maxLockboxes it was asked for').to.eq(CappedLockboxes)
+        const held = ['anthropic', 'openai', 'mistral', 'gemini', 'cohere']
+        await roomy.createBundle(bundleOf('u1'))
+        await storeEach(roomy, held)
+        expect(await Promise.all(held.map((boxlabel) => revisionIn(tight, boxlabel)))).to.deep.equal(held.map((boxlabel) => `rev-${boxlabel}`))
+        await expectWholeOrRefused(tight, held)
+        const before = await standingVault(tight, [...held, 'groq'])
+        await expectRefusal(tight.updateBox(scopeOf('u1'), boxOf('groq', 'groq'), noBoxYet), 'vault_full')
+        expect(await standingVault(tight, [...held, 'groq'])).to.deep.equal(before)
+        await tight.updateBox(scopeOf('u1'), boxOf('openai', 'next'), over('rev-openai'))
+        for (const boxlabel of ['anthropic', 'mistral', 'gemini']) { await tight.eraseBox(scopeOf('u1'), boxlabel, thisVault) }
+        await tight.updateBox(scopeOf('u1'), boxOf('groq', 'groq'), noBoxYet)
+        expect(await listedRevisions(tight)).to.deep.equal(['rev-cohere', 'rev-groq', 'rev-next'])
+      },
+    },
+    push_each_write: {
+      line:  '6.1',
+      title: "calls onChange after each kind of write to the vault, a read on each call seeing the write, once its watch is live",
+      runs:  pushes,
+      check: () => expectEachWriteHeard(sameAdapterTwice),
+    },
+    push_from_another_device: {
+      line:  '6.1',
+      title: "calls onChange after each kind of write made on another device, a read on each call seeing the write, once its watch is live",
+      runs:  pushes && devices,
+      check: () => expectEachWriteHeard(twoDevices),
+    },
+    push_ends_on_unsubscribe: {
+      line:  '6.1',
+      title: "calls an unsubscribed onChange no more, through several writes, however often it unsubscribes, while another watch hears each",
+      runs:  pushes,
+      check: async () => {
+        const [watcher, writer] = await (devices ? twoDevices() : sameAdapterTwice())
+        await writer.createBundle(bundleOf('u1'))
+        const gone = readingWatch(watcher)
+        const stays = readingWatch(watcher)
+        await untilLive([gone, stays], writer)
+        gone.unsubscribe()
+        gone.unsubscribe()
+        const goneCalls = gone.tally.calls
+        for (const boxlabel of ['anthropic', 'openai', 'mistral']) {
+          await expectHeard(stays, writer, () => writer.updateBox(scopeOf('u1'), boxOf(boxlabel, boxlabel), noBoxYet))
+        }
+        await wakeupAtNextTick()
+        expect(gone.tally.calls, 'an unsubscribed onChange was called').to.eq(goneCalls)
+        stays.unsubscribe()
+      },
+    },
+  } satisfies Record<string, VaultDBTimingCheck>
+}
+
+/** A timing check run as a test: it rejects, failing the test, when what it checks does not hold. */
+const expectToHold = (check: VaultDBTimingCheck): Promise<void> => check.check()
+
+/** A race's setup: u1's vault made, through the first device. */
+const withBundleFirst = (first: VaultDBVerbs) => first.createBundle(bundleOf('u1'))
+
+/** A race's setup: u1's vault made, holding a new lockbox under each of `boxlabels`, through the first device. */
+const holdingFirst = (boxlabels: readonly string[]) => async (first: VaultDBVerbs) => {
+  await first.createBundle(bundleOf('u1'))
+  await storeEach(first, boxlabels)
+}
+
+/** What a replacement in u1's vault expects: that vault, and the revision it read. */
+const over = (revisionId: string) => ({ vault_id: 'vault-id-u1', revision_id: revisionId })
+
+/** The kinds of `outcomes`, sorted, so a test of who won need not say which device it was. */
+const kindsOf = (outcomes: readonly RaceOutcome[]): string[] => outcomes.map((outcome) => outcome.kind).toSorted((one, two) => one.localeCompare(two))
+
+/** That `vaultDB` lists every one of `boxlabels` in u1's vault, or refuses the listing outright: never part of it (2.3). */
+const expectWholeOrRefused = async (vaultDB: VaultDBVerbs, boxlabels: readonly string[]) => {
+  const listing = await outcomeOf(vaultDB.listBoxes(scopeOf('u1')))
+  if (listing.kind === 'landed') {
+    const listed = listing.val as (LockboxSummary | DamagedLockbox)[]
+    expect(listed.map((box) => box.boxlabel)).to.have.members([...boxlabels])
+    return
+  }
+  expect(listing.val, 'a listing refused with something other than a VaultError').to.have.property('name', 'VaultError')
+}
+
+/** What u1's vault holds as one device reads it: its bundle, and each listed lockbox's boxlabel and revision. */
+const glimpseOf = async (vaultDB: VaultDBVerbs) => {
+  const bundle = await vaultDB.readBundle(scopeOf('u1'))
+  const listed = await vaultDB.listBoxes(scopeOf('u1'))
+  return { bundle, listed: listed.map((box) => [box.boxlabel, summaryOf(box)?.revision_id]) }
+}
+
+/**
+ * A watch on u1's vault through `watcher` that, each time it is called, reads the vault, as a vault
+ * does, keeping what each read found and how many writes the test had begun when the call came.
+ */
+const readingWatch = (watcher: VaultDBVerbs) => {
+  const tally = { calls: 0, writesBegun: 0 }
+  const reads: { after: number, found: Awaited<ReturnType<typeof glimpseOf>> }[] = []
+  const readAndKeep = async (after: number) => {
+    try {
+      reads.push({ after, found: await glimpseOf(watcher) })
+    } catch {
+      // A read that fails finds nothing, and the test waiting on it times out saying so.
+    }
+  }
+  const onChange = () => {
+    tally.calls += 1
+    void readAndKeep(tally.writesBegun)
+  }
+  const unsubscribe = watcher.subscribe(scopeOf('u1'), onChange)
+  return { tally, reads, unsubscribe }
+}
+
+/** How long a watch has to hear a write before a push test calls it unheard. */
+const HeardWithinMs = 2000
+
+/**
+ * That a write made by `write`, through `writer`, is heard by `watch`: some call made after the
+ * write began reads the vault as it stands after it. A call before the write, or one whose read
+ * ran before the write landed, never finds that, since each write in a push test leaves the vault
+ * unlike it ever stood before.
+ */
+const expectHeard = async (watch: ReturnType<typeof readingWatch>, writer: VaultDBVerbs, write: () => Promise<unknown>) => {
+  watch.tally.writesBegun += 1
+  const begun = watch.tally.writesBegun
+  await write()
+  const after = await glimpseOf(writer)
+  await vi.waitFor(() => {
+    expect(watch.reads.filter((read) => read.after >= begun).map((read) => read.found), 'no call to onChange read the vault as the write left it').to.deep.include(after)
+  }, { timeout: HeardWithinMs, interval: 5 })
+}
+
+/** How many probe writes {@link untilLive} makes, and how long it waits on each, before it calls a watch dead. */
+const LiveProbes = 20
+const ProbeWaitMs = 100
+
+/**
+ * Resolves once every one of `watches` has been called, so is known to be live: at once, for a
+ * watch that calls when it starts; otherwise after a probe write through `writer` -- the bundle's
+ * unlock_epoch moved on -- made again until each is heard, as a watch that starts on its own time
+ * may miss the first. u1's vault must hold a bundle.
+ */
+const untilLive = async (watches: readonly ReturnType<typeof readingWatch>[], writer: VaultDBVerbs) => {
+  const allHeard = () => watches.every((watch) => watch.tally.calls > 0)
+  for (let ii = 0; ii < LiveProbes && ! allHeard(); ii += 1) {
+    const standing = await writer.readBundle(scopeOf('u1'))
+    if (! standing) { throw new Error('untilLive probes a vault that holds a bundle, and found none.') }
+    await writer.updateBundle({ ...standing, unlock_epoch: standing.unlock_epoch + 1 }, { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch })
+    try {
+      await vi.waitFor(() => { expect(allHeard()).to.be.true }, { timeout: ProbeWaitMs, interval: 5 })
+    } catch {
+      // Not heard yet: probe again.
+    }
+  }
+  expect(allHeard(), `a watch heard none of ${String(LiveProbes)} writes to its vault`).to.be.true
+}
+
+/**
+ * That a watch through the first of `pair` hears each kind of write made through the second: an
+ * update of the bundle, two new lockboxes, a replacement, an erase of one, of the vault, and a
+ * create of the vault anew. The two may be one adapter, or two devices.
+ */
+const expectEachWriteHeard = async (pair: () => Promise<[VaultDBVerbs, VaultDBVerbs]>) => {
+  const [watcher, writer] = await pair()
+  await writer.createBundle(bundleOf('u1'))
+  const watch = readingWatch(watcher)
+  await untilLive([watch], writer)
+  const standing = await writer.readBundle(scopeOf('u1'))
+  const epoch = standing?.unlock_epoch ?? 1
+  const writes = [
+    () => writer.updateBundle(bundleOf('u1', { unlock_epoch: epoch + 1 }), { vault_id: 'vault-id-u1', unlock_epoch: epoch }),
+    () => writer.updateBox(scopeOf('u1'), boxOf('anthropic', 'anthropic'), noBoxYet),
+    () => writer.updateBox(scopeOf('u1'), boxOf('openai', 'openai'), noBoxYet),
+    () => writer.updateBox(scopeOf('u1'), boxOf('anthropic', 'next'), { vault_id: 'vault-id-u1', revision_id: 'rev-anthropic' }),
+    () => writer.eraseBox(scopeOf('u1'), 'anthropic', thisVault),
+    () => writer.eraseVault(scopeOf('u1'), thisVault),
+    () => writer.createBundle(bundleOf('u1', { vault_id: 'vault-id-anew' })),
+  ]
+  for (const write of writes) { await expectHeard(watch, writer, write) }
+  watch.unsubscribe()
+}
+
 /** Every verb a stranger might try on `u1`'s vault, each as a thunk. */
 const everyVerbOn = (stranger: VaultDBVerbs) => [
   () => stranger.readBundle(scopeOf('u1')),
@@ -1284,22 +1897,6 @@ const everyVerbOn = (stranger: VaultDBVerbs) => [
 
 /** Text no normalization leaves alone: "café" with its accent composed, then decomposed, and a key. */
 const UnnormalizedText = 'caf\u{E9} cafe\u{301} \u{1F511}'
-
-/** How often its `onChange` has been called, kept for a test to look at. */
-const changeCounter = () => {
-  const heard = { count: 0 }
-  return { heard, onChange: () => { heard.count += 1 } }
-}
-
-/**
- * Resolves once a watch just made through `vaultDB` has had time to start: after a read through
- * it, which follows the watch over a backend that serves calls in order, and a pause for one that
- * starts its watch on its own time. A watch's first call, where it makes one, is in by then.
- */
-const watchSettled = async (vaultDB: VaultDBVerbs) => {
-  await vaultDB.readBundle(scopeOf('u1'))
-  await new Promise((resolve) => { setTimeout(resolve, 50) })
-}
 
 /** Enough lockboxes that a listing cut to a page, or a sample, would show it: 25, `box0` to `box24`. */
 const ManyBoxlabels = Object.freeze(Array.from({ length: 25 }, (_unused, ii) => `box${String(ii)}`))
