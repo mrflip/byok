@@ -53,8 +53,6 @@ root 123). `pnpm size` within every budget (`everything` 29.29 of 30 kB, `openVa
   - A `VaultDB` that wraps another's public verbs (the demo's `OutageVaultDB`) must hand the new verb on
     too, or its `doReadBundle` meets the inner refusal and the hatch says "too damaged to say which
     vault it is". Documented on the verb and in VAULTDB.md; the in-tree wrapper does.
-  - The `damaged_bundle` message no longer ends in a dead end for the host, but its text still says only
-    "the app's support may be able to restore it"; a host's UI says the rest.
 * **For the Coach**: new public surface, for the PR's open questions: `eraseDamagedVault` and
   `EraseDamagedVaultOpts` (core), `VaultDB.eraseDamagedVault` (a public verb on the base class, so a
   wrapping adapter owes it), and `useVault().eraseDamagedVault` (React). Also: (1) is "sound is
