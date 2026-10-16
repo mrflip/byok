@@ -539,6 +539,13 @@ export type DescribeVaultDBOpts = {
    * adapter with no notion of identity has none to give.
    */
   makeVaultDBFor?: (() => ((userId: string | null) => VaultDBVerbs) | Promise<(userId: string | null) => VaultDBVerbs>) | undefined
+  /**
+   * Whether the adapter `makeVaultDB` makes pushes: calls a subscriber after each write through
+   * it, for line 6.1's push tests; without it, those are skipped. An adapter with no push (a
+   * backend that cannot say when it changed, or one whose push the factory left unwired) leaves
+   * it out.
+   */
+  pushes?: boolean | undefined
 }
 
 /** The lockbox limit {@link describeVaultDB} asks a capped adapter for. */
@@ -550,18 +557,19 @@ const CappedLockboxes = 3
  * public verbs, each group titled by its line ({@link VaultDBContract}). Run it against an adapter
  * with a factory making a fresh, empty one per test, and -- for an adapter with a lockbox limit a
  * test can fill -- a second making one held to a given limit, and for an adapter that serves the
- * user signed in, a third making one signed in as anyone.
+ * user signed in, a third making one signed in as anyone; and for an adapter that pushes, a word
+ * that it does.
  *
  * For an adapter's own tests, from `safebyok/testing`; it runs under vitest. It checks refusals
  * by `kind` rather than by class, so an adapter passes whichever copy of the package it extends.
  *
  * @param adapterTitle - The adapter under test, as the suite's titles name it.
  * @param makeVaultDB - A fresh, empty adapter: no record in it, and none shared with another call.
- * @param opts - Optionally, `makeCappedVaultDB`, for the lockbox limit's lines, and
- *   `makeVaultDBFor`, for who may reach a vault.
+ * @param opts - Optionally, `makeCappedVaultDB`, for the lockbox limit's lines; `makeVaultDBFor`,
+ *   for who may reach a vault; and `pushes`, for subscribe's calls.
  *
  * @example
- *   describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
+ *   describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()), { pushes: true })
  * @example
  *   describeVaultDB('postgresVaultDB', makeRequest, {
  *     makeCappedVaultDB: (maxLockboxes) => postgresVaultDB({ client, userId: 'u1', maxLockboxes }),
@@ -569,7 +577,7 @@ const CappedLockboxes = 3
  *   })
  */
 export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDBVerbs | Promise<VaultDBVerbs>, opts: DescribeVaultDBOpts = {}) => {
-  const { makeCappedVaultDB, makeVaultDBFor } = opts
+  const { makeCappedVaultDB, makeVaultDBFor, pushes = false } = opts
 
   /** The title of a group of tests for one line of the contract. */
   const lineTitle = (line: VaultDBContractLine) => `${adapterTitle}, as a VaultDB, ${line}: ${VaultDBContract[line]}`
@@ -628,6 +636,15 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       const [summary] = await vaultDB.listBoxes(scopeOf('u1'))
       expect(summaryOf(summary)?.note).to.be.null
     })
+
+    it("reads text back exactly as written, never normalized: a note holding a letter both composed and decomposed", async () => {
+      const vaultDB = await withBundle()
+      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one', { note: UnnormalizedText }), noBoxYet)
+      const lockbox = await vaultDB.readBox(scopeOf('u1'), 'anthropic')
+      expect(lockbox?.note).to.eq(UnnormalizedText)
+      const [summary] = await vaultDB.listBoxes(scopeOf('u1'))
+      expect(summaryOf(summary)?.note).to.eq(UnnormalizedText)
+    })
   })
 
   describe(lineTitle('1.2'), () => {
@@ -656,6 +673,21 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await vaultDB.eraseVault(scopeOf('u1'), thisVault)
       const after = await listEach()
       expect(after.map((listing) => listing.length)).to.deep.equal([0, 1, 1, 1, 1, 1, 1, 1])
+    })
+
+    it("keeps apart users whose ids differ only in how a letter is composed, reading each back as written", async () => {
+      const vaultDB = await makeVaultDB()
+      const [composed, decomposed] = ['caf\u{E9}', 'cafe\u{301}']
+      for (const userId of [composed, decomposed]) {
+        await vaultDB.createBundle(bundleOf(userId))
+        await vaultDB.updateBox(scopeOf(userId), boxOf('anthropic', userId), { vault_id: `vault-id-${userId}`, revision_id: null })
+      }
+      expect(await vaultDB.readBundle(scopeOf(composed))).to.deep.equal(bundleOf(composed))
+      expect(await vaultDB.readBundle(scopeOf(decomposed))).to.deep.equal(bundleOf(decomposed))
+      await vaultDB.eraseVault(scopeOf(composed), { vault_id: `vault-id-${composed}` })
+      expect(await vaultDB.readBundle(scopeOf(composed))).to.be.null
+      const kept = await vaultDB.listBoxes(scopeOf(decomposed))
+      expect(kept.map((box) => summaryOf(box)?.revision_id)).to.deep.equal([`rev-${decomposed}`])
     })
 
     it("keeps apart vaults and boxes whose labels differ only by a colon, a quote, a backslash, a comma or a bracket, or are in any script", async () => {
@@ -794,6 +826,14 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await expectRefusal(vaultDB.updateBundle(bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
     })
+
+    it("lands one of two updates made at once over the same bundle, and refuses the other as stale_write", async () => {
+      const vaultDB = await withBundle()
+      const rivals = [bundleOf('u1', { unlock_epoch: 2, unlocks: [envelopeOf('one')] }), bundleOf('u1', { unlock_epoch: 2, unlocks: [envelopeOf('two')] })]
+      const outcomes = await Promise.all(rivals.map((rival) => settledKind(vaultDB.updateBundle(rival, { vault_id: 'vault-id-u1', unlock_epoch: 1 }))))
+      expect(outcomes.toSorted((one, two) => one.localeCompare(two))).to.deep.equal(['landed', 'stale_write'])
+      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(rivals[outcomes.indexOf('landed')])
+    })
   })
 
   describe(lineTitle('3.3'), () => {
@@ -835,6 +875,23 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await vaultDB.createBundle(bundleOf('u2'))
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u2', revision_id: null }), 'stale_write')
     })
+
+    it("lands one of two first writes of a lockbox made at once, and refuses the other as stale_write", async () => {
+      const vaultDB = await withBundle()
+      const rivals = [boxOf('anthropic', 'one'), boxOf('anthropic', 'two')]
+      const outcomes = await Promise.all(rivals.map((rival) => settledKind(vaultDB.updateBox(scopeOf('u1'), rival, noBoxYet))))
+      expect(outcomes.toSorted((one, two) => one.localeCompare(two))).to.deep.equal(['landed', 'stale_write'])
+      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(rivals[outcomes.indexOf('landed')])
+    })
+
+    it("lands one of two replacements made at once over the same revision, and refuses the other as stale_write", async () => {
+      const vaultDB = await withBundle()
+      await storeEach(vaultDB, ['anthropic'])
+      const rivals = [boxOf('anthropic', 'one'), boxOf('anthropic', 'two')]
+      const outcomes = await Promise.all(rivals.map((rival) => settledKind(vaultDB.updateBox(scopeOf('u1'), rival, { vault_id: 'vault-id-u1', revision_id: 'rev-anthropic' }))))
+      expect(outcomes.toSorted((one, two) => one.localeCompare(two))).to.deep.equal(['landed', 'stale_write'])
+      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.deep.equal(rivals[outcomes.indexOf('landed')])
+    })
   })
 
   describe(lineTitle('3.4'), () => {
@@ -870,6 +927,17 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       const vaultDB = await makeVaultDB()
       await expectRefusal(vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault), 'stale_write')
     })
+
+    it("wins over a replacement made at once: the erase lands, and the lockbox is gone whichever came first", async () => {
+      const vaultDB = await withBundle()
+      await storeEach(vaultDB, ['anthropic'])
+      const erasing = vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault)
+      const writing = vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'next'), { vault_id: 'vault-id-u1', revision_id: 'rev-anthropic' })
+      const [erased, written] = await Promise.all([settledKind(erasing), settledKind(writing)])
+      expect(erased).to.eq('landed')
+      expect(['landed', 'stale_write']).to.include(written)
+      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
+    })
   })
 
   describe(lineTitle('3.5'), () => {
@@ -900,6 +968,18 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       const vaultDB = await makeVaultDB()
       await expectRefusal(vaultDB.eraseVault(scopeOf('u1'), thisVault), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
+    })
+
+    it("leaves no lockbox behind a vault erased while one was written into it", async () => {
+      const vaultDB = await withBundle()
+      const erasing = vaultDB.eraseVault(scopeOf('u1'), thisVault)
+      const writing = vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
+      const [erased, written] = await Promise.all([settledKind(erasing), settledKind(writing)])
+      expect(erased).to.eq('landed')
+      expect(['landed', 'stale_write']).to.include(written)
+      expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
+      expect(await vaultDB.readBox(scopeOf('u1'), 'anthropic')).to.be.null
+      expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(0)
     })
   })
 
@@ -1083,6 +1163,43 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       expect(unsubscribe).to.be.a('function')
       unsubscribe()
     })
+
+    it.runIf(pushes)("calls onChange after each kind of write to the vault", async () => {
+      const vaultDB = await makeVaultDB()
+      const { heard, onChange } = changeCounter()
+      const unsubscribe = vaultDB.subscribe(scopeOf('u1'), onChange)
+      await watchSettled(vaultDB)
+      const writes = [
+        () => vaultDB.createBundle(bundleOf('u1')),
+        () => vaultDB.updateBundle(bundleOf('u1', { unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }),
+        () => vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet),
+        () => vaultDB.eraseBox(scopeOf('u1'), 'anthropic', thisVault),
+        () => vaultDB.eraseVault(scopeOf('u1'), thisVault),
+      ]
+      for (const write of writes) {
+        const heardBefore = heard.count
+        await write()
+        await vi.waitFor(() => { expect(heard.count).to.be.greaterThan(heardBefore) })
+      }
+      unsubscribe()
+    })
+
+    it.runIf(pushes)("calls an unsubscribed onChange no more, however often it unsubscribes, while another watch still hears", async () => {
+      const vaultDB = await makeVaultDB()
+      const gone = changeCounter()
+      const stays = changeCounter()
+      const unsubscribe = vaultDB.subscribe(scopeOf('u1'), gone.onChange)
+      const unsubscribeStays = vaultDB.subscribe(scopeOf('u1'), stays.onChange)
+      await watchSettled(vaultDB)
+      unsubscribe()
+      unsubscribe()
+      const [goneBefore, staysBefore] = [gone.heard.count, stays.heard.count]
+      await vaultDB.createBundle(bundleOf('u1'))
+      await vi.waitFor(() => { expect(stays.heard.count).to.be.greaterThan(staysBefore) })
+      await wakeupAtNextTick()
+      expect(gone.heard.count).to.eq(goneBefore)
+      unsubscribeStays()
+    })
   })
 
   describe(lineTitle('7.1'), () => {
@@ -1113,6 +1230,25 @@ const everyVerbOn = (stranger: VaultDBVerbs) => [
   () => stranger.eraseBox(scopeOf('u1'), 'openai', thisVault),
   () => stranger.eraseVault(scopeOf('u1'), thisVault),
 ]
+
+/** Text no normalization leaves alone: "café" with its accent composed, then decomposed, and a key. */
+const UnnormalizedText = 'caf\u{E9} cafe\u{301} \u{1F511}'
+
+/** How often its `onChange` has been called, kept for a test to look at. */
+const changeCounter = () => {
+  const heard = { count: 0 }
+  return { heard, onChange: () => { heard.count += 1 } }
+}
+
+/**
+ * Resolves once a watch just made through `vaultDB` has had time to start: after a read through
+ * it, which follows the watch over a backend that serves calls in order, and a pause for one that
+ * starts its watch on its own time. A watch's first call, where it makes one, is in by then.
+ */
+const watchSettled = async (vaultDB: VaultDBVerbs) => {
+  await vaultDB.readBundle(scopeOf('u1'))
+  await new Promise((resolve) => { setTimeout(resolve, 50) })
+}
 
 /** Enough lockboxes that a listing cut to a page, or a sample, would show it: 25, `box0` to `box24`. */
 const ManyBoxlabels = Object.freeze(Array.from({ length: 25 }, (_unused, ii) => `box${String(ii)}`))

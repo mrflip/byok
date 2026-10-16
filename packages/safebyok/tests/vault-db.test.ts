@@ -96,7 +96,7 @@ class TroubledVaultDB extends MapVaultDB {
 
 const unheard = (): void => undefined
 
-TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
+TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()), { pushes: true })
 TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB(), {
   makeCappedVaultDB: (maxLockboxes) => new MapVaultDB(maxLockboxes),
 })
@@ -190,19 +190,6 @@ describe("localVaultDB", () => {
     await expect(vaultDB.readBundle(TH.scopeOf('u1'))).rejects.toThrow(/different app, user, or vault/)
     store.write(u1BoxCkey('other_box'), JSON.stringify(TH.boxOf('anthropic', 'one')))
     await expect(vaultDB.readBox(TH.scopeOf('u1'), 'other_box')).rejects.toThrow(/different boxlabel/)
-  })
-
-  it("keeps a user whose user_id holds a colon out of another user's listing and erasure", async () => {
-    const vaultDB = localVaultDB(memoryStore())
-    // User 'u1:main' with vault 'other' stores its rows under the prefix of user 'u1', vault 'main'.
-    const colonScope = { applabel: 'acme', user_id: 'u1:main', vaultlabel: 'other' }
-    await vaultDB.createBundle({ ...TH.bundleOf('u1'), ...colonScope, vault_id: 'vault-id-colon' })
-    await vaultDB.updateBox(colonScope, TH.boxOf('anthropic', 'colon'), { vault_id: 'vault-id-colon', revision_id: null })
-    await vaultDB.createBundle(TH.bundleOf('u1'))
-    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
-    await vaultDB.eraseVault(TH.scopeOf('u1'), TH.thisVault)
-    const theirs = await vaultDB.readBox(colonScope, 'anthropic')
-    expect(theirs?.revision_id).to.eq('rev-colon')
   })
 })
 
