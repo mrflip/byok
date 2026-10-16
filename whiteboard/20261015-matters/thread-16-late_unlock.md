@@ -1,6 +1,6 @@
 # Thread 16: late_unlock (2026-10-16)
 
-Branch `20261016-late_unlock`, PR [#110](https://github.com/mrflip/safebyok/pull/110), stacked on [#105](https://github.com/mrflip/safebyok/pull/105). Justify: green -- root 123, core 1144, React 95 (was 93), Convex 282, IndexedDB 108, Postgres 162, GraphQL 159, argon2-wasm 44, demo 131.
+Branch `20261016-late_unlock`, PR [#110](https://github.com/mrflip/safebyok/pull/110), stacked on [#105](https://github.com/mrflip/safebyok/pull/105). Justify: green -- root 123, core 1144, React 95 (was 94), Convex 282, IndexedDB 108, Postgres 162, GraphQL 159, argon2-wasm 44, demo 131.
 
 * **Built**: in `packages/safebyok-react/src/vault-provider.tsx`, an effect subscribes to the
   vault and, when a snapshot change reads `unlocked` while a dialog is asking, ends that dialog
