@@ -767,3 +767,13 @@ security expert who knows what questions to ask.
   and `idbVaultDB` now erase a whole vault on the `vault_id` alone (the contract's line 3.5 always
   said so), where they had also required a readable `unlock_epoch`, which kept exactly the
   damaged vaults from being erased; lockbox writes and `eraseBox` still need the epoch.
+  **Newer is not damaged** (review of the above): a bundle that fails this build's checks may be
+  one a *later* build writes and opens, and offering "erase" for it would erase, from a device
+  on an old build, a vault every up-to-date device opens. So the hatch refuses (kind
+  `damaged_bundle`, a message to update the app, nothing erased) a record with a `format` this
+  build does not know (of any type), an unlock `method` it does not know, or more unlocks than
+  `MaxUnlocks`, and erases only what fails otherwise. **The rule this rests on, for the Coach to
+  confirm: any change to the stored shape bumps `format`**, so that an older build can tell newer
+  from damaged. Where it cannot tell, it refuses: the hatch fails safe. Not routed through
+  `RefusalPolicy.heed`: there is no handle to lock and no key in memory, so `whenIdentityRevoked`
+  has nothing to act on, and the hatch's own last step is erasing the remembered unlock.

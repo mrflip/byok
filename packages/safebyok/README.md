@@ -466,7 +466,13 @@ It refuses a vault that is sound, with `bad_option` and nothing erased: a vault 
 deleted through its handle's `destroy()`. With no vault stored it erases only the device's
 remembered unlock, so a call cut short can be made again. It needs the stored record's `vault_id`
 to aim the erase, so a bundle too damaged to show one is refused as `damaged_bundle` still, with
-nothing erased: the backend's own tools can clear it. So is any backend that checks a record before
+nothing erased: the backend's own tools can clear it. A record this version cannot read may
+instead have been written by a **newer** safebyok, which opens it; so one in a `format` this
+version does not know, with an unlock `method` it does not know, or with more unlocks than
+`MaxUnlocks`, is refused the same way, nothing erased, with a message telling the user to update
+the app. That is all this version can tell from damage, which rests on a rule: **any change to the
+stored shape bumps `format`**, so an older build can tell "newer" from "damaged". Where it cannot
+tell, it refuses rather than erases. So is any backend that checks a record before
 it hands it over, as `safebyok-graphql`'s server does: there a damaged row is the backend's to
 clear. `safebyok-react` hands `eraseDamagedVault()` down beside `retryOpen`. A `VaultDB` that
 wraps another's public verbs hands `VaultDB.eraseDamagedVault` on too (`VAULTDB.md`, line 3.5).

@@ -42,6 +42,22 @@ root 123). `pnpm size` within every budget (`everything` 29.29 of 30 kB, `openVa
     a device failure finds the vault gone and still clears the device.
   - **React: in context, not a hook of its own.** The provider already holds every option the erase
     needs; the dashboard has none of them.
+* **Review follow-up** (the review came back `flagged`; the orchestrator's directive):
+  - **Newer is not damaged.** `mayBeNewer` in `vault-db.ts`: a `format` this build does not know (of
+    any type), an unlock `method` it does not know, or more than `MaxUnlocks` unlocks is refused as
+    `damaged_bundle` ("may have been written by a newer version ... update the app"), nothing erased.
+    Reused the kind rather than add one; a host cannot yet tell the two apart by kind, only by
+    message, and `openVault` still calls both `damaged_bundle`. Tests: each case in the base class,
+    and a newer-format vault through `eraseDamagedVault`.
+  - **The rule**, recorded in `notes/security.md`, the core README and the changeset: any change to
+    the stored shape bumps `format`. For the Coach to confirm.
+  - React reopens after `bad_option` (reads sound) or `stale_write` (made anew), and still rejects.
+  - Not routed through `RefusalPolicy.heed`: no handle, no key in memory, `whenIdentityRevoked` has
+    nothing to act on; documented in the doc block and security.md.
+  - **Review, minor, left**: the erase aims at `vault_id` only (pinning the exact record would change
+    3.5); "too damaged to name" shares the `damaged_bundle` kind; a local bundle that is not valid
+    JSON cannot be cleared (`readJson` refuses it as `corrupt_record`, which the hatch says as "too damaged to name"); `vaultIdMeetsExpectation`
+    repeats `vaultMeetsExpectation` in part; `isSoundBundle`'s try/catch.
 * **Deviations**: none. Pulled forward from no later thread.
 * **Discoveries**:
   - The in-tree KV adapters compared `unlock_epoch` on every expectation, erase of a vault included
@@ -55,6 +71,6 @@ root 123). `pnpm size` within every budget (`everything` 29.29 of 30 kB, `openVa
     vault it is". Documented on the verb and in VAULTDB.md; the in-tree wrapper does.
 * **For the Coach**: new public surface, for the PR's open questions: `eraseDamagedVault` and
   `EraseDamagedVaultOpts` (core), `VaultDB.eraseDamagedVault` (a public verb on the base class, so a
-  wrapping adapter owes it), and `useVault().eraseDamagedVault` (React). Also: (1) is "sound is
+  wrapping adapter owes it), and `useVault().eraseDamagedVault` (React). Also: (0) confirm the rule that any change to the stored shape bumps `format`; (1) is "sound is
   `bad_option`" right, or does a refusal of this kind want its own kind? (2) the demo's confirm text
   and button are placeholders for the Coach's wording.
