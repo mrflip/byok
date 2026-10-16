@@ -1,7 +1,7 @@
 import * as Z from 'zod/mini'
 import { DeviceUnlock, LockboxSummary, type DamagedLockbox, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, PasskeySaltBytes, VaultBundle, type VaultScope, Whisper, wallClock, type Clock, type PasskeyProof, type UnlockEnvelope, type UnlockSummary } from './types'
 import * as Names from './names'
-import { AnyTextValidators, Label, type VaultValidators } from './validators'
+import { Label, type VaultValidators } from './validators'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import { MaxSaltBytes, ensureSuppliedSpecKept } from './key-deriver-spec'
@@ -426,8 +426,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   if (! isBag(opts)) { throw new VaultError('bad_option', 'openVault takes one bag of options: applabel, userId, vaultlabel, vaultDB, deviceDB and keyDeriver at least.') }
   const rules = Names.rulesOf(opts.validators)
   // The same checks, but any text for a boxlabel: for reaching a lockbox that already stands under
-  // a name the boxlabel check refuses, which erase() alone does, by the name it stands under.
-  const standingRules: Names.NameRules = { ...rules, boxlabel: AnyTextValidators.boxlabel }
+  // a name the boxlabel check refuses, which erase() alone does, by the name it stands under. Any
+  // text at all, not AnyTextValidators' well-formed text: a host's own check may have let a lone
+  // surrogate stand.
+  const standingRules: Names.NameRules = { ...rules, boxlabel: Z.string() }
   const scope = Names.checkScope(rules, { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
   const { applabel, vaultlabel } = scope
   const vaultDB = parseVaultDB(opts.vaultDB)
