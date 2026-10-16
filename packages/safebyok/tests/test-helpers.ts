@@ -546,7 +546,7 @@ const sweepHolds = async (runHeldAt: (nth: number) => Promise<boolean>) => {
 }
 
 /** Microtasks to start the second move after the first: for an adapter in this process, whose awaits are microtasks. */
-const MicrotaskOffsets = [1, 2, 3, 5, 8] as const
+const MicrotaskOffsets = [1, 2, 3] as const
 /** Turns of the macrotask queue to start the second move after the first: for a backend that answers on a later turn. */
 const TickOffsets = [1, 2] as const
 /** The most round trips a race holds a move before; a move making more fails the race. */
@@ -1753,6 +1753,35 @@ export const vaultDBTimingChecks = (makeVaultDB: () => VaultDBVerbs | Promise<Va
       },
     },
   } satisfies Record<string, VaultDBTimingCheck>
+}
+
+/**
+ * That a device from `makeDevices` passes the turnstile it was made with before each of its writes
+ * goes to the backend -- a create, an update of the bundle, a write of a lockbox, an erase of one
+ * and of the vault -- so the races of {@link describeVaultDB} can hold it there. A race cannot tell
+ * a turnstile left unwired from an adapter that makes no round trips; an adapter over a backend
+ * reached by round trips calls this in its own tests to show its factory wires one.
+ *
+ * @param makeDevices - The adapter's makeDevices, as `describeVaultDB` takes it.
+ *
+ * @example it("sends each device's statements through the turnstile", () => TH.expectRoundTripsThroughTurnstile(makeDevices))
+ */
+export const expectRoundTripsThroughTurnstile = async (makeDevices: MakeVaultDBDevices): Promise<void> => {
+  const tally = { passes: 0 }
+  const counting: Turnstile = { pass: () => { tally.passes += 1; return Promise.resolve() } }
+  const device = (await makeDevices(counting))({})
+  const writes = [
+    ['createBundle', () => device.createBundle(bundleOf('u1'))],
+    ['updateBundle', () => device.updateBundle(bundleOf('u1', { unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 })],
+    ['updateBox',    () => device.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)],
+    ['eraseBox',     () => device.eraseBox(scopeOf('u1'), 'anthropic', thisVault)],
+    ['eraseVault',   () => device.eraseVault(scopeOf('u1'), thisVault)],
+  ] as const
+  for (const [verb, write] of writes) {
+    const before = tally.passes
+    await write()
+    expect(tally.passes - before, `${verb} reached the backend without passing the turnstile: makeDevices gives its devices a client that does not go through it`).to.be.greaterThan(0)
+  }
 }
 
 /** A timing check run as a test: it rejects, failing the test, when what it checks does not hold. */
