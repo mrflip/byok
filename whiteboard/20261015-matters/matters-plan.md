@@ -446,6 +446,12 @@ The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes
     to refuse what may be newer; the "stored-shape change bumps `format`" rule goes to the Coach.
 13. Thread 12 also corrects the older pending `20261015-store_vault_cap` changeset, which announced
     the column it removes.
+15. Thread 14's flagged review (#120): S1 is taken in this PR -- the device mark also records the
+    highest `vault_key_epoch` seen, bound into every envelope, so storage can't raise it -- because the
+    mark is new and unshipped, and leaving it would undo rotation's promise once thread 19 lands. S2's
+    honest message and an `eraseMark` recipe go in too (no new surface); a `rolled_back` hatch goes to
+    the Coach.
+16. #111 and #119 restacked onto main `cc32761` after the gripes line merged; justify green at #119.
 
 ## Not in this sprint
 
