@@ -6,10 +6,9 @@
  * names and notes, with their bounds, in `safebyok/validators` as well as here, and the IndexedDB
  * vault store in a package of its own, `safebyok-indexeddb`.
  */
-export { Argon2idWebV1, ensureSaltFits, parseKeyDeriverSpec } from './key-deriver-spec'
-export type { KeyDeriverSpec } from './key-deriver-spec'
-export { argon2idDeriver, argon2idWebV1Deriver } from './key-deriver'
-export type { Argon2idKeyDeriver, CustomKeyDeriver, KeyDeriver } from './key-deriver'
+export { Argon2idWebV1 } from './key-deriver-spec'
+export type { Argon2idSpec, KeyDeriverSpec } from './key-deriver-spec'
+export { Argon2idKeyDeriver, KeyDeriver, argon2idDeriver, argon2idWebV1Deriver } from './key-deriver'
 export { eraseDamagedVault, openVault } from './vault'
 export type { EraseDamagedVaultOpts, OpenVaultOpts, Vault, VaultSnapshot, VaultState } from './vault'
 export type { VaultLogger } from './logger'
