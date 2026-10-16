@@ -328,6 +328,32 @@ describe("VaultProvider", () => {
       expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
     })
 
+    it("resolves null for an action whose refusal lands after the user signed out, and shows the next user no dialog", async () => {
+      const world = await lockedWorld()
+      const { rerender } = render(world.tree('u1'))
+      const vault = await world.opened()
+      let release: () => void = noop
+      // eslint-disable-next-line unicorn/prefer-promise-with-resolvers -- Promise.withResolvers is ES2024, and every tsconfig's lib stops at ES2023
+      const held = new Promise<void>((resolve) => { release = resolve })
+      // A host action that holds its refusal back a while, as one that logs it first might.
+      const reading = watched(world.latest().withUnlockedVault(async () => {
+        try {
+          return await vault.read('anthropic_api_key')
+        } catch (err) {
+          await held
+          throw err
+        }
+      }))
+      rerender(world.tree(null))
+      release()
+      await waitFor(() => { expect(reading.outcome).to.be.null })
+      rerender(world.tree('u2'))
+      await waitFor(() => { expect(world.latest().vault).to.not.be.null })
+      expect(world.latest().vault).to.not.equal(vault)
+      await TH.wakeupAtNextTick()
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    })
+
     it("has overlapping calls wait on one dialog: one unlock runs them all", async () => {
       const world = await lockedWorld()
       render(world.tree('u1'))
