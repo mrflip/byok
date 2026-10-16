@@ -442,6 +442,8 @@ The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes
 11. Postgres's NOTIFY trigger becomes opt-in (thread 12), by the Coach's baseline: no operational
     work beyond tables and indexes unless the host opts in.
 12. Convex's 1365-lockbox test gets a per-test timeout, not a smaller fill (thread 22).
+14. Thread 21's flagged finding (an old build erasing a newer vault) is fixed by narrowing the hatch
+    to refuse what may be newer; the "stored-shape change bumps `format`" rule goes to the Coach.
 13. Thread 12 also corrects the older pending `20261015-store_vault_cap` changeset, which announced
     the column it removes.
 

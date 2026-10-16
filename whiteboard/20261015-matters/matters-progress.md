@@ -24,7 +24,7 @@
 | 15 | e2e_home         | held: the Coach weighs options (Open Matters) |
 | 16 | late_unlock      | filed #110 (on #109)       |
 | 17 | validation_note  | waits on #101 merging      |
-| 21 | damaged_erase    | in review (#115)           |
+| 21 | damaged_erase    | flagged; resumed with a directive |
 | 22 | flake_fixes      | underway (on #110)         |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
@@ -44,7 +44,13 @@
   `stale_write`). `localVaultDB`/`idbVaultDB` now erase a vault on `vault_id` alone (VAULTDB.md 3.5).
   React: `useVault().eraseDamagedVault()`; the demo offers "Erase and start over". Proven on local,
   IndexedDB and the base class only (Convex/Postgres rows can't be damaged this way; GraphQL's
-  server validates first).
+  server validates first). *Review: flagged.* A device on an older build would call a newer
+  bundle (new `format`, unlock `method`, or more than `MaxUnlocks`) damaged, and its hatch would
+  erase a vault every up-to-date device opens. *Orchestrator (YOLO, two-way, narrowing a
+  destructive call):* resumed with a directive -- the hatch refuses what may be newer ("update the
+  app"), fails safe where newer and damaged can't be told apart, and `notes/security.md` records the
+  rule that any stored-shape change bumps `format` (to the Coach as a matter). Also: the provider
+  reopens after `bad_option`/`stale_write`; the hatch goes through `RefusalPolicy.heed`.
 
 * **Thread 5 (#114), vaultdb_battery.** Audited all five adapters; did all but Convex here. New
   battery tests: 1.1/1.2 (text never normalized), five races under 3.2-3.5, a `pushes: true` option
