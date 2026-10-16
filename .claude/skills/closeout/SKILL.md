@@ -114,7 +114,7 @@ connector's guide) before the first docs call, and follow it to make one doc tit
 * **The first tab is the report** from step 4, ending with the list of files left out (below).
 * **Then one tab per markdown file** under `whiteboard/` or `human/` that this session wrote,
   edited, or worked from (a sprint's plan, a thread's notes), named for its path
-  (`whiteboard/20261014-convex_vaultdb/convex_vaultdb-plan.md`). The content is the file's,
+  (`winboard/20261014-convex_vaultdb/convex_vaultdb-plan.md`). The content is the file's,
   as it stands at the tip of its branch: not summarized, not edited. A worktree that step 3
   removed still has its branch: read the file with `git show <branch>:<path>`.
 

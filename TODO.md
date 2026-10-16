@@ -6,7 +6,7 @@ is blocked. **Soonish**: wanted, but a design question stands in the way; the no
 **Not yet**: reasonable, deferred; do not anticipate them in your implementation.
 
 The scattered small tasks have their own preplan, ready to start:
-`whiteboard/20261014-low_hanging_fruit/20261014-low_hanging_fruit-preplan.md` (the vault-size
+`winboard/20261014-low_hanging_fruit/20261014-low_hanging_fruit-preplan.md` (the vault-size
 cap, explicit options with a `safebyok/browser` defaults export, the provider surfacing a failed
 open, epoch milliseconds everywhere, `mask` in `safebyok/utils`, the boundary audit,
 `stale_write` retry, a size budget in CI, the sand below, a docs sweep, the label-grammar
@@ -15,7 +15,7 @@ report).
 ## Open from second_harvest (the Coach, 2026-10-16)
 
 Questions the second_harvest sprint left for the Coach
-(`human/20261015-sprint_second_harvest_done.md`), each with the orchestrator's recommendation.
+(`winboard/20261015-second_harvest/20261015-sprint_second_harvest_done-human.md`), each with the orchestrator's recommendation.
 
 * **[#60](https://github.com/mrflip/safebyok/pull/60)'s four `lockSoon()` calls**:
   - the snapshot flips to locked at once, before the grace period ends (keep);
@@ -112,7 +112,7 @@ package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
   `whiteboard/20261016-rotation/rotation-design.md`, built as sprint matters' threads 14 and 18-20.
 * **`listBoxRecords`** ([#73](https://github.com/mrflip/safebyok/pull/73), used by
   [#78](https://github.com/mrflip/safebyok/pull/78)): the recommendation is to move it into the
-  `VaultDB` base class, so no store writes it (`human/20261015-sprint_big_feats_rulings.md`). It
+  `VaultDB` base class, so no store writes it (`winboard/20261015-big_feats/20261015-sprint_big_feats_rulings-human.md`). It
   belongs with the base-class thread.
 * **Try passkeys on a real authenticator** (Chrome platform passkey, Safari, a security key) once
   [#76](https://github.com/mrflip/safebyok/pull/76) merges: it is tested only against a fake
@@ -164,7 +164,7 @@ disproves the machinery:
 * The npm staging questions: does a staged version keep the `--tag` it was staged with when
   approved? Is the provenance statement still attached after approval? Does a rejected stage use
   up its version number? The trusted publisher's dist-tag permission is on but unused (the
-  workflow installs npm 12.2.0, which can). Details in `human/20261014-staged_publish.md`.
+  workflow installs npm 12.2.0, which can). Details in `winboard/20261014-staged_publish/20261014-staged_publish-human.md`.
 * The Coach's switches before the first release (the sprint's progress file lists them): allow
   Actions to create PRs, the first changeset, the tag ruleset, a token for the Version PR's CI.
 * Deprecate `safebyok@0.0.0` once a real version is live.
@@ -186,12 +186,12 @@ stored and how big a vault can be. CI covers the package (`pnpm -r`). What is le
   device seeing a write is something a person can click through.
 * **Component packaging**: a publishable `dist/` with `convex.config` and the generated types
   (design.md's open question, still open), and `safebyok` as a peer (1).
-* **Rulings the sprint asked for** (`human/20261015-sprint_convex_vaultdb_done.md`): whether a
+* **Rulings the sprint asked for** (`winboard/20261014-convex_vaultdb/20261015-sprint_convex_vaultdb_done-human.md`): whether a
   vault locks itself on `not_permitted` (sign-out); `destroy()` on a handle that never saw a
   bundle resolving without erasing, and a retry after a refused `destroy()` taking the reborn
   vault; whether the label grammar is enforced server-side; the tests' `react` dev dependency
   (keep, recommended); ~~the first-emit deviation of `watchVault`~~ (ruled 2026-10-16: accepted as
-  built; `whiteboard/20261014-convex/design.md` records why).
+  built; `winboard/20261014-convex/design.md` records why).
 
 ### 3. Reservations before the first release: the stored format and the public surface
 
@@ -305,7 +305,7 @@ three change what the documents say:
 
 ### 5. Expiry and the unlock window (ruled; `lockSoon` built, natural expiry's timer not)
 
-Not on the Coach's lists, but ruled in `whiteboard/20261014-crypto/rulings.md` (*The unlock
+Not on the Coach's lists, but ruled in `winboard/20261014-crypto/rulings.md` (*The unlock
 window*, *Expiry*) and placed here because fingerprint unlock (8) reworks the same unlock path
 and should build on the settled model. The rulings call the two timestamps `staleVaultTS` and
 `shutVaultTS`; the Coach has since asked that each be named for its consequence, an action on a
@@ -354,7 +354,7 @@ and error strings become per-check params), then audit: `sideEffects: false` is 
 runs at module top level, each entry pulls only what it uses, and the budget limits drop to match.
 Report what zod/mini cost in authoring clarity; if it is more than the bytes are worth, say so.
 
-Built (second_harvest thread 1, `whiteboard/20261015-second_harvest/thread-1-zod_mini.md`):
+Built (second_harvest thread 1, `winboard/20261015-second_harvest/thread-1-zod_mini.md`):
 every entry fell by about 14 kB brotlied, and a bare `stableJsonify` from 25 kB to 2.3 kB, no zod
 in it. A host's label policy (*Pluggable label validator*, below) should be typed as
 `Z.core.$ZodType`, so a classic or a mini schema both fit.
