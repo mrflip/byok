@@ -39,8 +39,11 @@
   G118, G123, G173-G176, G179, G181-G185, G476, G232, G289, T02, T03); G177 annotated (its note
   half goes with thread 2); no joiner row stood. Thread 11 (#131): G203 and G288 swept, G524
   annotated (its Postgres half). G203's answer asked about the other databases and Playwright;
-  thread 11 answered, and the Coach noted it (the resolutions file). The Gripefest doc stands at
-  158 matters.
+  thread 11 answered, and the Coach noted it (the resolutions file). Thread 4 (#132): 26 rows
+  swept (G116, G117, G119, G120, G121, G498, G140, G122, G134, G136, G137, G139, G141-G148, G522,
+  G063, G513, G514, G212, G489); G499 annotated (settled by VAULTDB.md, for the Coach: sweep or
+  keep on NOT YET), G516 annotated (first part settled; the `rolled_back` message still names
+  `eraseMark`, and the rest stands). The Gripefest doc stands at 132 matters.
 * *Orchestrator:* **Rulings carried back** (the sprint skill's §3, new this sprint): the Coach's
   rulings are in `20261016-push_to_100_a-resolutions.md` in full, and a `→ *Coach:*` line goes
   beside each question in its PR (done for #126-#130; #131's worker did its own). Lines owed to
