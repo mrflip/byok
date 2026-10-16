@@ -228,7 +228,8 @@ bundle. A bundle with the same `vault_id` and a lower `unlock_epoch`, or a lower
 Nothing is unlocked and nothing is written. The message says calmly that this device has already
 seen a newer copy of the vault than storage offers now, and how a host accepts an older copy
 restored on purpose: it erases the device's mark (`deviceDB.eraseMark(scope)`) and opens again,
-after asking the user (the core README's recipe).
+on its own knowledge that the restore was meant, never on the user's answer (the core README's
+recipe).
 
 Why the mark holds both epochs: `unlock_epoch` is bound into nothing, so storage can serve an
 older bundle under a raised `unlock_epoch` and pass a check on it alone. After a rotation that
