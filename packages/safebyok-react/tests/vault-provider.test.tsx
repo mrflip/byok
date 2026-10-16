@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { AnyTextValidators, Ckeys, VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, openVault, type KeyDeriver, type Vault, type VaultValidators } from 'safebyok'
 import * as TH from 'safebyok/testing'
-import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
+import { Component, useEffect, useLayoutEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
 
 /** A probe component exercising the binding the way a host app would. */
@@ -302,6 +302,24 @@ describe("VaultProvider", () => {
       expect(await reading).to.be.null
     })
 
+    it("keeps a dialog an action opens in the very commit that gave the provider its vault", async () => {
+      const world = await lockedWorld()
+      const eager: { reading: { outcome: unknown } } = { reading: { outcome: 'pending' } }
+      // A layout effect runs in the commit itself, before React's passive effects -- among them the
+      // provider's cleanup from the render before, the one with no vault yet -- have had their turn.
+      const Eager = () => {
+        const { vault, withUnlockedVault } = useVault()
+        useLayoutEffect(() => {
+          if (vault !== null) { eager.reading = watched(withUnlockedVault(() => vault.read('anthropic_api_key'))) }
+        }, [vault, withUnlockedVault])
+        return null
+      }
+      render(<VaultProvider {...world.props} userId="u1"><Eager /></VaultProvider>)
+      fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+      fireEvent.click(screen.getByText('Unlock'))
+      await waitFor(() => { expect(eager.reading.outcome).to.eq('sk-fake') })
+    })
+
     it("resolves null when another user signs in, and shows that user no dialog", async () => {
       const world = await lockedWorld()
       const { rerender } = render(world.tree('u1'))
@@ -323,6 +341,32 @@ describe("VaultProvider", () => {
       await screen.findByPlaceholderText('vault passphrase')
       rerender(world.tree(null))
       expect(await reading).to.be.null
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    })
+
+    it("resolves null for an action whose refusal lands after the user signed out, and shows the next user no dialog", async () => {
+      const world = await lockedWorld()
+      const { rerender } = render(world.tree('u1'))
+      const vault = await world.opened()
+      let release: () => void = noop
+      // eslint-disable-next-line unicorn/prefer-promise-with-resolvers -- Promise.withResolvers is ES2024, and every tsconfig's lib stops at ES2023
+      const held = new Promise<void>((resolve) => { release = resolve })
+      // A host action that holds its refusal back a while, as one that logs it first might.
+      const reading = watched(world.latest().withUnlockedVault(async () => {
+        try {
+          return await vault.read('anthropic_api_key')
+        } catch (err) {
+          await held
+          throw err
+        }
+      }))
+      rerender(world.tree(null))
+      release()
+      await waitFor(() => { expect(reading.outcome).to.be.null })
+      rerender(world.tree('u2'))
+      await waitFor(() => { expect(world.latest().vault).to.not.be.null })
+      expect(world.latest().vault).to.not.equal(vault)
+      await TH.wakeupAtNextTick()
       expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
     })
 

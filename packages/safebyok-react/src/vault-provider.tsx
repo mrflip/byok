@@ -136,6 +136,9 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   // renders it.
   const [asking, setAsking] = useState<Asking | null>(null)
   const askingRef = useRef<Asking | null>(null)
+  // The handle the open effect holds now, set and cleared with it: null from the moment a vault
+  // goes until the next arrives, when there is nothing for a dialog to unlock.
+  const vaultRef = useRef<Vault | null>(null)
   // Counts the dialog's showings, so that each is a fresh dialog with nothing kept from the last.
   const askingRounds = useRef(0)
   // Wrapped, so that a rejection carrying any value at all (null, say) still reads as "failed".
@@ -143,6 +146,16 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   const [openError, setOpenError] = useState<VaultError | null>(null)
   // Bumped by retryOpen: a fresh value re-runs the open effect.
   const [openAttempt, setOpenAttempt] = useState(0)
+
+  /** Closes `ending` if it is still the dialog showing, and settles every action waiting on it. */
+  const endAsking = useCallback((ending: Asking | null, unlocked: boolean) => {
+    if (ending === null) { return }
+    if (askingRef.current === ending) {
+      askingRef.current = null
+      setAsking(null)
+    }
+    for (const settle of ending.waiters) { settle(unlocked) }
+  }, [])
 
   useEffect(() => {
     if (userId === null) { return }
@@ -155,6 +168,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     void openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
+      vaultRef.current = opened
       setVault(opened)
     }).catch((err: unknown) => {
       if (gone) { return }
@@ -166,12 +180,18 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     })
     return () => {
       gone = true
+      vaultRef.current = null
+      // A dialog belongs to the vault it was opened over: when that handle goes -- a sign-out,
+      // another user, a reopen, the provider unmounting -- its actions resolve null, and it closes.
+      // Here and not in an effect on `vault`, whose cleanup from the render before the vault came
+      // would end a dialog opened in the very commit that brought it.
+      endAsking(askingRef.current, false)
       handle?.close()
       setVault(null)
       setOpenFailure(null)
       setOpenError(null)
     }
-  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, whenIdentityRevoked, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt])
+  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, whenIdentityRevoked, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt, endAsking])
 
   const retryOpen = useCallback(() => {
     if (openError !== null) { setOpenAttempt((prev) => prev + 1) }
@@ -191,18 +211,11 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     setOpenAttempt((prev) => prev + 1)
   }, [openError, userId, applabel, vaultlabel, vaultDB, deviceDB, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck])
 
-  /** Closes `ending` if it is still the dialog showing, and settles every action waiting on it. */
-  const endAsking = useCallback((ending: Asking | null, unlocked: boolean) => {
-    if (ending === null) { return }
-    if (askingRef.current === ending) {
-      askingRef.current = null
-      setAsking(null)
-    }
-    for (const settle of ending.waiters) { settle(unlocked) }
-  }, [])
-
-  /** Waits on the dialog showing now, opening one if none is. */
+  /** Waits on the dialog showing now, opening one if none is; settles false while there is no vault. */
   const awaitUnlock = useCallback(() => new Promise<boolean>((settle) => {
+    // An action whose refusal lands after its vault went resolves null, as the dialog it would
+    // have waited on did, rather than leaving a dialog to show over whichever vault comes next.
+    if (vaultRef.current === null) { settle(false); return }
     const { current } = askingRef
     if (current !== null) {
       current.waiters.push(settle)
@@ -213,10 +226,6 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     askingRef.current = opening
     setAsking(opening)
   }), [])
-
-  // A dialog belongs to the vault it was opened over: when that handle goes -- a sign-out, another
-  // user, a reopen, the provider unmounting -- its actions resolve null, and it closes.
-  useEffect(() => () => { endAsking(askingRef.current, false) }, [vault, endAsking])
 
   // An unlock that lands while a dialog is asking -- the first dialog's, finishing after its Cancel,
   // or one the app made itself through the handle -- answers it: the dialog closes, and the actions
