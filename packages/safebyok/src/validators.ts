@@ -42,9 +42,10 @@ export const Label = Z.string().check(
  * Well-formed Unicode: no surrogate standing alone, half of a character such as an emoji, as text
  * cut off mid-character has. Such text has no UTF-8 form, and Convex requires valid Unicode. Under
  * the `u` flag a surrogate pair reads as the one character it encodes, so `\p{Cs}` (the Unicode
- * category of surrogates) matches only a lone one.
+ * category of surrogates) finds only a lone one. It searches for one rather than matching the
+ * whole text, which on text of millions of characters would overflow the regex engine's stack.
  */
-const WellFormed = Z.regex(/^\P{Cs}*$/u, "Text must be well-formed Unicode, and this holds a lone surrogate: half of a character such as an emoji, as text cut off mid-character does")
+const WellFormed = Z.refine<string>((text) => ! /\p{Cs}/u.test(text), "Text must be well-formed Unicode, and this holds a lone surrogate: half of a character such as an emoji, as text cut off mid-character does")
 
 /** The most characters a default {@link UserId} holds (UTF-16 code units, as JavaScript counts them). */
 export const MaxUserIdChars = 100
@@ -73,8 +74,10 @@ export const MaxNoteChars = 256
 /**
  * A note's characters: any but the control characters (Unicode's `Cc`: C0, DEL and C1), save tab
  * and newline. Carriage return is refused with the rest; a browser's textarea hands up newlines alone.
+ * It searches for a control character that is neither tab nor newline, rather than matching the
+ * whole note, so that an overlong note is refused for its length and never overflows the regex stack.
  */
-const NoteChars = Z.regex(/^[\t\n\P{Cc}]*$/u, "A note holds no control characters but tab and newline")
+const NoteChars = Z.refine<string>((note) => ! /(?![\t\n])\p{Cc}/u.test(note), "A note holds no control characters but tab and newline")
 
 /**
  * The default check for a lockbox's public note, shown beside it while the vault is locked:
