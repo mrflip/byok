@@ -410,6 +410,38 @@ describe("VaultProvider", () => {
     expect(latest().vault?.getSnapshot().boxes.map((summary) => summary.boxlabel)).to.deep.equal(['Anthropic API key'])
   })
 
+  it("shows the vault locked when storage says its user signed out, as the vault locks itself", async () => {
+    const { Grab, opened } = grabber()
+    const { props, vaultDB } = makeWorld()
+    render(
+      <VaultProvider {...props} userId="u1">
+        <Probe />
+        <Grab />
+      </VaultProvider>,
+    )
+    const vault = await opened()
+    await vault.unlock('correct horse battery staple')
+    await expectShown('unlocked')
+    vi.spyOn(vaultDB, 'readBox').mockRejectedValueOnce(new VaultError('identity_revoked', 'No one is signed in: sign in, then try again.'))
+    await TH.expectRefusal(vault.read('anthropic_api_key'), 'identity_revoked')
+    await expectShown('locked')
+  })
+
+  it("passes whenIdentityRevoked through: under 'stay', the vault stays unlocked", async () => {
+    const { Grab, opened } = grabber()
+    const { props, vaultDB } = makeWorld()
+    render(
+      <VaultProvider {...props} userId="u1" whenIdentityRevoked="stay">
+        <Grab />
+      </VaultProvider>,
+    )
+    const vault = await opened()
+    await vault.unlock('correct horse battery staple')
+    vi.spyOn(vaultDB, 'readBox').mockRejectedValueOnce(new VaultError('identity_revoked', 'No one is signed in: sign in, then try again.'))
+    await TH.expectRefusal(vault.read('anthropic_api_key'), 'identity_revoked')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+  })
+
   it("passes the logger through: what the vault has nobody to throw to reaches it", async () => {
     const spy = TH.spyLogger()
     let reading = Date.UTC(2026, 9, 15)
@@ -472,7 +504,8 @@ describe("VaultProvider", () => {
 
     const ConditionCases = [
       ["storage_unavailable", 'storage that cannot be reached'],
-      ["not_permitted",       'a user storage will not serve, as when signed out of the backend'],
+      ["identity_revoked",    'a user storage no longer serves, as when signed out of the backend'],
+      ["not_permitted",       'a call storage refuses the signed-in user'],
       ["corrupt_record",      'a stored record that fails verification'],
     ] as const
 

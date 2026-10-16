@@ -15,6 +15,8 @@ import { stableJsonify } from './stable-jsonify'
 import type { DeviceDB } from './device-db'
 import { jsonBytes, type VaultDB } from './vault-db'
 import { parseLogger, type VaultLogger } from './logger'
+import * as RefusalPolicy from './refusal-policy'
+import type { IdentityRevokedResponse } from './refusal-policy'
 
 /**
  * Where the vault stands, as the UI branches on it:
@@ -125,6 +127,15 @@ export type OpenVaultOpts = {
    * 'bad_option' for a bag holding anything else, or a field it does not know.
    */
   validators?: VaultValidators | undefined
+  /**
+   * What the vault does when its storage says the user it was opened for is no longer the one
+   * signed in (kind 'identity_revoked': signed out, or another user signed in). `'lock'`, the
+   * default, locks at once, as `lock()` does -- this device forgets its remembered unlock too --
+   * and erases nothing stored. `'stay'` leaves the vault as it was, for a host that locks or
+   * closes it on its own sign-out. Either way the call that met the refusal throws it. See
+   * {@link IdentityRevokedResponse}. Kind 'bad_option' for anything else.
+   */
+  whenIdentityRevoked?: IdentityRevokedResponse | undefined
 }
 
 /**
@@ -430,7 +441,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const standingRules: Names.NameRules = { ...rules, boxlabel: AnyTextValidators.boxlabel }
   const scope = Names.checkScope(rules, { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
   const { applabel, vaultlabel } = scope
-  const vaultDB = parseVaultDB(opts.vaultDB)
+  const givenVaultDB = parseVaultDB(opts.vaultDB)
   const deviceDB = parseDeviceDB(opts.deviceDB)
   const reentryMs = parseForcePassphraseReentryHours(opts.forcePassphraseReentryHours)
   const logger = parseLogger(opts.logger)
@@ -450,8 +461,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
   const keyDeriver = parseKeyDeriver(opts.keyDeriver)
   const whisperByteLimit = parseMaxWhisperBytes(opts.maxWhisperBytes)
-  const lockboxLimit = parseMaxLockboxes(opts.maxLockboxes, parseDeclared(vaultDB, 'maxLockboxes'))
-  const vaultByteLimit = ensureLimitsFit(vaultDB, whisperByteLimit, lockboxLimit)
+  const lockboxLimit = parseMaxLockboxes(opts.maxLockboxes, parseDeclared(givenVaultDB, 'maxLockboxes'))
+  const vaultByteLimit = ensureLimitsFit(givenVaultDB, whisperByteLimit, lockboxLimit)
+  const whenIdentityRevoked = RefusalPolicy.parse(opts.whenIdentityRevoked)
+  // Every storage refusal, whichever call met it, passes by the refusal policy on its way out.
+  const vaultDB = RefusalPolicy.heed(givenVaultDB, async (refusal) => { await heedRefusal(refusal) })
 
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
   let boxes: readonly (LockboxSummary | DamagedLockbox)[] = []
@@ -667,6 +681,25 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     shutsSoFar += 1
     dropKey()
     await deviceDB.eraseUnlock(scope)
+  }
+
+  /**
+   * Do what the refusal policy says of a storage refusal, before it is thrown: for a user no
+   * longer signed in, lock, as `lock()` does. The refusal is what the caller must hear, so a
+   * device store that will not forget the remembered unlock is only logged.
+   */
+  const heedRefusal = async (refusal: VaultError) => {
+    if (RefusalPolicy.decide(refusal, whenIdentityRevoked) !== 'lock') { return }
+    const wasUnlocked = vaultKey !== null
+    try {
+      await shut()
+    } catch (err) {
+      logger.warn("Storage no longer serves the user this vault was opened for, so the vault locked, but this device's remembered unlock could not be forgotten: the next open for the same user may pick it up.", { call: 'whenIdentityRevoked' }, asError(err))
+    }
+    bump()
+    if (wasUnlocked) {
+      logger.log("Storage no longer serves the user this vault was opened for -- signed out, or another user signed in -- so the vault locked, as whenIdentityRevoked 'lock' has it. It asks for the passphrase once the user signs in again.", { call: 'whenIdentityRevoked' })
+    }
   }
 
   /** Forget the unlock in memory, and the timer lockSoon() left to do so. */
