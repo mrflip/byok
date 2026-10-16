@@ -47,8 +47,15 @@ export type SafebyokApiOpts<DataModel extends GenericDataModel = GenericDataMode
 export class SafebyokComponent {
   private readonly component: ComponentApi
 
-  /** @param component - The installed component, `components.safebyok` from the host's generated api. */
+  /**
+   * @param component - The installed component, `components.safebyok` from the host's generated api.
+   *   Kind 'bad_option' for anything that is not an object, such as the `undefined` a forgotten
+   *   install leaves.
+   */
   constructor(component: ComponentApi) {
+    if ((component as unknown) === null || (typeof component !== 'object' && typeof component !== 'function')) {
+      throw new VaultError('bad_option', "SafebyokComponent takes the installed component, components.safebyok from your generated api: install it with app.use(safebyok) in convex.config.ts, then run Convex codegen.")
+    }
     this.component = component
   }
 
@@ -167,7 +174,7 @@ export type SafebyokApi = ApiFromModules<{ safebyok: ReturnType<SafebyokComponen
 /** The bag `api` was handed, once it holds a `getUserId` function: misuse, caught at setup. */
 const checkedApiOpts = <DataModel extends GenericDataModel>(opts: unknown): SafebyokApiOpts<DataModel> => {
   if (typeof opts !== 'object' || opts === null || typeof (opts as { getUserId?: unknown }).getUserId !== 'function') {
-    throw new VaultError('bad_option', "SafebyokComponent.api takes { getUserId }, a function that answers who is signed in: async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null. It runs first in every safebyok function, so a missing one would otherwise show only at the first request.")
+    throw new VaultError('bad_option', "SafebyokComponent.api takes { getUserId }, a function that answers who is signed in: async (ctx) => (await ctx.auth.getUserIdentity())?.subject ?? null.")
   }
   return opts as SafebyokApiOpts<DataModel>
 }
