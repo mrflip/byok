@@ -1,10 +1,12 @@
 # Thread 21: damaged_erase (2026-10-16)
 
 Branch `20261016-damaged_erase`, PR [#115](https://github.com/mrflip/safebyok/pull/115), stacked on
-[#108](https://github.com/mrflip/safebyok/pull/108) (thread 9; the line main → #98 → #97 → #105 →
-#106 → #107 → #108). Justify: green, every package (core 1266 + 18 skipped, react 102, demo 146 + 9
-skipped, indexeddb 122 + 9, postgres 194 + 9, convex 313 + 14, graphql 190 + 9, argon2-wasm 44,
-root 123). `pnpm size` within every budget (`everything` 29.29 of 30 kB, `openVault` 20.74 of 23).
+[#114](https://github.com/mrflip/safebyok/pull/114), the top of the line main → #98 → #97 → #105 →
+#106 → #107 → #108 → #109 → #110 → #113 → #114 (`6c8aa59`). Justify: green, every package (core 1295
++ 22 skipped, react 107, demo 153 + 11 skipped, indexeddb 139 + 9, postgres 217 + 9, convex 327 + 18,
+graphql 205 + 9, argon2-wasm 44, root 123); `pnpm size` within every budget. Rebased at filing: the
+conflicts (`idbVaultDB`'s erase, now over #109's `boxRange`, the battery's 3.5 group, `security.md`)
+kept both sides.
 
 * **Built**: the Coach's "yes" to a way to clear a vault `openVault` refuses as `damaged_bundle`.
   - `eraseDamagedVault(opts)` in `vault.ts`, exported with `EraseDamagedVaultOpts`: takes
