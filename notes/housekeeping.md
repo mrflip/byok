@@ -53,3 +53,21 @@ fetching, and an attic tag points at a commit no branch holds any more.
 `git worktree list` marks a worktree whose directory is gone as *prunable*, and its branch stays
 checked out there, so nothing will retire or delete it. `git worktree prune` clears the stale
 entries.
+
+## Finder's .DS_Store files
+
+```
+scripts/clear-ds-store.sh
+```
+
+macOS Finder writes a `.DS_Store` file into each folder it shows, including folders in a
+container's workspace that the Mac shares. They are gitignored, but one left in a folder that git
+is emptying, in a rebase or a `git worktree remove`, keeps the folder from being deleted. Run
+this in the worktree first.
+
+It takes no arguments: it clears the worktree holding the current directory, and nothing else --
+not the main checkout from a linked worktree, not a sibling, not a worktree nested inside this
+one. It deletes only a regular file named exactly `.DS_Store` that git ignores, so a tracked one
+stays, and what git sees never changes. It follows no symlink, crosses into no other filesystem,
+and skips `.git` and `node_modules`. Finder may write a new one a moment later; if git still
+balks, run it once more.
