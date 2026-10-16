@@ -677,16 +677,16 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   /** Refuse a new passkey whose credential is already one of `standing`'s ways in. */
   const ensureNewCredential = (standing: VaultBundle, passkey: PasskeyProof) => {
-    const taken = standing.unlocks.find((envelope) => envelope.method === 'passkey' && envelope.credential_id === passkey.credentialId)
-    if (taken !== undefined) {
-      throw new VaultError('bad_option', `That passkey is already a way into this vault, labelled '${taken.unlocklabel}': the snapshot's unlocks list each passkey's credential_id.`)
+    // Neither refusal here quotes an unlocklabel: a host's unlocklabel check may admit any text.
+    if (standing.unlocks.some((envelope) => envelope.method === 'passkey' && envelope.credential_id === passkey.credentialId)) {
+      throw new VaultError('bad_option', "That passkey is already a way into this vault: the snapshot's unlocks list each passkey's credential_id, beside its unlocklabel.")
     }
   }
 
   /** Refuse a new way in labelled `unlocklabel` that `standing` has no room or label for. */
   const ensureRoomForUnlock = (standing: VaultBundle, unlocklabel: string) => {
     if (standing.unlocks.some((envelope) => envelope.unlocklabel === unlocklabel)) {
-      throw new VaultError('bad_label', `This vault already has a way in labelled '${unlocklabel}': pick another unlocklabel. The snapshot's unlocks list the labels taken.`)
+      throw new VaultError('bad_label', "This vault already has a way in under that unlocklabel: pick another. The snapshot's unlocks list the labels taken.")
     }
     if (standing.unlocks.length >= MaxUnlocks) {
       throw new VaultError('too_many_unlocks', `This vault already holds its limit of ${String(MaxUnlocks)} ways in: remove one before adding another.`)
