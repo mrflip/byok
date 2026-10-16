@@ -25,7 +25,7 @@
 | 16 | late_unlock      | merged #110                |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | merged #115                |
-| 22 | flake_fixes      | in review #118 (files onto main) |
+| 22 | flake_fixes      | review fixed; filing #118 onto main |
 | -- | the line #98-#115 | merged 2026-10-16 03:09 (main 23f263a) |
 
 ## What the threads have taught
