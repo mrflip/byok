@@ -1,13 +1,13 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: thread 4 underway; 1 rebuilding to a Coach ruling; 11 in review; 3, 6, 7 and 8 filed; 5b cleared, cut once 4 files.
+**Status**: threads 2 and 4 underway; 11 in review; 1, 3, 6, 7 and 8 filed; 5b cleared, cut once 4 files.
 
 ## Status
 
 | # | Thread | Base | Status | PR |
 |---|---|---|---|---|
-| 1 | names_and_keys | main | rebuilding: the joiner ruling, then a second review | [#128](https://github.com/mrflip/safebyok/pull/128) |
-| 2 | public_bag | on 1 | pending | |
+| 1 | names_and_keys | main | filed #128 | [#128](https://github.com/mrflip/safebyok/pull/128) |
+| 2 | public_bag | on 1 (ce653fbb) | underway | |
 | 3 | locks_and_expiry | main | filed #127 | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 (98b70b80) | underway | |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
@@ -92,7 +92,7 @@
   `rememberedUnlock`, not `refresh()`'s `readMark`; (7) `keptMark()`'s warning is tagged
   `call: 'refresh'` from a lock. Left as accepted: (4) the post-deadline minute and a stepped-back
   clock (G128's class). Not checked: real-browser IndexedDB atomicity (fake-indexeddb only).
-* *Orchestrator:* **Thread 1** (ready, [#128](https://github.com/mrflip/safebyok/pull/128)) --
+* *Orchestrator:* **Thread 1** (filed, [#128](https://github.com/mrflip/safebyok/pull/128)) --
   what later threads inherit:
   * **No `bindValidators`** (a deviation, an Open Matters row): host validators run at entry only
     (`openVault`, `store`, `addPassphrase`, `addPasskey`); no VaultDB verb takes a bag. Thread 5's
@@ -101,8 +101,10 @@
   * **A floor** (`NameFloor`, `NoteFloor`: well-formed, NFC, no controls, 1 KiB name / 4 KiB note)
     runs beneath everything, in every verb and every record schema. Adapters declare
     `maxNameBytes` and `reservedNameChars` (VAULTDB.md 7.3, 7.4). Postgres and GraphQL: 640 bytes.
-  * **`Ckeys.joiner(delimiter = '^')`**, a one-character delimiter (a deviation, an Open Matters
-    row); the key-value adapters take `ckeyDelimiter`. No record format bump for the ckey.
+  * **`^` is fixed** (the Coach's ruling): no `ckeyDelimiter`, no `reservedNameChars`; `^` is in
+    `NameFloor` for every store (YOLO 7). `Ckeys` is plain functions plus `Ckeys.Delimiter`; `boxRange`
+    is `[P^, P_)`. No record format bump for the ckey. `DefaultValidators` 3,844 B of 4 kB (the floor's
+    schemas are `/* @__PURE__ */`).
   * **Thread 2**: `NoteFloor`, `NoteFloorBytes`, `LockboxNote` and `Lockbox.note`'s floor go with
     the note. `DefaultValidators` is at 3,981 B of its 4 kB budget: 2's removal of the note slot
     should free room; if not, raise that line by the rule and say so.
@@ -113,7 +115,9 @@
   Left: `memoryDeviceDB` throws a refusal synchronously from promise-returning methods;
   `listBoxes` filters by the floor, not `maxNameBytes`; GraphQL's `ServerMaxNameBytes` copies
   Postgres's 640 by hand; a `TextEncoder` per name check. Not checked: real Postgres, real Convex,
-  browser IndexedDB ordering.
+  browser IndexedDB ordering. *Second review* (over the rebuild): `clean`. Left: Postgres
+  `listBoxRecords`' one catch-all refusal and its local `heldScope` (**5b: share it from the base**);
+  `JoinChar` copies `Ckeys.Delimiter` (a test holds them equal).
 * *Orchestrator:* **Thread 7** (ready, [#129](https://github.com/mrflip/safebyok/pull/129)):
   pulled G333 forward (`VaultProvider` reopens only on `stale_write`, with its test): **thread 4
   strikes G333**, and its identical edit collapses at the restack. Exports `parseLogger` from
