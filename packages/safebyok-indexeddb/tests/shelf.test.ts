@@ -28,8 +28,19 @@ describe("settle", () => {
     await expect(refused).rejects.toMatchObject({ name: 'ConstraintError' })
   })
 
+  it("rejects a transaction with the error of its request that failed, not the transaction's null", async () => {
+    const shelf = shelfOf(TH.freshDbName())
+    await set('ckey', 'row', shelf)
+    const refused = inOneTransaction(shelf, (store) => {
+      store.add('again', 'ckey')
+      return Promise.resolve(true)
+    })
+    await expect(refused).rejects.toMatchObject({ name: 'ConstraintError' })
+    expect(await get('ckey', shelf)).to.eq('row')
+  })
+
   it("rejects with an Error that says why not, never null, when the browser gave no error", async () => {
-    const request = { error: null } as unknown as IDBRequest
+    const request = Object.assign(new EventTarget(), { error: null }) as unknown as IDBRequest
     const settled = settle(request)
     request.onerror?.(new Event('error'))
     let rejection: unknown = null

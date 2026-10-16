@@ -136,9 +136,9 @@ describe("idbVaultDB", () => {
     }
   })
 
-  it("reports a write the browser gives no error for as an unknown failure, never a null cause", async () => {
+  it("reports a write aborted from outside with the error its request failed with, never a null cause", async () => {
     const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
-    // A transaction aborted from outside fails with a null error.
+    // A transaction aborted from outside has a null error; its pending put fails with an AbortError.
     const aborting = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementationOnce(function (this: IDBObjectStore, ...args) {
       const request = this.put(...args)
       this.transaction.abort()
@@ -149,7 +149,7 @@ describe("idbVaultDB", () => {
       expect(refusal.kind).to.eq('storage_unavailable')
       const { cause } = refusal as { cause?: unknown }
       expect(cause).to.be.instanceOf(Error)
-      expect((cause as Error).message).to.match(/failed for an unknown reason/)
+      expect((cause as Error).name).to.eq('AbortError')
     } finally {
       aborting.mockRestore()
     }
