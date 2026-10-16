@@ -4491,8 +4491,10 @@ describe("the device mark", () => {
     const world = makeWorld()
     await world.openUnlocked('pw')
     const before = await markIn(world)
-    vi.spyOn(world.deviceDB, 'readMark').mockResolvedValueOnce(TH.markOf('u2', { unlock_epoch: 9 }))
+    // Every read of the mark at this open hands back u2's: the one before the bundle, and the one after.
+    const misfiled = vi.spyOn(world.deviceDB, 'readMark').mockResolvedValue(TH.markOf('u2', { unlock_epoch: 9 }))
     await world.open()
+    misfiled.mockRestore()
     expect(world.logged.map((call) => call.level)).to.deep.equal(['warn'])
     expect(world.logged[0]?.message).to.include('mark')
     const after = await markIn(world)
@@ -4552,6 +4554,23 @@ describe("a bundle rolled back", () => {
     expect(vault.getSnapshot()).to.eq(standing)
     expect(standing.state).to.eq('unlocked')
     expect(world.logged.map((call) => [call.level, (call.err as VaultError | null | undefined)?.kind])).to.deep.equal([['warn', 'rolled_back']])
+  })
+
+  it("refuses no copy that was the newest when storage handed it back, though another tab of this device raised the mark meanwhile", async () => {
+    const world = makeWorld()
+    const here = await world.openUnlocked('pw')
+    const slowVaultDB = world.deafVaultDB()
+    const there = await world.open({ vaultDB: slowVaultDB })
+    const readBundle = slowVaultDB.readBundle.bind(slowVaultDB)
+    // There's next read is served at epoch 1, and handed back only once here's change has landed.
+    vi.spyOn(slowVaultDB, 'readBundle').mockImplementationOnce(async (...args) => {
+      const served = await readBundle(...args)
+      await here.addPassphrase('pw', 'spare phrase', { unlocklabel: 'spare' })
+      return served
+    })
+    await there.unlock('pw')
+    expect(there.getSnapshot().state).to.eq('unlocked')
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2 })
   })
 
   it("takes the copy up again once storage hands back the newest", async () => {

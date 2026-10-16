@@ -549,9 +549,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   )
 
   const refresh = async () => {
+    // The mark the bundle is held to is read before it (see heedMark), and an older copy of a vault
+    // this device has seen newer is refused before anything is taken from it.
+    const seenBefore = checkedMark(await deviceDB.readMark(scope))
     const fresh = await damagedAs(vaultDB.readBundle(scope, rules), damagedBundle)
-    // An older copy of a vault this device has seen newer is refused before anything is taken from it.
-    const mark = fresh === null ? null : await heedMark(fresh)
+    const mark = fresh === null ? null : await heedMark(fresh, { seenBefore })
     // A change to the unlocks elsewhere (new epoch) or a deletion ends this device's unlock: the
     // vaultKey in hand still works on old rows, but passing as current invites confusion.
     const outlived = vaultKey !== null && bundle !== UnreadBundle && bundle !== null
@@ -566,6 +568,12 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     bump()
   }
 
+  /** `kept`, a mark the deviceDB handed back, when it passes its check and is of this scope; null otherwise. */
+  const checkedMark = (kept: unknown): DeviceMark | null => {
+    const checked = DeviceMark.safeParse(kept)
+    return checked.success && isOfScope(checked.data, scope) ? checked.data : null
+  }
+
   /**
    * This device's mark for the vault, as kept: one that does not pass its check, or names some
    * other scope, reads as none, as on a device that never saw the vault -- and is said so once,
@@ -574,8 +582,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const keptMark = async (): Promise<DeviceMark | null> => {
     const kept = await deviceDB.readMark(scope)
     if (kept === null) { return null }
-    const checked = DeviceMark.safeParse(kept)
-    if (checked.success && isOfScope(checked.data, scope)) { return checked.data }
+    const checked = checkedMark(kept)
+    if (checked !== null) { return checked }
     logger.warn("This device's mark of the newest copy of the vault it had seen could not be read, so it starts again from the copy storage holds now.", { call: 'refresh' })
     return null
   }
@@ -584,10 +592,17 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
    * This device's mark for `fresh`, a bundle storage handed back, kept up to date: a bundle of the
    * vault the mark names, at an `unlock_epoch` below the one this device has seen, is refused as
    * 'rolled_back', and nothing is written or taken from it.
+   *
+   * `seenBefore` is the mark as it was read before `fresh` was, which the bundle is then held to,
+   * when the caller read one: storage held that epoch when the mark was written, so a bundle read
+   * after it is older only if storage went back. The mark as it stands now could hold a newer
+   * epoch, written meanwhile by another tab or this one, and refuse a bundle that was the newest
+   * when it was read.
    */
-  const heedMark = async (fresh: VaultBundle): Promise<DeviceMark> => {
+  const heedMark = async (fresh: VaultBundle, opts: { seenBefore?: DeviceMark | null } = {}): Promise<DeviceMark> => {
     const kept = await keptMark()
-    if (kept !== null && kept.vault_id === fresh.vault_id && fresh.unlock_epoch < kept.unlock_epoch) {
+    const held = opts.seenBefore === undefined ? kept : opts.seenBefore
+    if (held !== null && held.vault_id === fresh.vault_id && fresh.unlock_epoch < held.unlock_epoch) {
       throw new VaultError('rolled_back', "Storage handed back an older copy of this vault than this device has already seen, so this device won't use it: nothing was unlocked or written. A backup restored over the vault, or storage altered, can do this. Try again later, and if it goes on, ask the app's support to look at its storage.")
     }
     return await raiseMark(kept, fresh)
