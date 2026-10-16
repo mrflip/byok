@@ -4,6 +4,8 @@ import { localVaultDB, memoryStore, openVault, type StringStore } from '../src/i
 import { Ciphered, fromB64, toB64 } from '../src/crypto'
 import { VaultError } from '../src/errors'
 import { Lockbox, PasskeySaltBytes, VaultBundle, VaultScope, type DeviceUnlock } from '../src/types'
+import * as Ckeys from '../src/ckeys'
+import { VaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation, type StoredLockbox } from '../src/vault-db'
 import * as TH from './test-helpers'
 
 const TweakCases = [
@@ -136,6 +138,159 @@ describe("tallyWatches", () => {
     expect(tally).to.deep.equal({ opened: 1, closed: 0 })
     vault.close()
     expect(tally).to.deep.equal({ opened: 1, closed: 1 })
+  })
+})
+
+/**
+ * A device for the race driver's own tests: each move makes `roundTrips` round trips through the
+ * turnstile and logs, by its tag, when each begins and when the move ends.
+ */
+const loggingDevice = (turnstile: TH.Turnstile, log: string[], roundTrips: number) => async (tag: string) => {
+  for (let ii = 1; ii <= roundTrips; ii += 1) {
+    await turnstile.pass()
+    log.push(`${tag}${String(ii)}`)
+    await TH.wakeupAtNextTick()
+  }
+  log.push(`${tag} done`)
+  return tag
+}
+
+/** A device that is nothing: for a race whose moves need none. */
+const noDevice = () => undefined
+
+describe("throughTurnstile", () => {
+  it("passes the turnstile before each listed method, leaving the rest as they were and `this` as the target", async () => {
+    const heard: string[] = []
+    const turnstile = { pass: () => { heard.push('passed'); return Promise.resolve() } }
+    class Client {
+      readonly label = 'pool'
+      query(text: string) { heard.push(`query ${text} on ${this.label}`); return Promise.resolve(text.length) }
+      end() { heard.push(`end ${this.label}`) }
+    }
+    const client = TH.throughTurnstile(turnstile, new Client(), ['query'])
+    expect(await client.query('SELECT 1')).to.eq(8)
+    client.end()
+    expect(client.label).to.eq('pool')
+    expect(heard).to.deep.equal(['passed', 'query SELECT 1 on pool', 'end pool'])
+  })
+})
+
+describe("raceEveryWay", () => {
+  it("runs two moves together, a few turns apart each way round, and held before each of their round trips each way round", async () => {
+    const titles = await TH.raceEveryWay({
+      makeDevices: (turnstile) => () => loggingDevice(turnstile, [], 2),
+      moves:       [(move) => move('one'), (move) => move('two')],
+      verdict:     (outcomes) => { expect(outcomes).to.deep.equal([{ kind: 'landed', val: 'one' }, { kind: 'landed', val: 'two' }]) },
+    })
+    expect(titles).to.deep.equal([
+      'made together',
+      'two started 1 microtasks after one', 'two started 2 microtasks after one', 'two started 3 microtasks after one', 'two started 5 microtasks after one', 'two started 8 microtasks after one',
+      'two started 1 ticks after one', 'two started 2 ticks after one',
+      'one held before its round trip 1 while two moved', 'one held before its round trip 2 while two moved', 'one held before its round trip 3 while two moved',
+      'one started 1 microtasks after two', 'one started 2 microtasks after two', 'one started 3 microtasks after two', 'one started 5 microtasks after two', 'one started 8 microtasks after two',
+      'one started 1 ticks after two', 'one started 2 ticks after two',
+      'two held before its round trip 1 while one moved', 'two held before its round trip 2 while one moved', 'two held before its round trip 3 while one moved',
+    ])
+  })
+
+  it("holds a move just before its round trip while the other moves to its end, then lets it go", async () => {
+    const logs: string[][] = []
+    await TH.raceEveryWay({
+      makeDevices: (turnstile) => {
+        const log: string[] = []
+        logs.push(log)
+        return () => loggingDevice(turnstile, log, 2)
+      },
+      moves:   [(move) => move('a'), (move) => move('b')],
+      verdict: () => undefined,
+    })
+    // The runs that held "a" before its round trips 1, 2 and (making only two) 3, after the eight that hold nothing.
+    expect(logs.slice(8, 11)).to.deep.equal([
+      ['b1', 'b2', 'b done', 'a1', 'a2', 'a done'],
+      ['a1', 'b1', 'b2', 'b done', 'a2', 'a done'],
+      ['a1', 'a2', 'a done', 'b1', 'b2', 'b done'],
+    ])
+  })
+
+  it("holds each of three or more moves midway in turn, then lets all go together", async () => {
+    const logs: string[][] = []
+    const titles = await TH.raceEveryWay({
+      makeDevices: (turnstile) => {
+        const log: string[] = []
+        logs.push(log)
+        return () => loggingDevice(turnstile, log, 2)
+      },
+      moves:   [(move) => move('a'), (move) => move('b'), (move) => move('c')],
+      verdict: () => undefined,
+    })
+    expect(titles).to.deep.equal([
+      'made together',
+      'each held before its round trip 1 in turn, then all let go', 'each held before its round trip 2 in turn, then all let go', 'each held before its round trip 3 in turn, then all let go',
+    ])
+    // Held before round trip 2, every move has made its first before any makes its second.
+    expect(logs[2]?.slice(0, 3)).to.deep.equal(['a1', 'b1', 'c1'])
+  })
+
+  it("makes fresh devices for every schedule, the setup first, through the first device", async () => {
+    const made: string[] = []
+    await TH.raceEveryWay({
+      makeDevices: () => {
+        made.push('backend')
+        return () => ({ note: (word: string) => { made.push(word); return Promise.resolve() } })
+      },
+      setup:   (first) => first.note('setup'),
+      moves:   [(device) => device.note('one'), (device) => device.note('two')],
+      verdict: () => undefined,
+    })
+    expect(made.slice(0, 4)).to.deep.equal(['backend', 'setup', 'one', 'two'])
+    // No round trips pass the turnstile, so each hold runs once, the moves one after the other.
+    expect(made.filter((word) => word === 'backend')).to.have.lengthOf(17)
+  })
+
+  it("names the schedule under which a verdict failed", async () => {
+    const race = TH.raceEveryWay({
+      makeDevices: (turnstile) => () => loggingDevice(turnstile, [], 1),
+      moves:       [(move) => move('one'), (move) => move('two')],
+      verdict:     (outcomes) => { expect(outcomes.map((outcome) => outcome.kind)).to.include('stale_write') },
+    })
+    await expect(race).rejects.toThrow(/^Under the schedule "made together": expected \[ 'landed', 'landed' \] to include 'stale_write'/)
+  })
+
+  it("tells a move's refusal by its kind, and anything else thrown as unknown", async () => {
+    await TH.raceEveryWay({
+      makeDevices: () => noDevice,
+      moves:       [() => Promise.reject(new VaultError('stale_write', 'stale')), () => Promise.reject(new Error('nope'))],
+      verdict:     (outcomes) => { expect(outcomes.map((outcome) => outcome.kind)).to.deep.equal(['stale_write', 'unknown']) },
+    })
+  })
+
+  it("fails a race in which one device cannot move while another waits at the turnstile", async () => {
+    const race = TH.raceEveryWay({
+      makeDevices: (turnstile) => {
+        // Every device takes one lock around its round trip, as no two real devices could.
+        const lock = sharedLock()
+        return () => (tag: string) => lock(async () => {
+          await turnstile.pass()
+          return tag
+        })
+      },
+      moves:   [(move) => move('one'), (move) => move('two')],
+      verdict: () => undefined,
+    })
+    await expect(race).rejects.toThrow(/^Under the schedule "one held before its round trip 1 while two moved": a device's move did not finish/)
+  }, 10_000)
+
+  it("fails a race whose move makes more round trips than it can hold before", async () => {
+    const race = TH.raceEveryWay({
+      makeDevices: (turnstile) => () => loggingDevice(turnstile, [], 13),
+      moves:       [(move) => move('one'), (move) => move('two')],
+      verdict:     () => undefined,
+    })
+    await expect(race).rejects.toThrow(/^A move made more than 12 round trips through the turnstile/)
+  })
+
+  it("refuses a race of fewer than two moves", async () => {
+    await expect(TH.raceEveryWay({ makeDevices: () => noDevice, moves: [() => Promise.resolve()], verdict: () => undefined })).rejects.toThrow(TypeError)
   })
 })
 
@@ -489,6 +644,332 @@ describe("perUser", () => {
     const onlyU1 = TH.perUser(() => servingOnly('u1', store))
     await TH.expectRefusal(onlyU1.readBundle(TH.scopeOf('u2')), 'identity_revoked')
   })
+})
+
+// ------------------------------------------------- the races, against adapters that do not guard
+
+type Rows = Map<string, unknown>
+
+/**
+ * A backend in memory reached by round trips: `atomically` runs its work on every row in one step,
+ * as one conditional statement or one transaction does, and answers on a later turn -- the next
+ * microtask, or over `theWire`, the next tick, as a database across a network does. Every device
+ * over it shares its rows and its listeners, and nothing else.
+ */
+class RoundTripBackend {
+  readonly rows: Rows = new Map()
+  readonly listeners = new Set<() => void>()
+  private readonly overTheWire: boolean
+
+  constructor(overTheWire: boolean) {
+    this.overTheWire = overTheWire
+  }
+
+  async atomically<ValT>(work: (rows: Rows) => ValT): Promise<ValT> {
+    await (this.overTheWire ? TH.wakeupAtNextTick() : Promise.resolve())
+    return work(this.rows)
+  }
+}
+
+/** A write taken apart: its check of what stands, and the write itself, each on the rows. */
+type WritePlan = { check: (rows: Rows) => boolean, write: (rows: Rows) => void }
+
+/** How an adapter makes a write's check and the write itself: together, or not. */
+type Stepping = (backend: Pick<RoundTripBackend, 'atomically'>, plan: WritePlan) => Promise<boolean>
+
+/** The check and the write in one round trip: atomic, as the contract asks. */
+const inOneStep: Stepping = (backend, plan) => backend.atomically((rows) => {
+  if (! plan.check(rows)) { return false }
+  plan.write(rows)
+  return true
+})
+
+/** The check in one round trip and the write in the next, so another device's write may land between. */
+const checkThenWrite: Stepping = async (backend, plan) => {
+  if (! await backend.atomically(plan.check)) { return false }
+  await backend.atomically(plan.write)
+  return true
+}
+
+/** One lock, taken around a whole write: shared by every device in this process, as no two real devices could share one. */
+const sharedLock = () => {
+  let tail: Promise<unknown> = Promise.resolve()
+  return <ValT>(work: () => Promise<ValT>): Promise<ValT> => {
+    const turn = afterThen(tail, work)
+    tail = endOf(turn)
+    return turn
+  }
+}
+
+/** `work`, once `before` has ended. */
+const afterThen = async <ValT>(before: Promise<unknown>, work: () => Promise<ValT>): Promise<ValT> => {
+  await before
+  return work()
+}
+
+/** Resolves once `promise` ends, however it ends: the next turn of a lock waits on this one's end, not its outcome. */
+const endOf = async (promise: Promise<unknown>) => {
+  try {
+    await promise
+  } catch {
+    // ended
+  }
+}
+
+/** {@link checkThenWrite} under one lock every device here shares: the race hidden in this process, and open between real devices. */
+const checkThenWriteUnder = (lock: ReturnType<typeof sharedLock>): Stepping => (backend, plan) => lock(() => checkThenWrite(backend, plan))
+
+/** How a {@link RoundTripVaultDB} is made: its stepping, and the ways it may be wrong beside that. */
+type RoundTripOpts = {
+  stepping:         Stepping
+  maxLockboxes?:    number | undefined
+  /** Counts the vault in a round trip of its own, before a new lockbox's write: honest, and best effort. */
+  countsApart?:     boolean
+  /** Lists no more lockboxes than its limit: a listing cut short. */
+  listsToLimit?:    boolean
+  /** Rings only its own subscribers, so no device hears another's writes. */
+  ringsOnlyItself?: boolean
+  /** Round trips it makes before each write, as a device fetching a session first does. */
+  preludes?:        number
+}
+
+/**
+ * A VaultDB over a {@link RoundTripBackend}, every write planned as a check and a write and made as
+ * its `stepping` says: honest with {@link inOneStep}, and broken in the ways a race test must catch
+ * with anything else.
+ */
+class RoundTripVaultDB extends VaultDB {
+  readonly maxRecordBytes = Infinity
+  readonly maxVaultBytes = Infinity
+  readonly maxLockboxes: number
+  private readonly backend: RoundTripBackend
+  private readonly opts: RoundTripOpts
+  private readonly ownListeners = new Set<() => void>()
+
+  constructor(backend: RoundTripBackend, opts: RoundTripOpts) {
+    super()
+    this.backend = backend
+    this.opts = opts
+    this.maxLockboxes = opts.maxLockboxes ?? Infinity
+  }
+
+  protected doReadBundle(scope: VaultScope) { return this.backend.atomically((rows) => rows.get(Ckeys.bundle(scope)) ?? null) }
+
+  protected async doCreateBundle(bundle: VaultBundle) {
+    const ckey = Ckeys.bundle(bundle)
+    const created = await this.step({ check: (rows) => ! rows.has(ckey), write: (rows) => { rows.set(ckey, bundle) } })
+    return created ? bundle : await this.backend.atomically((rows) => rows.get(ckey))
+  }
+
+  protected doUpdateBundle(bundle: VaultBundle, expected: BundleExpectation) {
+    const ckey = Ckeys.bundle(bundle)
+    const meets = (rows: Rows) => {
+      const standing = rows.get(ckey) as VaultBundle | undefined
+      return standing?.vault_id === expected.vault_id && standing.unlock_epoch === expected.unlock_epoch
+    }
+    return this.step({ check: meets, write: (rows) => { rows.set(ckey, bundle) } })
+  }
+
+  protected doReadBox(scope: VaultScope, boxlabel: string) { return this.backend.atomically((rows) => rows.get(Ckeys.box(scope, boxlabel)) ?? null) }
+
+  protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
+    const listed = await this.backend.atomically((rows) => boxesIn(rows, scope))
+    return this.opts.listsToLimit ? listed.slice(0, this.maxLockboxes) : listed
+  }
+
+  protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation) {
+    const ckey = Ckeys.box(scope, lockbox.boxlabel)
+    const isNew = expected.revision_id === null
+    const full = (rows: Rows) => isNew && boxesIn(rows, scope).length >= this.maxLockboxes
+    if (this.opts.countsApart && await this.backend.atomically((rows) => full(rows) && vaultIs(rows, scope, expected) && ! rows.has(ckey))) {
+      throw vaultFull()
+    }
+    const meets = (rows: Rows) => {
+      if (! vaultIs(rows, scope, expected) || ((rows.get(ckey) as Lockbox | undefined)?.revision_id ?? null) !== expected.revision_id) { return false }
+      if (! this.opts.countsApart && full(rows)) { throw vaultFull() }
+      return true
+    }
+    return await this.step({ check: meets, write: (rows) => { rows.set(ckey, lockbox) } })
+  }
+
+  protected doEraseBox(scope: VaultScope, boxlabel: string, expected: EraseExpectation) {
+    return this.step({ check: (rows) => vaultIs(rows, scope, expected), write: (rows) => { rows.delete(Ckeys.box(scope, boxlabel)) } })
+  }
+
+  protected doEraseVault(scope: VaultScope, expected: EraseExpectation) {
+    const erase = (rows: Rows) => {
+      const isBox = Ckeys.isBoxIn(scope)
+      for (const ckey of rows.keys()) {
+        if (isBox(ckey)) { rows.delete(ckey) }
+      }
+      rows.delete(Ckeys.bundle(scope))
+    }
+    return this.step({ check: (rows) => vaultIs(rows, scope, expected), write: erase })
+  }
+
+  protected override doSubscribe(_scope: VaultScope, onChange: () => void) {
+    const listeners = this.listeners()
+    listeners.add(onChange)
+    return () => { listeners.delete(onChange) }
+  }
+
+  private listeners() { return this.opts.ringsOnlyItself ? this.ownListeners : this.backend.listeners }
+
+  private async step(plan: WritePlan) {
+    for (let ii = 0; ii < (this.opts.preludes ?? 0); ii += 1) { await this.backend.atomically(() => undefined) }
+    const landed = await this.opts.stepping(this.backend, plan)
+    if (landed) {
+      for (const listener of this.listeners()) { queueMicrotask(listener) }
+    }
+    return landed
+  }
+}
+
+const vaultIs = (rows: Rows, scope: VaultScope, expected: { vault_id: string }) => (rows.get(Ckeys.bundle(scope)) as VaultBundle | undefined)?.vault_id === expected.vault_id
+
+const boxesIn = (rows: Rows, scope: VaultScope): StoredLockbox[] => [...rows]
+  .map(([ckey, lockbox]) => ({ boxlabel: Ckeys.isBoxIn(scope)(ckey) ? Ckeys.boxlabelOf(ckey) : null, lockbox }))
+  .filter((stored): stored is StoredLockbox => stored.boxlabel !== null)
+
+const vaultFull = () => new VaultError('vault_full', 'This vault is full: erase a lockbox to make room, then try again.')
+
+/**
+ * makeDevices for a RoundTripVaultDB: a fresh backend, and devices over it, each with `opts` --
+ * its round trips through the race's turnstile, unless `unwired`.
+ */
+const roundTripDevices = (opts: RoundTripOpts & { overTheWire?: boolean, unwired?: boolean, slowSecond?: boolean }): TH.MakeVaultDBDevices => (turnstile) => {
+  const backend = new RoundTripBackend(opts.overTheWire ?? false)
+  const reached = opts.unwired ? backend : TH.throughTurnstile(turnstile, backend, ['atomically'])
+  let made = 0
+  return ({ maxLockboxes }) => {
+    made += 1
+    return new RoundTripVaultDB(reached, { ...opts, maxLockboxes, preludes: made === 2 && opts.slowSecond ? 6 : 0 })
+  }
+}
+
+/** A turnstile no race holds. */
+const unheldTurnstile: TH.Turnstile = { pass: () => Promise.resolve() }
+
+/** The battery's options for a RoundTripVaultDB with `opts`: a fresh adapter, a capped one, its devices, and its push. */
+const roundTripBattery = (opts: RoundTripOpts & { overTheWire?: boolean, unwired?: boolean, slowSecond?: boolean }) => {
+  const makeDevices = roundTripDevices(opts)
+  const oneDevice = async (maxLockboxes?: number) => (await makeDevices(unheldTurnstile))({ maxLockboxes })
+  return [() => oneDevice(), { makeCappedVaultDB: oneDevice, makeDevices, pushes: true }] as const
+}
+
+TH.describeVaultDB('an honest adapter making round trips through the turnstile', ...roundTripBattery({ stepping: inOneStep }))
+TH.describeVaultDB('an honest adapter that counts a vault apart from its write, as a best effort', ...roundTripBattery({ stepping: inOneStep, countsApart: true }))
+
+/** The races a write whose check and write are apart loses, in some interleaving. */
+const SplitLosses = ['rival_creates', 'rival_bundle_updates', 'rival_first_writes', 'rival_replacements', 'erase_beats_replacement', 'vault_erase_beats_write'] as const
+
+/** The battery's checks over a check-then-write adapter whose devices share one lock, a fresh one for each call. */
+const lockedChecks = () => checksOver({ stepping: checkThenWriteUnder(sharedLock()), overTheWire: true })
+
+/** A check run as an assertion: it rejects, failing the test, when what it checks does not hold. */
+const expectToHold = (check: TH.VaultDBTimingCheck): Promise<void> => check.check()
+
+/** The checks of the battery over an adapter, by handle. */
+const checksOver = (opts: RoundTripOpts & { overTheWire?: boolean, unwired?: boolean, slowSecond?: boolean }) => TH.vaultDBTimingChecks(...roundTripBattery(opts))
+
+describe("vaultDBTimingChecks, against adapters that do not guard", () => {
+  for (const handle of SplitLosses) {
+    it(`fails a check-then-write split by an await in this process, its round trips unheld: ${handle}`, async () => {
+      await expect(checksOver({ stepping: checkThenWrite, unwired: true })[handle].check()).rejects.toThrow(/^Under the schedule "[^"]+": expected /)
+    })
+
+    it(`fails a check-then-write split across two round trips over a wire: ${handle}`, async () => {
+      await expect(checksOver({ stepping: checkThenWrite, overTheWire: true })[handle].check()).rejects.toThrow(/^Under the schedule "[^"]+": expected /)
+    })
+  }
+
+  for (const handle of SplitLosses) {
+    it(`fails a check-then-write whose second device reaches it six round trips late, as only a hold at the turnstile finds: ${handle}`, async () => {
+      await expect(checksOver({ stepping: checkThenWrite, overTheWire: true, slowSecond: true })[handle].check()).rejects.toThrow(/^Under the schedule "\w+ held before its round trip \d+ while \w+ moved": expected /)
+    })
+  }
+
+  it("misses that late device where nothing holds a round trip: what the turnstile is for", async () => {
+    const checks = checksOver({ stepping: checkThenWrite, overTheWire: true, slowSecond: true, unwired: true })
+    for (const handle of SplitLosses) { await expectToHold(checks[handle]) }
+  })
+
+  it("lets the writes of different lockboxes through a check-then-write adapter land, as they should", async () => {
+    const checks = checksOver({ stepping: checkThenWrite, overTheWire: true })
+    await expectToHold(checks.apart_new_lockboxes)
+    await expectToHold(checks.apart_replace_and_erase)
+  })
+
+  it("fails a check-then-write hidden behind a lock its devices share, once the turnstile holds one inside it", async () => {
+    await Promise.all([
+      expect(lockedChecks().rival_first_writes.check()).rejects.toThrow(/held before its round trip 1 while two moved": a device's move did not finish .* share something/),
+      expect(lockedChecks().apart_new_lockboxes.check()).rejects.toThrow(/held before its round trip 1 while two moved": a device's move did not finish/),
+    ])
+  }, 10_000)
+
+  it("is fooled by that lock where nothing holds a round trip: why makeDevices wires the turnstile", async () => {
+    const unwiredUnderLock = checksOver({ stepping: checkThenWriteUnder(sharedLock()), overTheWire: true, unwired: true })
+    await expectToHold(unwiredUnderLock.rival_first_writes)
+  })
+
+  it("fails a makeDevices that hands one adapter to both devices, or a backend to each", async () => {
+    const backend = new RoundTripBackend(false)
+    const oneAdapter = new RoundTripVaultDB(backend, { stepping: inOneStep })
+    const theOne = () => oneAdapter
+    const shared = TH.vaultDBTimingChecks(theOne, { makeDevices: () => theOne })
+    await expect(shared.seen_across_devices.check()).rejects.toThrow(/makeDevices made one adapter for both devices/)
+    const overItsOwn = () => new RoundTripVaultDB(new RoundTripBackend(false), { stepping: inOneStep })
+    const apart = TH.vaultDBTimingChecks(theOne, { makeDevices: () => overItsOwn })
+    await expect(apart.seen_across_devices.check()).rejects.toThrow()
+    await expect(apart.rival_creates.check()).rejects.toThrow(/^Under the schedule "made together"/)
+  })
+
+  it("fails a listing cut short at the limit, once a roomier device has taken the vault past it", async () => {
+    await expect(checksOver({ stepping: inOneStep, listsToLimit: true }).past_limit_from_roomier_device.check()).rejects.toThrow(/to have the same members/)
+  })
+
+  it("takes a vault past its limit, for real, when racers' counts are apart from their writes", async () => {
+    const landedCounts: number[] = []
+    await TH.raceEveryWay({
+      makeDevices: async (turnstile) => {
+        const deviceFor = await roundTripDevices({ stepping: inOneStep, overTheWire: true, countsApart: true })(turnstile)
+        return () => deviceFor({ maxLockboxes: 3 })
+      },
+      setup:   async (first) => { await first.createBundle(TH.bundleOf('u1')); await first.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet) },
+      moves:   ['openai', 'mistral', 'gemini', 'cohere'].map((boxlabel) => (racer: TH.VaultDBVerbs) => racer.updateBox(TH.scopeOf('u1'), TH.boxOf(boxlabel, boxlabel), TH.noBoxYet)),
+      verdict: (outcomes) => { landedCounts.push(outcomes.filter((outcome) => outcome.kind === 'landed').length) },
+    })
+    // Room for two: held between count and write, all four land; one after another, two.
+    expect(Math.max(...landedCounts)).to.eq(4)
+    expect(Math.min(...landedCounts)).to.eq(2)
+  })
+
+  it("fails an adapter that rings before its write lands, whose reads then miss the write", async () => {
+    const store = memoryStore()
+    const listeners = new Set<() => void>()
+    const ringNow = () => { for (const listener of listeners) { listener() } }
+    const earlyStore: StringStore = {
+      ...store,
+      write:     (ckey, text) => { ringNow(); store.write(ckey, text) },
+      erase:     (ckey) => { ringNow(); store.erase(ckey) },
+      subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
+    }
+    const checks = TH.vaultDBTimingChecks(() => localVaultDB(earlyStore), { pushes: true })
+    await expect(checks.push_each_write.check()).rejects.toThrow(/no call to onChange read the vault as the write left it/)
+  }, 10_000)
+
+  it("fails an unsubscribe that leaves its listener listening", async () => {
+    const store = memoryStore()
+    const leaky: StringStore = { ...store, subscribe: (listener) => { store.subscribe(listener); return noDevice } }
+    const checks = TH.vaultDBTimingChecks(() => localVaultDB(leaky), { pushes: true })
+    await expect(checks.push_ends_on_unsubscribe.check()).rejects.toThrow(/an unsubscribed onChange was called/)
+  })
+
+  it("fails a device that never hears another device's writes", async () => {
+    const checks = checksOver({ stepping: inOneStep, ringsOnlyItself: true })
+    await expectToHold(checks.push_each_write)
+    await expect(checks.push_from_another_device.check()).rejects.toThrow(/a watch heard none of 20 writes/)
+  }, 10_000)
 })
 
 /** Each numbered line of the VaultDB contract as `VAULTDB.md` writes it, in bold: its number, then its title. */
