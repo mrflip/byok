@@ -790,6 +790,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
    */
   const rememberedUnlock = async () => {
     if (bundle === UnreadBundle || bundle === null) { return }
+    const shutsThen = shutsSoFar
     const kept = await deviceDB.readUnlock(scope)
     if (kept === null) { return }
     const checked = DeviceUnlock.safeParse(kept)
@@ -811,12 +812,15 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     try {
       // Nothing on the remembered path ever re-wraps the vaultKey, so no extractable handle
       // exists on it at all.
-      vaultKey = await unwrapKeyUnder(
+      const unwrapped = await unwrapKeyUnder(
         remembered.local_unlock_key,
         remembered.vault_key_local_wrapped,
         localBinding(bundle.vault_id, bundle.unlock_epoch),
         { extractable: false, usage: ['wrapKey', 'unwrapKey'] },
       )
+      // A shut meanwhile -- a storage refusal saying the user signed out -- wins over the record.
+      if (shutSince(shutsThen)) { return }
+      vaultKey = unwrapped
       askPassphraseAt = remembered.ask_passphrase_at
     } catch {
       // A record that no longer opens reads as "no remembered unlock": the safe failure.

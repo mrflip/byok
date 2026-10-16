@@ -3932,6 +3932,24 @@ describe("when storage says the user is no longer signed in", () => {
     expect(await world.stateOnOpen()).to.eq('locked')
   })
 
+  it("wins over the remembered unlock an open is picking up, when a background refresh meets it meanwhile", async () => {
+    const world = makeWorld()
+    const first = await world.openUnlocked('pw one')
+    first.close()
+    const readUnlock = world.deviceDB.readUnlock.bind(world.deviceDB)
+    vi.spyOn(world.deviceDB, 'readUnlock').mockImplementationOnce(async (scope) => {
+      const kept = await readUnlock(scope)
+      // The open's own read is past; the next, a background refresh's, meets the sign-out.
+      vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(signedOut())
+      world.dbStore.write('elsewhere', '{}')
+      await vi.waitFor(async () => { expect(await readUnlock(scope)).to.be.null })
+      return kept
+    })
+    const vault = await world.open()
+    expect(vault.getSnapshot().state).to.eq('locked')
+    await TH.expectRefusal(vault.read('anthropic'), 'vault_locked')
+  })
+
   it("leaves the vault as it was under whenIdentityRevoked 'stay', still throwing the refusal", async () => {
     const world = makeWorld({ whenIdentityRevoked: 'stay' })
     const vault = await world.openUnlocked('pw one')
