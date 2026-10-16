@@ -19,6 +19,10 @@ TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB ov
     const schema = TH.schemaOver(db, ({ userId }) => postgresVaultDB({ client: db, userId, maxLockboxes }))
     return TH.perUser((userId) => graphqlVaultDB(TH.urqlClientFor(schema, userId), { maxLockboxes }))
   },
+  makeVaultDBFor: async () => {
+    const schema = TH.schemaOver(await TH.emptyDatabase())
+    return (userId) => TH.browserFor(schema, userId)
+  },
 })
 
 const u1 = TH.scopeOf('u1')

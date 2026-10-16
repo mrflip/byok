@@ -61,10 +61,10 @@ and never needed for any line here.
 **A backend with no atomic step at all** cannot keep this contract: line 3.3 compares the
 vault's bundle and the lockbox's revision before writing, and nothing short of an atomic step
 makes that comparison and the write one event. A backend with single-record conditional writes
-but nothing spanning two records (a plain key-value store with compare-and-set) keeps lines 3.1,
-3.2 and 3.5 by itself, but 3.3 and 3.4 only if the lockbox's own record carries what it is
-compared against; how such an adapter holds the bundle's half is not yet designed. Every adapter
-in this repository has an atomic step that spans a vault: a statement and a foreign key
+but nothing spanning two records (a plain key-value store with compare-and-set) keeps lines 3.1
+and 3.2, which touch the bundle alone, and no more: lines 3.3 and 3.4 check the bundle and write
+a lockbox, and 3.5 removes the bundle with every lockbox, and it can make neither one event.
+Every adapter in this repository has an atomic step that spans a vault: a statement and a foreign key
 (Postgres), a transaction (Convex, IndexedDB), or one synchronous turn of a single tab
 (`localVaultDB`).
 
@@ -163,8 +163,9 @@ is never refused as `vault_full`, however full the vault. A first write under a 
 already taken missed a lockbox it would replace, and refuses as `stale_write`, never as
 `vault_full`, so the vault's retry replaces it.
 
-**4.4. An erase always makes room.** Once a vault holds fewer lockboxes than its limit, a new one
-lands.
+**4.4. Under the limit, a new lockbox lands.** Once a vault holds fewer lockboxes than its
+limit -- erases having made room, or brought back under it a vault that racing writers took past
+-- a new one lands.
 
 **4.5. Past the limit, nothing is lost.** A vault taken past its limit by racing writers keeps
 every lockbox that landed, each readable by its boxlabel (line 2.2), and every write refused as
@@ -186,7 +187,8 @@ its README, what its count is as of: the start of the write's statement, say, or
 
 **5.1. Every refusal is a VaultError whose kind says what to do.** An adapter refuses with a
 `VaultError`: `stale_write` (by resolving `false`; the base class throws it), `vault_full`,
-`not_permitted`, or anything it throws otherwise, which becomes `storage_unavailable`. The base
+`identity_revoked`, `not_permitted`, or anything it throws otherwise, which becomes
+`storage_unavailable`. The base
 class refuses `bad_label`, `bad_option`, `lockbox_too_large` and `corrupt_record` itself, before
 the adapter is asked or after it answers. Each message says calmly what went wrong and what to do
 about it, and a caller branches on the kind, never the message.
@@ -202,12 +204,27 @@ adapter's own messages name the vault's limits, never its contents. A `storage_u
 refusal's `cause` is the backend's own error, passed up as it came for debugging; it holds only
 what the backend holds, which is ciphertext and public fields.
 
-**5.4. Only the signed-in user reaches their vaults.** An adapter that serves several users (a
-server's, made per request) refuses any verb that names another user's scope, or any scope at all
-while no one is signed in, with kind `not_permitted`, before the backend is asked anything.
-*Tested per adapter*: the battery reaches every user through `perUser`, and cannot sign one out.
+**5.4. Only the signed-in user reaches their vaults.** An adapter whose backend knows who is
+signed in (a server's, made per request) refuses every verb on a scope whose `user_id` is not the
+signed-in user's -- including every scope while no one is signed in -- with kind
+`identity_revoked`, before the backend is asked anything: it reads nothing of that scope and
+writes nothing to it. A server cannot tell "the user changed" from "the host opened another
+user's vault", and to the vault both mean the same: its user is not the one signed in.
 
-<!-- Lines 5.5 on are kept for identity_revoked (#106); whiteboard/20261015-matters/thread-11-vaultdb_contract.md has what they will say. -->
+**5.5. identity_revoked means the user is gone.** The vault locks itself on `identity_revoked`,
+dropping its key, so an adapter says it only when the signed-in identity really is gone or
+changed. A passing fault -- a token expired mid-refresh, a network error, a backend that could
+not say who is signed in -- is `storage_unavailable`, which locks nothing. *Tested per adapter*:
+the battery cannot make a fault.
+
+**5.6. not_permitted refuses one call, and locks nothing.** The scope's own user, still signed
+in, whom the host's backend refuses this call by a rule of its own, is refused with kind
+`not_permitted`; signing in again would not help. No adapter in this repository has such a rule:
+the kind is a host backend's. *Tested per adapter*.
+
+**5.7. An adapter with no notion of identity says neither.** One that serves whoever holds it --
+`localVaultDB`, IndexedDB -- never refuses `identity_revoked` or `not_permitted`. *Tested per
+adapter*: the battery cannot tell such an adapter from one that serves its signed-in user.
 
 ## 6. Push
 
@@ -218,6 +235,10 @@ a needless read, so a backend that cannot tell one scope's writes from another's
 often (`localVaultDB` calls after every write to its store); a backend with no push never calls,
 and the vault, which reads afresh after its own writes regardless, loses only news of other
 devices' writes.
+
+**6.2. A watch that fails calls onChange.** When a live watch fails -- its user signed out, say --
+the adapter calls `onChange`, so the vault reads again and meets the refusal itself, rather than
+sit idle and unlocked. *Tested per adapter*: the battery cannot fail a watch.
 
 ## 7. What an adapter declares
 

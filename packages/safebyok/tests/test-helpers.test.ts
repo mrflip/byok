@@ -401,7 +401,7 @@ TH.describeDeviceDB('describeDeviceDB, over the smallest honest DeviceDB', () =>
  * any scope naming someone else, as a server's must, so the VaultDB suite reaches it only through
  * `perUser`.
  */
-const servingOnly = (userId: string, store: StringStore): TH.VaultDBVerbs => {
+const servingOnly = (userId: string | null, store: StringStore): TH.VaultDBVerbs => {
   const shared = localVaultDB(store)
   const permitted = ({ user_id }: { user_id: string }): void => {
     if (user_id !== userId) { throw new VaultError('identity_revoked', "That vault belongs to someone other than the user signed in.") }
@@ -425,6 +425,11 @@ const servingOnly = (userId: string, store: StringStore): TH.VaultDBVerbs => {
 TH.describeVaultDB('perUser, over a VaultDB serving one user', () => {
   const store = memoryStore()
   return TH.perUser((userId) => servingOnly(userId, store))
+}, {
+  makeVaultDBFor: () => {
+    const store = memoryStore()
+    return (userId) => servingOnly(userId, store)
+  },
 })
 
 /** perUser over servingOnly, with the user ids it asked a VaultDB for, in order. */
@@ -501,6 +506,6 @@ describe("VaultDBContract", () => {
   })
 
   it("titles a line as an adapter's own test of it cites it", () => {
-    expect(`postgresVaultDB, 5.4: ${TH.VaultDBContract['5.4']}`).to.eq('postgresVaultDB, 5.4: Only the signed-in user reaches their vaults')
+    expect(`postgresVaultDB, 5.5: ${TH.VaultDBContract['5.5']}`).to.eq('postgresVaultDB, 5.5: identity_revoked means the user is gone')
   })
 })
