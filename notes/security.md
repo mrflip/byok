@@ -7,6 +7,13 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-16: the VaultDB contract (`packages/safebyok/VAULTDB.md`, line 4.2) makes a storage
+  adapter's lockbox limit a best effort: writes made one after another never pass it, but writers
+  racing for the last places may take a vault a few past it, and a client that bypasses the
+  library (a modified browser) is the host's to meter, as an abuse quota, not the adapter's to
+  stop. An adapter may offer a hard limit only as an opt-in. The vault's own `maxLockboxes` is
+  enforced in the client alone. Postgres today holds a hard limit on the server (#89); the next
+  thread replaces it with this best effort.
 * 2026-10-15: a lockbox row that fails the listing's check (not JSON, a malformed note or time, a
   record naming another boxlabel than the ckey it sits under, an unknown `format`) is listed as
   `{ boxlabel, damaged: true }` instead of making `listBoxes` -- so every `refresh()` and
