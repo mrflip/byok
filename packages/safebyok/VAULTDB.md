@@ -267,3 +267,52 @@ lockboxes might not fit in it.
 A backend that does not hold to the limits it declares, or a vault opened with limits that
 disagree with its backend's, is outside this contract: not a bug we will fix, and not one whose
 outcome we promise.
+
+## Proving the races
+
+Lines 3.1 to 3.5, 3.7 and 4.5 are promises about writes made at once, and a test that makes two
+writes at once through one adapter, over a backend that runs one call at a time, proves only how
+they came out, not that they raced. So `describeVaultDB` races them.
+
+**What the battery runs, for every adapter.** Each race -- two creates of one vault, two updates
+of one bundle, two first writes or two replacements of one lockbox, an erase against a write, two
+writes that do not collide, four writers for a vault's last place -- runs under every schedule
+`raceEveryWay` makes, each over a fresh backend, and its outcome is checked after each: the two
+moves made together; one started one to three microtasks, then one and two ticks, after the other,
+each way round; and one held just before each of its round trips to the backend while the other
+moves to its end, each way round (the four writers each held midway, then let go together). A move
+that cannot finish while another device waits before a round trip fails the race, as nothing in
+the baseline waits: the two devices share a lock or a queue that two real devices would not, or the
+adapter holds a lock from one round trip to the next.
+
+**What the adapter gives it.** Only what the battery cannot know: `makeDevices(turnstile)`, a
+fresh backend and a way to make devices over it, each an adapter of its own sharing nothing but
+the backend, and each passing the `turnstile` before every round trip it makes -- a statement, a
+request, a transaction, a watch's start. `throughTurnstile` wraps a client's methods in it, and
+`expectRoundTripsThroughTurnstile` shows, in the adapter's own tests, that every write passes it:
+a race cannot tell a turnstile left unwired from an adapter that makes no round trips. The adapter
+does not mark where its check ends and its write begins. Its check and its write should be one
+round trip, so there is no such place to mark, and asking for one would assume what the race is
+there to find; holding it before every round trip finds a gap wherever an adapter left one. With
+the same two, an adapter's own races -- of something it does beyond this contract -- run under the
+same schedules.
+
+**What it proves, and what it cannot.** It finds a check and its write split across two round
+trips, or across an await in the adapter's own code, and a lock or queue in this process that
+makes the devices take turns. It cannot split a round trip: that one statement, one transaction or
+one mutation is atomic is the backend's to keep, and every backend in this repository's tests runs
+one call at a time. Of Convex and IndexedDB, that is what the real backend promises too -- Convex's
+mutations are serializable, and IndexedDB runs transactions that write one store one after
+another, across tabs and connections. Of Postgres it is not: under READ COMMITTED, statements run at
+once, each over its own snapshot, and PGlite cannot show that. That the adapter's one-statement
+writes still hold -- a conditional `UPDATE` re-checking the row it waited on, `INSERT ... ON CONFLICT`,
+the foreign key read against the bundle that stands -- rests on Postgres's documented behaviour, not
+on a test here; only a run against a real server, with a connection to each device, would show it.
+Nor can the battery see a lock shared by devices whose turnstile is left unwired; and the devices of
+`localVaultDB` and `idbVaultDB`, in one page, share what two tabs would not (the store, the bell, a
+connection), so their races show one tab's devices, and IndexedDB's own rule shows the rest.
+
+**Push.** Line 6.1's tests know a watch is live by hearing a write, rather than by waiting, and need
+a read on some call to `onChange` to find each write: a push that comes before its write is
+readable, or never, fails. A watch whose start is a round trip is held there while a write lands,
+so one that starts late and never calls once live fails too.

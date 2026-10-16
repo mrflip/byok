@@ -870,8 +870,9 @@ export type DescribeVaultDBOpts = {
    * Each device is an adapter of its own over that backend, sharing nothing else with the others --
    * no adapter, client, connection, lock or queue -- held to `maxLockboxes` where the adapter takes a
    * limit (as for `makeCappedVaultDB`), and passing `turnstile` before every round trip it makes to
-   * the backend ({@link throughTurnstile}), so a race can hold it there. An adapter over a backend in
-   * this process that answers synchronously makes no round trips, and leaves `turnstile` be.
+   * the backend, a watch's start among them ({@link throughTurnstile}), so a race can hold it there:
+   * {@link expectRoundTripsThroughTurnstile} shows it does. An adapter over a backend in this
+   * process that answers synchronously makes no round trips, and leaves `turnstile` be.
    * Without it, the races run through one adapter, as `makeVaultDB` makes it, and the rest is skipped.
    */
   makeDevices?: MakeVaultDBDevices | undefined
