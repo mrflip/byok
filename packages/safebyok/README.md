@@ -447,7 +447,7 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `damaged_unlock`      | a way in is stored in a form this package never writes (a salt of the wrong length, or not base64url), so it cannot be tried: the passkey asked for, the passphrase `unlockId` aims at, or every passphrase the vault has. Other ways in are still tried | Unlock another way, then `removeUnlock()` the damaged one and add it again |
 | `damaged_lockbox`     | a lockbox failed its checks as read, or would not open under the vault's own vaultKey, or opened to no whisper: altered in storage, or moved there from elsewhere | Nothing was changed. Offer `erase()`, or a fresh `store()` over it (see *Damaged lockboxes*) |
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
-| `rolled_back`         | storage handed back an older copy of the vault's bundle than this device has already seen (a backup restored over it, or storage altered), so this device won't use it: nothing was unlocked or written | Tell the user the vault's storage looks out of date, and try again later; if it goes on, the app's support should look at its storage |
+| `rolled_back`         | this device has already seen a newer copy of the vault's bundle than storage offers now (storage restored from a backup, or altered), so it won't use this one: nothing was unlocked or written | Tell the user this device has seen a newer copy of the vault than storage holds. If the storage was restored from an older copy on purpose, accept it on this device (see *A vault rolled back*, below); otherwise the app's support should look at its storage |
 | `not_permitted`       | the storage backend refused the signed-in user, still the vault's own, this one call | Tell the user they may not; signing in again will not help |
 | `identity_revoked`    | the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in. The vault has locked itself (see *When the user signs out*) | Have the user sign in again, then open the vault for whoever that is |
 | `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause`, unless it may quote the call (Convex's) |
@@ -492,6 +492,30 @@ tell, it refuses rather than erases. So is any backend that checks a record befo
 it hands it over, as `safebyok-graphql`'s server does: there a damaged row is the backend's to
 clear. `safebyok-react` hands `eraseDamagedVault()` down beside `retryOpen`. A `VaultDB` that
 wraps another's public verbs hands `VaultDB.eraseDamagedVault` on too (`VAULTDB.md`, line 3.5).
+
+### A vault rolled back
+
+Each device keeps a mark of the newest copy of each vault's bundle it has seen (its device mark,
+in the `DeviceDB`), and refuses an older copy of that vault with `rolled_back`, taking nothing
+from it: storage handing back an older bundle could otherwise bring back a way in that was
+removed, or, once a vaultKey can be replaced, a vaultKey too. A device that never saw the newer
+copy, or whose site data was cleared, cannot tell, and takes the older copy as it stands.
+
+When the vault's storage was restored from an older copy on purpose, each device that saw a
+newer one accepts it by forgetting its mark of the vault, through the `DeviceDB` it opens the vault
+with, and opening it again. Whatever the older copy holds stands then, ways in removed since
+included, so ask the user first:
+
+```ts
+try {
+  vault = await openVault(opts)
+} catch (err) {
+  if (isVaultError(err, 'rolled_back') && await userConfirmsTheRestore()) {
+    await opts.deviceDB.eraseMark({ applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
+    vault = await openVault(opts)
+  }
+}
+```
 
 ### Damaged lockboxes
 
