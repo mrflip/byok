@@ -1,6 +1,6 @@
 # Thread 12: postgres_soft_cap (2026-10-16)
 
-Branch `20261016-postgres_soft_cap`, PR [#113](https://github.com/mrflip/safebyok/pull/113), stacked on [#107](https://github.com/mrflip/safebyok/pull/107). Justify: green at the root (core 1231 passed, postgres 201 passed and 9 skipped, graphql 188, convex 311, indexeddb 118, react 97, demo 141).
+Branch `20261016-postgres_soft_cap`, PR [#113](https://github.com/mrflip/safebyok/pull/113), stacked on [#110](https://github.com/mrflip/safebyok/pull/110). Justify: green at the root (core 1246 passed, postgres 201 passed and 9 skipped, graphql 188, convex 311, indexeddb 132, react 97, demo 141).
 
 * **Built**: `packages/safebyok-postgres`.
   * **The check the Coach asked for** ("don't trust my word"): the Coach's one-statement insert, in the form thread 11's verdict corrected, meets the contract's lines 3.3, 3.6, 4.2 to 4.5 and 5.2 at READ COMMITTED. I re-derived it from the contract rather than from the verdict, and ran the statement on PGlite for every outcome (landed, vault gone or made anew, boxlabel taken, full, replacement in a full vault). Not run: two real connections, since there is no Postgres server here and PGlite runs one statement at a time. The overshoot and the `23503` race are reasoned from Postgres's documented behaviour (thread 11's verdict), and the README and `notes/security.md` say so.
