@@ -11,7 +11,7 @@
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
 * **Status**: handing over to a fresh session (the Coach's word, near the session limit): read
-  *Resume here*, below, first. 5b in progress or ready (see *Resume here*); 15 (#138) flagged, waiting on the
+  *Resume here*, below, first. 5b at a checkpoint (#139, 2270693c; see *Resume here*); 15 (#138) flagged, waiting on the
   Coach; the line main → 1 (#128) → 2 (#133) → 3 (#127) → 4 (#132) → 13 (#137) → 10 (#136) is
   restacked; 6 (#126), 7 (#129), 8 (#130), 11 (#131), 14 (#134) filed, restack before 16; then
   16 and 17 (new, the fifth batch of rulings), 9, and 12 after 23:01Z
@@ -27,14 +27,16 @@ The sprint ran in one session until near its limit; the Coach restarts `/sprint`
   sprintbase set). `/workspace/byok-deriver_shim` (15, `20261016-deriver_shim`, unfiled at
   `46674a7b`, sprintbase `adc94772`). No other sprint worktrees exist. The main checkout
   (`/workspace/byok`) is the Coach's: never write to it.
-* **5b** (`store_base`; its PR: `gh pr list -R mrflip/safebyok --head 20261016-store_base`):
-  asked, as the session closed, to commit and push at its next green point, open its draft PR,
-  and bring `thread-5b-store_base.md` up to date. If it reported `ready`: verify, spawn its
-  reviewer over `8439aa01...<tip>`, then "File it" through a fresh `thread-worker` reading the
-  thread file, post the review comment, sweep its 34 Gripefest rows, one row per open matter. If
-  it reported `checkpoint` (or nothing): read its thread file and `git -C` its log and status, and
-  resume it with a fresh `thread-worker` in the same worktree. The progress file's status table
-  says which.
+* **5b** (`store_base`, [#139](https://github.com/mrflip/safebyok/pull/139), stacked on #136)
+  stopped at a **checkpoint**, as asked: tip `2270693c`, `pnpm justify` green at `3ef9fd97`,
+  worktree `/workspace/byok-store_base` clean and kept. The base class, the shared `Refusals`,
+  `Expectations` and `ChangeBell`, and every adapter's one options bag are built; nine items are
+  left, in order, in `thread-5b-store_base.md` on its branch (G304, G247, owed tests, test trims,
+  `shelf.ts`, doc lines, security notes, `pnpm size`, the row report). The PR is out of draft only
+  because the agent definition requires it before any report; its body says it is a checkpoint.
+  Next: a fresh `thread-worker` in that worktree, handed the thread file, finishes the list and
+  reports `ready`; then the review over `8439aa01...<tip>`, "File it", the review comment, the
+  sweep of its Gripefest rows. Its five open matters are already rows in *Open Matters*.
 * **15** ([#138](https://github.com/mrflip/safebyok/pull/138)) waits on the Coach's row "An
   overridden deriveKeyBytes skips the 32-byte check": the reviewer's fix (`keyBytesOf`, both
   callers, a test) was refused by the permission check, so it may not be routed to another agent

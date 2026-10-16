@@ -11,7 +11,7 @@
 | 3 | locks_and_expiry | on 2 (c397b745), restacked | filed (tip 65642238) | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 (65642238), restacked | filed (tip f6d424ef) | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
-| 5b | store_base build | on 10 (8439aa01) | underway; asked to checkpoint (commit, push, draft PR, thread file) for the handoff | |
+| 5b | store_base build | on 10 (8439aa01) | checkpoint at 2270693c (justify green at 3ef9fd97); nine items left, in its thread file | [#139](https://github.com/mrflip/safebyok/pull/139) |
 | 6 | crypto_small | main | filed #126 | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | main | filed #129 | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | main | filed #130 | [#130](https://github.com/mrflip/safebyok/pull/130) |
