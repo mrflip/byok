@@ -108,7 +108,8 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
   The Convex functions throw two, `identity_revoked` and `vault_full`; a write that came too late is
   a `stale_write`; and `storage_unavailable` is anything else Convex reported. It carries nothing
   of Convex's own error, which on a dev deployment may quote the call's arguments (names, notes,
-  ciphertext): your deployment's logs have it.
+  ciphertext): your deployment's logs have it, or, for trouble before the call left, the browser
+  console, where the Convex client reports its connection.
 * **Offline, a call waits** for the connection, as every Convex call does, rather than failing.
   Convex resends a mutation when it reconnects, so a write may land after any timeout you set:
   show progress, but don't report it failed.
