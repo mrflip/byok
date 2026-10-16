@@ -24,7 +24,7 @@
 | 15 | e2e_home         | held: the Coach weighs options (Open Matters) |
 | 16 | late_unlock      | filed #110 (on #109)       |
 | 17 | validation_note  | waits on #101 merging      |
-| 21 | damaged_erase    | flagged; resumed with a directive |
+| 21 | damaged_erase    | second review (#115)       |
 | 22 | flake_fixes      | underway (on #110)         |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
