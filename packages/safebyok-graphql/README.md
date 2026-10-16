@@ -82,7 +82,8 @@ Your app's own Client serves, cache exchange and all: every query the vault send
 
 * **Authenticate by your session**, the cookie `fetch` sends to its own origin, and never by a
   user id in the operation. The scope a browser names is checked against that user by the VaultDB
-  (`not_permitted` for anyone else's).
+  (`identity_revoked` for anyone else's, or while signed out, on which the browser's vault locks
+  itself).
 * **`fetchSubscriptions: true`** sends the vault's subscription over the same route, as
   server-sent events, which Yoga serves as it stands. Without it, or another way to send
   subscriptions, nothing is pushed: the vault refreshes after its own writes, and learns of other

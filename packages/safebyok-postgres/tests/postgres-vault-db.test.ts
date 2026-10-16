@@ -105,13 +105,13 @@ describe("postgresVaultDB, who may reach a vault", () => {
   ] as const
 
   for (const [verb, call] of EveryVerb) {
-    it(`${verb} on another user's vault refuses with not_permitted, and asks the database nothing`, async () => {
+    it(`${verb} on another user's vault refuses with identity_revoked, and asks the database nothing`, async () => {
       const db = await TH.emptyDatabase()
       const spy = TH.spyClient(db)
       const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', listen: TH.listenOn(db) })
       const refusal = await TH.refusalOf(call(vaultDB))
       expect(refusal).to.be.instanceOf(VaultError)
-      expect(refusal.kind).to.eq('not_permitted')
+      expect(refusal.kind).to.eq('identity_revoked')
       expect(refusal.message).to.include('another user')
       expect(spy.sent).to.have.lengthOf(0)
     })
@@ -124,14 +124,14 @@ describe("postgresVaultDB, who may reach a vault", () => {
   ] as const
 
   for (const [userId, blurb] of SignedOut) {
-    it(`refuses every vault while no one is signed in (a userId ${blurb}), with not_permitted`, async () => {
+    it(`refuses every vault while no one is signed in (a userId ${blurb}), with identity_revoked`, async () => {
       const db = await TH.emptyDatabase()
       const spy = TH.spyClient(db)
       const vaultDB = postgresVaultDB({ client: spy.client, userId })
       const refusal = await TH.refusalOf(vaultDB.readBundle(u1))
-      expect(refusal.kind).to.eq('not_permitted')
+      expect(refusal.kind).to.eq('identity_revoked')
       expect(refusal.message).to.include('No one is signed in')
-      expect(() => vaultDB.subscribe(u1, TH.changeCounter().onChange)).to.throw(VaultError).with.property('kind', 'not_permitted')
+      expect(() => vaultDB.subscribe(u1, TH.changeCounter().onChange)).to.throw(VaultError).with.property('kind', 'identity_revoked')
       expect(spy.sent).to.have.lengthOf(0)
     })
   }

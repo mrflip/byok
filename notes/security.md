@@ -313,7 +313,8 @@ security expert who knows what questions to ask.
 * 2026-10-15: signing out of Convex does not lock a vault opened over `convexVaultDB`: its calls
   are refused `not_permitted` from then on, and its failing `watchVault` subscription is ignored,
   but the unlocked vaultKey stays in memory until the vault locks, expires or is closed. The
-  README tells apps to close the vault on sign-out; nothing enforces it.
+  README tells apps to close the vault on sign-out; nothing enforces it. *Superseded 2026-10-16*: a sign-out now locks the vault
+  (`identity_revoked`, below).
 * 2026-10-15: a vault's lockbox count is capped on the client (`maxLockboxes`, `store()`
   refusing `vault_full`), counted from the handle's last look at storage, so stores of new
   lockboxes running at once -- on several devices, or on one handle, since nothing serializes
@@ -652,3 +653,22 @@ security expert who knows what questions to ask.
   `maxWhisperBytes`, 512 bytes for its fixed-size fields and its measured names and note, would
   pass `maxVaultBytes` (`vault_full`). The vault's total is reckoned from the snapshot's listing,
   so a vault another device filled meanwhile is caught by the backend's own limit, as before.
+* 2026-10-16: **a sign-out locks the vault.** An adapter whose backend knows who is signed in
+  refuses a vault whose `user_id` is not that user -- signed out, or another user signed in --
+  with kind `identity_revoked`, distinct from `not_permitted` (the vault's own user refused one
+  call). Convex, Postgres (and so GraphQL over it) refuse both of their old `not_permitted` cases
+  this way now; IndexedDB and `localVaultDB` never do. Every storage verb's refusal passes through
+  one policy (`src/refusal-policy.ts`) on its way out of the vault, whichever call made it,
+  a background refresh's included; for `identity_revoked` it locks at once, as `lock()` does:
+  the vaultKey dropped, the remembered unlock erased, a `lockSoon()` grace cut short, an unlock
+  under way defeated. It never erases the vault or a lockbox. `convexVaultDB`'s `ConvexClient`
+  watch now calls `onChange` on a failed `watchVault` (as a `ConvexReactClient`'s watch already
+  did), so an idle vault locks on a sign-out in another tab. **For review**: (1) the default is
+  `'lock'`, but `openVault`'s `whenIdentityRevoked: 'stay'` lets a host keep the vault unlocked
+  after a sign-out, as before; (2) the mismatched-user case is also `identity_revoked`, since a
+  server cannot tell "the user changed" from "a host opened the wrong user's vault", and locking
+  is the safe answer to both; (3) a vault opened before its backend's auth is ready meets
+  `identity_revoked` and erases its remembered unlock -- safe, but a host that races its auth
+  makes its users retype the passphrase (the READMEs say to open only once signed in);
+  (4) an adapter that says `identity_revoked` for a passing fault locks the vault needlessly --
+  the `VaultDB` contract says to use `storage_unavailable` for those.

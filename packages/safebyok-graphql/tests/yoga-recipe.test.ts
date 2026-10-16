@@ -84,18 +84,18 @@ describe("the README Yoga recipe", () => {
     vault.close()
   })
 
-  it("carries a refusal's kind across Yoga's error masking: another user's vault is not_permitted, a stale write stale_write", async () => {
+  it("carries a refusal's kind across Yoga's error masking: another user's vault is identity_revoked, a stale write stale_write", async () => {
     const browser = browserFor(await routeOver(), 'u1')
     const notMine = await TH.refusalOf(browser.readBundle(TH.scopeOf('u2')))
-    expect(notMine.kind).to.eq('not_permitted')
+    expect(notMine.kind).to.eq('identity_revoked')
     await browser.createBundle(TH.bundleOf('u1'))
     const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 7 }))
     expect(stale.kind).to.eq('stale_write')
   })
 
-  it("refuses a signed-out browser with not_permitted", async () => {
+  it("refuses a signed-out browser with identity_revoked", async () => {
     const refusal = await TH.refusalOf(browserFor(await routeOver(), null).readBundle(TH.scopeOf('u1')))
-    expect(refusal.kind).to.eq('not_permitted')
+    expect(refusal.kind).to.eq('identity_revoked')
   })
 
   it("never sends the driver's own error to the browser, not even in Yoga's development mode", async () => {

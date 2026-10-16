@@ -43,7 +43,7 @@ export type PostgresVaultDB = VaultDB & {
    * missing note missing: what the browser's VaultDB hands back from its own `doListBoxes`, to be
    * validated there. `listBoxes` gives summaries instead, the shape a vault shows, which a VaultDB
    * may not hand back. Refuses as `listBoxes` does: `bad_label` for a malformed scope,
-   * `not_permitted` for another user's, `storage_unavailable` for trouble.
+   * `identity_revoked` for another user's, `storage_unavailable` for trouble.
    *
    * @example served.set('listBoxes', (vaultDB, [scope]) => vaultDB.listBoxRecords(scope))
    */
@@ -81,8 +81,9 @@ const DefaultMaxLockboxes = 1000
  * browser's vault (the README has the recipe), or a GraphQL server does (`safebyok-graphql`).
  *
  * * **Who may reach a vault**: only `userId`. A verb naming any other user's scope, or any at
- *   all while no one is signed in, refuses with a VaultError of kind `not_permitted` before the
- *   database is asked anything.
+ *   all while no one is signed in, refuses with a VaultError of kind `identity_revoked` before
+ *   the database is asked anything: the user the browser's vault was opened for is not the one
+ *   signed in, and that vault locks itself.
  * * **Every write is one statement**, atomic as Postgres makes every statement: a write lands only
  *   while what it expects still stands, and a failed expectation refuses with kind `stale_write`.
  * * **A full vault**: a new lockbox in a vault already holding `maxLockboxes` refuses with kind
@@ -336,10 +337,10 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
   /** Refuses unless the signed-in user is the one `scope` names. */
   private mustReach(scope: Pick<VaultScope, 'user_id'>): void {
     if (this.userId === null) {
-      throw new VaultError('not_permitted', 'No one is signed in, so this vault cannot be reached: sign in, then try again.')
+      throw new VaultError('identity_revoked', 'No one is signed in, so this vault cannot be reached: sign in, then try again.')
     }
     if (scope.user_id !== this.userId) {
-      throw new VaultError('not_permitted', 'This vault belongs to another user: a signed-in user reaches only their own vaults.')
+      throw new VaultError('identity_revoked', 'This vault belongs to another user than the one signed in: a signed-in user reaches only their own vaults. If the user changed, open the vault for the new one.')
     }
   }
 }
