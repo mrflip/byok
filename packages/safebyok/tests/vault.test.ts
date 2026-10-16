@@ -1414,6 +1414,17 @@ describe("the host's validators", () => {
     expect(unlocklabelsOf(vault)).to.have.lengthOf(3)
   })
 
+  it("refuse a taken unlocklabel or passkey, under a host's check that admits any text, quoting no unlocklabel", async () => {
+    const vault = await makeWorld({ validators: { unlocklabel: ZClassic.string() } }).openUnlocked('pw')
+    await vault.addPassphrase('pw', 'pw two', { unlocklabel: 'sk-ant-fake-pasted-phrase' })
+    await vault.addPasskey('pw', () => TH.passkeyOf('laptop'), { unlocklabel: 'sk-ant-fake-pasted-passkey' })
+    const takenLabel = await TH.expectRefusal(vault.addPassphrase('pw', 'pw three', { unlocklabel: 'sk-ant-fake-pasted-phrase' }), 'bad_label')
+    expect(TH.thrownText(takenLabel)).to.not.include('sk-ant-fake')
+    const takenPasskey = await TH.expectRefusal(vault.addPasskey('pw', () => TH.passkeyOf('laptop'), { unlocklabel: 'laptop_again' }), 'bad_option')
+    expect(TH.thrownText(takenPasskey)).to.not.include('sk-ant-fake')
+    expect(unlocklabelsOf(vault)).to.have.lengthOf(3)
+  })
+
   it("check an unlocklabel with Label when the host gives no unlocklabel check, saying what was wrong", async () => {
     const vault = await makeWorld({ validators: AnyScript }).openUnlocked('pw')
     const err = await TH.expectRefusal(vault.addPassphrase('pw', 'pw two', { unlocklabel: 'Written down' }), 'bad_label')
