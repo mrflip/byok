@@ -180,6 +180,16 @@ describe("AnyTextValidators", () => {
     }
   })
 
+  it("answers for text of millions of characters, refusing a lone surrogate at its very end", () => {
+    const vast = 'n'.repeat(12_000_000)
+    expect(AnyTextValidators.note.safeParse(vast).success).to.be.true
+    expect(AnyTextValidators.note.safeParse(`${vast}\u{D800}`).success).to.be.false
+    const said = JSON.stringify(LockboxNote.safeParse(`${vast}\u{0007}\u{D800}`).error?.issues.map((issue) => issue.message))
+    expect(said).to.include('at most 256 characters')
+    expect(said).to.include('no control characters')
+    expect(said).to.include('lone surrogate')
+  })
+
   it("passes and refuses as its examples show", () => {
     expect(AnyTextValidators.boxlabel.safeParse('Work: מפתח API').success).to.be.true
     expect(AnyTextValidators.boxlabel.safeParse('key \u{D83D}').success).to.be.false
