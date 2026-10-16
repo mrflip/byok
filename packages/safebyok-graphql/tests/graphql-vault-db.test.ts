@@ -19,8 +19,8 @@ TH.bootDatabaseFirst()
 const browsersOverPGlite: TH.MakeVaultDBDevices = async (turnstile) => {
   const db = await TH.emptyDatabase()
   return ({ maxLockboxes }) => {
-    const client = TH.throughTurnstile(turnstile, db, ['query'])
-    const schema = TH.schemaOver(db, ({ userId }) => postgresVaultDB({ client, userId, listen: TH.listenOn(db), maxLockboxes }))
+    const client = TH.throughTurnstile(turnstile, db, ['query', 'listen'])
+    const schema = TH.schemaOver(db, ({ userId }) => postgresVaultDB({ client, userId, listen: (channel, onNotify) => client.listen(channel, onNotify), maxLockboxes }))
     return TH.perUser((userId) => graphqlVaultDB(TH.urqlClientFor(schema, userId), { maxLockboxes }))
   }
 }
@@ -247,10 +247,7 @@ describe("graphqlVaultDB, hearing other writes", () => {
     const schema = TH.schemaOver(await TH.emptyDatabase())
     const elsewhere = TH.browserFor(schema, 'u1')
     await elsewhere.createBundle(TH.bundleOf('u1'))
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.browserFor(schema, 'u1').subscribe(u1, onChange)
-    await TH.aWhile()
-
+    const { heard, unsubscribe } = await TH.liveWatch(TH.browserFor(schema, 'u1'), u1)
     await elsewhere.updateBox(u1, TH.boxOf('openai', 'r1'), { ...thisVault, revision_id: null })
     await TH.eventually(() => heard.count === 1)
     unsubscribe()
@@ -261,9 +258,7 @@ describe("graphqlVaultDB, hearing other writes", () => {
 
   it("hears nothing of another vault's writes", async () => {
     const schema = TH.schemaOver(await TH.emptyDatabase())
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.browserFor(schema, 'u1').subscribe(u1, onChange)
-    await TH.aWhile()
+    const { heard, unsubscribe } = await TH.liveWatch(TH.browserFor(schema, 'u1'), u1)
     await TH.browserFor(schema, 'u2').createBundle(TH.bundleOf('u2'))
     await TH.browserFor(schema, 'u1').createBundle(TH.bundleOf('u1', { vaultlabel: 'spare' }))
     await TH.aWhile()

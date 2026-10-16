@@ -108,9 +108,7 @@ describe("VaultNotifySql", () => {
 
   it("is what push needs: a vault over tables without it never hears another request's write, and works whole", async () => {
     const db = await tablesOnlyDatabase()
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.requestFor(db, 'u1').subscribe(TH.scopeOf('u1'), onChange)
-    await TH.wakeupAtNextTick()
+    const { heard, unsubscribe } = await TH.liveWatch(TH.requestFor(db, 'u1'), TH.scopeOf('u1'))
     await TH.requestFor(db, 'u1').createBundle(TH.bundleOf('u1'))
     await TH.requestFor(db, 'u1').updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-u1', revision_id: null })
     await TH.wakeupAtNextTick()

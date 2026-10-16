@@ -236,6 +236,13 @@ often (`localVaultDB` calls after every write to its store); a backend with no p
 and the vault, which reads afresh after its own writes regardless, loses only news of other
 devices' writes.
 
+A watch is live once `subscribe` returns, or else calls `onChange` once it is: a watch that starts
+on its own time -- a listen on a connection, a subscription over a wire -- would never hear a write
+that landed while it was starting, and the vault, which subscribes and then reads, could read the
+vault before that write and miss it until the next one. Calling once live has it read again.
+`postgresVaultDB` calls as its listen begins (and through it `safebyok-graphql` as its subscription
+starts); Convex's watch delivers a first result; `localVaultDB` and `idbVaultDB` are live at once.
+
 **6.2. A watch that fails calls onChange.** When a live watch fails -- its user signed out, say --
 the adapter calls `onChange`, so the vault reads again and meets the refusal itself, rather than
 sit idle and unlocked. *Tested per adapter*: the battery cannot fail a watch.

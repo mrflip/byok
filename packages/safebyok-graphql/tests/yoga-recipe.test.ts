@@ -110,9 +110,7 @@ describe("the README Yoga recipe", () => {
   it("pushes another device's write to a subscriber, over server-sent events", async () => {
     const route = await routeOver()
     const elsewhere = browserFor(route, 'u1')
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = browserFor(route, 'u1').subscribe(TH.scopeOf('u1'), onChange)
-    await TH.aWhile()
+    const { heard, unsubscribe } = await TH.liveWatch(browserFor(route, 'u1'), TH.scopeOf('u1'))
     await elsewhere.createBundle(TH.bundleOf('u1'))
     await TH.eventually(() => heard.count > 0)
     unsubscribe()

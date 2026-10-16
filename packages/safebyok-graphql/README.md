@@ -110,7 +110,8 @@ vaultResolvers({ vaultDBFor: (context) => postgresVaultDB({ client: pool, userId
 * **`safebyokVaultChanged`** sends the vault's scope after every write to it, as the VaultDB's
   `subscribe` hears them -- for `postgresVaultDB`, through its `listen` and the optional `VaultNotifySql` trigger, one
   `listen` serving every VaultDB your server makes -- and stops listening when the subscriber goes. Changes that come
-  while a subscriber is still busy with the last one go as one.
+  while a subscriber is still busy with the last one go as one. It sends one as it starts, too, when the VaultDB calls
+  as its watch begins, as `postgresVaultDB` does: a write made while the browser was subscribing is read then.
 
 ### In another GraphQL server
 
