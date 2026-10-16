@@ -21,7 +21,7 @@
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
 | 20 | rotation_docs    | waits on 19                |
-| 15 | e2e_home         | resumed: the Coach chose (b), a `safebyok-convex/testing` entry |
+| 15 | e2e_home         | paused mid-(b) at local ab5e9ba (rebased on main, unpushed): the Coach weighs in again |
 | 16 | late_unlock      | merged #110                |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | merged #115                |
