@@ -89,6 +89,9 @@ const headerOf = (envelope: UnlockEnvelope): EnvelopeHeader => {
  */
 export type UnlockProof = string | PasskeyProof
 
+/** The refusal for a key deriver's result that is not 32 bytes of a view. */
+const notKeyBytes = () => new VaultError('bad_option', 'keyDeriver handed back something other than 32 key bytes: a passphraseKey is a 256-bit key.')
+
 /** The memory a key deriver's bytes sit in, as the platform names it: told apart even across realms, and where `SharedArrayBuffer` is absent. */
 const isSharedMemory = (view: ArrayBufferView): boolean => Object.prototype.toString.call(view.buffer) === '[object SharedArrayBuffer]'
 
@@ -96,19 +99,19 @@ const isSharedMemory = (view: ArrayBufferView): boolean => Object.prototype.toSt
  * The passphraseKey `keyDeriver` makes of `passphrase` and its salt: 32 bytes, no other, in memory
  * of their own, or kind `bad_option` before anything is wrapped -- WebCrypto would accept 16 or 24
  * as a weaker AES key, and refuses a view over shared memory with no kind. The bytes the deriver
- * handed back are zeroed once imported, whether or not the import succeeds: they are ours the
- * moment they are returned, and a copy lingering in memory helps no one.
+ * handed back are zeroed once imported, whether or not the import succeeds, and when refused for
+ * their length: they are ours the moment they are returned, and a copy lingering in memory helps
+ * no one. Shared memory is refused untouched.
  */
 const passphraseKeyOf = async (keyDeriver: KeyDeriver, passphrase: string, saltBytes: Uint8Array): Promise<CryptoKey> => {
   const handed: unknown = await keyDeriver.deriveKeyBytes(passphrase, saltBytes)
-  if (! ArrayBuffer.isView(handed) || handed.byteLength !== PassphraseKeyBytes) {
-    throw new VaultError('bad_option', 'keyDeriver handed back something other than 32 key bytes: a passphraseKey is a 256-bit key.')
-  }
+  if (! ArrayBuffer.isView(handed)) { throw notKeyBytes() }
   if (isSharedMemory(handed)) {
     throw new VaultError('bad_option', 'keyDeriver handed back key bytes in shared memory (a SharedArrayBuffer), which WebCrypto will not import and other threads could read: hand back a fresh Uint8Array.')
   }
   const keyBytes = new Uint8Array(handed.buffer, handed.byteOffset, handed.byteLength)
   try {
+    if (keyBytes.byteLength !== PassphraseKeyBytes) { throw notKeyBytes() }
     return await importWrappingKeyBytes(keyBytes)
   } finally {
     keyBytes.fill(0)
