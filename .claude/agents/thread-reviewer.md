@@ -21,7 +21,8 @@ number, the review level, and the range to review as two SHAs. Every shell comma
 `pnpm` there would act on a checkout other agents share. Before running anything:
 
 1. Read the thread's file, `<sprint dir>/thread-<N>-<label>.md` in the worktree, and the plan's
-   gloss for it. A decision recorded there is a decision, not a finding.
+   gloss for it (`grep -n` the plan for the thread's number; read that entry, not the plan). A
+   decision recorded there is a decision, not a finding.
 2. Check the ground: `git status` clean, `git branch --show-current` the thread's branch.
    Anything else is a bail: report what you found and stop. The worktree is not yours to tidy.
 3. Check the range. Its tip is `git rev-parse HEAD`; its base is the commit the thread was cut
@@ -73,6 +74,11 @@ only through the objects and refs every checkout shares. Hence:
    back again is the review's. If anything changed in a way the review could have made, stop,
    touch nothing there, and report `bailed` with what you found.
 
+   **Style**, the part of the review workers no longer front-load. Read STYLE.md's *Naming* and
+   *Tests* sections, and look up in VOCABULARY.md each term of the cast the diff names; then
+   check the names the diff introduces and the tests it adds against them. The linter has the
+   rest of STYLE.md.
+
    **By hand**, where the skill did not see the thread: read `git diff <base-sha>...HEAD` in the
    worktree, file by file, with the code around each change, and hunt at the depth the level
    asks. At `low` or `medium`, correctness bugs you are confident of; at `high` or `max`, wider,
@@ -84,7 +90,9 @@ only through the objects and refs every checkout shares. Hence:
    - touch a cryptographic construction, the stored format, or the public surface beyond a
      plain bug in what the thread itself wrote;
    - reach outside the thread's diff;
-   - be taste or style the linter does not enforce;
+   - rename an exported name or a stored field (a misnamed local, or a test out of STYLE.md's
+     shape, is a fix like any other);
+   - be taste that neither the linter nor STYLE.md settles;
    - hand-roll where a library exists, or otherwise cross a CLAUDE.md guardrail;
    - be one you cannot explain in a sentence.
 

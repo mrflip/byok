@@ -142,17 +142,29 @@ pnpm changeset                     # a PR's release note; `--empty` when it need
 * `human/` -- **from agents, to Coaches.** A scratchpad, not a record: write to it, don't read it
   as input. `human/README.md` has the rules.
 * `notes/` -- durable notes. `notes/security.md` lists decisions a security reviewer should look
-  at: **add one whenever you make such a decision.**
+  at: **add one whenever you make such a decision.** It is long and you need none of it to
+  build: hand your caution to a `sonnet` subagent, which merges it into the entry that already
+  says it or inserts it (the file's header says how), and commit what it wrote.
+
+## Reading
+
+What you read stays in your context and is paid for again on every later turn, so read for the
+task at hand. Find with `grep -n`, then read the lines you need; do not `cat` a whole source file
+or document of more than a couple of hundred lines, and do not read again what is already in
+your context. The documents below are looked up by section, not read through.
 
 ## Notable files
 
-* `PROCESS.md` -- threads, branches, commits, PRs, releases, dependencies. **Read before any git
-  operation beyond a commit, and before adding a dependency.**
+* `PROCESS.md` -- threads, branches, commits, PRs, releases, dependencies. **Read the section
+  you need before any git operation beyond a commit, and before adding a dependency.**
 * `VOCABULARY.md` -- the cast: whisper, lockbox, vault, passphrase, each key by role, and their
   encrypted forms. Its names are the only names for those things, in code, docs and stored fields.
+  The code already speaks it: **look up a term you do not recognize**, or before naming a new
+  thing in the cast.
 * `STYLE.md` -- the naming vocabulary (`val`, `ckey`, `bag`, `kind`, and what `key` means here),
   braces, quotes, doc blocks, and how tests are written. These conventions are specific and
-  unguessable. **Read before naming anything new or writing a test.**
+  unguessable, and the linter enforces most of the layout. **Read *Naming* before naming
+  anything new, and *Tests* before writing a test.**
 * `packages/safebyok/eslint.config.mjs` -- mechanically enforced style; the other packages' and
   the root's configs are cut from it. Where it and a prose document disagree, it is a bug -- flag
   it.
