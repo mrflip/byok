@@ -8,26 +8,36 @@
 | 2 | release_age       | filed #96                  |
 | 3 | passkey_button_ux | filed #98                  |
 | 4 | small_sweep       | filed #99                  |
-| 5 | vaultdb_battery   | waits on 11                |
+| 5 | vaultdb_battery   | underway (on #107)         |
 | 6 | race_helper       | waiting on thread 5        |
 | 7 | indexeddb_fixes   | review fixed; files after 9 |
 | 8 | size_rule         | filed #99 (commits on it)  |
-| 9 | damaged_bundle    | review fixed; files after 11 |
+| 9 | damaged_bundle    | filing onto #107           |
 | 10 | identity_revoked | filed #106 (on #105)        |
-| 11 | vaultdb_contract | review fixed; filing onto #106 |
-| 12 | postgres_soft_cap | waiting on 11             |
+| 11 | vaultdb_contract | filed #107 (on #106)       |
+| 12 | postgres_soft_cap | underway (on #107)        |
 | 13 | rotation_design  | filed #105 (on #97)        |
 | 14 | rotation_shape   | waits on 11, #97 landing   |
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
 | 20 | rotation_docs    | waits on 19                |
-| 15 | e2e_home         | in review (#111)           |
+| 15 | e2e_home         | review clean; files after 16 |
 | 16 | late_unlock      | review fixed; files after 7 |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | waits on #108 filing       |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
+
+* **Thread 11 (#107) filed** on #106, landing second, so it wrote #106's lines in: 5.4 (another
+  user or nobody is refused every verb as `identity_revoked`, tested through a new
+  `makeVaultDBFor` option on Postgres, GraphQL, Convex and `servingOnly`), 5.5-5.7, and #106's
+  watch line as **6.2** (beside `subscribe`). 5.3's groups merged; 4.4 retitled.
+* **Thread 15 (#111), review clean.** 126 Convex tests before, 123 in `e2e` + 3 kept after; the moved
+  tests still catch a broken adapter. Left: no coverage report now measures `convex-vault-db.ts`
+  (with the Coach's ruling on the move); stale comments listing only `packages/` and `demos/`.
+  **A flake seen:** `safebyok-react`'s `vault-provider.test.tsx` ("an action through
+  withUnlockedVault summons the dialog...") failed once under a parallel justify, passing on rerun.
 
 *Orchestrator (~02:10Z):* the Coach merged #99 (taking #96 with it); #98, #97, #105 and #106 sit
 above it, so they stay open until the Coach merges the line's top. **Filing is serialized**: each
@@ -102,8 +112,8 @@ worktree shares -- now a ground rule against it.
   `reentryHours` prop for `vault.reentryWindowMs`, so #98's three bad-`reentryHours` tests went with
   the prop. `.size-limit.json`: main's two new entries (validators 8.5 kB, DefaultValidators 4 kB)
   predate the rule; validators measures 8.15 kB, so a thread that grows it widens it by the rule
-  (about 12 kB). **New threads stack on the line's top: now #106** (main → #96 → #99 → #98 → #97 →
-  #105 → #106). Local tags `<branch>-prerestack3` hold the old tips.
+  (about 12 kB). **New threads stack on the line's top: now #107** (main, with #96 and #99 merged, →
+  #98 → #97 → #105 → #106 → #107). Local tags `<branch>-prerestack3` hold the old tips.
 
 *Orchestrator (2026-10-16 ~01:35Z):* the previous orchestrator session ended mid-sprint; threads
 9, 10, 11 and 13 stopped with nothing committed (9 and 10 left work in progress in their
