@@ -4609,13 +4609,14 @@ describe("the vaultKey's epoch", () => {
     expect(TH.summaryOf(vault.getSnapshot().boxes[0])?.vault_key_epoch).to.eq(1)
   })
 
-  it("refuses as damaged_lockbox a lockbox that says it was sealed under another vaultKey", async () => {
+  it("refuses as damaged_lockbox a lockbox that says it was sealed under another vaultKey, quoting not its boxlabel", async () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
     await vault.store('anthropic', 'sk-fake')
     world.dbStore.write(u1BoxCkey('anthropic'), JSON.stringify({ ...storedRowOf(world, 'anthropic'), vault_key_epoch: 2 }))
     const err = await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
     expect(err.message).to.include('does not hold')
+    expect(TH.thrownText(err)).to.not.include('anthropic')
   })
 
   it("writes nothing from a device still holding a vaultKey since replaced, which has not looked at the bundle since", async () => {
