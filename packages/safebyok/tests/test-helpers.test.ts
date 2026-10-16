@@ -184,10 +184,10 @@ describe("raceEveryWay", () => {
     })
     expect(titles).to.deep.equal([
       'made together',
-      'two started 1 microtasks after one', 'two started 2 microtasks after one', 'two started 3 microtasks after one', 'two started 5 microtasks after one', 'two started 8 microtasks after one',
+      'two started 1 microtasks after one', 'two started 2 microtasks after one', 'two started 3 microtasks after one',
       'two started 1 ticks after one', 'two started 2 ticks after one',
       'one held before its round trip 1 while two moved', 'one held before its round trip 2 while two moved', 'one held before its round trip 3 while two moved',
-      'one started 1 microtasks after two', 'one started 2 microtasks after two', 'one started 3 microtasks after two', 'one started 5 microtasks after two', 'one started 8 microtasks after two',
+      'one started 1 microtasks after two', 'one started 2 microtasks after two', 'one started 3 microtasks after two',
       'one started 1 ticks after two', 'one started 2 ticks after two',
       'two held before its round trip 1 while one moved', 'two held before its round trip 2 while one moved', 'two held before its round trip 3 while one moved',
     ])
@@ -204,8 +204,8 @@ describe("raceEveryWay", () => {
       moves:   [(move) => move('a'), (move) => move('b')],
       verdict: () => undefined,
     })
-    // The runs that held "a" before its round trips 1, 2 and (making only two) 3, after the eight that hold nothing.
-    expect(logs.slice(8, 11)).to.deep.equal([
+    // The runs that held "a" before its round trips 1, 2 and (making only two) 3, after the six that hold nothing.
+    expect(logs.slice(6, 9)).to.deep.equal([
       ['b1', 'b2', 'b done', 'a1', 'a2', 'a done'],
       ['a1', 'b1', 'b2', 'b done', 'a2', 'a done'],
       ['a1', 'a2', 'a done', 'b1', 'b2', 'b done'],
@@ -244,7 +244,7 @@ describe("raceEveryWay", () => {
     })
     expect(made.slice(0, 4)).to.deep.equal(['backend', 'setup', 'one', 'two'])
     // No round trips pass the turnstile, so each hold runs once, the moves one after the other.
-    expect(made.filter((word) => word === 'backend')).to.have.lengthOf(17)
+    expect(made.filter((word) => word === 'backend')).to.have.lengthOf(13)
   })
 
   it("names the schedule under which a verdict failed", async () => {
@@ -871,6 +871,16 @@ const expectToHold = (check: TH.VaultDBTimingCheck): Promise<void> => check.chec
 
 /** The checks of the battery over an adapter, by handle. */
 const checksOver = (opts: RoundTripOpts & { overTheWire?: boolean, unwired?: boolean, slowSecond?: boolean }) => TH.vaultDBTimingChecks(...roundTripBattery(opts))
+
+describe("expectRoundTripsThroughTurnstile", () => {
+  it("passes devices that send every write through the turnstile", async () => {
+    await TH.expectRoundTripsThroughTurnstile(roundTripDevices({ stepping: inOneStep }))
+  })
+
+  it("fails devices whose writes reach the backend without passing it, naming the first", async () => {
+    await expect(TH.expectRoundTripsThroughTurnstile(roundTripDevices({ stepping: inOneStep, unwired: true }))).rejects.toThrow(/^createBundle reached the backend without passing the turnstile/)
+  })
+})
 
 describe("vaultDBTimingChecks, against adapters that do not guard", () => {
   for (const handle of SplitLosses) {
