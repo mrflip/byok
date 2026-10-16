@@ -499,6 +499,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   let bundle: VaultBundle | null | typeof UnreadBundle = UnreadBundle
   // This device's mark for the bundle in hand, set with it, so the two always name one vault.
   let deviceMark: DeviceMark | null = null
+  // The vault this handle last drafted, and the device_id its first way in carries: whichever of
+  // this handle's reads starts the vault's mark -- the unlock making it, or a refresh its write
+  // set off -- starts it under that id.
+  let drafted: { vault_id: string, device_id: string } | null = null
   let boxes: readonly (LockboxSummary | DamagedLockbox)[] = []
   let askPassphraseAt: number | null = null
   let vaultKey: CryptoKey | null = null
@@ -579,35 +583,38 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   /**
    * This device's mark for `fresh`, a bundle storage handed back, kept up to date: a bundle of the
    * vault the mark names, at an `unlock_epoch` below the one this device has seen, is refused as
-   * 'rolled_back', and nothing is written or taken from it. `mintedDeviceId` is the id to start a
-   * mark with for a vault this device has not seen; one is minted when none is given.
+   * 'rolled_back', and nothing is written or taken from it.
    */
-  const heedMark = async (fresh: VaultBundle, mintedDeviceId?: string): Promise<DeviceMark> => {
+  const heedMark = async (fresh: VaultBundle): Promise<DeviceMark> => {
     const kept = await keptMark()
     if (kept !== null && kept.vault_id === fresh.vault_id && fresh.unlock_epoch < kept.unlock_epoch) {
       throw new VaultError('rolled_back', "Storage handed back an older copy of this vault than this device has already seen, so this device won't use it: nothing was unlocked or written. A backup restored over the vault, or storage altered, can do this. Try again later, and if it goes on, ask the app's support to look at its storage.")
     }
-    return await raiseMark(kept, fresh, mintedDeviceId)
+    return await raiseMark(kept, fresh)
   }
 
   /**
    * The mark this device keeps once it has seen `fresh`: `kept` itself when it already stands at
    * that `unlock_epoch` of that vault or past it, and otherwise a new mark, written before it is
-   * returned -- under `kept`'s `device_id` for the same vault, under a new one for a vault not seen.
+   * returned -- under `kept`'s `device_id` for the same vault, and for a vault not seen, the one
+   * this handle drafted it under, or a new one.
    */
-  const raiseMark = async (kept: DeviceMark | null, fresh: VaultBundle, mintedDeviceId?: string): Promise<DeviceMark> => {
+  const raiseMark = async (kept: DeviceMark | null, fresh: VaultBundle): Promise<DeviceMark> => {
     const sameVault = kept !== null && kept.vault_id === fresh.vault_id
     if (sameVault && kept.unlock_epoch >= fresh.unlock_epoch) { return kept }
     const mark: DeviceMark = {
       format:       'safebyok-mark-v1',
       ...scope,
-      device_id:    sameVault ? kept.device_id : mintedDeviceId ?? randomId(),
+      device_id:    sameVault ? kept.device_id : newDeviceIdFor(fresh.vault_id),
       vault_id:     fresh.vault_id,
       unlock_epoch: fresh.unlock_epoch,
     }
     await deviceDB.writeMark(mark)
     return mark
   }
+
+  /** The `device_id` a mark of `vaultId` starts under: the one this handle drafted it under, or a new one. */
+  const newDeviceIdFor = (vaultId: string): string => (drafted?.vault_id === vaultId ? drafted.device_id : randomId())
 
   /**
    * This device's id for the vault `standing` is, which every way in it adds carries: the one its
@@ -699,8 +706,9 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       }
       const deviceId = randomId()
       const { draft, transientKey, sessionKey } = await draftBundle(proof, deviceId)
+      drafted = { vault_id: draft.vault_id, device_id: deviceId }
       const settled = await damagedAs(vaultDB.createBundle(draft, rules), damagedBundle)
-      const mark = await heedMark(settled, settled.vault_id === draft.vault_id ? deviceId : undefined)
+      const mark = await heedMark(settled)
       bundle = settled
       deviceMark = mark
       if (settled.vault_id === draft.vault_id) { return { standing: settled, transientKey, sessionKey } }

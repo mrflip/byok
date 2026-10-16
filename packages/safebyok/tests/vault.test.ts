@@ -4421,6 +4421,21 @@ describe("the device mark", () => {
     expect(storedUnlocksOf(world)[0]).to.deep.include({ device_id: mark?.device_id, vault_key_epoch: 1, registered_at: world.clock.now() })
   })
 
+  it("is started under the id the first way in carries, though a refresh the vault's making set off gets there first", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    const createBundle = world.vaultDB.createBundle.bind(world.vaultDB)
+    // The write rings this handle's own watch, whose refresh runs to its end before the unlock goes on.
+    vi.spyOn(world.vaultDB, 'createBundle').mockImplementationOnce(async (...args) => {
+      const settled = await createBundle(...args)
+      await TH.wakeupAtNextTick()
+      return settled
+    })
+    await vault.unlock('pw')
+    const mark = await markIn(world)
+    expect(storedUnlocksOf(world)[0]?.['device_id']).to.eq(mark?.device_id)
+  })
+
   it("rises with each newer bundle, its own writes and another device's, and every way in this device adds carries its id", async () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
