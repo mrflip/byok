@@ -8,18 +8,27 @@
 | 2 | release_age       | filed #96                  |
 | 3 | passkey_button_ux | filed #98                  |
 | 4 | small_sweep       | filed #99                  |
-| 5 | vaultdb_battery   | waiting on the gripes line |
+| 5 | vaultdb_battery   | waits on 11                |
 | 6 | race_helper       | waiting on thread 5        |
-| 7 | indexeddb_fixes   | waiting on the gripes line |
+| 7 | indexeddb_fixes   | next                       |
 | 8 | size_rule         | filed #99 (commits on it)  |
-| 9 | damaged_bundle    | underway (stacked on #97)  |
-| 10 | identity_revoked | underway                   |
-| 11 | vaultdb_contract | underway                   |
+| 9 | damaged_bundle    | interrupted; waits on #97's restack |
+| 10 | identity_revoked | resumed, rebasing onto b60e516 |
+| 11 | vaultdb_contract | resumed on b60e516         |
 | 12 | postgres_soft_cap | waiting on 11             |
-| 13 | rotation_design  | underway                   |
-| 14 | rotation_build   | waiting on 13 and the gripes line |
+| 13 | rotation_design  | resumed on b60e516         |
+| 14 | rotation_build   | waits on 13                |
+| 15 | e2e_home         | queued                     |
+| 16 | late_unlock      | waits on #98's restack     |
+| 17 | validation_note  | waits on #101 merging      |
+| -- | restack #96-#99  | underway                   |
 
 ## What the threads have taught
+
+*Orchestrator (2026-10-16 ~01:35Z):* the previous orchestrator session ended mid-sprint; threads
+9, 10, 11 and 13 stopped with nothing committed (9 and 10 left work in progress in their
+worktrees). The gripes line merged meanwhile (main `b60e516`). 10, 11 and 13 resumed on it; 9
+resumes once #97 is restacked.
 
 * **Thread 8 (#99), size_rule.** Budgets by the written rule, now in PROCESS.md's *Size budgets*:
   measured + 3 kB at 5 kB and over, + 50% (at least 1 kB) under, rounded **up** to two significant

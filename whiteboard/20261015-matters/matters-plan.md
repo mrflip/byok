@@ -8,8 +8,9 @@
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach), through the Open Matters tab of the big_feats sprint doc
   (`/turbochat`): each thread below is a row they set to `proceed`, with their answer verbatim.
-* **Status**: part 2 underway (threads 3, 8, 9, 10); wave 1's 1, 2, 4 filed; wave 2 (5 to 7) and
-  the rotation build (14) wait on the gripes line, mid-restack in another session.
+* **Status**: the gripes line merged (main b60e516, 2026-10-16 ~01:30Z), freeing wave 2. Filed:
+  1, 2, 3, 4, 8 (#96 to #99), being restacked onto main as one line. Underway: 10, 11, 13; 9 waits
+  for #97's restack. Queued: 7, 15, 16, then 5 (after 11), 6, 12, 14; 17 waits on #101.
 
 ## Read first
 
@@ -330,6 +331,67 @@ Its thread breakdown becomes thread 14 (and more) in this plan. Stored-shape cha
 * **Housekeeping**: the deletion was refused by this session's permission check; a read-only survey
   lists what is safe to remove, for the Coach to run.
 
+### Wave 5: the Coach's third round (2026-10-16)
+
+The gripes line has merged (main `b60e516`). The Coach's answers, verbatim, and where each went:
+
+* **The two lines collide** -- "I've restacked and merged a great pile of prs, would you please
+  take the ones on your sprint that are ready to merge and have an agent restack them on main? They
+  should be smart about justify time: if a, b, c, d rebase with relative ease, and justify d passes,
+  push d (so that its CI starts) and then push a, b, c -- let the ci system validate. unless a
+  sprint is already stacked, they should choose a stack order of least drama". *Orchestrator:* a
+  restacking agent puts #96 to #99 in one line on main (its order, least drama), justify once at
+  the top. Every later thread, once filed, is restacked onto the line's top.
+* **The first-emit deviation** -- "yes proceed as you recommended": accepted as built; thread 13
+  strikes it from TODO if listed.
+* **A failed `openVault` leaks its subscription** -- "yes": closed (fixed by #61); thread 13 ticks
+  it off in TODO.
+* **The gripes session's PRs** -- the Coach handles #81 (to draft, before 1.0.0) and #66.
+
+#### 15. e2e_home (sonnet)
+
+> **A home for cross-harness tests.** Rec: a private workspace package beside `demos/`, say
+> `e2e/`, never published, holding those tests; `safebyok-convex`'s own `package.json` then lists
+> no React at all. The Coach: "yes"
+
+*Gloss.* From main. A private workspace package (`e2e/` at the root, or `packages/`-adjacent as
+`demos/` is: follow the demos' layout and naming), `"private": true`, with its own justify scripts
+so the root's `pnpm justify` runs it. Move Convex's tests that use a real `ConvexReactClient` (and
+anything else that pairs a store with a framework) into it, and drop `react` (and `react-dom`,
+`@testing-library/*`, if only those tests used them) from `safebyok-convex`'s devDependencies. The
+moved tests must still fail when what they test is broken: move them, don't rewrite them. CLAUDE.md's
+*Layout* names the new directory. `tests:` / `tools:`.
+
+#### 16. late_unlock (sonnet) -- stacked on #98
+
+> **A second dialog after a late unlock (#98).** Rec: close the newer dialog too, settling its
+> waiters as unlocked, in a small follow-up on the React binding. The Coach: "yes"
+
+*Gloss.* Cut from #98's restacked tip. In `vault-provider.tsx`, when an unlock lands (the vault's
+snapshot turns unlocked) while a newer dialog is asking, close that dialog and settle its waiters
+as unlocked (they retry their actions), instead of leaving it up. #98's test that pins "a late
+unlock settles only its own dialog" changes to the new behaviour, and the thread file says so.
+`client:`.
+
+#### 17. validation_note (sonnet) -- waits on #101
+
+> **Label grammar on the server?** Should Convex, Postgres and GraphQL refuse a label outside the
+> grammar server-side, and not only in the client? The Coach: "The other sprint is adding these to
+> a todo section called "What exactly are we guaranteeing with these validators" or something. Add
+> a description of this there. Don't add new code"
+
+*Gloss.* That section arrives with another session's #101 (`20261016-docs_rulings`). Once #101
+merges, a documents-only thread from main adds to it a description of the server-side question:
+today the label grammar is checked only in the client, so a store reached by another client (or a
+host's server code) can hold a label outside it; what each of Convex, Postgres and GraphQL could
+check, at what cost; no recommendation beyond what the section's own framing asks. `plan:`.
+
+### Wave 2, freed
+
+The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes** at once;
+**5, vaultdb_battery** stacked on thread 11 once it files (it audits against 11's contract);
+**6** stacked on 5. **14, rotation_build** waits only on 13.
+
 ## Decisions taken in YOLO
 
 1. Part 2 continues this sprint, its worktree and its doc, rather than starting a new one: the
@@ -340,6 +402,11 @@ Its thread breakdown becomes thread 14 (and more) in this plan. Stored-shape cha
 4. The Argon2 note rides thread 9 (stacked on #97) instead of a commit on #97 itself.
 5. Thread 3 finishing (a second review and filing) runs beside three new threads, slightly over the
    cap of 3: it is a light thread with no builder.
+6. The label-grammar description (17) waits for #101 to merge rather than stacking on another
+   session's unmerged branch.
+7. The two TODO tick-offs (first-emit, `openVault` leak) ride thread 13, which already edits TODO.
+8. Threads 10, 11 and 13, interrupted when the last session ended, are resumed on the new main;
+   thread 9 resumes on #97's restacked tip.
 
 ## Not in this sprint
 
