@@ -4589,6 +4589,25 @@ describe("a bundle rolled back", () => {
     expect(await markIn(world)).to.deep.include({ unlock_epoch: 2 })
   })
 
+  it("refuses no vault another tab made while this one was making it, though that tab raised the mark meanwhile", async () => {
+    const world = makeWorld()
+    const there = await world.open()
+    const slowVaultDB = world.deafVaultDB()
+    const late = await world.open({ vaultDB: slowVaultDB })
+    const createBundle = slowVaultDB.createBundle.bind(slowVaultDB)
+    // There makes the vault first, so late's write hands back there's bundle at epoch 1, and only
+    // after that does there change it, raising the mark this device shares to epoch 2.
+    vi.spyOn(slowVaultDB, 'createBundle').mockImplementationOnce(async (...args) => {
+      await there.unlock('pw')
+      const settled = await createBundle(...args)
+      await there.changePassphrase('pw', 'pw two')
+      return settled
+    })
+    await late.unlock('pw')
+    expect(late.getSnapshot().state).to.eq('unlocked')
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2 })
+  })
+
   it("takes the copy up again once storage hands back the newest", async () => {
     const { world, vault, older, newer } = await rolledBackWorld()
     vault.close()
