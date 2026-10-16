@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: threads 1, 3, 7, 8 underway; 6 filed (#126); 5b waits on the Coach
+* **Status**: threads 4, 8, 11 underway; 1, 7 in review; 3 (#127), 6 (#126) filed; 5b waits on the Coach
 
 ## Read first
 
@@ -131,7 +131,9 @@ handoff carries it whole. Below, the orchestrator's gloss.
 ### 4. `refusals_and_catchup` -- one catch-up before a kind is named, damage quarantined
 
 * **Touches**: `vault.ts`, `vault-db.ts`, `errors.ts` (`newer_format`), `types.ts` (`syncing`,
-  `DamagedLockbox.revision_id`), `safebyok-react` (`VaultProvider`: G333), VAULTDB.md, READMEs.
+  `DamagedLockbox.revision_id`), VAULTDB.md, READMEs. ~~`safebyok-react` (`VaultProvider`:
+  G333)~~ -- pulled forward by thread 7.
+* **Added**: thread 3's review leftovers (1, 2, 3, 5, 6, 7 in the progress document).
 * **Model**: opus. **Depends on**: 3.
 * **Look-ahead**: 5 builds the base class on its `vault-db.ts`; 10 and 13 are cut from it. 7
   adds the G333 test against the provider this thread changes.

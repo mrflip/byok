@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: threads 8 and 11 underway; 1 and 7 in review; 3 filing; 6 filed; 5b waits on the Coach.
+**Status**: threads 4, 8 and 11 underway; 1 and 7 in review; 3 and 6 filed; 5b waits on the Coach.
 
 ## Status
 
@@ -8,8 +8,8 @@
 |---|---|---|---|---|
 | 1 | names_and_keys | main | in review | [#128](https://github.com/mrflip/safebyok/pull/128) |
 | 2 | public_bag | on 1 | pending | |
-| 3 | locks_and_expiry | main | filing | [#127](https://github.com/mrflip/safebyok/pull/127) |
-| 4 | refusals_and_catchup | on 3 | pending | |
+| 3 | locks_and_expiry | main | filed #127 | [#127](https://github.com/mrflip/safebyok/pull/127) |
+| 4 | refusals_and_catchup | on 3 (98b70b80) | underway | |
 | 5a | store_base design | -- | written: `store-base-design.md`; the Coach's row in *Open Matters* | |
 | 5b | store_base build | on 4 (restacked) | pending: the Coach's word on 5a | |
 | 6 | crypto_small | main | filed #126 | [#126](https://github.com/mrflip/safebyok/pull/126) |
@@ -51,7 +51,7 @@
 * *Orchestrator:* **`matters/`** holds all fourteen tabs of the Gripefest doc as of the sprint's
   start. G247 (thread 5's Convex `vault_id` check) appears only in the strawman and Validators
   tabs; follow the preplan's wording.
-* *Orchestrator:* **Thread 3** (ready, [#127](https://github.com/mrflip/safebyok/pull/127)) --
+* *Orchestrator:* **Thread 3** (filed, [#127](https://github.com/mrflip/safebyok/pull/127)) --
   what later threads inherit:
   * `Ms` is `Millis` everywhere (`ForeverMillis`, `reentryWindowMillis`, `MinuteMillis`,
     `MaxReentryHours` = 588). The far-future test is `>= ForeverMillis - MinuteMillis`; 3 already
