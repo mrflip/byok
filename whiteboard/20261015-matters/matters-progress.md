@@ -15,19 +15,33 @@
 | 9 | damaged_bundle    | filed #108 (on #107)       |
 | 10 | identity_revoked | filed #106 (on #105)        |
 | 11 | vaultdb_contract | filed #107 (on #106)       |
-| 12 | postgres_soft_cap | underway (on #107)        |
+| 12 | postgres_soft_cap | in review (#113)          |
 | 13 | rotation_design  | filed #105 (on #97)        |
 | 14 | rotation_shape   | waits on 11, #97 landing   |
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
 | 20 | rotation_docs    | waits on 19                |
-| 15 | e2e_home         | review clean; files after 16 |
-| 16 | late_unlock      | filing onto #109           |
+| 15 | e2e_home         | held: the Coach weighs options (Open Matters) |
+| 16 | late_unlock      | filed #110 (on #109)       |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | underway (on #108)         |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
+
+*Orchestrator (~02:40Z):* the Coach merged #99 expecting the line above it to go too; a merge
+takes only what is beneath. At the Coach's word ("restack any other prs on main so that closing
+the top makes them all go purple"), an agent restacks #98 to #110 onto main `5090c1a`. **#111 is
+held**: the Coach finds moving Convex's whole suite to `e2e/` wrong ("I'd want to have the test
+suite local"; `e2e/` is for N×N client-adapter checks and Playwright) and asked for options, not a
+rewrite -- they're in the Open Matters row, Rec (b): a test-only `safebyok-convex/testing` entry
+for the fake, `e2e/` running only the React half.
+* **Thread 12 (#113), postgres_soft_cap.** One lock-free insert, classified from one snapshot;
+  `lockbox_count`, its trigger, `FOR UPDATE` and `StillFullSql` gone; `VaultNotifySql` opt-in
+  (shipped as `vault-notify.sql`); README states the guarantee at READ COMMITTED and offers a
+  "vaya con dios" hard-cap trigger (its refusal reads `storage_unavailable`). For thread 14: the
+  `vault` CTE in `InsertBoxSql` is where a `FOR SHARE` bundle read goes; `ReplaceBoxSql` would need
+  a bundle join.
 
 * **Thread 11 (#107) filed** on #106, landing second, so it wrote #106's lines in: 5.4 (another
   user or nobody is refused every verb as `identity_revoked`, tested through a new
@@ -114,8 +128,8 @@ worktree shares -- now a ground rule against it.
   `reentryHours` prop for `vault.reentryWindowMs`, so #98's three bad-`reentryHours` tests went with
   the prop. `.size-limit.json`: main's two new entries (validators 8.5 kB, DefaultValidators 4 kB)
   predate the rule; validators measures 8.15 kB, so a thread that grows it widens it by the rule
-  (about 12 kB). **New threads stack on the line's top: now #109** (main, with #96 and #99 merged, →
-  #98 → #97 → #105 → #106 → #107 → #108 → #109). Local tags `<branch>-prerestack3` hold the old tips.
+  (about 12 kB). **New threads stack on the line's top: now #110** (main, with #96 and #99 merged, →
+  #98 → #97 → #105 → #106 → #107 → #108 → #109 → #110). Local tags `<branch>-prerestack3` hold the old tips.
 
 *Orchestrator (2026-10-16 ~01:35Z):* the previous orchestrator session ended mid-sprint; threads
 9, 10, 11 and 13 stopped with nothing committed (9 and 10 left work in progress in their
