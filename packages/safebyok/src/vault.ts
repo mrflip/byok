@@ -1,7 +1,7 @@
 import * as Z from 'zod/mini'
 import { DeviceUnlock, LockboxSummary, type DamagedLockbox, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, PasskeySaltBytes, VaultBundle, type VaultScope, Whisper, wallClock, type Clock, type PasskeyProof, type UnlockEnvelope, type UnlockSummary } from './types'
 import * as Names from './names'
-import { AnyTextValidators, Label, type NameValidator, type VaultValidators } from './validators'
+import { AnyTextValidators, Label, type VaultValidators } from './validators'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import { MaxSaltBytes, ensureSuppliedSpecKept } from './key-deriver-spec'
@@ -424,7 +424,7 @@ const UnreadBundle = Symbol.for('safebyok.unread_bundle')
  */
 export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   if (! isBag(opts)) { throw new VaultError('bad_option', 'openVault takes one bag of options: applabel, userId, vaultlabel, vaultDB, deviceDB and keyDeriver at least.') }
-  const rules = Names.rulesOf(parseValidators(opts.validators))
+  const rules = Names.rulesOf(opts.validators)
   // The same checks, but any text for a boxlabel: for reaching a lockbox that already stands under
   // a name the boxlabel check refuses, which erase() alone does, by the name it stands under.
   const standingRules: Names.NameRules = { ...rules, boxlabel: AnyTextValidators.boxlabel }
@@ -624,7 +624,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       unlock_epoch:     standing.unlock_epoch + 1,
       unlocks,
     }
-    await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch }))
+    await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch }, rules))
     bundle = next
     // The change has landed, whatever happens now: a shut meanwhile leaves only its unlock untaken.
     await takeUpUnlock(proven, next, shutsThen)
@@ -1375,26 +1375,6 @@ const noteToStore = (given: string | null | undefined, prev: Lockbox | null): st
 
 // The refusal never quotes the boxlabel: a host's validators may admit any text, a mistaken paste among it.
 const absentBox = () => new VaultError('absent_box', 'No lockbox stands under that boxlabel in this vault: its snapshot lists the ones it holds.')
-
-/** A schema a host may hand in `validators`: a Zod 4 schema, classic or mini, which carries `_zod`. */
-const nameValidator = Z.optional(Z.custom<NameValidator>((candidate) => isBag(candidate) && '_zod' in candidate))
-
-/** What `validators` may hold: a schema or undefined for each field it knows, and no other field. */
-const validatorsShape = Z.optional(Z.strictObject({
-  applabel:   nameValidator,
-  vaultlabel: nameValidator,
-  boxlabel:   nameValidator,
-  userId:     nameValidator,
-  note:       nameValidator,
-}))
-
-/** The host's `validators`, checked for shape only: the schemas are the host's, kept as handed in. */
-const parseValidators = (candidate: VaultValidators | undefined): VaultValidators | undefined => {
-  if (! validatorsShape.safeParse(candidate).success) {
-    throw new VaultError('bad_option', 'validators is a bag of Zod schemas, each checking one of applabel, vaultlabel, boxlabel, userId and note: leave out any field to keep its default check.')
-  }
-  return candidate
-}
 
 /** True when `record` names `scope`: the same app, user and vault. */
 const isOfScope = (record: VaultScope, scope: VaultScope): boolean => (

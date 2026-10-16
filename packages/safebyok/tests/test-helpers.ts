@@ -18,7 +18,7 @@ import { memoryStore } from '../src/string-store'
 import type { DamagedLockbox, DeviceUnlock, Lockbox, LockboxSummary, PasskeyEnvelope, PasskeyProof, PassphraseEnvelope, VaultBundle, VaultScope } from '../src/types'
 import type { OpenVaultOpts } from '../src/vault'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
-import { AnyTextValidators } from '../src/validators'
+import { AnyTextValidators, DefaultValidators } from '../src/validators'
 
 /** A Lockbox as the core writes one: a note, or no note field at all, never an undefined one. */
 type WrittenLockbox = Omit<Lockbox, 'note'> & { note?: string }
@@ -765,18 +765,18 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
 
     it("refuses a malformed scope or boxlabel before storage sees it", async () => {
       const vaultDB = await withBundle()
-      await expectRefusal(vaultDB.readBundle({ ...scopeOf('u1'), vaultlabel: 'not-a-label' }), 'bad_label')
-      await expectRefusal(vaultDB.readBox(scopeOf('u1'), 'not:a:label'), 'bad_label')
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('Not_a_label', 'one'), noBoxYet), 'bad_label')
-      await expectRefusal(vaultDB.eraseBox({ ...scopeOf('u1'), user_id: '' }, 'anthropic', thisVault), 'bad_label')
+      await expectRefusal(vaultDB.readBundle({ ...scopeOf('u1'), vaultlabel: 'not-a-label' }, DefaultValidators), 'bad_label')
+      await expectRefusal(vaultDB.readBox(scopeOf('u1'), 'not:a:label', DefaultValidators), 'bad_label')
+      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('Not_a_label', 'one'), noBoxYet, DefaultValidators), 'bad_label')
+      await expectRefusal(vaultDB.eraseBox({ ...scopeOf('u1'), user_id: '' }, 'anthropic', thisVault, DefaultValidators), 'bad_label')
       const overlongScope = scopeOf('u'.repeat(101))
-      await expectRefusal(vaultDB.listBoxes(overlongScope), 'bad_label')
+      await expectRefusal(vaultDB.listBoxes(overlongScope, DefaultValidators), 'bad_label')
     })
 
     it("refuses a malformed record or expectation, or a bundle under another vault_id, before storage sees it", async () => {
       const vaultDB = await withBundle()
       const overlong = boxOf('anthropic', 'one', { note: 'n'.repeat(257) })
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), overlong, noBoxYet), 'bad_option')
+      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), overlong, noBoxYet, DefaultValidators), 'bad_option')
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: '' }), 'bad_option')
       await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { unlock_epoch: 0 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'bad_option')
       await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { vault_id: 'vault-id-new', unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'bad_option')
