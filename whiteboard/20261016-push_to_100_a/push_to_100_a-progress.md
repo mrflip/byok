@@ -43,8 +43,8 @@
   158 matters.
 * *Orchestrator:* **Rulings carried back** (the sprint skill's §3, new this sprint): the Coach's
   rulings are in `20261016-push_to_100_a-resolutions.md` in full, and a `→ *Coach:*` line goes
-  beside each question in its PR. Lines owed to filed threads' files and `human/` entries are
-  added at the restack: the list follows when the PR pass reports.
+  beside each question in its PR (done for #126-#130; #131's worker did its own). Lines owed to
+  filed threads' files and `human/` entries go in at the restack: `restack-owed-rulings.md`.
 * *Orchestrator:* **Coach rulings, mid-sprint** (the plan's *Coach rulings* has their words):
   the key delimiter is fixed at `^`, with no option (thread 1 rebuilds); `lockSoon()` is soft,
   `whenIdentityRevoked` goes, a `read()` refuses when a hard lock landed during its awaits, and
