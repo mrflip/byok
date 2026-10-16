@@ -98,3 +98,11 @@ thread's file (or its `human/` entry), and put the line directly under it; in th
   * FOR SHARE on a real Postgres: nothing yet; the Coach asked for an explanation.
 * **#131** (thread 11, `thread-11-pg_container.md`)
   * node:crypto in a test helper: `→ *Coach (2026-10-16):* Yes: getRandomValues, the helper exported (thread 9).`
+
+*Orchestrator, 2026-10-16:* the fifth batch's PR-body lines are written (33 placed). Nine had no
+question in the PR body, because they were raised in review comments or the thread files:
+#132 the store compare; #134 strength test as advice; #136 the throwing test, the all-zero line,
+the inline strength test, zxcvbn as hard dependencies, spaces and the floor; #137 `FOR SHARE`
+(explain pending). They stay owed in the thread files at the restack only. Two placements to
+check: on #132, the lockSoon ruling sits under "Soft `lockSoon()` still forgets the remembered
+unlock", and the catch-up ruling under the review's minor (2).
