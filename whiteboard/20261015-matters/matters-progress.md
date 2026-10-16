@@ -35,7 +35,7 @@
   byte-identical. The "mainly main" ruleset requires test-build, lint-typecheck and both CodeQL
   checks, with **strict up-to-date**: every PR goes BEHIND whenever main moves, and merging the top
   takes all. #107's test-build hit the Convex timeout flake twice; rerun requested. **The whole line
-  merged with #115 (main `23f263a`). The line now: main → #111 → #119 (top).**
+  merged with #115 (main `23f263a`). The line now: main `cc32761` → #111 → #119 (top), restacked after the gripes line merged; justify green at the top.**
 
 * **Thread 21 (#115), damaged_erase.** `eraseDamagedVault(opts)` erases a vault `openVault` refuses
   as `damaged_bundle`, and the device's remembered unlock; a sound vault is refused (`bad_option`),
