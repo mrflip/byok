@@ -871,7 +871,8 @@ export type DescribeVaultDBOpts = {
    * no adapter, client, connection, lock or queue -- held to `maxLockboxes` where the adapter takes a
    * limit (as for `makeCappedVaultDB`), and passing `turnstile` before every round trip it makes to
    * the backend, a watch's start among them ({@link throughTurnstile}), so a race can hold it there:
-   * {@link expectRoundTripsThroughTurnstile} shows it does. An adapter over a backend in this
+   * {@link expectRoundTripsThroughTurnstile} shows that each write passes it, though not that every
+   * round trip does, since only the adapter knows how many it makes. An adapter over a backend in this
    * process that answers synchronously makes no round trips, and leaves `turnstile` be.
    * Without it, the races run through one adapter, as `makeVaultDB` makes it, and the rest is skipped.
    */
@@ -1779,7 +1780,9 @@ export const vaultDBTimingChecks = (makeVaultDB: () => VaultDBVerbs | Promise<Va
  * goes to the backend -- a create, an update of the bundle, a write of a lockbox, an erase of one
  * and of the vault -- so the races of {@link describeVaultDB} can hold it there. A race cannot tell
  * a turnstile left unwired from an adapter that makes no round trips; an adapter over a backend
- * reached by round trips calls this in its own tests to show its factory wires one.
+ * reached by round trips calls this in its own tests to show its factory wires one. It counts at
+ * least one pass for each write, so a write that makes a second round trip around the turnstile
+ * goes unseen here, and unheld in the races.
  *
  * @param makeDevices - The adapter's makeDevices, as `describeVaultDB` takes it.
  *
