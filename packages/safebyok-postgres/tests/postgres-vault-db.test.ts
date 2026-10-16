@@ -12,6 +12,11 @@ TH.bootDatabaseFirst()
 TH.describeVaultDB('postgresVaultDB over PGlite', async () => {
   const db = await TH.emptyDatabase()
   return TH.perUser((userId) => TH.requestFor(db, userId))
+}, {
+  makeCappedVaultDB: async (maxLockboxes) => {
+    const db = await TH.emptyDatabase()
+    return TH.perUser((userId) => postgresVaultDB({ client: db, userId, maxLockboxes }))
+  },
 })
 
 const u1 = TH.scopeOf('u1')

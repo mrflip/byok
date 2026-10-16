@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { localVaultDB, memoryStore, openVault, type StringStore } from '../src/index'
 import { Ciphered, fromB64, toB64 } from '../src/crypto'
@@ -482,5 +483,24 @@ describe("perUser", () => {
     const store = memoryStore()
     const onlyU1 = TH.perUser(() => servingOnly('u1', store))
     await TH.expectRefusal(onlyU1.readBundle(TH.scopeOf('u2')), 'not_permitted')
+  })
+})
+
+/** Each numbered line of the VaultDB contract as `VAULTDB.md` writes it, in bold: its number, then its title. */
+const BoldLines = /\*\*(\d+\.\d+)\. ([^*]+?)\.\*\*/gu
+
+/** Each numbered line of the VaultDB contract in `markdown`, its title by its number. */
+const contractLinesIn = (markdown: string): Record<string, string> => Object.fromEntries(
+  Array.from(markdown.matchAll(BoldLines), ([, line = '', title = '']): [string, string] => [line, title.replaceAll(/\s+/gu, ' ')]),
+)
+
+describe("VaultDBContract", () => {
+  it("names every numbered line of VAULTDB.md, by the title it has there, and nothing else", () => {
+    const written = contractLinesIn(readFileSync(new URL('../VAULTDB.md', import.meta.url), 'utf8'))
+    expect(TH.VaultDBContract).to.deep.equal(written)
+  })
+
+  it("titles a line as an adapter's own test of it cites it", () => {
+    expect(`postgresVaultDB, 5.4: ${TH.VaultDBContract['5.4']}`).to.eq('postgresVaultDB, 5.4: Only the signed-in user reaches their vaults')
   })
 })

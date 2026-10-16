@@ -13,6 +13,12 @@ TH.bootDatabaseFirst()
 TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB over PGlite', async () => {
   const schema = TH.schemaOver(await TH.emptyDatabase())
   return TH.perUser((userId) => TH.browserFor(schema, userId))
+}, {
+  makeCappedVaultDB: async (maxLockboxes) => {
+    const db = await TH.emptyDatabase()
+    const schema = TH.schemaOver(db, ({ userId }) => postgresVaultDB({ client: db, userId, maxLockboxes }))
+    return TH.perUser((userId) => graphqlVaultDB(TH.urqlClientFor(schema, userId), { maxLockboxes }))
+  },
 })
 
 const u1 = TH.scopeOf('u1')
