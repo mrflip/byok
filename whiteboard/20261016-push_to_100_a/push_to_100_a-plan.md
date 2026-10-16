@@ -233,6 +233,11 @@ From the sprint doc's *Open Matters*, as rows are swept:
 * **The adapters' logger option** (thread 5): `logger`, in every adapter.
 * **A hint on the whisper field** (thread 7): yes, a host `placeholder`, none by default. And a
   new NOTYET: "Option to let the user add a hint on their passphrase".
+* **Relative-time polyfill** (thread 7), the Coach's words: "we implement nothing but
+  `Intl.RelativeTimeFormat` code, assume it's there, and tell people how to make sure it's 100%
+  always there". So no presence check and no fallback in the dialog; the README says how a host
+  guarantees it (the `@formatjs/intl-relativetimeformat` polyfill import, for runtimes like
+  Hermes); no dependency.
 * **Password-manager attributes** (thread 7): yes, exported from `safebyok/utils` beside `mask`.
 * **`PostgresVaultDB`** (thread 5): drop the type ("we found out we don't need to export it":
   yes, drop it).
