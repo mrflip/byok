@@ -83,7 +83,8 @@ May go, when it is this session's:
 Never touch:
 
 * **A branch**, local or remote, nor a tag (a `-prerebase` tag is a marker, too). Branches stay
-  for their PRs and as the record of the work; no `git branch -d`, no `push --delete`.
+  for their PRs and as the record of the work; no `git branch -d`, no `push --delete`. Merged
+  threads are tidied by `/branch-sweep`, when the Coach asks for it.
 * **Another worker's worktree**, or one you cannot tie to a command of this session's -- even if
   it looks stale. Nor `git worktree prune`, which reaches into everyone's.
 * **The main checkout**: its branch, its uncommitted changes, its stashes. It is shared.
