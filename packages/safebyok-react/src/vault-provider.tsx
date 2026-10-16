@@ -136,6 +136,9 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   // renders it.
   const [asking, setAsking] = useState<Asking | null>(null)
   const askingRef = useRef<Asking | null>(null)
+  // The handle the open effect holds now, set and cleared with it: null from the moment a vault
+  // goes until the next arrives, when there is nothing for a dialog to unlock.
+  const vaultRef = useRef<Vault | null>(null)
   // Counts the dialog's showings, so that each is a fresh dialog with nothing kept from the last.
   const askingRounds = useRef(0)
   // Wrapped, so that a rejection carrying any value at all (null, say) still reads as "failed".
@@ -165,6 +168,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     void openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
+      vaultRef.current = opened
       setVault(opened)
     }).catch((err: unknown) => {
       if (gone) { return }
@@ -176,6 +180,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     })
     return () => {
       gone = true
+      vaultRef.current = null
       // A dialog belongs to the vault it was opened over: when that handle goes -- a sign-out,
       // another user, a reopen, the provider unmounting -- its actions resolve null, and it closes.
       // Here and not in an effect on `vault`, whose cleanup from the render before the vault came
@@ -206,8 +211,11 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     setOpenAttempt((prev) => prev + 1)
   }, [openError, userId, applabel, vaultlabel, vaultDB, deviceDB, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck])
 
-  /** Waits on the dialog showing now, opening one if none is. */
+  /** Waits on the dialog showing now, opening one if none is; settles false while there is no vault. */
   const awaitUnlock = useCallback(() => new Promise<boolean>((settle) => {
+    // An action whose refusal lands after its vault went resolves null, as the dialog it would
+    // have waited on did, rather than leaving a dialog to show over whichever vault comes next.
+    if (vaultRef.current === null) { settle(false); return }
     const { current } = askingRef
     if (current !== null) {
       current.waiters.push(settle)
