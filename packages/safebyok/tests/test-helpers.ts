@@ -251,17 +251,18 @@ export const thisVault = Object.freeze({ vault_id: 'vault-id-u1' } as const)
 
 /**
  * A shape-valid DeviceMark for device-storage tests: `userId`'s `main` vault as {@link bundleOf}
- * has it, seen at unlock epoch 1, by the device `device-one`.
+ * has it, seen at unlock epoch 1 and vaultKey epoch 1, by the device `device-one`.
  *
  * @example await deviceDB.writeMark(TH.markOf('u1'))
  * @example TH.markOf('u1', { unlock_epoch: 3 })  // a device that has seen the vault at epoch 3
  */
 export const markOf = (userId: string, overrides: Partial<DeviceMark> = {}): DeviceMark => ({
-  format:       'safebyok-mark-v1',
+  format:          'safebyok-mark-v1',
   ...scopeOf(userId),
-  device_id:    'device-one',
-  vault_id:     `vault-id-${userId}`,
-  unlock_epoch: 1,
+  device_id:       'device-one',
+  vault_id:        `vault-id-${userId}`,
+  unlock_epoch:    1,
+  vault_key_epoch: 1,
   ...overrides,
 })
 

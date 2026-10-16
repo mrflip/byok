@@ -3,7 +3,7 @@ import * as ZClassic from 'zod'
 import * as Z from 'zod/mini'
 import { ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, Lockbox, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, VaultScope, type DeviceMark, type DeviceUnlock, type VaultBundle, type PasskeyProof, type Whisper } from '../src/types'
 import { AnyTextValidators, LockboxNote, MaxUserIdChars, type VaultValidators } from '../src/validators'
-import { VaultError } from '../src/errors'
+import { VaultError, isVaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { jsonBytes, localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore } from '../src/string-store'
@@ -4417,7 +4417,7 @@ describe("the device mark", () => {
     await world.openUnlocked('pw')
     const mark = await markIn(world)
     const bundle = storedBundleOf(world)
-    expect(mark).to.deep.include({ format: 'safebyok-mark-v1', ...TH.scopeOf('u1'), vault_id: bundle['vault_id'], unlock_epoch: 1 })
+    expect(mark).to.deep.include({ format: 'safebyok-mark-v1', ...TH.scopeOf('u1'), vault_id: bundle['vault_id'], unlock_epoch: 1, vault_key_epoch: 1 })
     expect(storedUnlocksOf(world)[0]).to.deep.include({ device_id: mark?.device_id, vault_key_epoch: 1, registered_at: world.clock.now() })
   })
 
@@ -4523,13 +4523,29 @@ const rolledBackWorld = async () => {
   return { world, vault, older, newer }
 }
 
+/**
+ * The README's recipe for a vault whose storage was restored from an older copy on purpose: open
+ * it, and on 'rolled_back', once the user confirms, erase this device's mark and open it again.
+ */
+const openAcceptingRestore = async (opts: OpenVaultOpts, userConfirmsRestore: () => Promise<boolean>): Promise<Vault> => {
+  try {
+    return await openVault(opts)
+  } catch (err) {
+    if (! isVaultError(err, 'rolled_back') || ! await userConfirmsRestore()) { throw err }
+    await opts.deviceDB.eraseMark({ applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
+    return await openVault(opts)
+  }
+}
+
 describe("a bundle rolled back", () => {
   it("refuses an older copy at open as rolled_back, writing nothing, and quoting none of it", async () => {
     const { world, vault, older } = await rolledBackWorld()
     vault.close()
     world.dbStore.write(u1BundleCkey, older)
     const err = await TH.expectRefusal(world.open(), 'rolled_back')
-    expect(err.message).to.include('older copy')
+    expect(err.message).to.include('already seen a newer copy')
+    expect(err.message).to.include('eraseMark')
+    expect(err.message).to.not.include('Try again later')
     expect(TH.thrownText(err)).to.not.include((JSON.parse(older) as { vault_id: string }).vault_id)
     expect(world.dbStore.read(u1BundleCkey)).to.eq(older)
     expect(await markIn(world)).to.deep.include({ unlock_epoch: 3 })
@@ -4581,6 +4597,52 @@ describe("a bundle rolled back", () => {
     world.dbStore.write(u1BundleCkey, newer)
     const reopened = await world.open()
     expect(reopened.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("refuses an older copy at a lower vaultKey epoch as rolled_back, though storage raised its unlock epoch past the one seen", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    vault.close()
+    const first = storedBundleOf(world) as unknown as VaultBundle
+    const second: VaultBundle = {
+      ...first,
+      unlock_epoch:    2,
+      vault_key_epoch: 2,
+      prior_vault_key: { vault_key_epoch: 1, vault_key_wrapped: TH.fakeCiphered('prior') },
+      unlocks:         first.unlocks.map((envelope) => ({ ...envelope, vault_key_epoch: 2 })),
+    }
+    world.dbStore.write(u1BundleCkey, JSON.stringify(second))
+    await world.open()
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2, vault_key_epoch: 2 })
+    world.dbStore.write(u1BundleCkey, JSON.stringify({ ...first, unlock_epoch: 9 }))
+    await TH.expectRefusal(world.open(), 'rolled_back')
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2, vault_key_epoch: 2 })
+  })
+
+  it("takes an older copy at the same vaultKey epoch under a raised unlock epoch as it stands, its removed way in opening again", async () => {
+    const { world, vault, older } = await rolledBackWorld()
+    vault.close()
+    world.dbStore.write(u1BundleCkey, JSON.stringify({ ...(JSON.parse(older) as object), unlock_epoch: 9 }))
+    const reopened = await world.open()
+    await reopened.unlock('spare phrase')
+    expect(reopened.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("is accepted on this device once its mark of the vault is erased, as the README's recipe does", async () => {
+    const { world, vault, older } = await rolledBackWorld()
+    vault.close()
+    world.dbStore.write(u1BundleCkey, older)
+    const reopened = await openAcceptingRestore(world.optsWith(), () => Promise.resolve(true))
+    expect(reopened.getSnapshot().unlocks.map((unlock) => unlock.unlocklabel)).to.deep.equal(['passphrase', 'spare'])
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2 })
+  })
+
+  it("is still refused by the README's recipe when the user does not confirm the restore", async () => {
+    const { world, vault, older } = await rolledBackWorld()
+    vault.close()
+    world.dbStore.write(u1BundleCkey, older)
+    await TH.expectRefusal(openAcceptingRestore(world.optsWith(), () => Promise.resolve(false)), 'rolled_back')
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 3 })
   })
 
   it("is not caught on a device that never saw the newer copy, which takes the older as it stands", async () => {

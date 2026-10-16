@@ -150,9 +150,12 @@ export type OpenVaultOpts = {
  * This device keeps a mark of the newest copy of the vault's bundle it has seen (a device mark, in
  * the deviceDB, which `lock()` leaves and `destroy()` erases). A call that reads the bundle afresh
  * -- `openVault`, `unlock()`, a change to the ways in, a store that catches up with storage, a
- * background refresh -- refuses an older copy of that same vault with kind 'rolled_back', taking
- * nothing from it and writing nothing: storage handing back an older bundle could otherwise
- * bring back a way in that was removed. The vault stays as it stood before that read.
+ * background refresh -- refuses an older copy of that same vault, one at a lower unlock epoch or
+ * vaultKey epoch than this device has seen, with kind 'rolled_back', taking nothing from it and
+ * writing nothing: storage handing back an older bundle could otherwise bring back a way in that
+ * was removed. The vault stays as it stood before that read. A host that knows its storage was
+ * restored from an older copy on purpose accepts it on this device by erasing the device's mark
+ * of the vault (`deviceDB.eraseMark(scope)`) and opening the vault again.
  */
 export type Vault = {
   /**
@@ -590,8 +593,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   /**
    * This device's mark for `fresh`, a bundle storage handed back, kept up to date: a bundle of the
-   * vault the mark names, at an `unlock_epoch` below the one this device has seen, is refused as
-   * 'rolled_back', and nothing is written or taken from it.
+   * vault the mark names, at an `unlock_epoch` or a `vault_key_epoch` below the one this device has
+   * seen, is refused as 'rolled_back', and nothing is written or taken from it. The vaultKey's
+   * epoch is bound into every envelope and held to the bundle's, so storage cannot raise it on an
+   * older bundle and still have a way in open; the unlock epoch is bound into nothing, so an older
+   * bundle at the same vaultKey under a raised unlock epoch passes.
    *
    * `seenBefore` is the mark as it was read before `fresh` was, which the bundle is then held to,
    * when the caller read one: storage held that epoch when the mark was written, so a bundle read
@@ -602,27 +608,31 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   const heedMark = async (fresh: VaultBundle, opts: { seenBefore?: DeviceMark | null } = {}): Promise<DeviceMark> => {
     const kept = await keptMark()
     const held = opts.seenBefore === undefined ? kept : opts.seenBefore
-    if (held !== null && held.vault_id === fresh.vault_id && fresh.unlock_epoch < held.unlock_epoch) {
-      throw new VaultError('rolled_back', "Storage handed back an older copy of this vault than this device has already seen, so this device won't use it: nothing was unlocked or written. A backup restored over the vault, or storage altered, can do this. Try again later, and if it goes on, ask the app's support to look at its storage.")
+    const older = held !== null && held.vault_id === fresh.vault_id
+      && (fresh.unlock_epoch < held.unlock_epoch || fresh.vault_key_epoch < held.vault_key_epoch)
+    if (older) {
+      throw new VaultError('rolled_back', "This device has already seen a newer copy of this vault than storage offers now, so it won't use this one: nothing was unlocked or written. Storage restored from a backup, or altered, does this. If the vault's storage was restored from an older copy on purpose, the app can have this device accept it by forgetting what it saw of the vault (its deviceDB's eraseMark) and opening the vault again; otherwise the app's support should look at its storage.")
     }
     return await raiseMark(kept, fresh)
   }
 
   /**
    * The mark this device keeps once it has seen `fresh`: `kept` itself when it already stands at
-   * that `unlock_epoch` of that vault or past it, and otherwise a new mark, written before it is
+   * that `unlock_epoch` and `vault_key_epoch` of that vault or past both, and otherwise a new mark
+   * at the higher of each, written before it is
    * returned -- under `kept`'s `device_id` for the same vault, and for a vault not seen, the one
    * this handle drafted it under, or a new one.
    */
   const raiseMark = async (kept: DeviceMark | null, fresh: VaultBundle): Promise<DeviceMark> => {
     const sameVault = kept !== null && kept.vault_id === fresh.vault_id
-    if (sameVault && kept.unlock_epoch >= fresh.unlock_epoch) { return kept }
+    if (sameVault && kept.unlock_epoch >= fresh.unlock_epoch && kept.vault_key_epoch >= fresh.vault_key_epoch) { return kept }
     const mark: DeviceMark = {
-      format:       'safebyok-mark-v1',
+      format:          'safebyok-mark-v1',
       ...scope,
-      device_id:    sameVault ? kept.device_id : newDeviceIdFor(fresh.vault_id),
-      vault_id:     fresh.vault_id,
-      unlock_epoch: fresh.unlock_epoch,
+      device_id:       sameVault ? kept.device_id : newDeviceIdFor(fresh.vault_id),
+      vault_id:        fresh.vault_id,
+      unlock_epoch:    sameVault ? Math.max(kept.unlock_epoch, fresh.unlock_epoch) : fresh.unlock_epoch,
+      vault_key_epoch: sameVault ? Math.max(kept.vault_key_epoch, fresh.vault_key_epoch) : fresh.vault_key_epoch,
     }
     await deviceDB.writeMark(mark)
     return mark
