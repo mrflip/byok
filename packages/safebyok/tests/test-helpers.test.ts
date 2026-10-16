@@ -136,6 +136,42 @@ describe("beforeNextCall on a method already spied on", () => {
   })
 })
 
+describe("beforeNextCall armed more than once", () => {
+  const Targets = [
+    ["a plain method",            () => ({ fetchRow: (ckey: string) => Promise.resolve(ckey.length) })],
+    ["a method already spied on", () => { const target = { fetchRow: (ckey: string) => Promise.resolve(ckey.length) }; vi.spyOn(target, 'fetchRow'); return target }],
+  ] as const
+
+  for (const [blurb, makeTarget] of Targets) {
+    it(`runs one errand per call, in the order armed, on ${blurb}`, async () => {
+      const target = makeTarget()
+      const heard: string[] = []
+      TH.beforeNextCall(target, 'fetchRow', () => { heard.push('first errand'); return Promise.resolve() })
+      TH.beforeNextCall(target, 'fetchRow', () => { heard.push('second errand'); return Promise.resolve() })
+      await target.fetchRow('a')
+      expect(heard).to.deep.equal(['first errand'])
+      await target.fetchRow('bb')
+      expect(heard).to.deep.equal(['first errand', 'second errand'])
+      await target.fetchRow('ccc')
+      expect(heard).to.have.lengthOf(2)
+    })
+  }
+
+  it("holds two calls at their own gates, one per call", async () => {
+    const target = { fetchRow: (ckey: string) => Promise.resolve(ckey) }
+    const firstGate = TH.holdNextCall(target, 'fetchRow')
+    const secondGate = TH.holdNextCall(target, 'fetchRow')
+    const first = target.fetchRow('one')
+    await firstGate.reached
+    const second = target.fetchRow('two')
+    await secondGate.reached
+    firstGate.release()
+    secondGate.release()
+    expect(await Promise.all([first, second])).to.deep.equal(['one', 'two'])
+    expect(await target.fetchRow('three')).to.eq('three')
+  })
+})
+
 describe("holdNextCall", () => {
   it("holds the next call at a gate until released; a later call goes straight through", async () => {
     const heard: string[] = []
