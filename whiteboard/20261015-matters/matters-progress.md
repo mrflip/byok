@@ -6,20 +6,31 @@
 | - | ----------------- | -------------------------- |
 | 1 | hkdf_info         | filed #97                  |
 | 2 | release_age       | filed #96                  |
-| 3 | passkey_button_ux | in review (second round)   |
+| 3 | passkey_button_ux | filing (second review clean) |
 | 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | waiting on the gripes line |
 | 6 | race_helper       | waiting on thread 5        |
 | 7 | indexeddb_fixes   | waiting on the gripes line |
-| 8 | size_rule         | underway (on #99)          |
+| 8 | size_rule         | filed #99 (commits on it)  |
 | 9 | damaged_bundle    | underway (stacked on #97)  |
 | 10 | identity_revoked | underway                   |
-| 11 | vaultdb_contract | pending                    |
+| 11 | vaultdb_contract | underway                   |
 | 12 | postgres_soft_cap | waiting on 11             |
 | 13 | rotation_design  | pending                    |
 | 14 | rotation_build   | waiting on 13 and the gripes line |
 
 ## What the threads have taught
+
+* **Thread 8 (#99), size_rule.** Budgets by the written rule, now in PROCESS.md's *Size budgets*:
+  measured + 3 kB at 5 kB and over, + 50% (at least 1 kB) under, rounded **up** to two significant
+  figures (everything 30, openVault 23, stableJsonify 3.5, mask 8.8 kB). The sprint skill says the
+  orchestrator guesses a sprint's target up front and a late thread lowers the budgets. *Review:*
+  none, budgets and docs only. Left: three small budgets fell (stableJsonify 6 to 3.5 kB); a later
+  thread that outgrows one widens it by the rule. The 5 kB line is a cliff (argon2idWebV1Deriver).
+* **Thread 3 (#98), second review.** Clean over the review round. *Review:* left, minor: a late
+  unlock leaves a newer dialog asking over an unlocked vault (a design call, for the Coach); narrow
+  races (a lock between unlock and retries; `vault_locked` while `vault` is null); `role="alert"`
+  mounted with its text (with #90's markup); Escape not stopping propagation; shadow-root focus.
 
 *Orchestrator (part 2, 2026-10-16):* a new orchestrator session took over in YOLO; see the plan's
 *Part 2*. Thread 3's worker finished its review round (`60bc87e8`, pushed to #98) before the old
