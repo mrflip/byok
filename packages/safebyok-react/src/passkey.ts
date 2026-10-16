@@ -104,8 +104,9 @@ export const createPasskey = async (opts: CreatePasskeyOpts): Promise<PasskeyPro
  * The answer of whichever of a vault's passkeys the user touches: what `vault.unlock` (or any
  * change's proof) takes. `unlocks` is the snapshot's list, whole; the browser offers the user each
  * passkey in it, and asks the one chosen for its answer over that passkey's own salt. A passkey
- * stored damaged -- its `credential_id` or `prf_salt_b64` not base64url -- is left out, and the
- * others offered as ever.
+ * stored damaged -- its `credential_id` or `prf_salt_b64` not base64url, or its salt not
+ * `PasskeySaltBytes` long, which the vault would refuse -- is left out, and the others offered as
+ * ever.
  *
  * Resolves null when the user dismisses the prompt (or lets it time out, or has none of these
  * passkeys at hand). Refuses with kind 'absent_unlock' when `unlocks` holds no passkey,
@@ -146,13 +147,18 @@ export const askPasskey = async (unlocks: readonly UnlockSummary[], opts: AskPas
   return proofOf(credentialId, answering.saltBytes, answer)
 }
 
-/** A passkey of the vault's, its credential id and salt as bytes for WebAuthn; null when either is not base64url. */
+/**
+ * A passkey of the vault's, its credential id and salt as bytes for WebAuthn; null when either is
+ * not base64url, or the salt is not `PasskeySaltBytes` long.
+ */
 const askable = (unlock: UnlockSummary & { method: 'passkey' }) => {
   try {
+    const saltBytes = fromB64(unlock.prf_salt_b64) as Uint8Array<ArrayBuffer>
+    if (saltBytes.length !== PasskeySaltBytes) { return null }
     return {
       credentialId:    unlock.credential_id,
       credentialBytes: fromB64(unlock.credential_id) as Uint8Array<ArrayBuffer>,
-      saltBytes:       fromB64(unlock.prf_salt_b64) as Uint8Array<ArrayBuffer>,
+      saltBytes,
     }
   } catch {
     return null

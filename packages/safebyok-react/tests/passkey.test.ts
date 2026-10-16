@@ -124,7 +124,8 @@ describe("askPasskey", () => {
     await expectRefusal(askPasskey([passphraseSummary]), 'absent_unlock')
     const damaged = { ...summaryOf(await TH.passkeyOf('laptop'), 'laptop'), credential_id: 'not base64url!' }
     const saltless = { ...summaryOf(await TH.passkeyOf('phone'), 'phone'), prf_salt_b64: 'not base64url!' }
-    await expectRefusal(askPasskey([passphraseSummary, damaged, saltless]), 'damaged_unlock')
+    const shortSalted = { ...summaryOf(await TH.passkeyOf('tablet'), 'tablet'), prf_salt_b64: 'c2FsdA' }
+    await expectRefusal(askPasskey([passphraseSummary, damaged, saltless, shortSalted]), 'damaged_unlock')
   })
 
   it("leaves out a passkey stored damaged, and asks the others", async () => {
