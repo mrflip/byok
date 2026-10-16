@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: threads 2, 10 and 14 underway; 1, 3, 4, 6, 7, 8 and 11 filed; 5b cleared, cut once 4 files.
+**Status**: threads 2 and 10 underway; 14 in review; 1, 3, 4, 6, 7, 8 and 11 filed; 5b cleared, cut once 4 files.
 
 ## Status
 
@@ -20,7 +20,7 @@
 | 11 | pg_container | main | filed #131 | [#131](https://github.com/mrflip/safebyok/pull/131) |
 | 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
 | 13 | epoch_expectation | on 4 | pending | |
-| 14 | uncontrolled_fields | on 7 (3d62fc04) | underway: the CI flakes first | |
+| 14 | uncontrolled_fields | on 7 (3d62fc04) | in review | [#134](https://github.com/mrflip/safebyok/pull/134) |
 
 ## What the threads have taught
 
@@ -48,6 +48,13 @@
   rulings are in `20261016-push_to_100_a-resolutions.md` in full, and a `→ *Coach:*` line goes
   beside each question in its PR (done for #126-#130; #131's worker did its own). Lines owed to
   filed threads' files and `human/` entries go in at the restack: `restack-owed-rulings.md`.
+* *Orchestrator:* **Thread 14** (#134) fixed the CI flakes at their causes: the provider tests'
+  grabber records in a layout effect (a passive one could run after `waitFor` returned); the
+  demo's click-through derives through the test deriver (five 64 MiB Argon2id runs outlasted 5 s
+  under coverage) and waits for its lockbox before locking. **At the restack onto 10**: wire
+  `passphraseStrengthTest` through `VaultProvider` to `openVault` (its `satisfies` check will
+  demand it) and default the dialog's `passphraseAdvice` to advice built from it; thread 14's file
+  says how.
 * *Orchestrator:* **Thread 4's review** (#132): `fixed`, one commit (`store()` over a damaged
   box the listing did not show yet no longer erases first). Left, all minor and in *Open
   Matters*: the refresh queue's library-first yes; a hard lock not stopping a store in flight;
