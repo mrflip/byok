@@ -73,7 +73,7 @@ const LockboxCases = [
 describe("lockboxMeetsExpectation", () => {
   for (const [standingBundle, standingBox, revisionId, landed, blurb] of LockboxCases) {
     it(blurb, () => {
-      expect(lockboxMeetsExpectation(standingBundle, standingBox, { vault_id: 'vault-id-u1', revision_id: revisionId })).to.eq(landed)
+      expect(lockboxMeetsExpectation(standingBundle, standingBox, { vault_id: 'vault-id-u1', revision_id: revisionId, vault_key_epoch: 1 })).to.eq(landed)
     })
   }
 })

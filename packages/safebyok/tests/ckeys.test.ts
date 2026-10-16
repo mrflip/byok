@@ -19,6 +19,10 @@ describe("Ckeys, the ckey of each row", () => {
     expect(Ckeys.unlock(u1)).to.eq('["unlock","acme","u1","main"]')
   })
 
+  it("files a device mark under its kind and scope, as JSON", () => {
+    expect(Ckeys.mark(u1)).to.eq('["mark","acme","u1","main"]')
+  })
+
   it("begins every lockbox ckey of a scope with its box prefix", () => {
     expect(Ckeys.boxPrefix(u1)).to.eq('["box","acme","u1","main",')
     expect(Ckeys.box(u1, 'anthropic').startsWith(Ckeys.boxPrefix(u1))).to.be.true
@@ -153,11 +157,25 @@ describe("Ckeys.isUnlock", () => {
   })
 })
 
+describe("Ckeys.isMark", () => {
+  it("knows a mark's ckey, for any scope", () => {
+    expect(Ckeys.isMark(Ckeys.mark(u1))).to.be.true
+    expect(Ckeys.isMark(Ckeys.mark({ applabel: 'a:"b"', user_id: String.raw`\,[]`, vaultlabel: '' }))).to.be.true
+  })
+
+  it("refuses an unlock's ckey, another kind's, and anything that is not text", () => {
+    expect(Ckeys.isMark(Ckeys.unlock(u1))).to.be.false
+    expect(Ckeys.isMark('["marked","acme","u1","main"]')).to.be.false
+    expect(Ckeys.isMark(['mark', 'acme', 'u1', 'main'])).to.be.false
+  })
+})
+
 describe("Ckeys, between kinds", () => {
   it("never takes a bundle or an unlock for a lockbox, nor one kind's ckey for another's", () => {
     const isBox = Ckeys.isBoxIn(u1)
     expect(isBox(Ckeys.bundle(u1))).to.be.false
     expect(isBox(Ckeys.unlock(u1))).to.be.false
-    expect(new Set([Ckeys.bundle(u1), Ckeys.unlock(u1), Ckeys.box(u1, 'main')]).size).to.eq(3)
+    expect(isBox(Ckeys.mark(u1))).to.be.false
+    expect(new Set([Ckeys.bundle(u1), Ckeys.unlock(u1), Ckeys.mark(u1), Ckeys.box(u1, 'main')]).size).to.eq(4)
   })
 })

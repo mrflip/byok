@@ -13,10 +13,13 @@ import { PasskeySaltBytes, type PasskeyEnvelope, type PasskeyProof, type Passphr
  *
  * Each envelope's wrap is bound to its vault -- the scope, and the bundle fields that never
  * change, `vault_id` and `registered_at` -- and to its own public header (every field but the wrap
- * itself, encoded with its keys sorted), under a purpose its method names. A passkey envelope's
- * key is made with that same context as its HKDF `info`. The bundle's `unlock_epoch` and the
- * list of envelopes are not in it: a change to one envelope bumps the epoch and rewrites the
- * list, and the others, whose passphrases this device does not hold, must still open.
+ * itself, encoded with its keys sorted: its `vault_key_epoch`, `device_id` and `registered_at`
+ * among them), under a purpose its method names. A passkey envelope's key is made with that same
+ * context as its HKDF `info`. The bundle's `unlock_epoch` and the list of envelopes are not in it:
+ * a change to one envelope bumps the epoch and rewrites the list, and the others, whose
+ * passphrases this device does not hold, must still open. An envelope whose `vault_key_epoch` is
+ * not the bundle's is passed over as damaged, so one spliced in from an older bundle never hands
+ * over its older vaultKey as the bundle's own.
  */
 
 /**
@@ -38,6 +41,17 @@ export type EnvelopeHeader = HeaderOf<UnlockEnvelope>
  */
 export type BundleIdentity = Pick<VaultBundle, 'vault_id' | 'registered_at'>
 
+/**
+ * What an envelope is stamped with besides its method's own fields: its `unlock_id` and
+ * `unlocklabel`, the `vault_key_epoch` of the vaultKey it wraps, and the `device_id` and
+ * `registered_at` of the device and the time that added the way in. A way in sealed anew keeps
+ * its stamp; an envelope is one.
+ */
+export type EnvelopeStamp = Pick<UnlockEnvelope, 'unlock_id' | 'unlocklabel' | 'vault_key_epoch' | 'device_id' | 'registered_at'>
+
+/** The binding's first part: the bundle's format, under which every envelope's wrap is bound. */
+const BundleFormat = 'safebyok-vault-v2'
+
 /** The binding purpose of each method's wrap, so no method's envelope opens as another's. */
 const PurposeForMethod = {
   passphrase: 'vault_key_passphrase_wrapped',
@@ -55,7 +69,12 @@ const TransientUsage = { extractable: true, usage: ['wrapKey'] } as const
  * lets into, and its own public header.
  */
 const binding = (scope: VaultScope, bundle: BundleIdentity, header: EnvelopeHeader): Uint8Array => (
-  cipherBinding('safebyok-vault-v1', scope.applabel, scope.user_id, scope.vaultlabel, bundle.vault_id, bundle.registered_at, PurposeForMethod[header.method], header)
+  cipherBinding(BundleFormat, scope.applabel, scope.user_id, scope.vaultlabel, bundle.vault_id, bundle.registered_at, PurposeForMethod[header.method], header)
+)
+
+/** The stamp's own fields, and nothing else of whatever carries them: an envelope sealed anew passes itself. */
+const stampOf = ({ unlock_id, unlocklabel, vault_key_epoch, device_id, registered_at }: EnvelopeStamp): EnvelopeStamp => (
+  { unlock_id, unlocklabel, vault_key_epoch, device_id, registered_at }
 )
 
 /** `envelope` without its wrap. */
@@ -96,7 +115,7 @@ const passphraseKeyOf = async (keyDeriver: KeyDeriver, passphrase: string, saltB
  * @param passphrase - The passphrase this envelope admits.
  * @param scope - The vault's scope, bound into the wrap.
  * @param bundle - The bundle's `vault_id` and `registered_at`, bound into the wrap.
- * @param naming - The envelope's `unlock_id` and `unlocklabel`.
+ * @param stamp - The envelope's {@link EnvelopeStamp}: its id, label, vaultKey epoch, device and time.
  * @param vaultKey - The vaultKey to wrap: extractable, as only such a key can be.
  * @returns The envelope, and a non-extractable handle on the vaultKey unwrapped from it.
  */
@@ -105,14 +124,13 @@ export const sealPassphrase = async (
   passphrase: string,
   scope: VaultScope,
   bundle: BundleIdentity,
-  naming: { unlock_id: string, unlocklabel: string },
+  stamp: EnvelopeStamp,
   vaultKey: CryptoKey,
 ): Promise<{ envelope: PassphraseEnvelope, sessionKey: CryptoKey }> => {
   const saltBytes = randomBytes(keyDeriver.salt_bytes)
   const header = {
     method:            'passphrase',
-    unlock_id:         naming.unlock_id,
-    unlocklabel:       naming.unlocklabel,
+    ...stampOf(stamp),
     key_deriver_label: keyDeriver.key_deriver_label,
     salt_b64:          toB64(saltBytes),
   } as const
@@ -130,8 +148,9 @@ export const sealPassphrase = async (
  * open IS the passphrase check: there is no comparison.
  *
  * An envelope whose salt is not base64url of `keyDeriver.salt_bytes` bytes is damaged: its
- * deriver never made such a salt. It is passed over, costing no derivation, and the others are
- * tried as ever, so one damaged way in shuts out no other.
+ * deriver never made such a salt. So is one whose `vault_key_epoch` is not the bundle's: it wraps
+ * some other vaultKey than the bundle stands for. Either is passed over, costing no derivation,
+ * and the others are tried as ever, so one damaged way in shuts out no other.
  *
  * Refuses with kind `absent_unlock` when `unlockId` names no passphrase envelope of the bundle,
  * `unknown_key_deriver` when every envelope it would try was made by a key deriver other than
@@ -159,7 +178,9 @@ export const openWithPassphrase = async (
   }
   // Sorted out before the first derivation, so the outcome never hangs on order. (Checked here
   // rather than in the record's schema, which every entry point's bundle carries whole.)
-  const sound = derivable.filter((envelope) => saltBytesOf(envelope.salt_b64)?.length === keyDeriver.salt_bytes)
+  const sound = derivable.filter((envelope) => (
+    saltBytesOf(envelope.salt_b64)?.length === keyDeriver.salt_bytes && envelope.vault_key_epoch === bundle.vault_key_epoch
+  ))
   if (sound.length === 0) {
     if (unlockId !== undefined) {
       throw new VaultError('damaged_unlock', "That passphrase's way into the vault is stored damaged, so it could not be tried. Unlock another way, then remove it and add the passphrase again. The vault was left as it is.")
@@ -259,7 +280,7 @@ const passkeyKeyOf = async (prfBytes: Uint8Array, envelopeBinding: Uint8Array): 
  * @param passkey - What the new passkey answered, over a fresh salt of {@link PasskeySaltBytes}.
  * @param scope - The vault's scope, bound into the wrap and its key.
  * @param bundle - The bundle's `vault_id` and `registered_at`, bound into the wrap and its key.
- * @param naming - The envelope's `unlock_id` and `unlocklabel`.
+ * @param stamp - The envelope's {@link EnvelopeStamp}: its id, label, vaultKey epoch, device and time.
  * @param vaultKey - The vaultKey to wrap: extractable, as only such a key can be.
  * @returns The envelope, and a non-extractable handle on the vaultKey unwrapped from it.
  */
@@ -267,13 +288,12 @@ export const sealPasskey = async (
   passkey: PasskeyProof,
   scope: VaultScope,
   bundle: BundleIdentity,
-  naming: { unlock_id: string, unlocklabel: string },
+  stamp: EnvelopeStamp,
   vaultKey: CryptoKey,
 ): Promise<{ envelope: PasskeyEnvelope, sessionKey: CryptoKey }> => {
   const header = {
     method:        'passkey',
-    unlock_id:     naming.unlock_id,
-    unlocklabel:   naming.unlocklabel,
+    ...stampOf(stamp),
     credential_id: passkey.credentialId,
     prf_salt_b64:  passkey.prfSaltB64,
   } as const
@@ -291,7 +311,8 @@ export const sealPasskey = async (
  *
  * Refuses with kind `absent_unlock` when no passkey envelope of the bundle is that credential's
  * (or the one `unlockId` names is not), `damaged_unlock` when its envelope's salt is not
- * base64url of {@link PasskeySaltBytes} bytes, and `wrong_passkey` when the answer is for another
+ * base64url of {@link PasskeySaltBytes} bytes or its `vault_key_epoch` is not the bundle's, and
+ * `wrong_passkey` when the answer is for another
  * salt than the envelope's, or does not open it. An answer for the envelope's own credential and
  * salt that does not open it is most likely an envelope altered in storage, but a passkey asked
  * without user verification answers differently, and the vault cannot tell how it was asked: so
@@ -312,8 +333,9 @@ export const openWithPasskey = async (
   if (envelope === undefined) {
     throw new VaultError('absent_unlock', "None of this vault's passkeys is the one that answered: it may have been removed on another device, or be a passkey for another vault. Look again at the snapshot's unlocks.")
   }
-  // A salt no envelope this package writes could hold is a damaged way in, not a wrong passkey.
-  if (saltBytesOf(envelope.prf_salt_b64)?.length !== PasskeySaltBytes) {
+  // A salt no envelope this package writes could hold, or a vaultKey other than the bundle's, is a
+  // damaged way in, not a wrong passkey.
+  if (saltBytesOf(envelope.prf_salt_b64)?.length !== PasskeySaltBytes || envelope.vault_key_epoch !== bundle.vault_key_epoch) {
     throw new VaultError('damaged_unlock', "This passkey's way into the vault is stored damaged, so it could not be tried. Unlock with a passphrase, then remove this passkey and add it again. The vault was left as it is.")
   }
   if (envelope.prf_salt_b64 !== passkey.prfSaltB64) {

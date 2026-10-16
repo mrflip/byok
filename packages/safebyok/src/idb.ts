@@ -1,5 +1,5 @@
 import { createStore, del, delMany, entries, get, keys, set, clear, type UseStore } from 'idb-keyval'
-import { DeviceUnlock } from './types'
+import { DeviceMark, DeviceUnlock } from './types'
 import * as Ckeys from './ckeys'
 import type { DeviceDB } from './device-db'
 import { parseDbName, type IdbOpts } from './idb-opts'
@@ -58,28 +58,31 @@ const onBell = (dbName: string, listener: () => void): (() => void) => {
 /**
  * DeviceDB over this browser's IndexedDB: the real device storage. IndexedDB keeps the
  * DeviceUnlock record by structured clone, which is the only way a browser persists the
- * non-extractable localUnlockKey -- as a handle, never as bytes.
+ * non-extractable localUnlockKey -- as a handle, never as bytes. Device marks share its shelf.
  *
  * A record that will not read back (damaged, or written by another version) reads as "no
- * remembered unlock" and is dropped: losing the convenience is the safe failure. A row filed
- * under an earlier version's ckey is deleted unread at the next read or erase. Kind
- * 'bad_option' for a `dbName` that is not non-empty text.
+ * remembered unlock", or no device mark, and is dropped: losing the convenience is the safe
+ * failure. A row filed under an earlier version's ckey is deleted unread at the next read or
+ * erase of a remembered unlock. Kind 'bad_option' for a `dbName` that is not non-empty text.
  *
  * @example
  *   const deviceDB = idbDeviceDB()
  *   await deviceDB.readUnlock({ applabel: 'acme', user_id: 'u1', vaultlabel: 'main' })  // null
+ * @example
+ *   await deviceDB.readMark({ applabel: 'acme', user_id: 'u1', vaultlabel: 'main' })    // null
  */
 export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
   const dbName = parseDbName(opts, 'idbDeviceDB')
   const shelf = () => shelfStore(dbName)
   const ring = () => { ringBell(dbName) }
 
-  // A row under any ckey but an unlock's is one an earlier version filed (`unlock:acme:u1:main`
-  // before the tuple ckeys), which nothing else would ever reach, expire or erase. It is deleted
-  // unread, so an old remembered unlock never outlives the lock that should forget it.
+  // A row under any ckey but an unlock's or a mark's is one an earlier version filed
+  // (`unlock:acme:u1:main` before the tuple ckeys), which nothing else would ever reach, expire or
+  // erase. It is deleted unread, so an old remembered unlock never outlives the lock that should
+  // forget it.
   const sweepStrays = async () => {
     const ckeys = await keys(shelf())
-    const strays = ckeys.filter((ckey) => ! Ckeys.isUnlock(ckey))
+    const strays = ckeys.filter((ckey) => ! Ckeys.isUnlock(ckey) && ! Ckeys.isMark(ckey))
     if (strays.length === 0) { return }
     await delMany(strays, shelf())
     ring()
@@ -111,8 +114,30 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
       await sweepStrays()
     },
 
-    // The shelf holds remembered unlocks and nothing else, so forgetting them all is clearing it:
-    // any row an earlier version filed under another ckey goes too.
+    readMark: async (scope) => {
+      const raw: unknown = await get(Ckeys.mark(scope), shelf())
+      if (raw === undefined || raw === null) { return null }
+      const checked = DeviceMark.safeParse(raw)
+      if (! checked.success) {
+        await del(Ckeys.mark(scope), shelf())
+        ring()
+        return null
+      }
+      return checked.data
+    },
+
+    writeMark: async (mark) => {
+      await set(Ckeys.mark(mark), mark, shelf())
+      ring()
+    },
+
+    eraseMark: async (scope) => {
+      await del(Ckeys.mark(scope), shelf())
+      ring()
+    },
+
+    // The shelf holds remembered unlocks and device marks and nothing else, so forgetting them all
+    // is clearing it: any row an earlier version filed under another ckey goes too.
     eraseAll: async () => {
       await clear(shelf())
       ring()
@@ -154,7 +179,7 @@ export const inspectIdbDeviceDB = (opts?: IdbOpts) => {
       if (typeof listener !== 'function') { throw new VaultError('bad_option', 'subscribe needs a listener function to call after each write.') }
       return onBell(dbName, listener)
     },
-    /** Remove every row on the shelf: every remembered unlock in this database. */
+    /** Remove every row on the shelf: every remembered unlock and device mark in this database. */
     wipe: async (): Promise<void> => {
       await clear(shelfStore(dbName))
       ringBell(dbName)

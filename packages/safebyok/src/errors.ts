@@ -11,7 +11,7 @@
  *   `wrong_passkey`, `passkey_unavailable`, `absent_box`, `absent_vault`, `absent_unlock`,
  *   `whisper_too_large`, `lockbox_too_large`, `vault_full`, `too_many_unlocks`, `last_unlock`,
  *   `corrupt_record`, `damaged_bundle`, `damaged_unlock`, `damaged_lockbox`, `stale_write`,
- *   `not_permitted`, `identity_revoked`, `storage_unavailable`.
+ *   `rolled_back`, `not_permitted`, `identity_revoked`, `storage_unavailable`.
  *
  * `vault_full` means a new lockbox in a vault already holding its `maxLockboxes` (a limit the
  * client keeps), and also that storage has no room for the write (a limit of the backend's own,
@@ -33,6 +33,11 @@
  * vault can know: a passphrase or passkey whose answer fails to open its way in is
  * `wrong_passphrase` or `wrong_passkey` even when the stored vault was altered, because the
  * decryption fails alike either way. Their messages say so.
+ *
+ * `rolled_back` is storage handing back an older copy of a vault's bundle than this device has
+ * already seen -- a backup restored over it, or storage tampered with -- which the vault refuses to
+ * use: nothing is unlocked from it and nothing written over it. Only a device that saw the newer
+ * copy can tell, and only while its own storage keeps the mark of it.
  *
  * The package README's *Errors* section lists what each kind means and what to do about it.
  */
@@ -59,6 +64,7 @@ export const VaultErrorKindVals = [
   'damaged_lockbox',     // a lockbox failed its checks, or would not open under the vault's own vaultKey
   'unknown_key_deriver', // the vault names a key deriver this handle was not built with
   'stale_write',         // storage changed since this device read it, so the write was refused
+  'rolled_back',         // storage handed back an older copy of the vault than this device has seen, which it refuses to use
   'not_permitted',       // the storage backend refused the signed-in user this call: not theirs to make
   'identity_revoked',    // the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in
   'storage_unavailable', // the storage backend could not be reached, or failed
@@ -134,6 +140,7 @@ export const VaultErrorFamilyForKind = {
   damaged_lockbox:     'condition',
   unknown_key_deriver: 'misuse',
   stale_write:         'condition',
+  rolled_back:         'condition',
   not_permitted:       'condition',
   identity_revoked:    'condition',
   storage_unavailable: 'condition',

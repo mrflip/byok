@@ -112,7 +112,7 @@ describe("VaultNotifySql", () => {
     const unsubscribe = TH.requestFor(db, 'u1').subscribe(TH.scopeOf('u1'), onChange)
     await TH.wakeupAtNextTick()
     await TH.requestFor(db, 'u1').createBundle(TH.bundleOf('u1'))
-    await TH.requestFor(db, 'u1').updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-u1', revision_id: null })
+    await TH.requestFor(db, 'u1').updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 })
     await TH.wakeupAtNextTick()
     expect(heard.count).to.eq(0)
     expect(await TH.requestFor(db, 'u1').listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(1)
@@ -133,7 +133,7 @@ describe("the README's hard cap, vaya con dios", () => {
     await db.exec(String(note).replaceAll('>= 1000', '>= 2'))
     const vaultDB = TH.requestFor(db, 'u1')
     const u1 = TH.scopeOf('u1')
-    const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null }
+    const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 }
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.createBundle({ ...TH.bundleOf('u1'), vaultlabel: 'other' })
     await vaultDB.updateBox(u1, TH.boxOf('openai', 'sk-fake'), noBoxYet)

@@ -8,7 +8,8 @@ import { VaultOperations } from '../src/graphql-vault-db'
 const schema = buildSchema(VaultSchemaSdl)
 
 /** A record's validator, as the core exports it: its fields, each one a validator. */
-type RecordSchema = { shape: Record<string, { safeParse: (val: unknown) => { success: boolean } }> }
+// A field is optional when Zod says it may be left out (`optin`), whether or not it takes an undefined.
+type RecordSchema = { shape: Record<string, { _zod: { optin?: string } }> }
 
 /** Each object type and input type, the core record it carries, and the fields it leaves out. */
 const RecordTypes = [
@@ -47,7 +48,7 @@ describe("VaultSchemaSdl", () => {
       const { shape } = recordSchema as unknown as RecordSchema
       const described = Object.entries(fieldsOf(typename))
       for (const [field, { type }] of described) {
-        expect(isNonNullType(type), `${typename}.${field}`).to.eq(! shape[field]!.safeParse(undefined).success)
+        expect(isNonNullType(type), `${typename}.${field}`).to.eq(shape[field]!._zod.optin !== 'optional')
       }
     })
   }

@@ -9,6 +9,7 @@ import type { VaultScope } from './types'
  *     ["vault","acme","u1","main"]
  *     ["box","acme","u1","main","anthropic"]
  *     ["unlock","acme","u1","main"]
+ *     ["mark","acme","u1","main"]
  *
  * JSON quotes and escapes every string, so any text at all may stand in any place -- colons,
  * quotes, commas, brackets, backslashes, control characters, any script -- and two different
@@ -36,6 +37,13 @@ export const box = (scope: VaultScope, boxlabel: string): string => encode(['box
  * @example unlock(scope)  // '["unlock","acme","u1","main"]'
  */
 export const unlock = (scope: VaultScope): string => encode(['unlock', ...scopeParts(scope)])
+
+/**
+ * The ckey of `scope`'s device mark, on a device's own storage.
+ *
+ * @example mark(scope)  // '["mark","acme","u1","main"]'
+ */
+export const mark = (scope: VaultScope): string => encode(['mark', ...scopeParts(scope)])
 
 /**
  * The text that begins the ckey of every lockbox in `scope`, and of nothing else safebyok
@@ -79,8 +87,8 @@ export const boxlabelOf = (ckey: string): string | null => {
 /**
  * True for each ckey {@link unlock} gives, for any scope, false for any other ckey safebyok writes
  * or wrote before, and false for anything that is not text. It tests the prefix `["unlock",`
- * alone, not the rest of the tuple. On a device shelf that holds only remembered unlocks, a row
- * it refuses is one this version did not write.
+ * alone, not the rest of the tuple. On a device shelf, which holds remembered unlocks and device
+ * marks, a row it and {@link isMark} both refuse is one this version did not write.
  *
  * @example isUnlock(unlock(scope))        // true
  * @example isUnlock('unlock:acme:u1:main')  // false: an earlier version's ckey
@@ -88,6 +96,18 @@ export const boxlabelOf = (ckey: string): string | null => {
 export const isUnlock = (ckey: unknown): ckey is string => typeof ckey === 'string' && ckey.startsWith(UnlockPrefix)
 
 const UnlockPrefix = '["unlock",'
+
+/**
+ * True for each ckey {@link mark} gives, for any scope, false for any other ckey safebyok writes,
+ * and false for anything that is not text. It tests the prefix `["mark",` alone, as
+ * {@link isUnlock} tests its own.
+ *
+ * @example isMark(mark(scope))     // true
+ * @example isMark(unlock(scope))   // false
+ */
+export const isMark = (ckey: unknown): ckey is string => typeof ckey === 'string' && ckey.startsWith(MarkPrefix)
+
+const MarkPrefix = '["mark",'
 
 const scopeParts = (scope: VaultScope) => [scope.applabel, scope.user_id, scope.vaultlabel]
 

@@ -35,14 +35,16 @@ export const VaultScope = v.object({
 })
 
 /** The formats of a VaultBundle this package stores. */
-export const VaultBundleFormat = v.union(v.literal('safebyok-vault-v1'))
+export const VaultBundleFormat = v.union(v.literal('safebyok-vault-v2'))
 
 /** The formats of a Lockbox this package stores. */
-export const LockboxFormat = v.union(v.literal('safebyok-lockbox-v1'))
+export const LockboxFormat = v.union(v.literal('safebyok-lockbox-v2'))
 
 /**
  * A passphrase's way into a vault: its `unlock_id` and `unlocklabel`, how its passphraseKey is
- * derived (`key_deriver_label`, `salt_b64`), and the vaultKey wrapped under that passphraseKey.
+ * derived (`key_deriver_label`, `salt_b64`), which vaultKey it wraps (`vault_key_epoch`), the
+ * device and time that added it (`device_id`, `registered_at`), and the vaultKey wrapped under
+ * that passphraseKey.
  *
  * @example { method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase', key_deriver_label: 'argon2id_web_v1', salt_b64: 'q83v...', vault_key_wrapped: { cipher_iv_b64, ciphertext_b64 } }
  */
@@ -52,13 +54,16 @@ export const PassphraseEnvelope = v.object({
   unlocklabel:       v.string(),
   key_deriver_label: v.string(),
   salt_b64:          v.string(),
+  vault_key_epoch:   v.number(),
+  device_id:         v.string(),
+  registered_at:     v.number(),
   vault_key_wrapped: Ciphered,
 })
 
 /**
  * A passkey's way into a vault: its `unlock_id` and `unlocklabel`, which WebAuthn credential to ask
- * (`credential_id`) and the salt to ask its PRF with (`prf_salt_b64`), and the vaultKey wrapped
- * under the key that answer makes.
+ * (`credential_id`) and the salt to ask its PRF with (`prf_salt_b64`), which vaultKey it wraps,
+ * the device and time that added it, and the vaultKey wrapped under the key that answer makes.
  *
  * @example { method: 'passkey', unlock_id: '7c2e...', unlocklabel: 'laptop', credential_id: 'AXk3...', prf_salt_b64: 'q83v...', vault_key_wrapped: { cipher_iv_b64, ciphertext_b64 } }
  */
@@ -68,6 +73,9 @@ export const PasskeyEnvelope = v.object({
   unlocklabel:       v.string(),
   credential_id:     v.string(),
   prf_salt_b64:      v.string(),
+  vault_key_epoch:   v.number(),
+  device_id:         v.string(),
+  registered_at:     v.number(),
   vault_key_wrapped: Ciphered,
 })
 
@@ -79,7 +87,17 @@ export const PasskeyEnvelope = v.object({
 export const UnlockEnvelope = v.union(PassphraseEnvelope, PasskeyEnvelope)
 
 /**
- * A vault's bundle: its scope, `vault_id`, `unlock_epoch`, its ways in (`unlocks`, each the
+ * The vaultKey before a bundle's own, wrapped under its own, at its `vault_key_epoch`: absent
+ * until a vault's vaultKey is first replaced.
+ */
+export const PriorVaultKey = v.object({
+  vault_key_epoch:   v.number(),
+  vault_key_wrapped: Ciphered,
+})
+
+/**
+ * A vault's bundle: its scope, `vault_id`, `unlock_epoch`, which vaultKey its ways in wrap
+ * (`vault_key_epoch`, and the one before as `prior_vault_key`), its ways in (`unlocks`, each the
  * vaultKey wrapped under a key one method makes), and when it was made (`registered_at`, epoch
  * milliseconds). Nothing in it opens without a passphrase or passkey. How many ways in, and that no two
  * share an id or label, are the client's rules.
@@ -91,13 +109,16 @@ export const VaultBundle = v.object({
   vaultlabel:       v.string(),
   vault_id:         v.string(),
   unlock_epoch:     v.number(),
+  vault_key_epoch:  v.number(),
+  prior_vault_key:  v.optional(PriorVaultKey),
   unlocks:          v.array(UnlockEnvelope),
   registered_at:    v.number(),
 })
 
 /**
  * One lockbox: its whisper ciphered under its own lockboxKey, that lockboxKey wrapped under the
- * vaultKey, and the public shell -- boxlabel, revision, note, and the epoch-millisecond times it
+ * vaultKey, and the public shell -- boxlabel, revision, which vaultKey (`vault_key_epoch`), note,
+ * and the epoch-millisecond times it
  * was first stored (`registered_at`) and its whisper last changed (`changed_at`). `note` is absent
  * when there is none, never `undefined`.
  */
@@ -105,6 +126,7 @@ export const Lockbox = v.object({
   format:              LockboxFormat,
   boxlabel:            v.string(),
   revision_id:         v.string(),
+  vault_key_epoch:     v.number(),
   lockbox_key_wrapped: Ciphered,
   whisper_ciphered:    Ciphered,
   note:                v.optional(v.string()),
@@ -131,13 +153,15 @@ export const BundleExpectation = v.object({
 
 /**
  * What a lockbox update was written for and read: it lands only while the scope's bundle has this
- * `vault_id`, and the standing lockbox this `revision_id` -- or, for null, there is no lockbox.
+ * `vault_id`, and the standing lockbox this `revision_id` -- or, for null, there is no lockbox. Its
+ * `vault_key_epoch` names the vaultKey the lockbox was sealed under.
  *
- * @example { vault_id: bundle.vault_id, revision_id: null }   // a box that was not there
+ * @example { vault_id: bundle.vault_id, revision_id: null, vault_key_epoch: bundle.vault_key_epoch }   // a box that was not there
  */
 export const LockboxExpectation = v.object({
-  vault_id:    v.string(),
-  revision_id: v.nullable(v.string()),
+  vault_id:        v.string(),
+  revision_id:     v.nullable(v.string()),
+  vault_key_epoch: v.number(),
 })
 
 /**

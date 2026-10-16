@@ -171,8 +171,8 @@ class UrqlVaultDB extends VaultDB {
   }
 
   protected async doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean> {
-    const { vault_id, revision_id } = expected
-    await this.told(UpdateBoxDoc, { scope: scopeOut(scope), lockbox: recordOf(lockbox, LockboxFields), expected: { vault_id, revision_id } })
+    const { vault_id, revision_id, vault_key_epoch } = expected
+    await this.told(UpdateBoxDoc, { scope: scopeOut(scope), lockbox: recordOf(lockbox, LockboxFields), expected: { vault_id, revision_id, vault_key_epoch } })
     return true
   }
 

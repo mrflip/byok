@@ -8,7 +8,7 @@ describe("selectionOf", () => {
   })
 
   it("asks for a listed lockbox without either ciphered field", () => {
-    expect(selectionOf(ListedLockboxFields)).to.eq('format boxlabel revision_id note registered_at changed_at')
+    expect(selectionOf(ListedLockboxFields)).to.eq('format boxlabel revision_id vault_key_epoch note registered_at changed_at')
   })
 })
 

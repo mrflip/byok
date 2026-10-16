@@ -13,4 +13,11 @@ describe("memoryDeviceDB", () => {
     expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
     expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null  // stays gone
   })
+
+  it("treats a mangled mark as no mark, and clears it", async () => {
+    const deviceDB = memoryDeviceDB()
+    await deviceDB.writeMark({ ...TH.markOf('u1'), device_id: '' })
+    expect(await deviceDB.readMark(TH.scopeOf('u1'))).to.be.null
+    expect(await deviceDB.readMark(TH.scopeOf('u1'))).to.be.null  // stays gone
+  })
 })

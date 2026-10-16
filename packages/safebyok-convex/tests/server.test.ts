@@ -23,7 +23,7 @@ const EveryCall: [string, (caller: Caller) => Promise<unknown>][] = [
   ['updateBundle',     (caller) => caller.mutation(api.safebyok.updateBundle, { bundle: TH.bundleOf('u1', { unlock_epoch: 2 }), expected: { vault_id: 'vault-id-u1', unlock_epoch: 1 } })],
   ['getBox',           (caller) => caller.query(api.safebyok.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })],
   ['listBoxSummaries', (caller) => caller.query(api.safebyok.listBoxSummaries, { scope: u1 })],
-  ['updateBox',        (caller) => caller.mutation(api.safebyok.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1' } })],
+  ['updateBox',        (caller) => caller.mutation(api.safebyok.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1', vault_key_epoch: 1 } })],
   ['eraseBox',         (caller) => caller.mutation(api.safebyok.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })],
   ['eraseVault',       (caller) => caller.mutation(api.safebyok.eraseVault, { scope: u1, expected: TH.thisVault })],
   ['watchVault',       (caller) => caller.query(api.safebyok.watchVault, { scope: u1 })],
@@ -59,7 +59,7 @@ describe("SafebyokComponent.api, for the vault's own user", () => {
 
   it("resolves a failed expectation false, not as a refusal", async () => {
     const t = await seeded()
-    const stale = { vault_id: 'vault-id-u1', revision_id: 'rev-a0' }
+    const stale = { vault_id: 'vault-id-u1', revision_id: 'rev-a0', vault_key_epoch: 1 }
     expect(await t.withIdentity({ subject: 'u1' }).mutation(api.safebyok.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: stale })).to.be.false
   })
 })
