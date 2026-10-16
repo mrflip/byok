@@ -245,7 +245,7 @@ export type Vault = {
    * Refuses with kind 'wrong_passphrase' when `proof` opens nothing (or `newPassphrase` is
    * empty), 'wrong_passkey' or 'absent_unlock' for a passkey's answer that does not open the
    * vault, 'bad_label' for an unlocklabel that fails the vault's unlocklabel check (by default
-   * `Label`; a host's own in openVault's `validators`) or is already taken, and
+   * `Label`; a host's own in openVault's `validators`), is empty or is already taken, and
    * 'too_many_unlocks' when the vault already holds {@link MaxUnlocks}: remove one first. Like
    * `changePassphrase()`, it moves the unlockEpoch, so every other device locks; it leaves
    * this one unlocked, and throws kind 'stale_write' when another device changed the vault's ways
@@ -1312,11 +1312,14 @@ const parseUnlockId = (candidate: string): string => {
   return checked.data
 }
 
-/** `opts.unlocklabel`, once it passes the vault's unlocklabel check: kind 'bad_label' otherwise. */
+/**
+ * `opts.unlocklabel`, once it passes the vault's unlocklabel check: kind 'bad_label' otherwise.
+ * Never empty, whatever the check admits, as a stored way in has a label.
+ */
 const parseUnlocklabel = (rules: Names.NameRules, candidate: { unlocklabel: string } | undefined, call: 'addPassphrase' | 'addPasskey'): string => {
   const unlocklabel: unknown = candidate?.unlocklabel
-  if (typeof unlocklabel !== 'string') {
-    throw new VaultError('bad_label', `${call} needs an unlocklabel, what the user calls this way in, as text.`)
+  if (typeof unlocklabel !== 'string' || unlocklabel === '') {
+    throw new VaultError('bad_label', `${call} needs an unlocklabel, what the user calls this way in, as text that is not empty.`)
   }
   return Names.check(rules, 'unlocklabel', unlocklabel)
 }
