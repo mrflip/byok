@@ -117,8 +117,10 @@ export abstract class VaultDB {
    * names and notes of any length, each `store()` measures them: it refuses, with kind
    * `vault_full`, a write that would take the vault past this limit, each lockbox counted at
    * twice `maxWhisperBytes` and the UTF-8 bytes of its scope, boxlabel and note as JSON, with a
-   * little more for its fixed-size fields. A backend that also
-   * enforces a limit of its own sets it above what this admits, and refuses a lockbox write past it with a
+   * little more for its fixed-size fields. That total is a conservative estimate, made before the
+   * lockbox is sealed, so at a limit declared exactly tight it may refuse a write that would just
+   * have fit; `maxRecordBytes`, by contrast, is checked on the real serialized bytes. A backend
+   * that also enforces a limit of its own sets it above what this admits, and refuses a lockbox write past it with a
    * VaultError of kind `vault_full`. A backend that does not hold to the limit it declares, or
    * a vault opened with limits that disagree with its backend's, is undefined behaviour: not a
    * bug we will fix, and not one whose outcome we promise.
