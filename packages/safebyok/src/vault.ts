@@ -1073,7 +1073,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
    */
   const unwrappingKeyFor = (unlockedKey: CryptoKey, standing: VaultBundle, lockbox: Lockbox): CryptoKey => {
     if (lockbox.vault_key_epoch === standing.vault_key_epoch) { return unlockedKey }
-    throw new VaultError('damaged_lockbox', `The lockbox '${lockbox.boxlabel}' is damaged: it says it was sealed under a vaultKey this vault does not hold, so it can't be opened. It was left as it is; erase it, or store its whisper again over it.`)
+    // Quotes no boxlabel, as no refusal here does: a host's boxlabel check may admit any text.
+    throw new VaultError('damaged_lockbox', "That lockbox is damaged: it says it was sealed under a vaultKey this vault does not hold, so it can't be opened. It was left as it is; erase it, or store its whisper again over it.")
   }
 
   /**
