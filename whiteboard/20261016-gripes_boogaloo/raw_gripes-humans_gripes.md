@@ -1,0 +1,197 @@
+# raw gripes: humans_gripes
+
+Read all 23 dated entries in human/ on origin/main (plus README.md), and the one human/ file only on an open PR: 20261016-sprint_gripes_part2_done.md (PR#100, open). PR#81 (comment_width) carries a copy of 20261015-sprint_second_harvest_done.md identical to main, so nothing extra.
+
+- Pick a default sign-out policy: demo keeps the remembered unlock across sign-out (per user); the real package should probably drop it — 20261014-byok_react_demo
+- Decide whether STYLE's `\w`-only label rule (refusing `anthropic-prod` / `anthropic:prod`) is OK for user-typed boxlabels — 20261014-byok_react_demo
+- Keep `guard()` returning null for "dialog dismissed" out of the library surface (collides with legitimately-null whispers) — 20261014-byok_react_demo
+- Bless or rename the new commit prefix `demos:`, which is not in PROCESS.md's table — 20261014-byok_react_demo
+- Write the first changeset (`pnpm changeset`, both packages, minor -> 0.1.0); no branch holds one, #22 carries only an empty one — 20261014-changeset_releases PR#22
+- Close and reopen the Version PR before merging it, since a PR opened by the workflow token runs no workflows so required checks (CI, CodeQL) would wait forever — 20261014-changeset_releases PR#22
+- Decide whether to give the `version` job a GitHub App token as the lasting fix for Version PR checks never starting — 20261014-changeset_releases PR#22
+- Limit the `npm` environment to the `main` branch (today any branch may use it) — 20261014-changeset_releases PR#22
+- Verify at first release that npm's trusted publisher accepts the rewritten workflow (same file, `npm` environment, now on `push`, staging from the `publish` job) — 20261014-changeset_releases PR#22
+- Verify what npm says when asked to stage an already-staged version; scripts/release.ts counts "previously published" as done, other wording makes a re-run report that package failed — 20261014-changeset_releases PR#22
+- Verify whether a version rejected with `npm stage reject` can be staged again (PROCESS.md says its number is burned until tested) — 20261014-changeset_releases PR#22
+- Decide whether to give the `npm` environment required reviewers (none today, 2FA approval is the only gate after merge) — 20261014-changeset_releases PR#22
+- Verify that provenance survives staging a tarball and approving it, and that the dist-tag survives approval — 20261014-changeset_releases PR#22
+- Until first release, every push to main runs the `pack` and `publish` jobs for safebyok-react 0.0.0 (about two minutes of runner time a push) — 20261014-changeset_releases PR#22
+- Approve the three new runtime deps owed a Coach yes: `@noble/hashes`, `@scure/base`, `idb-keyval` (plus dev `fake-indexeddb`) — 20261014-crypto PR#5
+- Decide whether `idb-keyval` should be a regular dependency rather than an optional peer (only the `safebyok/idb` entry loads it) — 20261014-crypto PR#5
+- Review the KeyDeriver seam (`openVault({ keyDeriver })`, label-checked against the stored vault) as the reading of "Security First ... pluggable second" — 20261014-crypto PR#5
+- Review that the in-memory vaultKey is extractable (needed for device-remember re-wrap and passphrase change) while lockboxKeys unwrap non-extractable — 20261014-crypto PR#5
+- Give `Ciphered` (the `{ cipher_iv_b64, ciphertext_b64 }` pair) a VOCABULARY line or a better name — 20261014-crypto PR#5
+- Confirm the judgment that the stub's stored formats being unreadable by v1 does not break the stored-vault contract — 20261014-crypto PR#5
+- Add CAS writes (the format already carries revision_id/epoch) — 20261014-crypto PR#5
+- Build the Convex adapter — 20261014-crypto PR#5
+- Add auto-lock/abort — 20261014-crypto PR#5
+- Add whisper_schema_version — 20261014-crypto PR#5
+- Decide zod dependency vs peer — 20261014-crypto PR#5, 20261014-foundations_round_two, 20261014-foundations_round_three
+- Decide the commit prefix for safebyok-react (`api:` was used; bless or rename) — 20261014-crypto PR#5, 20261014-foundations_round_two, 20261014-foundations_round_three
+- Decide whisper strictness (still open after round three; later narrowed by the no-bare-null ruling) — 20261014-foundations_round_two, 20261014-foundations_round_three
+- Decide the demo's build-first dev loop question (round three read `pnpm demo:react` as the answer) — 20261014-foundations_round_two
+- Decide whether stored-field underbar_case applies at the facades (`key_deriver_label`) or only at the adapter — 20261014-vocabulary
+- Resolve `keyDeriverLabel` vs STYLE's smush rule for `label` (would be `keyderiverlabel`); Coach's spelling used for now — 20261014-vocabulary
+- Decide whether `user_id` / `userId` should be validated as a label (auth ids often contain capitals) given vaults are named by applabel, vaultlabel, userlabel — 20261014-vocabulary
+- Rename `.devcontainer/devcontainer.json` volumes `byok-…` when the container is rebuilt (renaming orphans the ~/.claude and node_modules volumes) — 20261014-rename_to_safebyok
+- Fix `packages/safebyok-convex` failing its own `pnpm justify` (only a package.json, so eslint finds nothing to lint) — 20261014-rename_to_safebyok
+- Commit or discard the reviewer's uncommitted fix in scripts/release.ts and tests/scripts/release.test.ts so thread 3 (changeset_releases) can be filed — 20261014-sprint_pr_releases_paused
+- Fix the two flaky "altered ciphertext" tests (vault.test.ts, crypto.test.ts, ~1/64), same cause, in their own thread — 20261014-sprint_pr_releases_paused
+- Decide whether the `packages` CI and the demo should be required checks (`test-build` now runs the demo's tests) — 20261014-sprint_pr_releases_paused
+- Kill the stray vite dev server from thread 1's removed worktree on port 5199 (pids 281403, 281454) — 20261014-sprint_pr_releases_paused
+- Click through the demo passphrase dialog, never done (no browser in the sandbox) — 20261014-sprint_pr_releases_paused
+- Clean up the preplan branch `20261014-pr_based_releases` (still holds preplan, a `rel` row, TODO edits) — 20261014-sprint_pr_releases_paused
+- Check whether a staged version keeps its `--tag` on approval (npm docs silent; try first prerelease `pnpm bump prerelease --preid beta` landing under `next`) — 20261014-staged_publish PR#11
+- Check that provenance survives staging and approval, by looking at the package page after the first approval — 20261014-staged_publish PR#11
+- Make the trusted publisher's first publish within 2 days of saving its configuration; npm does not validate the configuration on save — 20261014-staged_publish PR#11
+- Test the exact-pinned npm 12.2.0 in the release workflow (Node 24.21.0's npm 11.19.0 is older than the 11.21.0 dist-tag over OIDC needs); Dependabot will not move it — 20261014-staged_publish PR#11
+- Find out whether a rejected stage uses up its version number — 20261014-staged_publish PR#11
+- Rename the `rememberForMs` option and also the `VaultProvider` prop, or its `satisfies Record<keyof OpenVaultOpts, unknown>` fails the build — 20261014-whisper_cap_and_convex PR#7
+- Close the vault_id hole (a box from a destroyed vault landing in its recreation) in the storage thread — 20261014-whisper_cap_and_convex
+- Turn `VaultProvider`'s swallowed openVault rejection into the error-families TODO: misuse thrown loud during render to an error boundary, conditions through the context — 20261014-whisper_cap_and_convex
+- Rebase whichever of the storage rework (adapter-implemented verbs) and #7's `maxRecordBytes` lands second, since both touch src/vault-db.ts — 20261014-whisper_cap_and_convex PR#7
+- Start the "pluggable label validator" (Soonish) from the label report: boxlabel first, vaultlabel next, applabel widened with most care; no stored record or binding touched — 20261015-label_grammar_report PR#35
+- Add a fixed `LabelFloor` schema (non-empty, no `:`, no control chars, fixed ceiling suggested 64 -- Coach's number) used by Lockbox/VaultBundle/VaultScope/DeviceUnlock and VaultDB `checkScope`/`checkBoxlabel` — 20261015-label_grammar_report PR#35
+- Decide the `LabelFloor` ceiling (report suggests 64) — 20261015-label_grammar_report PR#35
+- Add `labelRules?: { applabel?, vaultlabel?, boxlabel? }` to `OpenVaultOpts` as plain-Zod `LabelRule` (input type = output type), parsed once in `openVault` beside `parseMaxWhisperBytes` — 20261015-label_grammar_report PR#35
+- Make `parseLabel(slot, candidate)` run the floor, the slot rule, then check `parsed === candidate`; refusals are `bad_label` and never quote the candidate — 20261015-label_grammar_report PR#35
+- Decide where a label rule applies: applabel/vaultlabel at `openVault`, boxlabel on `store`, while `read`/`use`/`erase` accept anything the floor accepts — 20261015-label_grammar_report PR#35
+- Label validators must never transform a label (lowercase, trim, normalise); validate only, since the binding is rebuilt from the same bytes — 20261015-label_grammar_report PR#35
+- Document for VaultDB adapter authors: "labels hold no colon and no control characters; escape anything else you build keys from" — 20261015-label_grammar_report PR#35
+- A colon in any label would need a ckey migration (`vault:`, `box:`, `unlock:` ckeys; scopePath ambiguity; `isBoxCkeyOf` stops seeing the box) — keep colon refused at the floor — 20261015-label_grammar_report PR#35
+- Forward the label-rule option through `VaultProviderProps`, add it to the `useEffect` deps, and document that rules must be defined at module scope (inline rule objects reopen the vault every render) — 20261015-label_grammar_report PR#35
+- Decide whether the Convex component enforces any label grammar (report recommends no; at most a length ceiling on `v.string()` args in the host's `api()` wrapper) — 20261015-label_grammar_report PR#35
+- Add a `notes/security.md` line when the validator lands: looser boxlabel rules remove the accident-guard against pasted API keys; labels are public; keep a short maximum — 20261015-label_grammar_report PR#35
+- Sort `listBoxes` by code point instead of runtime-locale `localeCompare` (differs from Convex byte order with non-ASCII labels) — 20261015-label_grammar_report PR#35
+- Require NFC normalization in any host rule allowing non-ASCII labels (NFC vs NFD spellings are two labels) — 20261015-label_grammar_report PR#35
+- Docs should warn hosts to widen label grammar only after every client has upgraded (older safebyok reads widened labels as `corrupt_record`) — 20261015-label_grammar_report PR#35
+- Collapse the label grammar message text duplicated in `vault.ts` `parseLabel`, `vault-db.ts` `checkBoxlabel` and `checkScope` into one place — 20261015-label_grammar_report PR#35
+- Update grammar-pinning tests deliberately: `tests/types.test.ts` LabelCases, `vault-db-suite.ts` (`'not:a:label'` stays refused), colon-`user_id` test, ckey tests, Convex `validators.test.ts` — 20261015-label_grammar_report PR#35
+- Write label-validator tests: spaced/capital boxlabel through store/read/list/erase on both adapters, colon refused at floor, transform rule refused, old vault read unchanged, tightened rule still reads/erases old box, DeviceUnlock round trip, provider not reopening on re-render — 20261015-label_grammar_report PR#35
+- Merge the sprint big_feats PRs in order: #71, then #73 and #76, then #78; #74 after #68; #77 after #70; the sprint documents PR last — 20261015-sprint_big_feats_done
+- Expect one-line conflicts in `.changeset/config.json` `fixed` group and the root README package list among #73/#74/#77/#78, and in `.size-limit.json` among #71/#76/#74 — 20261015-sprint_big_feats_done
+- Rename `passphrase_epoch` to `unlock_epoch` in one sweep after the big_feats PRs land — 20261015-sprint_big_feats_done PR#71
+- Rule on: every envelope change takes a proof even when unlocked, and any way in proves any change (one passkey can set a new passphrase and remove the others) — 20261015-sprint_big_feats_done PR#71 PR#76
+- Rule on: a vault always keeps a passphrase (no passwordless vaults for now) — 20261015-sprint_big_feats_done PR#76
+- Rule on: epoch left out of the envelope binding, so a backend can splice a removed envelope back in — 20261015-sprint_big_feats_done PR#71
+- Rule on: passkey HKDF `info` names purpose and credential, not `vault_id` or scope (binding more is a construction change) — 20261015-sprint_big_feats_done PR#76
+- Decide on the ~4.8 s cost of an un-aimed wrong passphrase at the 8-envelope cap — 20261015-sprint_big_feats_done PR#71
+- Approve public surface: `parseKeyDeriverSpec` (PR#74); `PasskeyEnvelope`, `PasskeyProof`, `toB64`/`fromB64` in `safebyok/utils`, two error kinds, four React exports (PR#76) — 20261015-sprint_big_feats_done
+- Approve `safebyok/idb` dropping `idbVaultDB`, `inspectIdb`, `IdbShelf` with no shim (PR#77) — 20261015-sprint_big_feats_done
+- Approve `graphql` as optional runtime peer of `safebyok-graphql/server` (Yoga masks other errors; dev mode would send the driver error to the browser) (PR#78) — 20261015-sprint_big_feats_done
+- Decide about hash-wasm having no published audit and never zeroing working memory (PR#74) — 20261015-sprint_big_feats_done
+- Review two days-old dev deps in PR#78: `graphql-yoga` 5.24.5, `@graphql-tools/schema` 10.1.4 — 20261015-sprint_big_feats_done
+- Approve size budget rise for `openVault` 16.5 to 18.5 kB (PR#71, PR#76) — 20261015-sprint_big_feats_done
+- Decide minor items: taken `unlocklabel` as `bad_label` (PR#71); `addPasskey` checks proof after the passkey exists (PR#76); IndexedDB BroadcastChannel keeping Node/Bun alive and throwing listener crashing it (PR#77); no server-side vault cap on Postgres (PR#73); `listBoxRecords` vs a core change (PR#73, PR#78) — 20261015-sprint_big_feats_done
+- Follow up (TODO.md *Open from big_feats*): epoch rename, real-authenticator pass on PR#76, Postgres vault cap, `listBoxRecords`, swallowed LISTEN/subscription failures, `TH.perUser` into `safebyok/testing`, CLAUDE.md *Layout* — 20261015-sprint_big_feats_done
+- Delete the deregistered worktree directories `/workspace/byok-passkey_unlock` and `/workspace/byok-unlock_envelopes`, and the local `*-prerebase` / `*-prefold` tags — 20261015-sprint_big_feats_done
+- Resume the stopped sprint big_feats agents: thread 1 worker (all work uncommitted, CI and CLAUDE.md edits need explanation), thread 2 reviewer, thread 5 reviewer — 20261015-sprint_big_feats_paused
+- Rule on thread 2's open points: proof-for-every-envelope-change, epoch out of binding, ~4.8 s worst-case unaimed unlock — 20261015-sprint_big_feats_paused
+- Correct the agent's reading if wrong: every VaultDB declares `maxLockboxes` beside `maxRecordBytes` (Infinity in memory, `1_200_300_400_500_600` across a wire), `openVault` refuses a larger one, Postgres enforces in the insert and refuses `vault_full` — 20261015-sprint_big_feats_rulings PR#73
+- Rename `passphrase_epoch` to `unlock_epoch` in the core and all five adapters — 20261015-sprint_big_feats_rulings
+- Try real authenticators (Chrome, Safari, a security key) once PR#76 merges — 20261015-sprint_big_feats_rulings PR#76
+- Decide whether to add `vault_id` and scope to the passkey HKDF `info` (agent recommends adding: standard practice, free before 1.0) — 20261015-sprint_big_feats_rulings PR#76
+- Decide whether to leave the epoch out of the envelope binding and add a `notes/security.md` line that removing an envelope does not revoke it against a backend keeping the old bundle (agent recommends leaving out) — 20261015-sprint_big_feats_rulings PR#71
+- Add a TODO for rotating the vaultKey as the real revocation — 20261015-sprint_big_feats_rulings
+- Decide `listBoxRecords`: (a) per served store, (b) core accepts a summary, or (c) move into the `VaultDB` base class (agent recommends c) — 20261015-sprint_big_feats_rulings PR#73
+- Decide swallowed failures: give each store's `subscribe` a way to report failure to the vault logger (PR#65) as a warning naming the error kind, optionally a `live: false` snapshot field — 20261015-sprint_big_feats_rulings
+- Pin the two days-old dev deps (`graphql-yoga`, `@graphql-tools/schema`) to the newest release at least two weeks old — 20261015-sprint_big_feats_rulings PR#78
+- Settle the final `openVault` size budget in the restack (PR#68 and PR#70 each add to the 16.5 to 18.5 kB rise) — 20261015-sprint_big_feats_rulings
+- Fix in an amendment: `addPasskey` should check the proof before creating the passkey (PR#76) — 20261015-sprint_big_feats_rulings
+- Fix in an amendment: IndexedDB BroadcastChannel should not hold a Node/Bun process open and listener errors should be caught (PR#77) — 20261015-sprint_big_feats_rulings
+- Tell gripe_fixes' orchestrator to put PR#68 and PR#70 into one line so big_feats can stack on top; the pair will likely exceed `openVault`'s size budget — 20261015-sprint_big_feats_rulings
+- Merge the Convex sprint PRs in order: #17 any time, #18, #19 (stacked on #18), #20 (stacked on #19); whichever of #16/#18 merges second rebases across the core move — 20261015-sprint_convex_vaultdb_done
+- Decide `destroy()` on a handle that never saw a bundle resolving without erasing while a vault has since appeared elsewhere ("delete account" reports success) (PR#18) — 20261015-sprint_convex_vaultdb_done
+- Decide after a refused `destroy()` the handle holds the successor's vault_id so an automatic retry erases the reborn vault (PR#18) — 20261015-sprint_convex_vaultdb_done
+- Decide `storage_unavailable` also wrapping adapter programming errors; the `do*` naming; safebyok-react prompting only on `vault_locked` so `stale_write` does not prompt (PR#18) — 20261015-sprint_convex_vaultdb_done
+- Decide a write-side vault-size cap or batched erase before publishing: nothing enforces a cap so `eraseVault` can outgrow one Convex transaction (~150 of the largest lockboxes) (PR#19) — 20261015-sprint_convex_vaultdb_done
+- Decide server-side label grammar in Convex; add CI for safebyok-convex once PR#15 lands; a publishable `dist/`; optional codegen (PR#19) — 20261015-sprint_convex_vaultdb_done
+- Overrule or accept the hand-written `let subscribed` once-guard on unsubscribe in `convexVaultDB` (library-first) (PR#20) — 20261015-sprint_convex_vaultdb_done
+- Fix the leak: a failed `openVault` leaks its subscription (small core follow-up, recommended) (PR#20) — 20261015-sprint_convex_vaultdb_done
+- Make `safebyok` a peer dependency of safebyok-convex before publishing (`instanceof VaultError` across copies) (PR#20) — 20261015-sprint_convex_vaultdb_done
+- Decide whether a vault should lock itself on `not_permitted` (sign-out) (PR#20) — 20261015-sprint_convex_vaultdb_done
+- Decide on the tests' `react` dev dependency for a real `ConvexReactClient`: keep (recommended), move to safebyok-react, or drop (PR#20) — 20261015-sprint_convex_vaultdb_done
+- Accept the first-emit deviation: every `watchVault` result refreshes, the first included (PR#20) — 20261015-sprint_convex_vaultdb_done
+- Resolve the TODO.md two-line conflict with the Coach's uncommitted rewrite, and decide whether to install Convex's own Claude Code plugin (PR#17) — 20261015-sprint_convex_vaultdb_done
+- Fix the flaky `tests/crypto.test.ts` "refuses altered ciphertext..." (1 in 64): overwrite-with-`A` is a no-op when the character is already `A`; flip a byte instead — 20261015-sprint_convex_vaultdb_done
+- Delete the dead worktree directories `/workspace/byok-storage_verbs` and `/workspace/byok-convex_component` — 20261015-sprint_convex_vaultdb_done
+- Build the demo over Convex (left out of gripe_fixes): it needs a deployment and an auth story the Coach must choose — 20261015-sprint_gripe_fixes_done
+- Delete leftover unregistered directories `/workspace/byok-test_helpers` and `/workspace/byok-comment_width` (permission check refused the orchestrator) — 20261015-sprint_gripe_fixes_done
+- Decide whether to reserve a KDF label namespace (PR#68) — 20261015-sprint_gripe_fixes_done PR#68
+- Run the Argon2id schema whenever a hand-built deriver's `algorithm === 'argon2id'`, since a host-labelled deriver gets only the generic salt check and an unrunnable spec fails at `unlock()` with no `kind` (PR#68) — 20261015-sprint_gripe_fixes_done
+- Look at `KeyDeriver` giving every deriver Argon2id's optional fields before 1.0 (PR#68) — 20261015-sprint_gripe_fixes_done
+- Provide built-as-a-whole recommended KDFs and functions to roll your own, incl. RFC 9106's second option (TODO.md entry) — 20261015-sprint_gripe_fixes_done PR#68
+- Decide whether the reframed validation allowance (PR#70) is enough or a stricter accounting is wanted (it would lower capacity) — 20261015-sprint_gripe_fixes_done PR#70
+- Decide `user_id` having no length bound (PR#70); whether `erase()` tolerates a box that reads `corrupt_record`; whether `SafebyokComponent.api` checks `getUserId` at load; `openVault` duck-typing `vaultDB` — 20261015-sprint_gripe_fixes_done PR#70
+- Decide whether `convexVaultDB` keeps Convex's validator error as a refusal's `cause` (dev deployments quote refused arguments; recommended keep) (PR#75) — 20261015-sprint_gripe_fixes_done
+- Fix: a misuse unlock never settles the `withUnlockedVault` promise; a core accessor for the unlock window would end the dialog's duplicated default (PR#67) — 20261015-sprint_gripe_fixes_done
+- Decide CI gate issues (PR#72): Dependabot runtime-dependency PRs fail until a changeset is pushed; the gate keys on PR author; the Version PR skip trusts the `changeset-release/` branch name — 20261015-sprint_gripe_fixes_done
+- Decide whether the `expect*` lint convention is acceptable, and fix `tallyWatches` (now public) letting a double close hide a leaked watch (PR#80) — 20261015-sprint_gripe_fixes_done
+- Decide whether to hold comments trailing code to 100 columns too (needs a code-length rule) (PR#81); the Coach redoes the comment-width rule from its recipe after the line and big_feats merge — 20261015-sprint_gripe_fixes_done PR#81
+- Tell the /sprint orchestrator how sprint docs should ride (REPLY that they go with the first thread changes /sprint's own mechanics) — 20261015-sprint_gripe_fixes_done
+- Reviewer/worker commands were refused by the permission system in two reviewers (thread 6 hand-made edit `ed955db`, thread 7 stopped) — look at the refusals — 20261015-sprint_gripe_fixes_done
+- Decide validation-overrides shape: floor plus policy (recommended), narrow only, or full replacement with the ckey stringifier (PR#85) — 20261015-sprint_gripe_followups_done PR#85
+- Decide whether to re-export `z` from safebyok (recommended not) (PR#85) — 20261015-sprint_gripe_followups_done
+- Decide which fields take a host validator policy: `boxlabel`, `userId`, `note` (recommended), or `applabel`/`vaultlabel` too (PR#85) — 20261015-sprint_gripe_followups_done
+- Decide what a widened label may hold (ASCII letters, digits, `_`, `-`, `.`, 1 to 40, never a colon) and whether the `user_id` floor refuses control characters (PR#85) — 20261015-sprint_gripe_followups_done
+- Decide one home for base schemas (`safebyok/validators`) or export from both entries; and Standard Schema instead of a zod type (recommended later) (PR#85) — 20261015-sprint_gripe_followups_done
+- Decide whether `MaxUserIdChars` is public for a host form's `maxLength` (PR#87) — 20261015-sprint_gripe_followups_done
+- Decide whether `store()` overwrites a box whose record fails validation, as `erase()` now removes one (PR#87) — 20261015-sprint_gripe_followups_done
+- Fix (TODO.md *Soonish*): a lockbox row that breaks the listing locks the vault out, and `erase()` can report `corrupt_record` after its delete landed — 20261015-sprint_gripe_followups_done
+- Choose the dialog time wording: `Intl.RelativeTimeFormat` "Locks again on this device in 7 days" (recommended) or `Intl.DurationFormat` after Node 22 is dropped; a `locale` prop on `VaultProvider` belongs with text overrides in a later thread — 20261015-sprint_gripe_followups_done
+- Delete `/workspace/byok-vault_amendments` (holds one untracked `.DS_Store`); close or delete PR#66 which is open with nothing left to merge — 20261015-sprint_gripe_followups_done
+- Decide whether refused-name text reaching `snapshot.boxes` (a damaged box listed with its name) should be capped/hidden or an opaque erase handle used (recommend keep; documented) (PR#93) — 20261015-sprint_gripe_rulings_done
+- Decide whether `Ckeys` (with `boxlabelOf`, `isUnlock`) stays public as an encoding contract for adapter authors (recommend keep) (PR#92) — 20261015-sprint_gripe_rulings_done
+- Decide whether the old-unlock sweep should also run in `writeUnlock`; today it runs when an open finds the vault or at any lock; costs a `keys()` call per read/erase and is permanent code (PR#92) — 20261015-sprint_gripe_rulings_done
+- Decide `lockbox_too_large` as a new kind or folded into `vault_full` (PR#95) — 20261015-sprint_gripe_rulings_done
+- Decide whether `AnyTextValidators` should refuse lone surrogates (Convex refuses them as `storage_unavailable`) (PR#95) — 20261015-sprint_gripe_rulings_done
+- Close the race when storing over a damaged box with another device's write (needs a revision-guarded erase in the adapter contract); JS adapters on the old `doListBoxes` contract list every box as damaged; erase of a refused name reads twice; host check can run four times per verb (PR#93) — 20261015-sprint_gripe_rulings_done
+- Fix PR#95 minors: a wrapper forgetting the `validators` bag falls back to defaults; provider drops a misspelt `validators` field; JSON escapes can trip `vault_full` early; Convex weighs a record ~11 bytes heavier; validators entry re-exports `Whisper`/`EpochMillis` — 20261015-sprint_gripe_rulings_done
+- Fix an absurd unlock window just under `ForeverMs` reading "in 288,000,000,000 minutes" (PR#91) — 20261015-sprint_gripe_rulings_done
+- Delete leftover directories `/workspace/byok-vault_amendments` and `/workspace/byok-replaceable_validators` — 20261015-sprint_gripe_rulings_done
+- Give a yes to PR#42's two dev dependencies `size-limit` and `@size-limit/preset-small-lib` (size budgets checked in CI) — 20261015-sprint_low_hanging_fruit_done PR#42
+- Rebase and force-push PR#46 (Convex 8,000-lockbox / 7 MiB cap) and PR#50 (error-kind families, stacked on #46): conflicts with main in four Convex test files from #36's `TH` rename — 20261015-sprint_low_hanging_fruit_done
+- Rebase and force-push PR#37 (`mask` in `safebyok/utils`): conflicts in `notes/security.md`, core README, `package.json`, `errors.ts`, `tsdown.config.ts` — 20261015-sprint_low_hanging_fruit_done
+- Decide for `mask` (PR#37): keep `Z.object` (mask ships zod)? accept losing combining-mark vowels? keep stripping right-to-left letters (those scripts vanish from a mask)? — 20261015-sprint_low_hanging_fruit_done PR#37
+- Decide whether the `store()` backoff (1 s base, doubling, three attempts, up to ~6 s) is right, or use `p-retry` / `exponential-backoff` instead of three hand-written lines (PR#45) — 20261015-sprint_low_hanging_fruit_done
+- Decide whether a host may set a lower server-side Convex limit (real row with full note ~1.6 KiB vs 1 KiB fit check); verify production Convex charges reads as `getDocumentSize` and that a rollback deploys beside the leftover tally table; consider erase in scheduled batches (PR#46) — 20261015-sprint_low_hanging_fruit_done
+- Decide whether `unknown_key_deriver` is misuse or a condition (agent leans condition once a second deriver ships), and whether `VaultProvider` hands conditions (`storage_unavailable`, `not_permitted`) to the context rather than the error boundary (PR#50) — 20261015-sprint_low_hanging_fruit_done
+- Decide an upper cap on `forcePassphraseReentryHours` (PR#40) — 20261015-sprint_low_hanging_fruit_done
+- Decide whether to clamp `expires_at` on read, export `LockboxNote`, and repair vaults bricked by an over-long note (PR#43) — 20261015-sprint_low_hanging_fruit_done
+- Decide whether a retry finding the device relocked yields `vault_locked` or `stale_write`, and whether "erased elsewhere" gets a distinct kind (PR#44) — 20261015-sprint_low_hanging_fruit_done
+- Fix the screen-lock recipe: `lock()` also erases the seven-day remembered unlock; and a race in `unlock()` against `lock()` untouched by any thread (PR#32, PR#33) — 20261015-sprint_low_hanging_fruit_done
+- Note thread 7's file still says "no backoff"; PR#45's thread file records the reversal; clean local tag `20261015-convex_server_cap-prerebase` — 20261015-sprint_low_hanging_fruit_done
+- Take the first release: write the first changeset (`pnpm changeset`, `safebyok` brings `safebyok-react` through the `fixed` group, minor, 0.0.0 -> 0.1.0) — 20261015-sprint_pr_releases_done
+- Get the App token for the Version PR so required checks start; until then close and reopen the Version PR before merging (PROCESS.md *Releases*) — 20261015-sprint_pr_releases_done
+- Check whether `safebyok-react` (never on npm) needs the package to exist before a trusted publisher works; if first staging fails on OIDC, publish a placeholder by hand as `safebyok@0.0.0` was — 20261015-sprint_pr_releases_done
+- Optionally restrict the `npm` environment to `main` and add required reviewers — 20261015-sprint_pr_releases_done
+- Verify at first release: trusted publisher, `npm stage list` output, restaging after a reject, required reviewers on the npm environment — 20261015-sprint_pr_releases_done
+- Address PR#22 reviewer minors: no-op `pack`/`publish` runs while a version is unreleased, a rejected stage is never restaged, "already staged" known only by npm's wording, a failed tag push not retried — 20261015-sprint_pr_releases_done PR#22
+- Log in TODO.md (branch `20261015-pr_releases_b`, unpushed): `vault.test.ts` altered-ciphertext flake, dependabot's `directory: /` after the package move, click-through of the demo passphrase dialog — 20261015-sprint_pr_releases_done
+- Close PR#38 (everything already in main through #36, shipped in 0.2.0); say whether PR#49 (draft-PR guidance) goes on top of the stack — 20261015-sprint_second_harvest_done
+- Reword CLAUDE.md's console line and the core `eslint.config.mjs` comment to "writes nothing to the console but through the fallback logger" (PR#65) — 20261015-sprint_second_harvest_done
+- Confirm the `no-console` suppressions the Coach approved only by relay: PR#64's line (PR#65 removes it) and PR#65's file-wide one in `console-logger.ts` — 20261015-sprint_second_harvest_done
+- Consider a `logger` option on `convexVaultDB` because the Convex adapter's failing watch never reaches the logger — 20261015-sprint_second_harvest_done
+- Answer PR#60's four calls: snapshot flips at once; unlock during grace beats the timer; grace capped at 60 s; `close()` keeps the record and throws `vault_closed` — 20261015-sprint_second_harvest_done PR#60
+- Decide whether a lost `unlock()` rejects with `vault_locked` or `stale_write` (PR#55) — 20261015-sprint_second_harvest_done
+- Review release levels: several changesets are minor where patch might do (pre-1.0, minor is safe) — 20261015-sprint_second_harvest_done
+- Decide whether to turn off lint rule `unicorn/prefer-iterator-to-array` while the lib target is ES2023 — 20261015-sprint_second_harvest_done
+- Fix PR#64 minor: a clock that goes bad partway through `store()` lets the write land, then throws — 20261015-sprint_second_harvest_done PR#64
+- Fix PR#65 minors: broken storage watch warns on every change event with no rate limit; failed catch-up after a stale write logged as "a background refresh"; `log` has no call site; an inline JSX logger reopens the vault each render — 20261015-sprint_second_harvest_done PR#65
+- Consider `/* @__PURE__ */` annotations to save `idbDeviceDB` about 0.5 kB (PR#62) — 20261015-sprint_second_harvest_done
+- Fix PR#52 minors: build lays modules under `dist/src/`; published helpers in `tests/` get test lint rules not `src/`'s; `makeGate`'s `prefer-promise-with-resolvers` disable now ships — 20261015-sprint_second_harvest_done PR#52
+- Fix PR#58 minors: a backward clock step erases a fresh remembered unlock; tabs opening with different settings erase each other's records — 20261015-sprint_second_harvest_done
+- Wrap deviceDB failures at open as `storage_unavailable`; move `tallyWatches` into `safebyok/testing` if PR#52 did not — 20261015-sprint_second_harvest_done
+- Delete `/workspace/byok-convex_server_cap` (unregistered worktree, branch merged) — 20261015-sprint_second_harvest_done
+- Keep the eslint configs in step mechanically: parked as a generator script in TODO.md *RAGEBAIT* if drift ever causes an uncaught bug — 20261015-strict_configs
+- Decide whether size checks should be done once after serialization (agent: two checks answering different questions, keep both) — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Fix: erasing a box under a refused name reads it twice — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Document `bad_label` on `read()` and `use()` — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Decide `withUnlockedVault` (PR#98) resolving null on a misuse rather than rejecting, as the Coach approved — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Add a validator slot for `unlocklabel` — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Fix closing a vault twice unsubscribing twice — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Decide whether PR#104's forgotten validators bag is harmless as built or should be a required argument (nine public signatures) — 20261016-sprint_gripes_part2_done PR#104
+- Note boxes already stored with a control character or lone surrogate now list as damaged, and test `\p{}` on Hermes (PR#104) — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Note `expectRefusal` is stricter for a lookalike `VaultError` from a second copy of the core, and `stateOnOpen` still leaves its vault open (PR#103) — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Review the three unreviewed post-review changes: PR#102's component check and trimmed message, PR#103's per-method `beforeNextCall` queue (76 lines), PR#104's regex rewrite — 20261016-sprint_gripes_part2_done PR#100 (open)
+- Run the delete-directories command in its Open Matters row; restack whichever of the gripes_part2 line and the matters sprint (PR#96-PR#99) lands second, since they share `vault-provider.tsx`, test helpers and `TODO.md` — 20261016-sprint_gripes_part2_done PR#100 (open)

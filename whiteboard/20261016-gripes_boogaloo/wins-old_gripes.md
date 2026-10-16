@@ -1,0 +1,143 @@
+# wins: old_gripes
+
+Read all 1275 lines of `whiteboard/20261015-gripes/20261015-gripes.md` (the original gripes list, Open and Addressed sections, with the Coach's marks and the gripe_fixes sprint notes). Refs are "Section > subsection: short title".
+
+- safebyok 0.1.0 shipped on 2026-10-15 (PR#39); gripes framed "before 0.1.0" that missed it are marked deadline passed — header; Open > Stored-vault contract
+- (Coach) Ruled no back-compat before 1.0.0: no shims, migrations or reading of older stored shapes (CLAUDE.md:67-69), so reservations no longer need a reader (PR#59) — Open > Stored-vault contract: reservations
+- Epoch-ms time fields, `changed_at` and `ask_passphrase_at` are built on unfiled local branch `20261015-clean_times` (not on main) — Open > Stored-vault contract: reservations
+- Publish job installs an npm tarball checked against its recorded sha512, offline (open PR#72, gripe_fixes sprint) — Open > Release and npm: unpinned npm
+- A Dependabot PR that moves a public package's runtime dependencies needs a changeset; the Version PR's skip stays by construction (open PR#72) — Open > Release and npm: changeset check
+- Component holds every Convex vault to 8,000 lockboxes and 7 MiB, refusing growth as `vault_full` (tallies.ts, vaults.ts:132; PR#46); other server-side row checks remain structural — Open > Stored-vault contract: component row checks
+- `keyDeriverShape` bounds `salt_bytes` to 1..65536 (open PR#68) — Open > Crypto: salt_bytes bound
+- `argon2idDeriver(spec)` takes a full option bundle, refusing the unrunnable (salt under 8 or over 65536 bytes, key not 32 bytes), allowing the weak; deriver with the supplied label must carry its parameters; one supplied configuration (open PR#68) — Open > Crypto: enforced KDF
+- Remembered unlock whose deadline lies past this open's `forcePassphraseReentryHours` is erased on open (vault.ts:510, PR#58); deadline still not bound into encryption — Open > Crypto: expires_at unbound
+- `lockSoon()` lets work already past its start finish for the grace, documented (vault.ts:117, notes/security.md:300; PR#60); no handle revocation — Open > Crypto: lock does not revoke
+- Hosts get a sign-out recipe, `lockSoon()` then close (README.md:130; PR#60) — Open > Locking: lock on not_permitted; sign-out
+- `lockSoon()` and the README screen-lock recipe are built (vault.ts:117; PR#60); natural-expiry timer, React `lockWhenHidden` and the abort signal remain unbuilt — Open > Locking: auto-lock
+- README states that locking ends the remembered unlock (README.md:94) and the hidden-tab recipe moved to `lockSoon()` (PR#60) — Open > Locking: screen-lock erases remembered unlock
+- Passphrase dialog states the vault's real window ("until you lock it" for `Infinity`) (open PR#67) — Open > Locking: dialog says seven days
+- Local `lock()` landing during `unlock()` now wins; `lockSoon()` gets the same rule (PR#55, PR#60) — Addressed > Locking: lock during unlock
+- Errors table added to README; its `stale_write` row tells a host to read again and repeat only "if it still applies" (README.md:176; PR#54) — Open > destroy: retry brings secret back
+- Coach's answers to PR#34 kept `maxVaultBytes` abstract and asked for `vault_full` listed with the core's kinds (PR#54, errors.ts:28-43) — Open > Vault size: cap decisions
+- (Coach) Ruled `maxVaultBytes` stays abstract with no default (PR#34 comment) — Addressed > Vault size: client cap
+- 1 KiB per-lockbox allowance reframed as 2 KiB per lockbox plus twice the whisper, admitting the same configurations, with a test of the heaviest row, `user_id` up to 512 bytes (open PR#70) — Open > Vault size: 1 KiB allowance
+- Convex component hold per-vault tally in the same transaction as each write; lockbox cap now enforced server-side (tallies.ts:33; PR#46); host `maxLockboxes` stays soft — Open > Concurrency: soft lockbox cap
+- Every error kind has a family, misuse or condition (errors.ts:84; PR#54); an open's conditions reach the app as `openError` with Retry (vault-provider.tsx:120; PR#61) — Open > API: misuse vs conditions
+- `PassphraseModal` closes as if dismissed when its unlock loses to a `lock()` (passphrase-modal.tsx:26; PR#55) — Open > API: PassphraseModal rethrow
+- A condition now shows in the dialog; misuse or a non-VaultError reaches the error boundary (open PR#67) — Open > API: PassphraseModal rethrow
+- (Coach) Ruled no cap on `forcePassphraseReentryHours` ("allow unlimited"); built in PR#53, stored deadline bounded by PR#57 — Open > API: #40 calls
+- `LockboxNote` exported for host forms (index.ts:11; PR#58); PR#59 set the no-back-compat rule the minor-or-patch question turned on — Open > API: #43 calls
+- Write verbs check record and expectation, `updateBundle` refuses a changed `vault_id`; `listBoxes` stays projected on purpose (open PR#70) — Open > API: VaultDB validation
+- `dbName` checked and the remembered unlock compares its scope; `clock` was already checked by PR#64 (open PR#70, validation-survey.md) — Open > API: smaller validation gaps
+- `vaultMeetsExpectation` is now typed on plain `{ vault_id }` and the lockbox check is its own function (vault-db.ts:340,346) — Open > API: naming taste
+- (Coach) Ruled a pluggable label validator ships with a stringifier that handles the colon, `:`-join staying default (TODO.md:319, PR#51) — Open > Labels: grammar hazards; host grammar decisions
+- `Label` doc block says `user_id` is deliberately not a Label (types.ts:62) and VOCABULARY no longer names `userlabel` — Open > Labels: user_id naming
+- (Coach) Ruled `user_id` gets a replaceable validation (TODO.md:333, PR#51); not yet built — Open > Labels: user_id naming
+- (Coach) Reversed the RTL strip and merged PR#37 with the later commits; no review of second NFC pass, U+FFFC strip, caps or property test recorded — Open > mask: unreviewed commits
+- PR#37 settled most small mask points: Coach kept `Z.object`; `maskAll` struck; invisibles covered by `\p{C}`/`\p{M}`/Default_Ignorable strip; Hangul double-compose, emoji-cut note, `errors.ts` wording landed — Open > mask: smaller points
+- Missing `mask` size-limit entry was added (PR#37, .size-limit.json:8) — Open > Dependencies: size caveats
+- `safebyok/testing` entry and optional vitest peer landed in PR#36, weak deriver recorded in `notes/security.md:276`; PR#52 re-cuts the entry — Open > Dependencies: weak testing deriver
+- Core moves to `zod/mini` and an unbundled build: bare `stableJsonify` 25.3 to 2.3 kB, `openVault` 30.2 to 15.1 kB brotlied, budget lowered (open PR#62) — Open > Dependencies: zod bundle
+- CI coverage, Node 22 and 26, and the release workflow (version, pack, stage) have run green on GitHub; PR#47 staged 0.2.0 — Open > Testing gaps: never run
+- Demo components tested (22% to 97%), `createAuth` takes a clock, stronger "never quotes" sweep, `tweakB64('')` throws, one `expectRefusal` (open PR#75, PR#67 for modal bullet) — Open > Testing gaps: weak tests
+- `safebyok/testing` ended relative-path test-helper imports and the `TH.testDeriver` hazard (PR#36, helpers.ts:5); `TH.omitting` replaces the casts (open PR#75); each package builds once per root run (open PR#72) — Open > Testing gaps: plumbing hazards
+- Test helpers extracted: call sites -464 lines; new helpers in `safebyok/testing` and each package's own test helpers (open PR#80, PR#75) — Open > Testing gaps: test helpers
+- Dependabot checked: nothing to change, `directory: /` already covers `packages/*` and `demos/*`; a comment says why (open PR#72) — Open > CI: Dependabot directory
+- `justify` about 35 s down to 20 s warm, each package built once per run (open PR#72) — Open > CI: justify slow
+- 116 comment lines rewrapped and a 100-column comment rule in every lint config; comments trailing code not caught (open PR#81, merge last) — Open > CI: comment width
+- Root `test:coverage` has coverage, `BundleCases` tables realigned, `wakeupAtNextTick` `@example` corrected (open PR#72) — Open > CI: #36 small items
+- `notes/security.md` refresh in progress (open PR#69) — Open > Docs: notes/security.md
+- VOCABULARY.md gets a *Names, records and times* section; the `whisperSchemaVersion` row removed (open PR#69) — Open > Docs: VOCABULARY
+- Both "pretending" wordings in vault.ts reworded (open PR#69) — Open > Docs: pretending wording
+- Failed open shows in place in the demo with a Retry instead of throwing (VaultDashboard.tsx; PR#61) — Open > Docs: demo copy
+- Convex demo left out of the gripe_fixes sprint: needs a deployment and an auth story for `getUserId`, both the Coach's to choose — Open > Convex: Convex demo
+- Main checkout restacked on main; local `20261015-roadmap` and `20261014-pr_based_releases` branches gone — Open > Process: dead worktrees
+- TODO.md's race line is fixed by PR#55 and the recipe by PR#60, so the two uncommitted lines can be dropped — Open > Process: TODO.md lines
+- (Coach) Parked the eslint-config generator in RAGEBAIT until drift causes an uncaught bug (TODO.md:391) — Open > Deferred: eslint configs
+- (Coach) Marked superseded-bundle-in-backups NOTYET and eslint config sync ragebait, moved to Deferred by design — header; Open > Deferred
+- Plaintext stub vault no longer a risk: real cryptography landed (PR#5) — Addressed > Crypto: stub vault
+- vaultKey made non-extractable at the Coach's request (PR#6) — Addressed > Crypto: extractable vaultKey
+- Runtime dependencies "all resolved with the Coach in chat" (PR#5); ruling 3 replaced hand-rolled `stableJsonify` with `safe-stable-stringify` — Addressed > Crypto: runtime deps
+- KeyDeriver seam blessed in chat (PR#5), warned in the doc block, made required (PR#40) — Addressed > Crypto: KeyDeriver seam
+- `notes/security.md` Argon2id statement corrected by the reviewer's commits (PR#40) — Addressed > Crypto: security.md Argon2id
+- Relic slop survey issues fixed by the rewrite (PR#5) — Addressed > Crypto: relic survey
+- Stub formats: nothing had been published, PR#12 kept no reader — Addressed > Crypto: stub formats
+- `whisper_schema_version` ruled public metadata, an integer — Addressed > Crypto: schema version
+- Base64 overhead accepted as noise at API-key sizes (the author's call) — Addressed > Crypto: base64 overhead
+- (Coach) NOTED browser-direct Anthropic calls: user spend caps are the real backstop — Addressed > Crypto: browser-direct calls
+- `forcePassphraseReentryHours` upper cap made deliberate (Infinity or huge means until `lock()`), deadline clamped to `FarFuture` (vault.ts:936; PR#53); stored `expires_at` bounded 1981-2255 (types.ts:179; PR#57) — Addressed > Locking: no upper cap
+- (Coach) NOTED client-side unlock window politeness (two devices may differ) — Addressed > Locking: window client-side
+- `vault_id` expectations on writes and both erases close the hole (PR#18); (Coach) 2026-10-15 ruling overturned erase-wins — Addressed > Stored format: vault_id hole
+- Over-long note rejected on new writes and DeviceDB output validated (PR#43); already-bricked vaults stay open — Addressed > Stored format: long note
+- `versionedUpdate` and the storage verbs provide compare-and-swap (PR#18) — Addressed > Stored format: compare-and-swap
+- Caught `exactOptionalPropertyTypes` vs note-less rows, with a test holding the schema to note-less rows — Addressed > Stored format: exactOptionalPropertyTypes
+- Zod-strips vs Convex-refuses unknown field tested and recorded — Addressed > Stored format: zod vs Convex
+- `store()` retries up to three attempts (PR#44); doc-block contradiction and "unreachable recount" note fixed before filing — Addressed > Stored format: store retry
+- `openVault` that fails closes its storage watch and rejects with the original error even if unsubscribe throws (vault.ts:787; PR#61), with a Convex test — Addressed > Stored format: leaked subscription
+- (Coach) Ruled the hand-written backoff in `store()` stays; `p-retry` named in TODO.md:392 for when it grows; 3 attempts, 1 s base, six-second worst case documented (vault.ts:163; PR#45, 5f9a11a) — Addressed > Stored format: store backoff
+- `not_permitted` and `storage_unavailable` kinds added — Addressed > Stored format: storage-trouble kinds
+- Storage-verbs surface changes merged under the Coach's ruling on core changes (PR#18, PR#19) — Addressed > Stored format: VaultDB surface change
+- (Coach) NOTED bricked-vault and demo-data orphaning caveats — Addressed > Stored format: bricked vault; demo data
+- Client-side size cap built: `maxVaultBytes`, `vault_full` (PR#34) — Addressed > Vault size: client cap
+- Server-side cap: Convex vaults held to 8,000 lockboxes and 7 MiB less 1 KiB by a per-vault tally in the write transaction, refusing as `vault_full` (tallies.ts:33, vaults.ts:131; PR#46) — Addressed > Vault size: server cap
+- Whisper size cap added (PR#7) — Addressed > Vault size: whisper cap
+- `ensureLimitsFit` and zero-fit message fixed (PR#34) — Addressed > Vault size: ensureLimitsFit
+- VaultProvider throws an `openVault` rejection to the error boundary; README documents a keyed boundary for recovery (PR#32) — Addressed > API: provider rejection
+- Breaking renames (`keyDeriver` required, `forcePassphraseReentryHours`, `askPassphraseAt`) landed before 0.1.0 (PR#40, a594be9) — Addressed > API: breaking renames
+- `withUnlockedVault`, a refused bare `null` and a `Symbol.for` sentinel resolve the null collisions — Addressed > API: null collisions
+- Sign-out locks the vault — Addressed > API: sign-out
+- zod is a peer dependency (`^4.0.0`) (PR#5) — Addressed > API: zod peer
+- `Ciphered` blessed; VOCABULARY.md defines it — Addressed > API: Ciphered
+- Relic API dead ends superseded by the built surface; dropped features built later or dissolved — Addressed > API: relic dead ends; dropped features
+- Error kinds, `vault_full` included, moved into the core README (README.md:174) and TODO's *Error families* dropped (PR#54, PR#61); conflict-handler item corrected to thread 7 (PR#51, TODO.md:344) — Addressed > API: vault_full listing
+- (Coach) Ruled `mask` keeps right-to-left letters and numbers, stripping only direction marks (mask.ts:48; PR#37) — Addressed > mask: RTL
+- (Coach) Accepted the `\p{M}` loss, documented in `mask`'s doc block, core README (README.md:19) and VOCABULARY; `maskCarefully` variant parked in TODO.md:373 (PR#37) — Addressed > mask: \p{M}
+- `head`, `tail`, `minStars` capped at 1000 so none raise a bare `RangeError`; too-small `maxLen` gives that many stars (mask.ts:23,79; PR#37) — Addressed > mask: RangeError
+- (Coach) Authorized the force-push; PR#37 rebased and merged — Addressed > mask: force-push
+- `safebyok` made a peer of `safebyok-convex` (388e8fd, PR#41) — Addressed > Convex packaging: peer
+- Root scripts reach every package so `safebyok-convex` is in CI (PR#16) — Addressed > Convex packaging: CI
+- Component has publishable `dist/` with `files: [dist, src]`, released as 0.1.0 (PR#41) — Addressed > Convex packaging: publishable dist
+- `safebyok-convex` has its own configs and source; the unmatched-pattern flag is gone — Addressed > Convex packaging: justify stopgap
+- Codegen templates run offline, Convex skill filed (PR#17), removal at filing, `.d.ts` files read for the client — Addressed > Convex packaging: codegen/skills
+- Redundant first-result refresh accepted in the design (first-emit question stays Open) — Addressed > Convex packaging: first refresh
+- Demo covered by the two required jobs via `pnpm -r` (ci.yml:17-20, pnpm-workspace.yaml:4); ruleset requires test-build, lint-typecheck and both CodeQL analyses; `node-compat` optional on purpose — Addressed > Convex packaging: required checks
+- (Coach) NOTED `react` dev dependency of the Convex tests — Addressed > Convex packaging: react dev dep
+- First changeset written (PR#28), released as 0.1.0 via PR#39 — Addressed > Release: first changeset
+- GitHub App token (PR#27) makes the Version PR start checks; Version PR PR#39 merged and release succeeded — Addressed > Release: Version PR checks
+- `safebyok@0.1.0` and `safebyok-convex@0.1.0` published by the release run; `safebyok@0.1.0` carries SLSA provenance — Addressed > Release: trusted publisher
+- Third-party Actions pinned (PR#2) — Addressed > Release: unpinned Actions
+- Release script refuses `workspace:` tarballs; lockstep `workspace:^` rewritten at pack; `justify` runs before pack; a test checks the list (PR#15) — Addressed > Release: workspace ranges
+- (Coach) Turned on Actions PR creation and widened the tag ruleset; wider token power deliberate — Addressed > Release: permissions
+- Reviewer's release-script fix landed via PR#22 — Addressed > Release: reviewer fix
+- Each public package's `prepublishOnly` runs `scripts/require-pnpm.ts` (package.json:43) and `scripts/release.ts:384` refuses a tarball carrying `@safebyok/source` (via PR#36) — Addressed > Release: hand-run publish
+- Select-mode job stops no-op runs, and a test covers the tag case — Addressed > Release: no-op runs
+- Release script rewritten in TypeScript, stages only, per-package tags from the action; drift recorded — Addressed > Release: design drift
+- Changeset gate, SHA action pins, fixed-group check and bootstrap empty changeset built and verified — Addressed > Release: preplan items
+- (Coach) OK'd changeset naming (PR#30); file renamed before filing (PR#31) — Addressed > Release: changeset naming
+- Stub published only after cryptography (PR#5 before PR#10) — Addressed > Release: stub publish
+- Prerelease mode documented in `PROCESS.md:131-133`; `distTag` in `scripts/release.ts:181` picks the tag (PR#22) — Addressed > Release: prerelease mode
+- (Coach) Marked `safebyok-react` not-on-npm, dist-tag permission and `privatePackages` items fixed; (Coach) marked npm environment and rejected-stage items NOTED ("still a one-person project") — Addressed > Release: last items
+- Flaky `crypto.test.ts` fixed (PR#25) — Addressed > Tooling: flaky crypto.test.ts
+- `--no-bail` both-runs on main fixes the `&&` hiding (argument bug still Open) — Addressed > Tooling: && chaining
+- `**/dist/**` ignored at the root — Addressed > Tooling: stale dist lint
+- Core moved under `packages/` (PR#16); `--stream` with `workspaceConcurrency: 1` — Addressed > Tooling: root build
+- (Coach) Said yes to both size-limit dev dependencies and merged PR#42 — Addressed > Tooling: size-limit deps
+- Flaky tamper test replaced with `TH.tweakB64` (vault.test.ts:984, test-helpers.ts:27; PR#36) — Addressed > Tooling: flaky vault.test.ts
+- (Coach) Ruled tests stay on `dist/`, while tsc and the editor read source via `@safebyok/source` (tsconfig.base.json:14; PR#29) — Addressed > Tooling: tests on dist
+- Demo coverage `include` set (vite.config.ts:13) — Addressed > Tooling: demo coverage include
+- Assorted plumbing items fixed (PR#15, PR#16, PR#22) — Addressed > Tooling: assorted plumbing
+- `safebyok-react` built like the core (PR#15) — Addressed > Tooling: react publishable
+- Commit prefixes added as PROCESS.md rows; reworded before push — Addressed > Tooling: commit prefixes
+- `eslint-disable`s reported as CLAUDE.md asks; #38's explicitly approved — Addressed > Tooling: eslint-disable report
+- `pnpm demo:react` serves the demo dev loop (the author's reading, not confirmed by the Coach) — Addressed > Tooling: demo dev loop
+- Concurrent branches merged, resolving merge-order notes — Addressed > Tooling: merge order
+- (Coach) VERIFY FIXED verified 2026-10-15 at PR#66's tip: under dash `both --fix` hands `--fix` to every package; under `bash --posix` scripts exit 1 on root failure and 0 on pass; PR#36 forwards arguments (package.json:18) — Addressed > Tooling: root exit arguments
+- Docs sweep landed in PR#33 (recipe's own effect stays Open) — Addressed > Docs: docs sweep
+- Later PRs carry `whiteboard/` (PR#26) — Addressed > Docs: whiteboard in PRs
+- /sprint skill mirrors whiteboard files in `.claude/skills/sprint/SKILL.md` — Addressed > Docs: sprint skill mirror
+- (Coach) REPLIED: no, `/closeout` will be invoked (not in PROCESS.md beside `/sprint`) — Addressed > Docs: process docs
+- (Coach) REPLIED: whether a sprint-skill change gets a separate PR is up to the orchestrator — Addressed > Docs: process docs
+- (Coach) REPLIED: sprint docs (plan, preplan, anything else in `whiteboard/YYYYMMDD-<sprint>`) should be swept into the first thread — Addressed > Docs: process docs
+- No vite dev server is running in the container (checked 2026-10-15) — Addressed > Process: stray vite server
+- PR#36 merged with the testing entry already on main (0568faf); PR#38 still open, equivalent commits, blocks nothing — Addressed > Process: #36 on #38
+- (Coach) NOTED sprint doc mirroring skipped while Docs tools were disconnected — Addressed > Process: doc mirroring skipped

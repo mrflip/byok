@@ -1,0 +1,145 @@
+# raw gripes: prs_60_80
+
+Read the body, conversation comments and reviews of closed PRs #60-#80 of mrflip/safebyok (no inline review comments exist on any of them; #66 closed unmerged).
+
+- (Coach) Await Coach's final word on four lockSoon calls: snapshot flips to `locked` at call time not timer fire; unlock in grace beats timer; grace capped at 60 s; close() keeps stored remembered unlock — PR#60 body
+- Settle natural expiry's own timer (`askPassphraseAt` + 60 s, via `shutAfter()`): setTimeout maxes at 24.8 days, and `ensureUnlocked()` drops an expired key itself (TODO roadmap 5) — PR#60 body
+- Decide whether adding `lockSoon` to the `Vault` interface (breaks hosts' own `Vault` fakes) deserves more than a patch changeset — PR#60 body
+- Thread 6 should do the clock validation (`FarPast`..`FarFuture`) and the Infinity-to-`FarFuture` coercion; `lockSoon()` should follow the clock validation — PR#60 body
+- Natural expiry's `ensureUnlocked()` can still take the key from a store in hand (already in TODO roadmap 5) — PR#60 comment by mrflip
+- `lockSoon()` on an already-expired held key gives it a full grace — PR#60 comment by mrflip
+- `shutAfter`'s `dueAt` uses the injected clock while the timer runs on real time (tests only) — PR#60 comment by mrflip
+- The README screen-lock recipe's `.catch` also swallows a failed `eraseUnlock` (as the old `lock()` recipe did) — PR#60 comment by mrflip
+- A `close()` during an unlock's record write also loses an older remembered record that write overwrote — PR#60 comment by mrflip
+- Decide whether `openVault` should wrap a `deviceDB.readUnlock` throw at open as `storage_unavailable` so it reaches `openError` instead of the error boundary — PR#61 body
+- Move the duplicated `tallyWatches` helper (core `vault.test.ts` and React provider tests) into `safebyok/testing` — PR#61 body
+- Turn off `unicorn/prefer-iterator-to-array` in the convex package while tsconfig lib stops at ES2023 (it conflicts with `prefer-spread`; worked around with `Array.from(iterable, mapper).flat()`) — PR#61 body
+- `idbDeviceDB` still carries every schema in `types.js` (~0.5 kB); `/* @__PURE__ */` annotations could shave it, left alone as not worth the noise — PR#62 body
+- Decide whether the Version PR should use `pr-draft: create` instead of `always` (one-word change) so a PR already marked ready isn't re-drafted — PR#63 body
+- Open Version PR #56 is not a draft now; it goes to draft only when main next rebuilds it (this merge) — PR#63 body
+- Merge PR#63 with a merge commit, not a squash — PR#63 body
+- A clock that goes out of bounds mid-`store()`/`erase()`/`changePassphrase()` lets the write land, then throws `bad_option` from the closing refresh — PR#64 body
+- The new stored times are not in the cipherAdditionalData, so a backend can alter them undetected; binding the whole header is roadmap 3's next step — PR#64 body
+- `changed_at` standing still tells the backend the same whisper was stored again (one bit; recorded in `notes/security.md`) — PR#64 body
+- Replace the one `eslint-disable-next-line no-console` in `vault.ts` (`lockSoon()` on a bad clock) with thread 7's pluggable logger — PR#64 body
+- On a bad clock, `ensureUnlocked()` throws without dropping the vaultKey; failing closed would be stronger — PR#64 comment by mrflip
+- A host `now()` that throws escapes with no `kind` (as before this PR) — PR#64 comment by mrflip
+- Fractional times read back from storage pass unfloored into the snapshot — PR#64 comment by mrflip
+- The demo's "saved" label shows `changed_at`, which stands still on an identical re-save — PR#64 comment by mrflip
+- (Coach) Update CLAUDE.md's "src/ writes nothing to the console" line (and the core eslint.config.mjs comment) to name the fallback logger `src/console-logger.ts`; agents leave CLAUDE.md to the Coach — PR#65 body
+- (Coach) Confirm the file-wide `eslint-disable no-console` in `src/console-logger.ts` (approval was only relayed) — PR#65 body
+- Convex adapter's failing watch (`ignoreTrouble`) never reaches the logger; needs a logger on `convexVaultDB` or a trouble callback on `VaultDB.subscribe` (interface change) — PR#65 body
+- A watch against broken storage warns once per change event with no rate limit — PR#65 body
+- A failed catch-up after a stale write is logged as "a background refresh" beside the thrown `stale_write` — PR#65 body
+- `VaultLogger.log` is required though nothing calls it yet (the agreed signature) — PR#65 body
+- A `logger` defined inline in JSX reopens the vault on each render (provider's recorded design; README warns) — PR#65 comment by mrflip
+- Close PR #38 (already in main) — listed among the Coach's open questions in the closing note — PR#66 body
+- Coach to decide the logger suppressions, a Convex logger follow-up, #60's four calls, #55's error kind, release levels, and minor findings each PR left (gathered in `human/20261015-sprint_second_harvest_done.md`) — PR#66 body
+- Merge #63 with a merge commit (not squash) or the stack goes purple — PR#66 body
+- A misuse or non-VaultError unlock failure never settles the `withUnlockedVault` promise (dialog throws and unmounts, caller's `finally` never runs); settling it would change `onDone`'s contract — PR#67 body
+- Sub-minute reentry windows read "1 minute" and 25.5 h reads "1530 minutes" in the React passphrase dialog (chosen wording, noted) — PR#67 body
+- `PassphraseModal`'s `reentryHours` is hand-checked, with its 168 default and recomputed `ForeverMs` able to drift from the core; a core accessor for the window on `Vault` would end it — PR#67 body
+- The modal test's local helpers should be considered by the test-helpers thread (a `tests/test-helpers.ts`, thread 7's ground) — PR#67 body
+- A custom deriver under a host's own label declaring `algorithm: 'argon2id'` gets only the generic 1..65536 salt check at `openVault`; an unrunnable spec fails at `unlock()` as plain noble `Error` with no `kind`. Move the Argon2id schema into `key-deriver-spec.ts`? — PR#68 body
+- Review `KeyDeriver = Partial<KeyDeriverSpec> & …` (gives every deriver Argon2id's optional fields; a non-Argon2 deriver cannot declare its own `algorithm`) before 1.0 — PR#68 body
+- The passphraseKey bytes are not zeroed after import in `unlock()`/`changePassphrase()` (predates PR#68) — PR#68 body
+- `argon2idDeriver` bounds are repeated as literals in per-field messages and doc block; oversized `parallelism` is reported under `memory_kib` — PR#68 body
+- The 32-byte `deriveKeyBytes` output check accepts any `ArrayBufferView`; a `SharedArrayBuffer`-backed one would fail at `importKey` without a `kind` — PR#68 comment by mrflip
+- Reserve a namespace for supplied KDF labels (refuse host labels like `argon2id_web_*`) so a future supplied spec cannot collide; a host's own label is checked against nothing — PR#68 body
+- TODO "Soonish" shelf: built-as-a-whole recommended KDFs, and functions to roll your own (replaces the question of adding RFC 9106's second option) — PR#68 body
+- Raise the size budget (everything 24 to 24.5 kB, openVault 16.5 to 17 kB) — noted as needing the Coach's approval, done in its own `tools:` commit — PR#68 body
+- Thread 8 (comment_width) should exempt Markdown table rows or skip `.md` files: VOCABULARY tables exceed 100 columns and cannot be wrapped — PR#69 body
+- Say whether `userId` (options) and `user_id` (records) should be split into separate VOCABULARY entries rather than one camelCase/underbar entry — PR#69 body
+- Check the merge when #68 lands: VOCABULARY rows passphraseSalt/keyDeriverSpec/keyDeriverLabel/key deriver and the end of `notes/security.md` (key-deriver seam entries) were left to #68 — PR#69 body
+- Size budget: #68 and #70 each take `openVault` from 15.9 to 16.19/16.27 kB against a 16.5 kB budget; whichever merges second needs a raised budget or a trim — PR#70 body
+- (Coach) Decide whether the reframed lockbox allowance `N × (2W + 2 KiB) ≤ V` is enough or needs stricter accounting (explicit base64 term, smaller backend share); it would drop 101 to 100 lockboxes over Convex — PR#70 body
+- `user_id` has no length bound, so the 2 KiB lockbox allowance rests on a 512-byte assumption; bounding it is a stored-format and API call — PR#70 body
+- A note of control characters escapes past 2 KiB on a JSON-text backend (counted as the backend's own way of counting) — PR#70 body
+- A lockbox with damaged stored shape can be neither stored over nor erased (both read it first), only `destroy()` clears it; should `erase()` tolerate `corrupt_record`? — PR#70 body
+- `openVault` duck-types `vaultDB`, so a hand-written object skips the base class's write checks; a brand symbol is the alternative — PR#70 body
+- Check `SafebyokComponent.api({ getUserId })` at module load; needs a plain `Error` or core `VaultError` in server code — PR#70 body
+- Reduce duplication: `checkOutgoing`/`checkRecord`, four listener checks, `isOfScope`/`checkBundle` scope comparison, double parse per write — PR#70 body
+- `StoredBytesPerWhisperByte` and `LockboxFieldsBytes` are exported from `vault.ts` (not the package) only for a test — PR#70 body
+- `updateBox` with no lockbox reports `bad_label` (deliberate, pinned by a test) — PR#70 body
+- Confirm that every change to the unlocks (`addPassphrase`, `removeUnlock`, `changePassphrase`) asks for a proof passphrase even on an unlocked vault, when the plan said adding needs only an unlocked vault — PR#71 body
+- Move the envelope salt decode check into the record schema at read (now at unlock in `envelope.ts` because `@scure/base` in the schema broke the size budget; top-level zod schemas not marked pure) — PR#71 body
+- Decide whether a taken `unlocklabel` should refuse as a condition the UI might show rather than `bad_label` (misuse) — PR#71 body
+- Envelopes made by a different key deriver are passed over silently; a correct passphrase for such an envelope reads as `wrong_passphrase` (matters once `kdf_configs` lands) — PR#71 body
+- Rename `passphrase_epoch` to `unlock_epoch` (kept for this sprint, YOLO decision 2) — PR#71 body
+- Small cleanups left by PR#71 review: `sealFor` discards an unwrapped `sessionKey`; duplicated `absent_unlock` message; `errors.ts` comment promises a method-mismatch case nothing throws; `changePassphrase`'s async map could be a plain `map` — PR#71 comment by mrflip
+- Unlock cost: an unaimed wrong-passphrase unlock costs one Argon2id per envelope, ~0.6 s each, ~4.8 s at the cap of 8 — PR#71 body
+- A backend can splice an older/removed envelope back in since `passphrase_epoch` left the binding; removal is not revocation (recorded in `notes/security.md`) — PR#71 comment by mrflip
+- A build failure in the root `test` or `test:coverage` skips every package's tests (deliberate, to avoid a stale `dist/`) — PR#72 body
+- The Dependabot changeset gate keys on the PR author, so a human commit on a Dependabot branch passes; could require every commit be Dependabot's — PR#72 body
+- `runtime-deps.ts` does not compare a public package removed/made private, `peerDependenciesMeta`, or `bundledDependencies` — PR#72 body
+- The Version PR changeset-skip trusts the `changeset-release/...` branch name; tightening needs the App's bot login — PR#72 body
+- A Dependabot PR changing a runtime dependency fails CI until the Coach pushes a changeset, after which Dependabot stops rebasing it — PR#72 body
+- `justify:root` is no longer called by `justify` (kept as a shortcut) — PR#72 body
+- `safebyok-convex`'s `./test` entry imports `convex-test`, which is only a devDependency (predates PR#72) — PR#72 body
+- CI `test-build` job builds twice (`pnpm build` after `test:coverage`), ~2 s wasted, kept so the build reports when tests fail — PR#72 body
+- Tests do not all run side by side (pnpm sorted run puts core alone first); fix the `pnpm-workspace.yaml` comment or add `--no-sort` — PR#72 comment by mrflip
+- GitHub Actions itself was not run for PR#72: the publish job's npm install and the Dependabot changeset-gate path were checked by reading only — PR#72 comment by mrflip
+- A VaultDB's public `listBoxes` output is not valid `doListBoxes` input (summaries drop `format`, use `note: null`); `listBoxRecords` fills the gap, alternative is a core change; graphql thread meets it too — PR#73 body
+- Add a server-side vault limit to `safebyok-postgres` (lockbox-count cap in the insert, refusing `vault_full`); a signed-in user can grow their own vault without bound — PR#73 body
+- A `listen` that rejects is dropped silently in `postgresVaultDB` (a synchronous throw comes out of `subscribe`); the subscriber never hears again — PR#73 body
+- Route-borne bundles, lockboxes and expectations are validated server-side only as the core's VaultDB does (past scope and boxlabel) — PR#73 body
+- The Postgres NOTIFY payload's scope is visible to any role that can connect and LISTEN — PR#73 body
+- `listBoxRecords` copies the core's `bad_label` and `storage_unavailable` messages because the core's helpers are not exported; `placeholderOf` throws plain Error at module load — PR#73 body
+- The Supabase README section comes from Supabase docs and is untested against Supabase — PR#73 body
+- Concurrent writers in `safebyok-postgres` were reasoned from Postgres semantics, not run (PGlite has a single connection) — PR#73 comment by mrflip
+- (Coach) Confirm the new core export `parseKeyDeriverSpec` (exported rather than copying bounds or calling `argon2idDeriver`); it takes `KeyDeriverSpec` not `unknown` — PR#74 body
+- hash-wasm has no published audit (noble has one) and never zeroes its working memory (`notes/security.md`) — PR#74 body
+- Decide whether `deriveKeyBytes` should refuse a salt whose length differs from the spec's (answered for stored vaults by #71; deriver still takes any length within bounds) — PR#74 body
+- The 1 GiB refusal message still names `@noble/hashes` as the reason though the wasm deriver shares the bound — PR#74 body
+- hash-wasm caches a failed compile so a CSP refusal persists until reload; older Safari may need `'unsafe-eval'` rather than `'wasm-unsafe-eval'` (unchecked) — PR#74 body
+- `pnpm size` builds the core twice (filter plus the wasm package's `build:deps`) — PR#74 body
+- The `refusalOf` test helper is duplicated between core tests and the argon2-wasm package — PR#74 body
+- Real-browser CSP behaviour for the wasm deriver was mocked in Node, not checked — PR#74 comment by mrflip
+- The wasm deriver holds the thread ~130 ms per derivation in one synchronous call, where noble yields — PR#74 body
+- (Coach) Decide whether `convexVaultDB` should keep Convex's error as a refusal's `cause` (dev-deployment validator error quotes refused arguments; recommended keeping it) — PR#75 body
+- About 135 refusal sites in `vault.test.ts` now check name and `kind`, not class (recorded decision; class still checked in vault-db, errors, mask tests) — PR#75 body
+- The Convex leak sweep counts public constant leaves (format literals, `test_digest_v0`, fake salt) and could fail falsely if a validator names one — PR#75 body
+- Some `world.open()` handles in demo tests are never closed; inspection-panel tests share module-level stores; demo `createAuth` does not validate its `clock` — PR#75 body
+- Build-the-core-first `pretest` is left to thread 4; passphrase-modal tests to #67 — PR#75 body
+- A real Convex dev deployment's validator (which quotes arguments where convex-test does not) was not checked against the strengthened leak test — PR#75 comment by mrflip
+- (Coach) Decide the HKDF `info` for passkey envelopes: it omits `vault_id` and scope (separation rests on per-envelope PRF salt plus AAD); adding them is cheap now, a stored-format change later — PR#76 body
+- (Coach) Confirm that a vault always keeps a passphrase (`removeUnlock` refuses the last one, a passkey cannot create a vault `absent_vault`); rules out passwordless vaults — PR#76 body
+- (Coach) Confirm that any way in proves any change (a passkey holder can set a new passphrase and remove the user's other unlocks); recovery story depends on it — PR#76 body
+- `addPasskey` checks its proof only after the passkey exists, so a wrong passphrase orphans a passkey on the authenticator; fixing needs proving first (API-shape change) — PR#76 body
+- One damaged passkey envelope makes `askPasskey` throw `corrupt_record` for every passkey rather than offering the others — PR#76 body
+- `PasskeyUnlockButton` reads the snapshot without subscribing, as `PassphraseModal` does — PR#76 body
+- Cleanups: `sealPasskey` returns an unused `sessionKey`; `saltLengthOf` (`vault.ts`) duplicates `saltBytesOf` (`envelope.ts`) — PR#76 body
+- Manual pass with real authenticators (Chrome platform passkey, Safari, a security key) before release; no real authenticator has run the passkey code — PR#76 body
+- Dismissing `createPasskey`'s fallback `get` returns null but leaves the new credential behind; worth a line in its doc — PR#76 comment by mrflip
+- Strike TODO's two IndexedDB side quests ("IndexedDB vault store as its own package", "`versionedUpdate` truly atomic") as done by PR#77 — PR#77 body
+- CLAUDE.md's *Layout* lists none of the new packages (postgres, graphql, indexeddb); `fixed` group and root README package list each gained a line in the restack — PR#77 body
+- (Coach) Decide whether the IndexedDB bell's never-closed BroadcastChannel (keeps a Node/Bun process alive) needs a close, or `unref` where the platform has it — PR#77 body
+- A throwing bell listener on its own microtask crashes a Node process; `reportError`, where available, is an option — PR#77 body
+- The core's device-store bell keeps old behaviours (channel opens only on subscribe, listeners called synchronously) — PR#77 body
+- `safebyok-indexeddb` `listBoxes` and `eraseVault` read the whole store (every user's rows) where a key range over the scope prefix would do — PR#77 body
+- A failed IndexedDB write's `cause` can be null (`request.error` on abort) so `storage_unavailable` loses its cause — PR#77 body
+- IndexedDB race tests share one connection; two tabs (two connections) were not tested, nor transaction lifetime in a real browser — PR#77 body
+- `passphrase_epoch` is a GraphQL `Int` (32-bit), narrower than the core's safe-integer check; over 2^31 reads as `storage_unavailable` — PR#78 body
+- GraphQL validation and coercion errors carry no kind, so the browser sees them as `storage_unavailable` (a retryable kind) — PR#78 body
+- A misconfigured `vaultDBFor` crosses to the browser with its own kind, `bad_option` — PR#78 body
+- Duplicated helpers: `perUser` (copied from postgres tests, candidate for `safebyok/testing`), storage-trouble message and `noUnsubscribing` copied from the core; `ServedVaultDB` needs each adapter's hand-written `listBoxRecords` — PR#78 body
+- Not tried for `safebyok-graphql`: graphql 16, Apollo Server, Mercurius, graphql-ws, a real HTTP disconnect, two copies of graphql loaded — PR#78 body
+- (Coach) Confirm `graphql` as a runtime optional peer of the server half (needed so Yoga keeps a refusal's kind); host and server must share one copy of graphql — PR#78 body
+- (Coach) Confirm opaque JSON for `unlocks` envelopes in the GraphQL schema rather than a typed union (GraphQL has no input unions; passkey method arriving) — PR#78 body
+- A failed GraphQL subscription on the client is silent (like the rejected Postgres `listen`) — PR#78 body
+- Export `VaultOperations` (the client's GraphQL documents) so hosts that allowlist persisted operations can use it — PR#78 body
+- The `passphrase_epoch` to `unlock_epoch` rename follow-up now also reaches the GraphQL SDL — PR#78 body
+- Two dev dependencies are only days old: `graphql-yoga` 5.24.5 and `@graphql-tools/schema` 10.1.4 — PR#78 body
+- If two copies of graphql load, Yoga masks every refusal (kind lost; dev mode leaks masked message and stack, never the driver cause); README line suggested — PR#78 comment by mrflip
+- Merge the big_feats PRs in order #71, #73, #76, #78, #74, #77, this PR last — PR#79 body
+- Rename `passphrase_epoch` to `unlock_epoch` across every adapter (first item of TODO "Open from big_feats") — PR#79 body
+- Coach's word needed on big_feats rulings: every envelope change takes a proof and any way in proves any change; a vault always keeps a passphrase; epoch out of envelope binding; passkey HKDF `info` omits `vault_id`; `graphql` runtime peer; hash-wasm's missing audit — PR#79 body
+- `tallyWatches` counts every unsubscribe call, so a double close can hide a leaked watch; stricter counting is a follow-up (it is now public surface) — PR#80 body
+- `beforeNextCall` on a verb that is already a spy records one call twice — PR#80 body
+- `convexRefusalOf` and `tallyWatches`' refused-open `@example` have no test of their own — PR#80 body
+- `stateOnOpen` leaves its vault open, as the inline code it replaced did — PR#80 body
+- (Coach) Confirm `expect*` / `TH.expect*` as the lint convention for assertion helpers (`vitest/expect-expect`) in all five eslint configs — PR#80 body
+- `safebyok/testing` now imports runtime code from the core (`localVaultDB`, `memoryStore`, `memoryDeviceDB`); same `dist/` modules, one `VaultError` — PR#80 body
+- `beforeNextCall` uses an `as unknown as` cast because vitest `spyOn` cannot be typed over a generic method name — PR#80 body
+- After #67 merges, move the modal test's `vaultUnlockingWith`, `submitPassphrase`, `Catcher`, `wrong` into a React `tests/test-helpers.ts` — PR#80 body
+- Mid-unlock race tests deliberately left step by step; a `landMidway` helper would save ~75 lines but hide event order — PR#80 body

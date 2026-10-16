@@ -1,0 +1,57 @@
+# wins: prs_open
+
+Read the body, conversation comments, reviews and inline review comments of open PRs #100, #101, #102, #103, #104, #111, #117, #119, #81 (draft), #56 (draft); reviews and inline comments were empty everywhere. Wins in open PRs are not merged yet.
+
+- Version PR #56 would release 0.3.0 of safebyok, safebyok-argon2-wasm, safebyok-convex, safebyok-react, safebyok-indexeddb, safebyok-postgres and safebyok-graphql (PR#56, open) — PR#56 body
+- #81 turns on `@stylistic/max-len` (comments 100 columns; code out of reach; URLs and eslint-disable lines ignored) in root, core, React, Convex and demo lint configs (PR#81, open) — PR#81 body
+- #81 rewraps the 116 comment lines that ran past 100, whitespace and markers only, in its own commit; adds a STYLE.md bullet (PR#81, open) — PR#81 body
+- #81 review fix: the reflow had split `{@link FarFuture}` above `clockReading` in `vault.ts`; rewrapped whole in 9554c7f (PR#81, open) — PR#81 comment by mrflip
+- #81 recipe scripts fixed after review: `reflow-ex.mjs` null-checks, `verify.mjs` compares TypeScript tokens and comment words, new `inline-tags.mjs` catches a split `{@link` (PR#81, open) — PR#81 comment by mrflip
+- #81 verified a pure reflow (code tokens and comment words identical) and probed that long comments error while long code, URL and eslint-disable lines do not (PR#81, open) — PR#81 comment by mrflip
+- #100 is the top of the gripes_part2 stack (main, #104, #103, #102, #101, #100); merging it with a merge commit lands the whole line; carries plan, progress record and closing note (PR#100, open) — PR#100 body
+- #101 records the Coach's validator question in TODO.md Soonish with lines for box-list refused text (#93), notes controls, lone surrogates, server-side names, `unlocklabel` (#95), grouped errors, the damaged-box race and Convex `getUserId` (PR#101, open) — PR#101 body
+- #101 adds a TODO.md section of rulings with no thread: `Ckeys` public, remembered unlocks swept as now, `lockbox_too_large` its own kind, old-contract adapters fail (PR#101, open) — PR#101 body
+- #101 adds to STYLE.md, Tests: a helper named `expect...` must assert, or take another name (PR#101, open) — PR#101 body
+- #102: `SafebyokComponent.api` throws `VaultError` `bad_option` at setup unless the options bag holds a `getUserId` function, naming the option with the usual one-liner (PR#102, open) — PR#102 body
+- #102: the constructor refuses a non-object `component` (forgotten install) with `bad_option` and the `app.use(safebyok)` instruction; 11 new tests (PR#102, open) — PR#102 body
+- #102 review: nothing to change; esbuild shows importing `VaultError` into `server.ts` pulls only `errors.js` (98 B) into a 3.6 kB host bundle (PR#102, open) — PR#102 comment by mrflip
+- #103: `tallyWatches` counts each watch closed once, so a double close cannot cancel out a leaked watch (PR#103, open) — PR#103 body
+- #103: `expectRefusal` requires `instanceof VaultError`, once, for every call site in every package (PR#103, open) — PR#103 body
+- #103: `beforeNextCall`/`holdNextCall` on an already-spied method record the call once, each arming belonging to one call in order (PR#103, open) — PR#103 body
+- #103: `convexVaultDB`'s `convexRefusalOf` gets its test in `packages/safebyok-convex/tests/test-helpers.test.ts` (PR#103, open) — PR#103 body
+- #103: the demo closes the vaults it opens from outside the page (`tests/setup.ts`) and inspection-panel tests wipe shared stores after each test (PR#103, open) — PR#103 body
+- #103 review fix 769b0eb: inspection-panel "starts from empty shelves" tests now await the shelf read, and go red without `inspector.wipe()` (PR#103, open) — PR#103 comment by mrflip
+- #103 review fix 39d9168: `world.seed` closes its vault in `finally` when unlock or store refuses, with a test red on the old helper (PR#103, open) — PR#103 comment by mrflip
+- #103 changeset (`safebyok` patch) names the three changed helpers and the ESM/CJS split as a second way to see two `VaultError` classes (PR#103, open) — PR#103 body
+- #104: `UserId`, `LockboxNote` and every `AnyTextValidators` field refuse lone surrogates via a `/\p{Cs}/u` search (bad_label, or bad_option for a note); 12M-character text gets an answer (PR#104, open) — PR#104 body
+- #104: default note check refuses C0 (CR included), DEL and C1 control characters; tab and newline pass; a host's own `validators.note` is untouched (PR#104, open) — PR#104 body
+- #104: refusals by our own checks pass on the reason (too long, control character, not well-formed) and quote nothing; host-schema refusals name the field only (PR#104, open) — PR#104 body
+- #104: `safebyok/validators` no longer re-exports `Whisper` and `EpochMillis`; entry shrinks 8.36 to 3.86 kB; `DefaultValidators` 3.74 of 4 kB, `openVault` 20.14 of 20.5 kB (PR#104, open) — PR#104 body
+- #104: new export `checkValidators(bag)`; `Names.rulesOf` and `VaultProvider` call it so a misspelt bag field such as `boxLabel` surfaces as `bad_option` (PR#104, open) — PR#104 body
+- #104: a `VaultDB` verb handed no `validators` checks with `AnyTextValidators` (any well-formed text) instead of refusing names the vault passed (PR#104, open) — PR#104 body
+- #104 bug fixed: `reviseUnlocks` called `updateBundle` without its rules, blocking passphrase/passkey changes under a wider `userId` or label check; a test spies all nine verbs for the bag (PR#104, open) — PR#104 body
+- #104 answered the Coach: Convex's client does no check (`convexToJson` passes strings), only its closed server refuses; `convex-test` stores a lone surrogate; errors are plain `Error` with no class or code, so no finer mapping; README claim softened (PR#104, open) — PR#104 body
+- #104 review fix af44ea2: `erase()` can reach a lockbox stored under a lone-surrogate boxlabel; the standing check is plain `Z.string()` again, with a test (PR#104, open) — PR#104 comment by mrflip
+- #104 review fix 57aa845: VaultDB doc block, changeset and security note say a bag-less verb never refuses a well-formed name (PR#104, open) — PR#104 comment by mrflip
+- #104 review fix 2edb5df: both checks search for a stray character rather than match the whole text, avoiding a regex-stack overflow on 10M+ characters (PR#104, open) — PR#104 body
+- #104 review confirmed `/^\P{Cs}*$/u` agrees with `isWellFormed()`, note charset is exact, every VaultDB call in the vault passes its bag, and no refusal quotes its input (PR#104, open) — PR#104 comment by mrflip
+- (Coach) #111 ruled "yes" to a private package beside `demos/` for cross-harness tests, in place of a separate repo (PR#111, open) — PR#111 body
+- #111 adds private workspace package `e2e/` (`safebyok-e2e`) with its own lint/typecheck/test/justify, holding the fake Convex deployment and the `convexVaultDB` battery over both `ConvexClient` and `ConvexReactClient` (PR#111, open) — PR#111 body
+- #111: `safebyok-convex` lists and imports no React; its `toConvexLockbox` suite stays; `scripts/release.ts` refuses a public package under `e2e/` as under `demos/`, with a test (PR#111, open) — PR#111 body
+- #117: new `Sanitizer.refusalFor(foreign, kind, message)` in `sanitizer.ts` decides what of a foreign error rides on the refusal thrown in its place: nothing; used by `names.ts` and `convexVaultDB` (PR#117, open) — PR#117 body
+- #117: `convexVaultDB` turns every non-safebyok Convex failure into `storage_unavailable` with no cause, since dev-deployment errors quote the call's arguments (PR#117, open) — PR#117 body
+- #117: `erase()` reads storage once for the lockbox it erases, even under a refused boxlabel (PR#117, open) — PR#117 body
+- #117: `read()` and `use()` document `bad_label` for a refused name, with `erase()` as the remedy (PR#117, open) — PR#117 body
+- #117: the vault-total estimate is called conservative in `VaultDB.maxVaultBytes` and the README; the record cap weighs real serialized bytes (PR#117, open) — PR#117 body
+- #117: new sixth validator slot `validators.unlocklabel` (default `Label`), checked where `addPassphrase`/`addPasskey` add a way in; `VaultProvider` passes it through (PR#117, open) — PR#117 body
+- #117: a second `close()` does nothing, so the storage watch is ended once (PR#117, open) — PR#117 body
+- #117: TODO.md and `notes/security.md` updated (sanitizer and dropped Convex cause; `unlocklabel` slot and why stored labels are not re-checked; #68's four KDF follow-ups) (PR#117, open) — PR#117 body
+- #117 review fix a913da8: a taken unlocklabel or duplicate passkey is refused without quoting the label, with a test (PR#117, open) — PR#117 comment by mrflip
+- #117 review fix cfe34bc: an empty unlocklabel admitted by a host check is now `bad_label` at `addPassphrase`/`addPasskey`, not `bad_option` on the way to storage (PR#117, open) — PR#117 comment by mrflip
+- #117 after review: Convex message also points at the browser console (ca8c654), and TODO notes `asStorageTrouble`, Postgres and GraphQL still attach `cause` (2fb2a3c) (PR#117, open) — PR#117 body
+- #119: `raceEveryWay` runs each VaultDB race under every schedule (together, staggered, and held before each round trip via `Turnstile`/`throughTurnstile`), over fresh devices; adapters give only `makeDevices(turnstile)` (PR#119, open) — PR#119 body
+- #119: every in-tree adapter (local, `MapVaultDB`, Postgres, GraphQL, IndexedDB, Convex) is wired into the race battery, proven by `expectRoundTripsThroughTurnstile` (PR#119, open) — PR#119 body
+- #119: new checks 2.1 across devices, 4.5 past the limit, 6.1 from another device; push tests hear a probe write rather than wait 50 ms (PR#119, open) — PR#119 body
+- #119: honesty proof in `test-helpers.test.ts`: broken adapters (check-then-write splits, shared lock, shared adapter, cut listing, leaky/deaf/late watches) are each caught (PR#119, open) — PR#119 body
+- #119 bug fixed: over Postgres and GraphQL a write during a watch's start was never heard; `postgresVaultDB` now calls once as its listen begins and VAULTDB.md 6.1 asks any late-starting watch to do so (PR#119, open) — PR#119 body
+- #119 documents what the races cannot prove (VAULTDB.md *Proving the races*; `notes/security.md`); four adapter lint configs realigned to the core's `assertFunctionNames` (PR#119, open) — PR#119 body

@@ -1,0 +1,120 @@
+# wins: prs_60_80
+
+Read the body, conversation comments and reviews of closed PRs #60-#80 of mrflip/safebyok (no inline review comments exist on any of them; #66 closed unmerged).
+
+- `vault.lockSoon(graceSeconds = 5)` added: snapshot reads `locked` at once, new operations throw `vault_locked`, in-hand work finishes, a timer drops the vaultKey after the grace — PR#60 body
+- `lockSoon` grace runs 0-60 s, anything else (NaN, Infinity) is `bad_option`; `lockSoon(0)` is `lock()`; a second call can only shorten a running grace — PR#60 body
+- `unlock()` or `changePassphrase()` landing within the grace cancels the timer; one already under way when `lockSoon()` is called loses — PR#60 body
+- `close()` ends the grace, drops the key, a pending `unlock()` on a closed handle throws `vault_closed`, no timer outlives the handle — PR#60 body
+- Core README screen-lock recipe rewritten: `lock()` for real lock signals, `lockSoon()` for tab-away/sign-out; says either ends the remembered unlock — PR#60 body
+- `lockSoon` shipped with a 29-case suite (fake timers, `makeRacingWorld().holdNextBoxRead()`), `notes/security.md` entry and a patch changeset; justify green — PR#60 body
+- Review fix df343ac: `lockSoon()` clears `askPassphraseAt` rather than setting it to now, so a wall clock stepped back no longer reopens the gate (tested) — PR#60 comment by mrflip
+- Review fix e88105f: lockSoon doc, README and changeset corrected — a `changePassphrase()` in the grace also ends it (now tested); `shut()` and grace-ceiling docs fixed — PR#60 comment by mrflip
+- Review fix 1fec5b8: README Idle Detection snippet declares its `AbortController` and notes TS DOM types lack `IdleDetector` — PR#60 comment by mrflip
+- Review confirmed every key-dropping path clears the timer, unlock-in-grace beats the timer, and `keyInHand()` is reachable only past `ensureUnlocked()` — PR#60 comment by mrflip
+- `safebyok-react` `useVault()` gains `openError` and `retryOpen()`; `storage_unavailable`, `not_permitted`, `corrupt_record` at open stay in place instead of reaching the error boundary — PR#61 body
+- Core exports `VaultErrorFamilyVals`, `VaultErrorFamilyForKind` (must cover every kind) and `isVaultCondition(err)`, checked against the README Errors tables — PR#61 body
+- A failed `openVault` no longer leaks a storage watch: the handle closes itself and rejects with the original error, even if unsubscribe throws; Convex test proves no live query — PR#61 body
+- Demo gets an outage switch; dashboard shows "Can't reach your vault." with Retry (no Retry for `corrupt_record`) — PR#61 body
+- React README "When opening fails" rewritten, core README names family exports, `notes/security.md` entry on `corrupt_record` reaching the UI, TODO error-families entry dropped — PR#61 body
+- PR#61 tests: 7 new core "failed open" tests, a Convex test, 12 provider tests including exactly one live watch after two failed opens and a retry — PR#61 body
+- Core validates with `zod/mini` throughout (types, crypto, vault-db, vault); exported schemas are mini schemas; peer range stays `^4.0.0` and tests pass on zod 4.0.0 — PR#62 body
+- Core builds unbundled (one dist file per module, `sideEffects: false`); size budgets cut, e.g. everything 36.7 to 22.1 kB, openVault 30.2 to 15.1 — PR#62 body
+- Core lint now refuses classic zod (`zod`, `zod/v4`, `zod/v3`) in `src/`; STYLE.md names `zod/mini`; security note added; TODO roadmap 7 marked built — PR#62 body
+- Tests check that the exported mini schemas compose inside, and refuse inside, a classic Zod schema; minor changeset states the host-visible changes (`z.optional(Label)`, `z.flattenError`) — PR#62 body
+- Release workflow `version` job passes `pr-draft: always`: Version PR opens as draft and returns to draft whenever main rebuilds it; PROCESS.md Releases and workflow header updated — PR#63 body
+- Stored times renamed and in epoch ms: lockbox `registered_at`/`changed_at`, bundle `registered_at`, device `ask_passphrase_at`; `changed_at` moves only when `stableJsonify` of the whisper differs — PR#64 body
+- Host clock checked at `openVault`: non-`Clock`, out-of-range (`FarPast`..`FarFuture`) or throwing `now()` is `bad_option`; later bad readings fail closed, dropping the vaultKey — PR#64 body
+- `lockSoon()` on a bad clock locks at once, warns once on console and returns normally (Coach's decision, one approved `console.warn`) — PR#64 comment by mrflip
+- `forcePassphraseReentryHours: Infinity` becomes a `FarFuture - FarPast` window at option parse; adapter `maxRecordBytes`/`maxVaultBytes` Infinity read as `MAX_SAFE_INTEGER` (a6126e5) — PR#64 body
+- A throwing host `now()` becomes `bad_option` with the error as unquoted cause; stored times are whole-ms `EpochMillis` again so a stored fraction is `corrupt_record` — PR#64 comment by mrflip
+- Demo shows "changed <date>" from `changed_at`; changeset (minor, core+convex), `notes/security.md`, STYLE.md, Convex README, TODO roadmap 3 updated; no migration, old vaults fail as `corrupt_record` — PR#64 body
+- Review fix 22ebbd9: changeset says the stored format changed with no migration in one sentence; clean-up instructions for old vaults dropped (no deployed vaults) — PR#64 comment by mrflip
+- `openVault` takes a pluggable `logger` (`VaultLogger` exported: `log`/`warn`/`error` with message, story, err); non-conforming loggers refused as `bad_option`; throws and thenable rejections from a logger are swallowed — PR#65 body
+- With no logger, `src/console-logger.ts` writes to the console tagged `safebyok:`; the direct `console.warn` and its eslint suppression in `vault.ts` are gone — PR#65 body
+- (Coach) Ruled: "yes with no logger console is the fallback" — PR#65 body
+- Four logger call sites, each with story `{ call }` only: `lockSoon` bad clock, forgotten remembered unlock, failed background refresh, adapter unsubscribe throwing at failed-open cleanup — PR#65 body
+- A test fires every logger call site and sweeps logged text (down through causes) for fake passphrase, whisper, note, ciphertexts and salts; two `notes/security.md` entries — PR#65 body
+- `VaultProvider` passes `logger` through (README: define it once outside the component); `safebyok/testing` adds `spyLogger()` and `loggedText()` — PR#65 body
+- Review fix: logger guard now settles any thenable a logger returns (other-realm/library promises were going unhandled); new test — PR#65 comment by mrflip
+- Review fix: the "remembered unlock was forgotten" warning now follows the erase, so a failing erase no longer claims a forgetting that did not happen; new test — PR#65 comment by mrflip
+- Review fix: README, `VaultLogger` example and security note now say `logger: console` prints missing story/error as undefined/null, and that a host's own errors are the host's to keep clean — PR#65 comment by mrflip
+- Review fix (86cbca2, ea7cd8f): `loggedText` ends cause cycles and writes placeholders where JSON.stringify would throw; secret sweep now breaks the host clock so a logged error carries a `cause` — PR#65 comment by mrflip
+- PR#66 (closed unmerged) carried the second_harvest sprint plan, progress record, closing note `human/20261015-sprint_second_harvest_done.md`, TODO.md updates and CLAUDE.md's console line naming the fallback logger "at the Coach's word" — PR#66 body
+- PR#66 documented the merge stack order #45 → #37 → #55 → #60 → #57 → #58 → #59 → #61 → #51 → #62 → #52 → #64 → #65 → this → #49 → #63 — PR#66 body
+- React `PassphraseModal` states the real window ("for 7 days", "8 hours", "15 minutes", "until you lock it") via new `reentryHours` prop handed by `VaultProvider`; no core change — PR#67 body
+- Passphrase dialog: conditions (`wrong_passphrase`, `storage_unavailable`, ...) show calm message in place; `vault_locked` closes as dismissed; misuse/non-VaultError throws in render for the error boundary — PR#67 body
+- Dialog unit words via `Intl.NumberFormat` (`style: 'unit'`, `useGrouping: false`); modal test gains wrong-passphrase, other-error, window cases and drops vacuous assertions; minor changeset — PR#67 body
+- Review of PR#67 found nothing to change; the `'` vs `"` quoting in `WindowCases` was fixed after review — PR#67 comment by mrflip
+- New export `argon2idDeriver(spec)`: host-chosen Argon2id parameters and label via `@noble/hashes`, returns frozen deriver; `argon2idWebV1Deriver` is the same builder over `Argon2idWebV1` — PR#68 body
+- `argon2idDeriver` refuses unworkable values as `bad_option` without quoting input (salt <8 or >65536, memory <8 KiB/lane or >1 GiB, passes 0 or >2^32-1, no lanes, key not 32 bytes); weaker-but-runnable allowed — PR#68 body
+- `openVault` and the factory refuse a deriver wearing a supplied spec's label unless it carries every parameter (fix: `{ ...Argon2idWebV1, deriveKeyBytes }`); `openVault` bounds `salt_bytes` to 1..65536 — PR#68 body
+- `unlock()` and `changePassphrase()` refuse a `deriveKeyBytes` result that is not 32 bytes — PR#68 body
+- Spec moved into `key-deriver-spec.ts` so `openVault` does not pull in Argon2id; size budget raised (everything 24.5 kB, openVault 17 kB) as the Coach approved — PR#68 body
+- Core README *Key derivation* section, VOCABULARY rows and a `notes/security.md` entry added; tests cover per-field bounds, factory output vs noble, impostor derivers, real-unlock salts of 1 and 65536 — PR#68 body
+- Review fix 0d9d3fe (was bf78bbe): `iterations: 2**32` refusal message now names the 2^32 ceiling, with a test; review verified bounds against `@noble/hashes` limits — PR#68 comment by mrflip
+- Fix 7ba2ebc: the supplied-label refusal message now tells a stand-in's author to test its bytes against `argon2idWebV1Deriver` — PR#68 comment by mrflip
+- `notes/security.md` refreshed against the code: stale claims fixed (Convex adapter checks in its transaction, `safebyok/testing` entry covers the whole module, `rememberForMs` kept as history), long lines rewrapped, no entry removed — PR#69 body
+- VOCABULARY.md gains a *Names, records and times* section (applabel, vaultlabel, boxlabel, userId, scope, note, bundle, device unlock, vaultDB, deviceDB, askPassphraseAt, EpochMillis, clock, logger...); `whisperSchemaVersion` row removed; cipherAdditionalData row corrected — PR#69 body
+- "pretending" reworded in `vault.ts` `destroy()` doc and `refresh()` comment; empty changeset — PR#69 body
+- VaultDB write verbs now validate records and expectations before the adapter's `do*` method (`bad_option`/`bad_label`, never quoted); `updateBundle` refuses a wrong `vault_id`; adapters get parsed (stripped) records — PR#70 body
+- `listBoxes` deliberately validates only the listed shape so one damaged ciphertext cannot make the whole vault unopenable — PR#70 body
+- `dbName` must be non-empty text in `browserOpts`, `idbVaultDB`, `idbDeviceDB`, `inspectIdb` (private parser `src/idb-opts.ts`); `inspectIdb` `shelf` must be known — PR#70 body
+- Remembered unlock is compared with the vault's applabel, user_id and vaultlabel; a mismatch is forgotten and logged — PR#70 body
+- Gaps closed: `openVault` options bag/`userId`/`vaultDB`/`deviceDB` shapes, non-text passphrases, non-function listeners (vault, VaultDB, `inspectIdb`, string stores) and `use` callbacks now throw `VaultError` — PR#70 body
+- Lockbox size allowance reframed to `N × (2W + 2 KiB) ≤ V` (same admitted configs); a test builds the ~1,850-byte heaviest row with real ciphertext; `whiteboard/20261015-gripe_fixes/validation-survey.md` written — PR#70 body
+- Review fix 9f88c6f: `maxVaultBytes` doc and security note now name the 512-byte `user_id` assumption instead of claiming 2 KiB covers fields "at their largest" — PR#70 comment by mrflip
+- Review verified: no new refusal quotes its input, stripping unknown fields drops no stored field, reframed size check admits exactly the old set — PR#70 comment by mrflip
+- A vault bundle holds `unlocks`, a list of 1..8 (`MaxUnlocks`) passphrase envelopes replacing `key_deriver_label`/`passphrase_salt_b64`/`vault_key_passphrase_wrapped`; no migration — PR#71 body
+- New vault methods `addPassphrase(passphrase, newPassphrase, {unlocklabel})` (returns `unlock_id`), `removeUnlock(passphrase, unlockId)` (never the last), `changePassphrase(old, new, {unlockId?})`, `unlock(passphrase, {unlockId?})` — PR#71 body
+- Each change needs a proof passphrase and moves `passphrase_epoch`, locking other devices; locked snapshot lists `unlocks` (method, unlock_id, unlocklabel) — PR#71 body
+- Each envelope binds its vault and key-sorted public header under a per-method purpose; new error kinds `absent_unlock`, `too_many_unlocks`, `last_unlock`; new `src/envelope.ts`; three security-note entries — PR#71 body
+- Follow-through in Convex validators/table, `safebyok/testing` (`bundleOf`, new `envelopeOf`), React empty snapshot; VOCABULARY, core README *Several passphrases*, changeset; budget raised (openVault 18.5 kB, entry 26 kB, idbDeviceDB 9.5, browserOpts 14.5) — PR#71 body
+- Review fix dc23704: aimed `unlock` on a vault destroyed elsewhere now refuses as `absent_unlock` instead of creating a new vault; tested — PR#71 comment by mrflip
+- Fix 1b62da6: an envelope with non-base64url or wrong-length salt refuses unlock as `corrupt_record` before any derivation; a blank proof passphrase is refused at once — PR#71 body
+- Publish job installs npm by hash: downloads tarball, checks against registry sha512 `dist.integrity` in `release.yml`, installs offline with `--ignore-scripts`; security-note entry added — PR#72 body
+- New `scripts/runtime-deps.ts` (14 tests) lists runtime/peer/optional dependency changes; CI requires a changeset on a Dependabot PR only when that list is non-empty; PROCESS.md and workflow comment updated — PR#72 body
+- Dependabot `directory: /` shown sufficient for `packages/*` and `demos/*` (comment added, TODO entry removed) — PR#72 body
+- `pnpm justify` runs ~20 s, down from ~35 s: installs once, runs steps even after failure, lint/typecheck four at a time, each package builds once via `SAFEBYOK_SKIP_BUILD_DEPS=1` — PR#72 body
+- Root `test:coverage` measures `scripts/` (adds `@vitest/coverage-v8`); case-table alignment restored in `types.test.ts` and Convex `validators.test.ts`; `wakeupAtNextTick` `@example` fixed — PR#72 body
+- Review verified `NPM_INTEGRITY` matches the registry and the publish step fails closed; fix 563d674 removed a dated progress note from `dependabot.yml` — PR#72 comment by mrflip
+- Review fixes 3cb2735 (only `SAFEBYOK_SKIP_BUILD_DEPS=1` skips dependency builds) and 9fd3ffd (`pnpm-workspace.yaml` comment wording) — PR#72 comment by mrflip
+- New package `safebyok-postgres`: `vault-tables.sql` (also `VaultTablesSql`) creates `safebyok_bundles` and `safebyok_lockboxes` (column per field, `jsonb` for structured values, FK cascade, RLS with no policy, NOTIFY trigger) — PR#73 body
+- `postgresVaultDB({ client, userId, listen })` works over any `query(text, params)` driver (pg Pool/Client/PoolClient, PGlite); every verb is one statement; foreign scope or signed-out refuses `not_permitted` before any query — PR#73 body
+- `src/columns.ts` names each record's columns once, held to the record's fields both ways and to the DDL by a test; `listBoxRecords` serves listings as stored records — PR#73 body
+- Postgres README: tables, route recipe, `listen` wiring for PGlite and `pg`, Supabase, "Writing an adapter of your own"; `notes/security.md` server-side authorization rule; tests on PGlite with 100% line coverage — PR#73 body
+- Review fixes 6cda7fc and 3e61112: `listen` docs say to call PGlite's `listen` on its PGlite; security note says a driver's `cause` can quote a whole failing row; route recipe answers malformed body with 400 — PR#73 comment by mrflip
+- New package `safebyok-argon2-wasm`: `argon2idWasmWebV1Deriver` (same spec, label, bytes as `argon2idWebV1Deriver`; vaults open under either) and `argon2idWasmDeriver(spec)`, on hash-wasm 4.12.0 (the dependency the Coach named) — PR#74 body
+- Wasm deriver ~130 ms per derivation vs 580 ms for noble (1 GiB: 0.9 s vs 3.0 s); equivalence tested against reference vector, 12 cheap specs, lone-surrogate passphrase, cross-opening vaults — PR#74 body
+- Core newly exports `parseKeyDeriverSpec`; wasm factory uses it so refusals match `argon2idDeriver` word for word; core's refusal now begins "Argon2id cannot run that keyDeriverSpec" — PR#74 body
+- Wasm deriver refuses with `bad_option` when `WebAssembly` is absent or CSP blocks compile (original as `cause`); empty passphrase refused as `wrong_passphrase`; never falls back on its own — PR#74 body
+- Wasm sizes 9.38 kB (budget 10) and 15.06 kB (budget 16), no noble; docs: package README, core README, root README, `notes/security.md` entry, CLAUDE.md Layout lists the package — PR#74 body
+- Review fixes for PR#74: lone-surrogate case, `Buffer.from(bytes).toString('hex')` in the vector test, `tests/index.test.ts` pinning the two exports, security note on hash-wasm never zeroing memory — PR#74 comment by mrflip
+- `TH.expectRefusal(operation, kind)` replaces four divergent copies (vault.test, `describeVaultDB`, Convex `refusalOf`, demo `refusalKind`); `describeVaultDB` now requires refusals named `VaultError` — PR#75 body
+- `safebyok/testing` gains `thrownText`, `leafTexts`, `omitting`; `tweakB64('')` now throws `TypeError` — PR#75 body
+- Convex "never quotes a record" test strengthened (wrapping client, `updateBundle` and `updateBox`, whole refusal and causes searched); mutation-checked to fail when the client quotes arguments — PR#75 body
+- Demo `createAuth` takes a `clock`; every demo component now has a jsdom test (coverage 22% to 97%, only `main.tsx` untested) — PR#75 body
+- Review fixes for PR#75: per-field missing-vaultDB/deviceDB messages, demo outage tests check `isVaultError`, changeset explains `describeVaultDB` requirement, KnockKnock Cancel test made able to fail (7c8135e) — PR#75 comment by mrflip
+- Passkey unlock: new envelope method `passkey` (`credential_id`, `prf_salt_b64`, `vault_key_wrapped`) wraps the vaultKey under HKDF-SHA256 over the WebAuthn PRF answer; AAD binds format, scope, vault_id, purpose and header; HKDF checked against RFC 5869 A.3 — PR#76 body
+- Core takes bytes: `PasskeyProof` (`credentialId`, `prfSaltB64`, `prfBytes`); `vault.addPasskey(proof, passkey, {unlocklabel})`; `unlock`/`addPassphrase`/`removeUnlock` accept a passphrase or passkey proof; `last_unlock` now means the last passphrase — PR#76 body
+- `safebyok-react` adds `createPasskey`, `askPasskey` (UV required, random user handle, fresh 32-byte PRF salt, second `get`), `PasskeyUnlockButton`, and "Use a passkey" in `PassphraseModal`; tests use a fake `navigator.credentials` — PR#76 body
+- Also in PR#76: Convex `UnlockEnvelope` passkey member, `passkeyOf`/`passkeyEnvelopeOf` in testing, demo "Ways in" panel with "Add fingerprint", `toB64`/`fromB64` in `safebyok/utils`, VOCABULARY, READMEs, three security entries, size budgets raised (27 kB / 19 kB) — PR#76 body
+- Review fix for PR#76: demo "Add fingerprint" asks for the passphrase before making a passkey; `createPasskey` doc notes a dismissed fallback `get` leaves the credential — PR#76 comment by mrflip
+- Review verified the passkey construction (RFC 5869 HKDF, unambiguous JSON-array `info`, AAD swap yields `wrong_passkey`, no PRF bytes in errors/logs) — PR#76 comment by mrflip
+- New package `safebyok-indexeddb` with `idbVaultDB({ dbName })` and `inspectIdbVaultDB({ dbName })`; `safebyok/idb` no longer exports `idbVaultDB`, `inspectIdb`, `IdbShelf` (no shim; host changes one import); stored data and BroadcastChannel name unchanged — PR#77 body
+- Every IndexedDB write verb is one readwrite transaction (`inOneTransaction` in `src/shelf.ts`); four race tests fail on the old adapter and pass now; `notes/security.md` records the windows closed — PR#77 body
+- README *Writing an adapter of your own* is the key-value template (three files to write, `src/expectations.ts` kept, `TH.describeVaultDB` in one line); `inspectIdb` split into `inspectIdbDeviceDB` (core) and `inspectIdbVaultDB` (package) — PR#77 body
+- IndexedDB bell: a write opens the BroadcastChannel itself, listeners run on their own microtask so a throwing one no longer turns a landed write into `storage_unavailable`; core `vault-db.ts` stops exporting ckey/expectation helpers — PR#77 body
+- Review fix 997823f: bell no longer calls a listener unsubscribed between the ring and its microtask; test added — PR#77 comment by mrflip
+- Review fix eb0b3ce: `vaultMeetsExpectation` now needs a finite `passphrase_epoch`, so erase/lockbox writes cannot land on a bundle row with no epoch; tests added — PR#77 comment by mrflip
+- New package `safebyok-graphql`: `safebyok-graphql/server` exports `VaultSchemaSdl`, `vaultResolvers({ vaultDBFor })` over any `ServedVaultDB`; browser half `graphqlVaultDB(client)` over urql, `network-only`, subscription-fed `subscribe` — PR#78 body
+- GraphQL refusals cross as GraphQLError with only message and `extensions.kind`; driver error stays server-side as non-enumerable `cause`; anything else crosses as `storage_unavailable`; records cross field by field — PR#78 body
+- GraphQL tests run `TH.describeVaultDB` twice over PGlite (urql execute exchange; README Yoga recipe over fetch with SSE subscriptions); README has Yoga/Next.js/Postgres recipe; security entry and changeset added — PR#78 body
+- Review fix: GraphQL subscription now stops listening (ending Postgres LISTEN) when the subscriber leaves while waiting, by reading the `ReadableStream` through a reader; two tests that failed before — PR#78 comment by mrflip
+- Review held: refusals cross unmasked without cause (Yoga dev mode too); user always from request context; coalescing never drops a write's signal — PR#78 comment by mrflip
+- big_feats sprint closing PR: plan, progress record, pause note, closing note `human/20261015-sprint_big_feats_done.md`, and TODO.md marking built items plus a new *Open from big_feats* section; documents only — PR#79 body
+- PR#79 stated the six big_feats PRs and their merge order (#71, #73, #76, #78, #74, #77, then #79) — PR#79 body
+- `safebyok/testing` gains `memoryVaultOpts`, `describeDeviceDB`, `holdNextCall`, `beforeNextCall` (+ `AsyncVerbOf`), `tallyWatches`, `freshDbName`, frozen `noBoxYet`/`thisVault`; answers the gripe to find test helpers and simplify — PR#80 body
+- Core test world gains `openUnlocked` (148 sites), `stateOnOpen`, `rememberedUnlock`, `deafVaultDB`; Convex `convexRefusalOf`; demo `fakeAnthropic` and `VaultProbe`; root `makeScratchDir` replaces six hook pairs — PR#80 body
+- Vitest `restoreMocks`/`unstubGlobals` plus a Testing Library `cleanup` setup file remove ~20 `afterEach` hooks; `vitest/expect-expect` counts `expect*`/`TH.expect*` helpers in all five eslint configs — PR#80 body
+- Review fix d2ff093: Convex "hears nothing once unsubscribed" counts after `unsubscribe()` again; f7e2447: changeset names `AsyncVerbOf`; 9e1b457: `noBoxYet`/`thisVault` frozen with a test — PR#80 comment by mrflip

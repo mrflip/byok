@@ -1,0 +1,227 @@
+# raw gripes: old_gripes
+
+Read all 1275 lines of `whiteboard/20261015-gripes/20261015-gripes.md` (the original gripes list, Open and Addressed sections, with the Coach's marks). Refs are "Section > subsection: short title".
+
+- (Coach) Pin npm@12.2.0 by hash in the `publish` job, the only job holding the OIDC token (release.yml:147); marked FIX — Open > Release and npm: unpinned npm
+- Verify "already staged" detection, which relies only on npm's "previously published" wording never checked against the real registry (`npm stage list` closed to trust tokens) — Open > Release and npm: already staged
+- Find out whether a staged version keeps the `--tag` it was staged with when approved; a non-`latest` tag has never been tried — Open > Release and npm: staged --tag
+- Check that the release script's quoting of npm's error summary can never carry a token — Open > Release and npm: error summary
+- Retry a failed GitHub release creation on a re-run (the tag case is tested, the release case is not) — Open > Release and npm: release retry
+- Confirm from the changesets action's docs that the Version PR branch is rebuilt from main's tip on every push; no confirmation recorded — Open > Release and npm: Version PR branch
+- Deprecate `safebyok@0.0.0` now that a real version is live (npm shows it not deprecated) — Open > Release and npm: deprecate 0.0.0
+- (Coach) Make the changeset check cover Dependabot PRs and the Version PR, which can change a public package without a changeset; marked FIX — Open > Release and npm: changeset check skips
+- Land the roadmap-item-3 stored-vault reservations that missed 0.1.0 (deadline passed); only the epoch-ms time fields exist, on unfiled local branch `20261015-clean_times` — Open > Stored-vault contract: reservations
+- Make the bundle hold a list of unlock envelopes so passkey and recovery envelopes can be added later (TODO.md:100) — Open > Stored-vault contract: unlock list
+- Bind `whisper_codec` and `whisper_schema_version` into the lockbox cipher binding (a pre-existing lockbox bound as written, not defaulted); Convex schema widens with it — Open > Stored-vault contract: whisper_codec
+- Bind the whole public header rather than the positional array, with backends storing strings exactly as given (no Unicode normalization) — Open > Stored-vault contract: whole-header binding
+- Make every stored time UTC epoch milliseconds; lockbox and bundle `created_at`/`updated_at` are still ISO strings (types.ts:121) — Open > Stored-vault contract: epoch ms
+- Record in `notes/security.md` that a `changed_at` that stays put tells the backend two payloads were equal — Open > Stored-vault contract: changed_at
+- Replace `note` with a reserved bound public bag that is always written even when empty; design the bag's real shape (service, hint, etc.) — Open > Stored-vault contract: note to bag
+- Rename the device record's `expires_at` to `ask_passphrase_at`; the new check erases old-named records so each user is asked for the passphrase once — Open > Stored-vault contract: ask_passphrase_at
+- Make the Convex component check rows beyond structure: label grammar, empty ids, note length, `vault_id` constancy, epoch increase, `revision_id` freshness — Open > Stored-vault contract: component row checks
+- Give `DeviceUnlock` a JSON form, or accept that only structured-clone stores (IndexedDB) or memory can hold one — Open > Stored-vault contract: DeviceUnlock JSON
+- Decide whether stored-field underbar_case applies at the facades (`key_deriver_label`) or only at the adapter — Open > Stored-vault contract: underbar_case
+- Decide whether Convex needs revision history; it keeps only current bundle and lockbox rows, so no recovery from a bad overwrite — Open > Stored-vault contract: no revision history
+- Decide about `boxes` validated as `string[][]` because Convex has no tuple validator — Open > Stored-vault contract: boxes shape
+- Bind a remembered unlock's `expires_at` into its encryption, or clamp it to now + `forcePassphraseReentryHours` on read; tampering with IndexedDB can extend it — Open > Crypto: expires_at unbound
+- Handle a remembered unlock keeping the `expires_at` it was written with after a later open passes a shorter window — Open > Crypto: expires_at unbound
+- Document or mitigate that a non-extractable vaultKey can still be used by injected code (XSS, extension, stolen unlocked device) to read whispers — Open > Crypto: non-extractable key
+- Build padding for whisper ciphertext length; decide whether `maxWhisperBytes` measures padded or unpadded size and which bucket watermarks — Open > Crypto: length leak
+- Make locking revoke key handles already in use, or say so in `lock()`'s doc; work holding the key finishes after a lock — Open > Crypto: lock does not revoke
+- Measure the ~560 ms Argon2id derivation on browsers and mobile, not only V8 — Open > Crypto: Argon2id timing
+- (Coach) Bound `keyDeriver` `salt_bytes`: shape check accepts 1 and values over the 65536 `getRandomValues` allows; marked FIX, see enforced KDF — Open > Crypto: salt_bytes bound
+- (Coach) Offer specific supplied KDF configurations or a full option bundle; deny unworkable values (65536), allow foolish ones (1); hash-wasm deriver must carry same label and parameters; marked FIX — Open > Crypto: enforced KDF
+- Mention in the README that a `view` facility puts whispers into React state — Open > Crypto: view in React state
+- Decide whether a vault should lock itself when storage refuses with `not_permitted` (as after sign-out); today an unlocked vaultKey stays in memory — Open > Locking: lock on not_permitted
+- Build auto-lock (tab hidden, idle), the natural-expiry timer, the rule that a shut forgets both, React `lockWhenHidden`, and an abort signal for a long derivation — Open > Locking: auto-lock
+- Decide whether the screen-lock recipe's `lock()` erasing the seven-day remembered unlock is intended, or a lock that keeps the remembered unlock is wanted — Open > Locking: screen-lock erases remembered unlock
+- (Coach) Make the React passphrase dialog state the vault's real window instead of always "seven days" (passphrase-modal.tsx:46); marked FIX — Open > Locking: dialog says seven days
+- Settle sign-out and account switching, left to each host — Open > Locking: sign-out
+- Make IndexedDB `versionedUpdate` atomic (idb-keyval `update()`), and `doEraseVault`/`doUpdateBox` single transactions so orphaned lockboxes are not left — Open > Concurrency: IndexedDB check-then-save
+- Make the lockbox cap hard under concurrency (host `maxLockboxes` soft; local backends enforce none) — Open > Concurrency: soft lockbox cap
+- Serialize the core's refreshes; every open runs two at once and they can interleave after a write — Open > Concurrency: refreshes not serialized
+- Make `quietRefresh` surface a failed catch-up read after a stale refusal, so the device relocks and the erase reaches the snapshot — Open > Concurrency: quietRefresh swallows
+- Restore a pre-write look in `store()`/`erase()`: a session stale from a passphrase change elsewhere can write before relocking — Open > Concurrency: no look before writing
+- Retry `changePassphrase` and `destroy` so a concurrent passphrase change does not surface `stale_write` to the user — Open > Concurrency: not retried
+- Add timeouts to Convex calls (offline calls wait; an abandoned write can land on reconnect) and handle a failing watch (`onError` does nothing) — Open > Concurrency: Convex timeouts
+- Check across tabs the assumption that memory/localStorage targets with no conditional write are atomic — Open > Concurrency: memory/localStorage
+- Stop `read()`/`use()` reporting a misleading `corrupt_record` on a box the successor vault rewrote — Open > Concurrency: corrupt_record on rewritten box
+- Make `destroy()` on a handle that never saw a bundle erase (or fail), so "delete my account" cannot report success while a vault stands — Open > destroy: never saw bundle
+- Handle a refused `destroy()` leaving the handle holding the successor's `vault_id`, so an auto-retry erases a vault made anew elsewhere; add a line to integration docs — Open > destroy: successor vault_id
+- Prevent a host's `stale_write` retry loop from re-storing a box erased on another device (the erased box throws the same `stale_write` kind) — Open > destroy: retry brings secret back
+- Decide whether `destroy()` should stay unguarded and need no unlock; no ruling, only stated rationale — Open > destroy: unguarded
+- Get the Coach's confirmation of size-cap decisions: bytes rather than lockbox count, `vault_full` name, share-plus-1 KiB fit check — Open > Vault size: cap decisions
+- Reduce refresh cost that grows with the vault (every refresh reads every lockbox; one-shot WebCrypto holds a whole whisper in memory several times) — Open > Vault size: refresh cost
+- (Coach) Fix the 1 KiB per-lockbox allowance being smaller than a lockbox's other fields at their largest; marked FIX — Open > Vault size: 1 KiB allowance
+- Avoid a full refresh on every refused store when a vault is at or over its limit — Open > Vault size: refresh per refused store
+- Justify `localVaultDB`'s 1 MiB per-record ceiling, and guard the local adapters' `Infinity` byte cap against browser quotas — Open > Vault size: local ceilings
+- Avoid `watchVault` reading whole lockbox documents to emit revision pairs (Convex cannot project fields) — Open > Vault size: watchVault reads whole docs
+- Prevent Convex argument-validation errors from quoting refused arguments (`user_id`, notes, ciphertext) into logs and dev clients; only recorded in `notes/security.md` — Open > Convex: validation errors quote args
+- Document or verify that user isolation rests on the host's `getUserId` callback, which the component cannot verify — Open > Convex: isolation
+- Decide whether every `watchVault` result (first included) triggering a refresh is accepted, or bring back the plan's skip of the first emit — Open > Convex: watchVault refresh
+- Do the Coach's cold walk-through of the Convex README in another app (the acceptance test) — Open > Convex: cold walk-through
+- Get approval for `vite` as a dev dependency of the Convex package, added without being on the plan's approved list — Open > Convex: vite dev dep
+- Rule whether the unsubscribe once-guard should be a library or stay a hand-written three-line flag — Open > Convex: unsubscribe once-guard
+- Run Convex codegen against a real deployment; `ComponentApi` is derived and `_generated/` comes from templates run offline — Open > Convex: codegen
+- Make the `./test` entry not assume Vite/vitest (`import.meta.glob`), and stop wrappers restating validators and duplicating non-public core helpers — Open > Convex: ./test entry
+- Guard against a convex bump breaking the fake socket that follows convex 1.46.0's wire protocol — Open > Convex: fake socket
+- Settle Convex agent tooling: nested skill visibility for subagents, vendored skill text edited with no re-sync plan, `guidelines.md` unvendored, Convex Claude Code plugin install — Open > Convex: agent tooling
+- (Coach) Build a demo running over Convex (needs a deployment and a `getUserId` auth story); marked FIX — Open > Convex: Convex demo
+- Update `design.md`'s header, which still says "Intent, not yet code." — Open > Convex: design.md header
+- Decide the misuse-vs-condition split: `storage_unavailable` is thrown to the error boundary though it says "try again shortly", and wraps an adapter's own `TypeError`s — Open > API: misuse vs conditions
+- Decide the changed behavior that `store()` now throws `vault_locked` rather than `stale_write` when a retry finds the device relocked (shipped as a patch) — Open > API: vault_locked on retry
+- Decide whether erase-wins and an exhausted retry need distinct error kinds; both throw `stale_write` — Open > API: stale_write ambiguity
+- Make safebyok-react prompt for the passphrase on `stale_write` from a store or erase, not only `vault_locked` — Open > API: react prompt on stale_write
+- (Coach) Stop `PassphraseModal` rethrowing non-`wrong_passphrase` errors into a voided promise; marked FIX — Open > API: PassphraseModal rethrow
+- Get a word on #40's calls: `safebyok/browser` entry name (Coach had said `basic`), memoized frozen `browserOpts` bag per `dbName`, removal of `SevenDaysMs` — Open > API: #40 calls
+- Decide #43's calls: whether `note: null` should clear a note (new API on a field the roadmap may retire), and the minor-or-patch bump — Open > API: #43 calls
+- (Coach) Validate VaultDB inputs evenly: `updateBundle`/`updateBox` `expected`, `createBundle` input, `bundle.vault_id` match, outgoing records, `listBoxes` damaged ciphered fields; marked FIX — Open > API: VaultDB validation
+- (Coach) Do a full survey of validation gaps: `dbName` in `browserOpts`/`idbVaultDB`/`idbDeviceDB`, remembered-unlock scope comparison, `clock` shape; marked FIX — Open > API: smaller validation gaps
+- Design a conflict-handler hook for an erase-versus-update collision after the retry limit — Open > API: conflict-handler hook
+- Decide whether whisper strictness should refuse what JSON mangles (`Date`, `Map`) rather than flatten it — Open > API: whisper strictness
+- Decide whether `maxWhisperBytes` being checked on write only is intended — Open > API: maxWhisperBytes write-only
+- Rule on the adapter `do*` hook naming convention; `vaultMeetsExpectation` typing point is stale — Open > API: naming taste
+- Handle label-grammar widening hazards: colon collides ckeys (needs ckey migration), read-path widening makes `corrupt_record`, older clients, a validator must never change a label — Open > Labels: grammar hazards
+- Decide host-chosen grammar (`LabelFloor`, `labelRules`): floor max length (64?), rule scope for read/use/erase, server-side Convex enforcement, boxlabel-first order — Open > Labels: host grammar decisions
+- Document that labels are public and keep a short maximum in a looser boxlabel rule, with refusals never quoting input (`notes/security.md` lacks it) — Open > Labels: pasted API keys
+- Resolve `localeCompare` vs byte ordering in `listBoxes` and idb ckeys vs Convex; a host allowing non-ASCII must require NFC — Open > Labels: sort order
+- Do the work owed when the grammar becomes pluggable: grammar text repeated in three error messages, tests pin today's grammar, rule joins `useEffect` deps in React — Open > Labels: pluggable work
+- Decide the original ask that `anthropic-prod` and `anthropic:prod` style labels are refused — Open > Labels: refused label styles
+- Reconcile `keyDeriverLabel` with STYLE.md's smush rule (`keyderiverlabel`) — Open > Labels: keyDeriverLabel
+- Build the replaceable `user_id` validation; code says `user_id` (not validated as a Label) while VOCABULARY once said `userlabel` — Open > Labels: user_id naming
+- Review mask's commits after the reviewer's last: second NFC pass, U+FFFC strip, caps, widened property test — Open > mask: unreviewed commits
+- Get a Coach yes for hand-writing `mask` after a library search found nothing — Open > mask: hand-written
+- Check `mask` rendering in real terminals and fonts and Unicode versions other than Node 24's — Open > mask: rendering
+- Stop tsdown needing a hand-kept `typesVersions` line per new entry or attw fails — Open > mask: typesVersions
+- Decide whether `mask` should validate more lightly than zod; `Z.object` silently drops misspelled options where `strictObject` refuses — Open > mask: smaller points
+- Decide the 1000 cap on `mask` head, tail and `minStars`, and whitespace removed rather than collapsed — Open > mask: smaller points
+- Decide `mask`'s stars-only variant, whether `maxLen` replaces `maxStars`, and stripping more invisibles (U+00AD, U+2061-2064, U+180E, U+034F), U+FFFD kept — Open > mask: smaller points
+- Fix `mask` Hangul jamo counting one character too many and cuts that can split an emoji sequence — Open > mask: smaller points
+- Fix `errors.ts` describing `bad_option`/`bad_whisper` too narrowly and omitting zod's safe-integer limit — Open > mask: smaller points
+- Fix `mask` tests: single quotes against STYLE.md, no-Intl test stubs Intl around Zod, property test checks against its own regex copy, lint forces regex match over spread — Open > mask: smaller points
+- Make code refuse `test_digest_v0` (the weak `safebyok/testing` deriver) for a real vault; the entry exists, recorded in `notes/security.md` only — Open > Dependencies: weak testing deriver
+- Move `idb-keyval` out of regular dependencies, since only the `safebyok/idb` entry loads it — Open > Dependencies: idb-keyval
+- Review the security decision of `pnpm-workspace.yaml` denying esbuild's install script while esbuild arrives through convex — Open > Dependencies: esbuild script
+- Shrink zod's share of a bare `openVault` bundle (120-135 kB; bare `stableJsonify` 25 kB) via a zod/mini audit — Open > Dependencies: zod bundle
+- Size-budget caveats: `pnpm size` not in `justify`; CI builds core twice; only ESM measured; zod bump may trip 7-8% headroom; size-limit Node range vs engines `>=22`; `--why` plugin; tree-shaking test bundles `src/` — Open > Dependencies: size caveats
+- Resolve `pnpm peers check` warnings (two plugins leave eslint 10 unmet) and `settings.react.version` pinned to '19.3' because 'detect' crashes under eslint 10 — Open > Dependencies: peers check
+- Click through the demo's passphrase dialog in a real browser; no one has — Open > Testing gaps: demo dialog
+- Run against a real Convex deployment to prove concurrency, invalidation, auth (`setAuth`, JWT refresh), reconnect, resend, error redaction, and measure the 4092-lockbox erase — Open > Testing gaps: real Convex
+- Run real IndexedDB and its concurrent interleavings in tests — Open > Testing gaps: real IndexedDB
+- Run actionlint and the npm approval of staged 0.2.0 (CI coverage, Node 22/26, release workflow have run) — Open > Testing gaps: never run
+- (Coach) Strengthen weak tests: demo components 22% coverage, wrong-passphrase path, modal redundant assertion, `createAuth` global clock, weak "never quotes" test, `tweakB64('')`, two `expectRefusal`s; marked FIX — Open > Testing gaps: weak tests
+- (Coach) Fix test-plumbing hazards: casts under `exactOptionalPropertyTypes`, Convex client tests need the core built first; marked FIX — Open > Testing gaps: plumbing hazards
+- (Coach) Look through the tests, identify things that should be helpers, write them and simplify; marked FIX — Open > Testing gaps: test helpers
+- (Coach) Check Dependabot `directory: /` against packages under `packages/` and `demos/`; marked FIX — Open > CI: Dependabot directory
+- (Coach) Speed up `justify` (~37-40 s, 13 tsdown runs; each dependent rebuilds core, `workspaceConcurrency: 1`); marked FIX — Open > CI: justify slow
+- (Coach) Rewrap comment lines over 100 columns in ~25 files and enforce a width; marked FIXd — Open > CI: comment width
+- (Coach) Fix #36's small items: `test:coverage` runs root tests without coverage, `BundleCases` misaligned, `wakeupAtNextTick` `@example` overpromises; marked FIX — Open > CI: #36 small items
+- Make `pnpm changeset` usable without a terminal (interactive, exits 13), so agents need not write changesets by hand — Open > CI: changeset interactive
+- Document that a no-backend IndexedDB vault is best-effort and lost when the user clears site data (demo asks `persist()`) — Open > Docs: IndexedDB best-effort
+- Promote the proposed README from `whiteboard/` (stale: seven-primitive adapter layer, old seven-day knob) and write an adapter author's guide — Open > Docs: proposed README
+- (Coach) Refresh `notes/security.md` (entries mid-rename or pre-release, `rememberForMs` still named at :105); marked FIX — Open > Docs: notes/security.md
+- (Coach) Check VOCABULARY.md line by line against the exports; marked FIX — Open > Docs: VOCABULARY
+- Fix demo copy and behaviour: `persist()` at boot before a gesture, no "only in this browser" line, new-vault dead end in unlock dialog, no error boundary, blank note clears a box's note — Open > Docs: demo copy
+- (Coach) Reword "pretending" at vault.ts:161,248; marked FIX — Open > Docs: pretending wording
+- Fill pr_releases thread 2 gaps: missing `human/` entry, reviewer's two minor points never passed on, deviations (extra commit, CLAUDE.md Commands edit) never ruled on — Open > Process: thread 2 gaps
+- Rename the devcontainer `byok-*` volumes at the next rebuild (renaming orphans the old ones) — Open > Process: devcontainer volumes
+- Clean dead worktrees (11 `/workspace/byok-*` dirs incl. `byok-storage_verbs`, `byok-convex_component`) and stale `origin/20261014-pr_based_releases` branch — Open > Process: dead worktrees
+- Drop the main checkout's two uncommitted `TODO.md` lines (screen-lock and race gripes; committed on `20261015-gripes` ead7b29) rather than merge them — Open > Process: TODO.md lines
+- Support React Native later: no `crypto.subtle`, no WebAssembly in Hermes; needs a WebCrypto shim, keychain DeviceDB, native Argon2 (low, deferred) — Open > Deferred: React Native
+- Not yet: recovery keys, fingerprint unlock (owes a `notes/security.md` entry), sub-millisecond tiebreaker, PBKDF2 deriver — Open > Deferred: not yet
+- Side quests: blob helper with pluggable store, Postgres/REST/GraphQL stores, IndexedDB store package (~40 lines BroadcastChannel duplicated), `safebyok-vue`, pluggable stringifier, Convex adapter tree-shakability — Open > Deferred: side quests
+- (Coach) NOTYET: a superseded bundle kept in Convex backups still opens the unrotated vaultKey with the old passphrase — Open > Deferred: backups
+- (Coach) ragebait: keeping eslint configs cut from the core's in step is manual; generator parked, shared config package deferred — Open > Deferred: eslint configs
+- Ensure the plaintext stub vault never ships or is mistaken for real — Addressed > Crypto: stub vault
+- Make the in-memory vaultKey non-extractable (caveat stays under Open) — Addressed > Crypto: extractable vaultKey
+- Get the Coach's yes for runtime dependencies `@noble/hashes`, `@scure/base`, `idb-keyval`, `safe-stable-stringify` before adding them — Addressed > Crypto: runtime deps
+- Decide whether the KeyDeriver seam is the right reading of "security first, pluggable second" — Addressed > Crypto: KeyDeriver seam
+- Correct `notes/security.md` claiming the main entry imports no Argon2id when it re-exports the deriver — Addressed > Crypto: security.md Argon2id
+- Fix the 24 relic-survey issues, two harmful if copied (CORS-failing fetch, React `destroy()` on unmount) — Addressed > Crypto: relic survey
+- Provide a reader for the stub's stored formats (unreadable by v1) — Addressed > Crypto: stub formats
+- Decide the type and visibility of `whisper_schema_version` (leaks data-shape generation) — Addressed > Crypto: schema version
+- Accept or avoid base64's ~33% overhead on ciphered fields — Addressed > Crypto: base64 overhead
+- (Coach) NOTED: the demo calls Anthropic from the browser with `dangerouslyAllowBrowser`; the provider receives the key each request; spend caps are the backstop — Addressed > Crypto: browser-direct calls
+- Fix a `lock()` landing while `unlock()` is in flight leaving the vault unlocked — Addressed > Locking: lock during unlock
+- Handle `forcePassphraseReentryHours` with no upper cap pushing `askPassphraseAt`/`expires_at` past `Number.MAX_SAFE_INTEGER` and `Date` range — Addressed > Locking: no upper cap
+- (Coach) NOTED: the unlock window is client-side politeness, so two devices can carry different windows (status unclear) — Addressed > Locking: window client-side
+- Close the `vault_id` hole where a box from a destroyed vault lands in its recreation; #9's guard was check-then-write — Addressed > Stored format: vault_id hole
+- Stop a note over 256 characters being written unchecked and bricking the vault, and the vault trusting whatever a host's DeviceDB returned — Addressed > Stored format: long note
+- Provide compare-and-swap writes and a conflict seam — Addressed > Stored format: compare-and-swap
+- Keep `exactOptionalPropertyTypes` from refusing note-less lockboxes already stored — Addressed > Stored format: exactOptionalPropertyTypes
+- Handle zod stripping an unknown field where Convex refuses it — Addressed > Stored format: zod vs Convex unknown field
+- Retry a store that loses a race — Addressed > Stored format: store retry
+- Stop a failed `openVault` leaking its storage subscription (a live Convex watch), repeated on each error-boundary reset — Addressed > Stored format: leaked subscription
+- Review the store backoff in #45: hand-rolled jittered backoff vs p-retry, reverses thread 7's "no delay", ~6 s worst case — Addressed > Stored format: store backoff
+- Name the storage-trouble error kinds — Addressed > Stored format: storage-trouble kinds
+- Cover the storage-verbs thread changing VaultDB's public surface and exporting `VaultBundle`/`VaultScope` without the Coach having asked — Addressed > Stored format: VaultDB surface change
+- (Coach) NOTED: a vault bricked by an over-long stored note still will not open; decide whether `listBoxes` skips or flags the bad row — Addressed > Stored format: bricked vault
+- (Coach) NOTED: demo data written before a change is orphaned or mistyped (dropped `byok-*` tags, ISO `created_at`, `JSON.parse(...) as Account` in `auth.ts`) — Addressed > Stored format: demo data
+- Cap vault size: past ~150 large lockboxes a Convex vault could not be erased, listed or watched in one transaction (client cap, `maxVaultBytes`) — Addressed > Vault size: client cap
+- Cap a Convex vault on the server; the client cap is the only guard, and the Coach said yes to follow-up `convex_server_cap` (not filed) — Addressed > Vault size: server cap
+- Add a whisper size cap — Addressed > Vault size: whisper cap
+- Fix `ensureLimitsFit` letting an undeclared `maxRecordBytes` through and the zero-fit message "at most 0 lockboxes" — Addressed > Vault size: ensureLimitsFit
+- Make VaultProvider surface an `openVault` rejection instead of dropping it — Addressed > API: provider rejection
+- Land the post-0.1.0-breaking renames before 0.1.0 (`keyDeriver` required, `rememberForMs` to `forcePassphraseReentryHours`, `expiresAt` to `askPassphraseAt`) — Addressed > API: breaking renames
+- Resolve `guard()` returning `null` colliding with a `null` whisper, and `vault.ts` using `null` for "not read" and "no bundle" — Addressed > API: null collisions
+- Decide whether the remembered unlock survives sign-out — Addressed > API: sign-out
+- Decide whether zod is a regular dependency or a peer — Addressed > API: zod peer
+- Decide `Ciphered` as an exported name — Addressed > API: Ciphered
+- Retire the relic's API dead ends (schema registry, principal machinery, five-state status, DeviceDB flags, `handleSignedOut`) — Addressed > API: relic dead ends
+- Account for dropped features (passphrase change, compare-and-swap, stale and corrupted states) — Addressed > API: dropped features
+- Fix #37 issues before its last review: `maxLen` lengthening a result, surviving bidi controls, `typeof Intl.Segmenter` assuming `Intl`, ASCII-only length test, false never-splits claim, line width — Addressed > API: #37 early fixes
+- List `vault_full` in the core's error kinds (not TODO.md's *Error families*) and fix TODO's "thread 6" to thread 7 — Addressed > API: vault_full listing
+- Decide whether `mask` strips right-to-left letters and numbers, making those scripts vanish — Addressed > mask: RTL
+- Decide `mask` stripping `\p{M}`, which drops Devanagari/Thai vowel signs and Arabic harakat — Addressed > mask: \p{M}
+- Fix `mask` with `maxLen: Infinity` and vast `minStars` throwing a bare `RangeError`, and a too-small `maxLen` throwing at render — Addressed > mask: RangeError
+- Resolve #37 conflicting with main in `notes/security.md`, needing a Coach force-push — Addressed > mask: force-push
+- Make `safebyok` a peer of `safebyok-convex` so one `VaultError` class is shared — Addressed > Convex packaging: peer
+- Put `safebyok-convex` into a CI job — Addressed > Convex packaging: CI
+- Give the Convex component a publishable `dist/` per module, lockstep group membership, and `.claude/` kept out of the tarball — Addressed > Convex packaging: publishable dist
+- Fix `safebyok-convex`'s own `justify` failing with no source behind `--no-error-on-unmatched-pattern` — Addressed > Convex packaging: justify stopgap
+- Resolve component codegen possibly needing login/deployment, the owed Convex skill, hidden deployment-running rule, no skill for the client — Addressed > Convex packaging: codegen/skills
+- Remove the redundant refresh on a React client's first result (accepted in design; first-emit question stays Open) — Addressed > Convex packaging: first refresh
+- Decide whether more checks should be required (the demo was never one) — Addressed > Convex packaging: required checks
+- (Coach) NOTED: decide whether `react` as a dev dependency of the Convex tests (for a real `ConvexReactClient`) is kept, moved or dropped — Addressed > Convex packaging: react dev dep
+- Write the first changeset before any release — Addressed > Release: first changeset
+- Make a Version PR opened by `GITHUB_TOKEN` start checks without close and reopen — Addressed > Release: Version PR checks
+- Confirm npm's trusted publisher accepts the rewritten workflow and provenance survives staging and approval — Addressed > Release: trusted publisher
+- Pin third-party Actions flagged by CodeQL (4x), including the publishing workflow — Addressed > Release: unpinned Actions
+- Prevent `npm stage` shipping literal `workspace:` ranges, peer range `^0.0.0` matching only 0.0.0, `pnpm pack` skipping `prepublishOnly`, drift of a fixed package list — Addressed > Release: workspace ranges
+- Enable Actions PR creation permission and widen the tag ruleset to `safebyok*@*` — Addressed > Release: permissions
+- Commit the reviewer's release-script fix left uncommitted after a permission denial — Addressed > Release: reviewer fix
+- Guard hand-run `npm publish` shipping the `@safebyok/source` condition, including the release's `npm publish <tarball>` path — Addressed > Release: hand-run publish
+- Stop every push to main running pack/publish as no-ops, and retry a failed tag push — Addressed > Release: no-op runs
+- Reconcile release design drift from the preplan (bash script that tagged, one `v*` tag, changesets' own `pnpm publish`) — Addressed > Release: design drift
+- Build the changeset gate, action pins by SHA, throwaway fixed-group check, bootstrap empty changeset — Addressed > Release: preplan items
+- Settle changeset naming (~30 hand-written lines; a randomly named changeset) — Addressed > Release: changeset naming
+- Keep the plaintext stub from publishing before the cryptography — Addressed > Release: stub publish
+- Document prerelease mode (`pnpm changeset pre enter beta`) rather than automate it — Addressed > Release: prerelease mode
+- (Coach) fixed: `safebyok-react@0.1.0` has a GitHub release and tag but is 404 on npm while safebyok and safebyok-convex 0.1.0 are; may be a stage awaiting approval — Addressed > Release: react not on npm
+- (Coach) NOTED (still a one-person project): the `npm` environment has no required reviewers and no branch limit, so 2FA approval is the only gate to publish — Addressed > Release: npm environment
+- (Coach) fixed: the dist-tag permission lets a workflow repoint `latest`/`next` without 2FA; unused by the workflow, runner npm below 11.21.0 — Addressed > Release: dist-tag permission
+- (Coach) NOTED: a rejected or never-approved stage is never restaged (number burned, tag names an earlier commit); unknown whether npm allows restaging — Addressed > Release: rejected stage
+- (Coach) fixed: `privatePackages` was written to keep `safebyok-convex` unpublished but it is now public (status unclear) — Addressed > Release: privatePackages
+- Fix `crypto.test.ts` overwriting the first character with `A` and failing ~1 in 64 runs — Addressed > Tooling: flaky crypto.test.ts
+- Stop root scripts chained with `&&` letting a root failure hide package failures — Addressed > Tooling: && chaining
+- Stop a stale root `dist/` failing the root lint — Addressed > Tooling: stale dist lint
+- Make the root build recursive and stop parallel builds racing on `dist/` — Addressed > Tooling: root build
+- Get the Coach's yes for dev dependencies `size-limit` and its preset in #42 — Addressed > Tooling: size-limit deps
+- Fix the flaky tamper test in `vault.test.ts` ("a lockbox with altered ciphertext") overwriting with `A` — Addressed > Tooling: flaky vault.test.ts
+- Decide whether tests run against built `dist/` or source — Addressed > Tooling: tests on dist
+- Give the demo's coverage an `include` — Addressed > Tooling: demo coverage include
+- Clean assorted plumbing: packages CI job to fold, binding tests needing core built, agent definitions saying root justify skipped packages, `.claude/` lint ignore, conflicting convex test line, "." workspace risk — Addressed > Tooling: assorted plumbing
+- Build `safebyok-react` publishable like the core (was source-exported and private) — Addressed > Tooling: react publishable
+- Fix commit prefixes (`api:`, `demos:`, `react:`, the `rel` row) — Addressed > Tooling: commit prefixes
+- Report the `eslint-disable`s for `sonarjs/no-hardcoded-passwords` on fake salts — Addressed > Tooling: eslint-disable report
+- Solve the demo's build-first dev loop — Addressed > Tooling: demo dev loop
+- Handle merge-order and rebase notes between concurrent branches — Addressed > Tooling: merge order
+- (Coach) VERIFY FIXED: root scripts' `exit $(( root || $? ))` losing pnpm arguments under dash and exiting 1 under bash-as-sh; root step takes no args and needs POSIX `sh` — Addressed > Tooling: root exit arguments
+- (Coach) fixed: the IDE's phantom `tsconfigRootDir` candidate clears only after an eslint-server restart (status unclear) — Addressed > Tooling: tsconfigRootDir phantom
+- Run the docs sweep: no-recovery line, screen-lock recipe, demo `persist()`, stale "stub" wording, release bullet, release App key in `notes/security.md`, recipe `removeEventListener` — Addressed > Docs: docs sweep
+- Carry `whiteboard/` in PRs (it was left out of #1) and decide whether the preplan should be copied — Addressed > Docs: whiteboard in PRs
+- Review the /sprint skill change mirroring every whiteboard file — Addressed > Docs: sprint skill mirror
+- (Coach) REPLY: should PROCESS.md mention `/closeout` beside `/sprint`; should a `/sprint` skill change ride in its own PR; should sprint docs ride with the first thread — Addressed > Docs: process docs
+- Remove a stray vite dev server on port 5199 left by a removed worktree — Addressed > Process: stray vite server
+- Handle #36 stacked on #38 (#38 must merge first) — Addressed > Process: #36 on #38
+- (Coach) NOTED: sprint doc mirroring was skipped while the Docs tools were disconnected — Addressed > Process: doc mirroring skipped
