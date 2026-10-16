@@ -7,6 +7,18 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-16: `describeVaultDB` now races every compare-and-write line (VAULTDB.md, 3.1 to 3.5, 3.7,
+  4.5) from two devices, holding one before each of its round trips while the other moves
+  (`raceEveryWay`, a turnstile the adapter's test factory wires into its client). What it shows: no
+  check is split from its write across round trips or awaits, and no in-process lock or queue
+  makes the devices take turns. What it cannot: split one round trip. Every in-tree backend under
+  test runs one call at a time, which is the real promise of Convex's mutations and of IndexedDB's
+  readwrite transactions, but not of Postgres at READ COMMITTED, whose statements run at once: the
+  atomicity of `postgresVaultDB`'s one-statement writes under concurrent connections is reasoned
+  (thread 11's verdict), not tested. The self-tests that prove the races catch a broken adapter
+  run over an in-memory backend, not over each real one. Separately, `postgresVaultDB` now calls a
+  subscriber once as its listen begins (6.1), so a vault reads a write that landed while its watch
+  was starting, which it missed before.
 * 2026-10-16: the VaultDB contract (`packages/safebyok/VAULTDB.md`, line 4.2) makes a storage
   adapter's lockbox limit a best effort: writes made one after another never pass it, but writers
   racing for the last places may take a vault a few past it, and a client that bypasses the
