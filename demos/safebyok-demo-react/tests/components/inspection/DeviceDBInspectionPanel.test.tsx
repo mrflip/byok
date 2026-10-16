@@ -29,8 +29,11 @@ describe("DeviceDBInspectionPanel", () => {
     expect(screen.getByText(/"userlabel":"margo"/)).to.not.be.null
   })
 
-  it("starts from empty shelves, whatever the tests before it wrote", () => {
+  it("starts from empty shelves, whatever the tests before it wrote", async () => {
     render(<DeviceDBInspectionPanel />)
+    // The IndexedDB shelf's rows load after the first render: a read of our own, queued behind
+    // the panel's, lets them land first.
+    await act(() => deviceDbInspector.rows())
     expect(screen.queryByText(/margo/)).to.be.null
     expect(screen.queryByText('🔑 non-extractable key')).to.be.null
   })
