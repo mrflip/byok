@@ -9,7 +9,7 @@
 | 3 | passkey_button_ux | merged #98                 |
 | 4 | small_sweep       | merged #99                 |
 | 5 | vaultdb_battery   | merged #114; helpers sweep and Postgres cap duplicates left |
-| 6 | race_helper       | review fixed; filing #119 onto #111 |
+| 6 | race_helper       | filed #119 (on #111)       |
 | 7 | indexeddb_fixes   | merged #109                |
 | 8 | size_rule         | merged with #99            |
 | 9 | damaged_bundle    | merged #108                |
@@ -35,7 +35,7 @@
   byte-identical. The "mainly main" ruleset requires test-build, lint-typecheck and both CodeQL
   checks, with **strict up-to-date**: every PR goes BEHIND whenever main moves, and merging the top
   takes all. #107's test-build hit the Convex timeout flake twice; rerun requested. **The whole line
-  merged with #115 (main `23f263a`); new work files onto main.**
+  merged with #115 (main `23f263a`). The line now: main → #111 → #119 (top).**
 
 * **Thread 21 (#115), damaged_erase.** `eraseDamagedVault(opts)` erases a vault `openVault` refuses
   as `damaged_bundle`, and the device's remembered unlock; a sound vault is refused (`bad_option`),
