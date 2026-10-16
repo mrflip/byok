@@ -47,8 +47,9 @@ export type ConvexVaultClient = ConvexWatchingClient | ConvexReactWatchingClient
  * Hand it to `openVault` as its `vaultDB`.
  *
  * * **Who may reach a vault** is your Convex backend's call: a vault call made while signed out,
- *   or for another user's vault, refuses with a VaultError of kind `not_permitted`. Signing out
- *   does not lock a vault already unlocked: close it when your user signs out.
+ *   or for another user's vault, refuses with a VaultError of kind `identity_revoked`, and the
+ *   vault locks itself. A sign-out reaches an open vault through its live `watchVault` query, so
+ *   it locks even while idle. Close it when your user signs out all the same.
  * * **Other devices' writes** reach this one live: the vault subscribes to the safebyok function
  *   `watchVault`, and refreshes when it changes.
  * * **A full vault**: the component holds every vault to limits of its own, whatever a client
@@ -165,8 +166,9 @@ class ConvexVaultDB extends VaultDB {
       return this.client.watchQuery(this.api.watchVault, args).onUpdate(() => { onChange() })
     }
     // A failing watch has nobody to throw to: without this handler, ConvexClient throws it from
-    // inside its socket. The vault's next foreground call meets the same trouble and says so.
-    return this.client.onUpdate(this.api.watchVault, args, () => { onChange() }, ignoreTrouble)
+    // inside its socket. It calls onChange instead, as a ConvexReactClient's watch does, so the
+    // vault looks again and meets the trouble itself: a sign-out locks it, anything else is logged.
+    return this.client.onUpdate(this.api.watchVault, args, () => { onChange() }, () => { onChange() })
   }
 }
 
@@ -175,8 +177,6 @@ const ConvexDocumentBytes = 1_048_576
 
 /** Convex's most for one function to read, in bytes: 16 MiB. */
 const ConvexTransactionReadBytes = 16_777_216
-
-const ignoreTrouble = (): void => undefined
 
 /**
  * `call`, with a refusal from safebyok's functions -- a `ConvexError` carrying one of its kinds --

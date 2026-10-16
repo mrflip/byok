@@ -111,10 +111,10 @@ describe("vaultResolvers, refusing", () => {
     const result = await asked(TH.schemaOver(await TH.emptyDatabase()), VaultOperations.safebyokReadBundle, { scope: TH.scopeOf('u2') })
     expect(result.data).to.deep.equal({ safebyokReadBundle: null })
     expect(result.errors!.map((err) => err.toJSON())).to.deep.equal([{
-      message:    'This vault belongs to another user: a signed-in user reaches only their own vaults.',
+      message:    'This vault belongs to another user than the one signed in: a signed-in user reaches only their own vaults. If the user changed, open the vault for the new one.',
       locations:  [{ line: 2, column: 3 }],
       path:       ['safebyokReadBundle'],
-      extensions: { kind: 'not_permitted' },
+      extensions: { kind: 'identity_revoked' },
     }])
   })
 
@@ -218,6 +218,6 @@ describe("vaultResolvers, the subscription", () => {
       variableValues: { scope: TH.scopeOf('u2') },
       contextValue:   { userId: 'u1' },
     }) as ExecutionResult
-    expect(result.errors!.map((err) => err.extensions)).to.deep.equal([{ kind: 'not_permitted' }])
+    expect(result.errors!.map((err) => err.extensions)).to.deep.equal([{ kind: 'identity_revoked' }])
   })
 })

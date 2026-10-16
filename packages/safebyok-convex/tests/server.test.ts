@@ -66,16 +66,16 @@ describe("SafebyokComponent.api, for the vault's own user", () => {
 
 describe("SafebyokComponent.api, for anyone else", () => {
   for (const [fnName, call] of EveryCall) {
-    it(`refuses ${fnName} as not_permitted when no one is signed in`, async () => {
+    it(`refuses ${fnName} as identity_revoked when no one is signed in`, async () => {
       const t = await seeded()
       const refusal = await TH.convexRefusalOf(call(t))
-      expect(refusal.kind).to.eq('not_permitted')
+      expect(refusal.kind).to.eq('identity_revoked')
     })
 
-    it(`refuses ${fnName} as not_permitted for another signed-in user`, async () => {
+    it(`refuses ${fnName} as identity_revoked for another signed-in user`, async () => {
       const t = await seeded()
       const refusal = await TH.convexRefusalOf(call(t.withIdentity({ subject: 'u2' })))
-      expect(refusal.kind).to.eq('not_permitted')
+      expect(refusal.kind).to.eq('identity_revoked')
     })
   }
 
@@ -103,7 +103,7 @@ describe("SafebyokComponent.api, for anyone else", () => {
     ]
     expect(refusals.map((refusal) => refusal.message)).to.deep.equal([
       'No one is signed in, so this vault cannot be reached: sign in, then try again.',
-      'This vault belongs to another user: a signed-in user reaches only their own vaults.',
+      'This vault belongs to another user than the one signed in: a signed-in user reaches only their own vaults. If the user changed, open the vault for the new one.',
     ])
   })
 })
@@ -121,7 +121,7 @@ describe("SafebyokComponent.api, with the host's getUserId", () => {
       const host = TH.hostWith(getUserId)
       const t = host.createTest().withIdentity({ subject: 'u1' })
       const refusal = await TH.convexRefusalOf(t.query(host.api.safebyok.getBundle, { scope: u1 }))
-      expect(refusal.kind).to.eq('not_permitted')
+      expect(refusal.kind).to.eq('identity_revoked')
     })
   }
 
@@ -134,6 +134,6 @@ describe("SafebyokComponent.api, with the host's getUserId", () => {
     await t.mutation(host.api.safebyok.createBundle, { bundle: TH.bundleOf('user|u1') })
     expect(await t.query(host.api.safebyok.getBundle, { scope: TH.scopeOf('user|u1') })).to.deep.equal(TH.bundleOf('user|u1'))
     const refusal = await TH.convexRefusalOf(t.query(host.api.safebyok.getBundle, { scope: u1 }))
-    expect(refusal.kind).to.eq('not_permitted')
+    expect(refusal.kind).to.eq('identity_revoked')
   })
 })

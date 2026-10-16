@@ -158,10 +158,13 @@ const byHeader = (request: Request) => Promise.resolve(request.headers.get('x-te
 const postOf = (body: unknown) => new Request(`https://app.example.test${VaultRouteUrl}`, { method: 'POST', body: JSON.stringify(body) })
 
 /** A browser for `userId`: its fetch reaches `route` in-process, signed in as that user. */
-const browserFor = (route: (request: Request) => Promise<Response>, userId: string | null) => (
+const browserFor = (route: (request: Request) => Promise<Response>, userId: string | null) => sessionedBrowser(route, { userId })
+
+/** A browser whose fetch reaches `route` in-process, signed in as `session.userId` at each call: change it to sign in or out. */
+const sessionedBrowser = (route: (request: Request) => Promise<Response>, session: { userId: string | null }) => (
   new RouteVaultDB((url, init) => {
     const headers = new Headers(init.headers)
-    if (userId !== null) { headers.set('x-test-user', userId) }
+    if (session.userId !== null) { headers.set('x-test-user', session.userId) }
     return route(new Request(`https://app.example.test${url}`, { ...init, headers }))
   })
 )
@@ -185,21 +188,40 @@ describe("the README route recipe", () => {
     vault.close()
   })
 
-  it("carries a refusal's kind across: another user's vault is not_permitted, a stale write stale_write", async () => {
+  it("carries a refusal's kind across: another user's vault is identity_revoked, a stale write stale_write", async () => {
     const route = await routeOver()
     const browser = browserFor(route, 'u1')
     const notMine = await TH.refusalOf(browser.readBundle(TH.scopeOf('u2')))
     expect(notMine).to.be.instanceOf(VaultError)
-    expect(notMine.kind).to.eq('not_permitted')
+    expect(notMine.kind).to.eq('identity_revoked')
     await browser.createBundle(TH.bundleOf('u1'))
     const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 7 }))
     expect(stale.kind).to.eq('stale_write')
   })
 
-  it("refuses a signed-out browser with not_permitted", async () => {
+  it("locks the browser's vault at its next call once the session signs out, erasing nothing", async () => {
+    const route = await routeOver()
+    const session: { userId: string | null } = { userId: 'u1' }
+    const deviceDB = memoryDeviceDB()
+    const opts = { applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: sessionedBrowser(route, session), deviceDB, keyDeriver: TH.testDeriver, logger: TH.spyLogger().logger }
+    const vault = await openVault(opts)
+    await vault.unlock('correct horse battery staple')
+    await vault.store('anthropic_api_key', 'sk-ant-test-not-a-real-key')
+    session.userId = null
+    await TH.expectRefusal(vault.read('anthropic_api_key'), 'identity_revoked')
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+    // Signed in again: the same passphrase opens what was stored.
+    session.userId = 'u1'
+    await vault.unlock('correct horse battery staple')
+    expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
+    vault.close()
+  })
+
+  it("refuses a signed-out browser with identity_revoked", async () => {
     const route = await routeOver()
     const refusal = await TH.refusalOf(browserFor(route, null).readBundle(TH.scopeOf('u1')))
-    expect(refusal.kind).to.eq('not_permitted')
+    expect(refusal.kind).to.eq('identity_revoked')
   })
 
   it("answers 400 to anything but a vault verb, a malformed body among them, and the client says so as storage_unavailable", async () => {

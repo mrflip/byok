@@ -403,7 +403,7 @@ TH.describeDeviceDB('describeDeviceDB, over the smallest honest DeviceDB', () =>
 const servingOnly = (userId: string, store: StringStore): TH.VaultDBVerbs => {
   const shared = localVaultDB(store)
   const permitted = ({ user_id }: { user_id: string }): void => {
-    if (user_id !== userId) { throw new VaultError('not_permitted', "That vault belongs to someone else.") }
+    if (user_id !== userId) { throw new VaultError('identity_revoked', "That vault belongs to someone other than the user signed in.") }
   }
   return {
     maxRecordBytes: shared.maxRecordBytes,
@@ -481,6 +481,6 @@ describe("perUser", () => {
   it("passes on a refusal from the user's VaultDB", async () => {
     const store = memoryStore()
     const onlyU1 = TH.perUser(() => servingOnly('u1', store))
-    await TH.expectRefusal(onlyU1.readBundle(TH.scopeOf('u2')), 'not_permitted')
+    await TH.expectRefusal(onlyU1.readBundle(TH.scopeOf('u2')), 'identity_revoked')
   })
 })

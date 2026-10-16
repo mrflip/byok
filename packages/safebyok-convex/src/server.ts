@@ -53,8 +53,9 @@ export class SafebyokComponent {
 
   /**
    * The nine public functions a client's `convexVaultDB` calls, one per storage verb. Each first
-   * resolves `getUserId(ctx)`, and refuses with a `ConvexError` of kind `not_permitted` when it
-   * is null, or when the vault's `user_id` is someone else's; then it calls the component.
+   * resolves `getUserId(ctx)`, and refuses with a `ConvexError` of kind `identity_revoked` when
+   * it is null, or when the vault's `user_id` is someone else's -- the user the vault was opened
+   * for is not the one signed in, and the vault locks itself -- then it calls the component.
    *
    * @param opts - `getUserId`: who is calling, from the host's own auth.
    * @returns The functions, to export under these names from one module of the host's `convex/`.
@@ -70,10 +71,10 @@ export class SafebyokComponent {
     const mustBe = async (ctx: GenericQueryCtx<DataModel>, userId: string): Promise<void> => {
       const callerId = await getUserId(ctx)
       if (! callerId) {
-        throw notPermitted('No one is signed in, so this vault cannot be reached: sign in, then try again.')
+        throw identityRevoked('No one is signed in, so this vault cannot be reached: sign in, then try again.')
       }
       if (callerId !== userId) {
-        throw notPermitted('This vault belongs to another user: a signed-in user reaches only their own vaults.')
+        throw identityRevoked('This vault belongs to another user than the one signed in: a signed-in user reaches only their own vaults. If the user changed, open the vault for the new one.')
       }
     }
 
@@ -160,6 +161,6 @@ export class SafebyokComponent {
  */
 export type SafebyokApi = ApiFromModules<{ safebyok: ReturnType<SafebyokComponent['api']> }>['safebyok']
 
-const notPermitted = (message: string) => (
-  new ConvexError<SafebyokErrorData>({ kind: 'not_permitted', message })
+const identityRevoked = (message: string) => (
+  new ConvexError<SafebyokErrorData>({ kind: 'identity_revoked', message })
 )
