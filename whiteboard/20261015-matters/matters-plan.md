@@ -410,6 +410,8 @@ The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes
 9. The cap of 3 counts threads being built; a thread in review or filing doesn't hold a slot.
 10. New threads are cut from the line's top, not main, so they file without a restack (the Coach's
     one-stack preference); a thread cut from main earlier is restacked onto the top when it files.
+11. Postgres's NOTIFY trigger becomes opt-in (thread 12), by the Coach's baseline: no operational
+    work beyond tables and indexes unless the host opts in.
 
 ## Not in this sprint
 

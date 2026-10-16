@@ -14,19 +14,34 @@
 | 8 | size_rule         | filed #99 (commits on it)  |
 | 9 | damaged_bundle    | resumed on #97's restacked tip |
 | 10 | identity_revoked | in review (#106)           |
-| 11 | vaultdb_contract | resumed on b60e516         |
+| 11 | vaultdb_contract | in review (#107)           |
 | 12 | postgres_soft_cap | waiting on 11             |
 | 13 | rotation_design  | filed #105 (on #97)        |
 | 14 | rotation_shape   | waits on 11, #97 landing   |
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
 | 20 | rotation_docs    | waits on 19                |
-| 15 | e2e_home         | queued                     |
+| 15 | e2e_home         | underway (on #105)         |
 | 16 | late_unlock      | queued (cut from the line's top) |
 | 17 | validation_note  | waits on #101 merging      |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
+
+* **Thread 11 (#107), vaultdb_contract.** The contract is `packages/safebyok/VAULTDB.md`, 26
+  numbered lines; `describeVaultDB` runs a group per line, titled `..., 3.3: <line>`, and
+  `TH.VaultDBContract` is held to the doc by a drift test. Owners: the adapter does the atomic
+  compare-and-write, the base class turns `false` into `stale_write`, the vault reads before and
+  retries after. Limit lines (4.2-4.5) run given `{ makeCappedVaultDB }` (Postgres, GraphQL,
+  `MapVaultDB`; **Convex not yet -- thread 5**). Lines 5.5+ are reserved for #106's five
+  `identity_revoked` lines: whichever lands second writes them in. Race lines check outcomes only;
+  **thread 6 proves the race**. Departs from the Coach: a write returns no count (a matter row).
+  **For thread 12** (`thread-11-postgres_verdict.md`): the one-statement insert meets the contract
+  at READ COMMITTED if it reports why it missed in the same statement (CTEs over one snapshot),
+  maps FK `23503` to `stale_write`, and the README names the isolation level (`40001` above it);
+  racing writers may overshoot by N-1. Rotation (thread 14) will need a statement-scoped
+  `FOR SHARE` on the bundle row. *Orchestrator:* the NOTIFY trigger becomes opt-in in thread 12,
+  by the Coach's own baseline (nothing beyond tables and indexes unless the host opts in).
 
 * **Thread 13 (#105), rotation_design.** Design in `whiteboard/20261016-rotation/rotation-design.md`.
   "Re-wrap the remaining envelopes" is impossible (an envelope's key is a passphrase or a passkey
