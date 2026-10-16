@@ -13,7 +13,7 @@
 | 7 | indexeddb_fixes   | in review (#109)           |
 | 8 | size_rule         | filed #99 (commits on it)  |
 | 9 | damaged_bundle    | in review (#108)           |
-| 10 | identity_revoked | filing #106 onto #105 (review fixed) |
+| 10 | identity_revoked | filed #106 (on #105)        |
 | 11 | vaultdb_contract | in review (#107)           |
 | 12 | postgres_soft_cap | waiting on 11             |
 | 13 | rotation_design  | filed #105 (on #97)        |
@@ -88,8 +88,8 @@
   `reentryHours` prop for `vault.reentryWindowMs`, so #98's three bad-`reentryHours` tests went with
   the prop. `.size-limit.json`: main's two new entries (validators 8.5 kB, DefaultValidators 4 kB)
   predate the rule; validators measures 8.15 kB, so a thread that grows it widens it by the rule
-  (about 12 kB). **New threads stack on the line's top: now #105** (main → #96 → #99 → #98 → #97 →
-  #105). Local tags `<branch>-prerestack3` hold the old tips.
+  (about 12 kB). **New threads stack on the line's top: now #106** (main → #96 → #99 → #98 → #97 →
+  #105 → #106). Local tags `<branch>-prerestack3` hold the old tips.
 
 *Orchestrator (2026-10-16 ~01:35Z):* the previous orchestrator session ended mid-sprint; threads
 9, 10, 11 and 13 stopped with nothing committed (9 and 10 left work in progress in their
