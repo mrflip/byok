@@ -1,9 +1,9 @@
 # Thread 10: identity_revoked (2026-10-16)
 
-Branch `20261016-identity_revoked`, PR [#106](https://github.com/mrflip/safebyok/pull/106), from
-main at `b60e516` (rebased there from `c4c070f` mid-thread, after the gripes line landed).
-Justify: green (core 1169, convex 287, postgres 163, graphql 159, react 76, indexeddb 108,
-argon2-wasm 44, demo 131, root 123). `pnpm size` over budget: see *For the Coach*.
+Branch `20261016-identity_revoked`, PR [#106](https://github.com/mrflip/safebyok/pull/106),
+stacked on #105 (the line main -> #96 -> #99 -> #98 -> #97 -> #105), restacked at filing onto
+`ca960ac`. Justify: green (core 1190, convex 287, postgres 163, graphql 159, react 97, indexeddb
+108, argon2-wasm 44, demo 131, root 123). `pnpm size` green under #99's budgets.
 
 ## Design
 
@@ -91,9 +91,8 @@ make a signed-out adapter: thread 5 decides). The core's own `servingOnly` fake 
 
 ## For the Coach
 
-* **Size budgets overshoot** (this thread does not edit `.size-limit.json`, per the plan):
-  `everything` 28.75 kB of 28.5 kB (+245 B over), `openVault` 20.57 kB of 20.5 kB (+72 B over).
-  Thread 8's re-derived budgets (#99) should absorb it; otherwise this PR's `size` check fails.
+* **Size**: on main's old budgets this thread overshot (`everything` +245 B, `openVault` +72 B);
+  on the stack, under #99's, it measures `everything` 28.58 of 30 kB, `openVault` 20.39 of 23 kB.
 * **Public surface to rule on**: the kind `identity_revoked`; the option `whenIdentityRevoked`
   with values `'lock' | 'stay'` (and the export `IdentityRevokedResponseVals`, type
   `IdentityRevokedResponse`); `not_permitted` narrowed; Convex's `SafebyokErrorKindVals` now
@@ -102,3 +101,21 @@ make a signed-out adapter: thread 5 decides). The core's own `servingOnly` fake 
   also a way to keep keys past a sign-out. Kept, defaulting to `'lock'`. Removing it is one line
   of the enum and the README paragraph.
 * No `eslint-disable` or `ts-expect-error` added.
+
+## Review
+
+The thread-reviewer fixed two (its commits on this branch): an open picking up the remembered
+unlock now yields to a shut since it began, so a background refresh meeting `identity_revoked`
+mid-open no longer leaves the open `unlocked` holding a dropped key (a test reproduces it); and
+`heed`'s pass-through is checked for all eight verbs, `validators` included. Left, minor:
+
+* A `read()` already past `ensureUnlocked()` still returns its whisper if a sign-out locks the
+  vault mid-`readBox`, as a `lock()` always has. For the Coach: should a lock (either kind) also
+  withhold a whisper already on its way out?
+* A device store whose `eraseUnlock` never settles hangs the refused call (the key is dropped
+  first, so nothing leaks).
+* A closed handle's in-flight refusal still erases the remembered unlock (consistent with the
+  policy, though `close()` alone keeps it).
+* Every `ConvexClient` watch error now makes the vault refresh, not only a sign-out: a failing
+  deployment costs one extra query and one logged warning per failure.
+
