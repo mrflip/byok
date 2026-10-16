@@ -9,7 +9,7 @@
 | 3 | passkey_button_ux | merged #98                 |
 | 4 | small_sweep       | merged #99                 |
 | 5 | vaultdb_battery   | merged #114; helpers sweep and Postgres cap duplicates left |
-| 6 | race_helper       | underway (cut from #114; files onto main) |
+| 6 | race_helper       | in review #119 (files onto main) |
 | 7 | indexeddb_fixes   | merged #109                |
 | 8 | size_rule         | merged with #99            |
 | 9 | damaged_bundle    | merged #108                |
