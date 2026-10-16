@@ -1,5 +1,5 @@
 import * as Z from 'zod/mini'
-import { Lockbox, LockboxSummary, VaultBundle, VaultScope, type DamagedLockbox } from './types'
+import { Lockbox, LockboxSummary, MaxUnlocks, UnlockMethodVals, VaultBundle, VaultScope, type DamagedLockbox } from './types'
 import { VaultError, isVaultError } from './errors'
 import * as Names from './names'
 import type { VaultValidators } from './validators'
@@ -269,8 +269,11 @@ export abstract class VaultDB {
    * every lockbox only while the standing bundle still has that `vault_id` (`eraseVault`'s own
    * expectation). Resolves quietly when the scope holds no bundle. Refuses with kind `bad_option`
    * when the bundle stands sound, and erases nothing, since a sound vault is deleted through its
-   * handle's `destroy()`; with kind `damaged_bundle` when the record is too damaged to name the
-   * vault it belongs to, which only the backend's own tools can clear; and with kind
+   * handle's `destroy()`; with kind `damaged_bundle`, erasing nothing, when the record is too
+   * damaged to name the vault it belongs to (which only the backend's own tools can clear), or
+   * when it may have been written by a newer safebyok, in a `format`, unlock method or number of
+   * unlocks this one does not know, and which a device on the newer version opens: it is told
+   * from damage by those three, and where it cannot be told, it is refused; and with kind
    * `stale_write` when the vault was replaced meanwhile.
    *
    * An adapter that hands each call on to another VaultDB's public verbs hands this one on too:
@@ -285,6 +288,8 @@ export abstract class VaultDB {
     if (isSoundBundle(raw, asked)) {
       throw new VaultError('bad_option', "That vault's stored bundle is sound, so it is not erased here: a vault that opens is deleted through its handle's destroy(). Only a vault that openVault refuses as damaged_bundle is erased this way.")
     }
+    // A later safebyok may write what this one cannot read, which is no damage: it is refused, not erased.
+    if (mayBeNewer(raw)) { throw newerBundle() }
     const named = StoredVaultId.safeParse(raw)
     if (! named.success) { throw unnamedBundle() }
     const landed = await fromStorage(() => this.doEraseVault(asked, { vault_id: named.data.vault_id }))
@@ -452,6 +457,27 @@ const checkBundle = (raw: unknown, scope: VaultScope): VaultBundle => {
 }
 
 const unnamedBundle = (opts?: ErrorOptions) => new VaultError('damaged_bundle', "This vault's stored record is too damaged to say which vault it is, so storage can't be told which one to erase, and nothing was erased. Its backend's own tools can clear it.", opts)
+
+const newerBundle = () => new VaultError('damaged_bundle', "This vault's stored record is in a form this version of the app does not know. It may have been written by a newer version, which opens it, so nothing was erased: update the app and try again.")
+
+/**
+ * True when a record that fails this version's checks may be one a later version writes, which
+ * is not damage: it names a `format` this version does not know (of any type), holds an unlock `method` it does
+ * not know, or holds more unlocks than {@link MaxUnlocks}. These are all this version can tell
+ * from damage; anything else that fails is taken for damage. Any change to the stored shape
+ * therefore bumps `format`.
+ */
+const mayBeNewer = (raw: unknown): boolean => {
+  if (typeof raw !== 'object' || raw === null) { return false }
+  const { format, unlocks } = raw as { format?: unknown, unlocks?: unknown }
+  if (format !== undefined && ! VaultBundle.shape.format.safeParse(format).success) { return true }
+  if (! Array.isArray(unlocks)) { return false }
+  if (unlocks.length > MaxUnlocks) { return true }
+  return unlocks.some((envelope: unknown) => {
+    const { method } = (typeof envelope === 'object' && envelope !== null ? envelope : {}) as { method?: unknown }
+    return typeof method === 'string' && ! (UnlockMethodVals as readonly string[]).includes(method)
+  })
+}
 
 /**
  * The bundle as the adapter stores it. An adapter that validates on the way up, as a wrapper over
