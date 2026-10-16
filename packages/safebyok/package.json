@@ -26,7 +26,8 @@
   "type": "module",
   "sideEffects": false,
   "files": [
-    "dist"
+    "dist",
+    "VAULTDB.md"
   ],
   "engines": {
     "node": ">=22"
