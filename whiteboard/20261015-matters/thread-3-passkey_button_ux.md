@@ -63,11 +63,29 @@ What the developer and the end user each meet, before and after, is in
 `thread-3-passkey_button_ux-before_after.md` beside this file: for the Coach, ruling on what
 remains, and for anyone changing how these components fail.
 
+## Review
+
+The second review (over `fd83bf1f..60bc87e8`) came back clean, no fixes. Its minor findings are
+left, none blocking:
+
+* A late unlock leaves a newer dialog asking over an unlocked vault -- for the Coach.
+* Narrow pre-existing races around a lock between an unlock and its retries.
+* `vault_locked` while `vault` is null waits unseen.
+* `role="alert"` mounted with its text may not be announced by every screen reader; deferred to
+  #90, which rewrites that markup.
+* Escape doesn't stop propagation.
+* `document.activeElement` is not followed into a shadow root.
+* A gripe survives a dismissed passkey press.
+
+## Coach's rulings
+
+* **The dialog swaps its form for a notice** on a failure not the user's to mend: "LGTM", kept.
+* **The hand-written error boundary**: by the Coach's library rubric, skip `react-error-boundary`
+  and keep the class (it reaches ~8% of React installs, no major framework or UI kit depends on
+  it, call sites would be no shorter, and its `onError` would hand us the error object, which
+  ours deliberately never sees).
+
 ## For the Coach
 
-* **Library-first, needing your yes**: `Boundary` is ten lines against React's documented class
-  API (react.dev shows writing one; there is no hook form). The boring library is
-  `react-error-boundary`, which would be a runtime dependency of every host. Rec: keep the class.
-* **A choice you may want to overrule**: on such a failure the dialog replaces its form with the
-  notice rather than showing a gripe above the form. Rec: keep it -- retrying cannot mend misuse.
 * No `onError` prop. Rec: none until a host asks.
+* The late-unlock finding above (a newer dialog asking over an unlocked vault).
