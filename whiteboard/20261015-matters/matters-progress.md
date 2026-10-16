@@ -25,7 +25,7 @@
 | 16 | late_unlock      | filed #110 (on #109)       |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | filed #115 (on #114)       |
-| 22 | flake_fixes      | underway (on #110)         |
+| 22 | flake_fixes      | in review #118 (on #110)   |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
