@@ -57,7 +57,8 @@ export type ConvexVaultClient = ConvexWatchingClient | ConvexReactWatchingClient
  * * **Offline**, a call waits for the connection, as every Convex call does, rather than failing.
  *   A failure Convex reports (a deployment missing the safebyok functions, say) refuses with kind
  *   `storage_unavailable`, carrying nothing of Convex's own error, which on a dev deployment may
- *   quote the call's arguments: your deployment's logs have it.
+ *   quote the call's arguments: your deployment's logs have it, or, for trouble before the call
+ *   left, the browser console, where the Convex client reports its connection.
  *
  * @param client - Your app's Convex client: a `ConvexClient`, or your `ConvexReactClient`.
  * @param api - The safebyok functions as your clients reference them: `api.safebyok`, from your
@@ -179,7 +180,7 @@ const ConvexTransactionReadBytes = 16_777_216
 
 const ignoreTrouble = (): void => undefined
 
-const ConvexTroubleMessage = "The vault's storage could not be reached, or failed partway: try again shortly. Convex's own error is not carried here, as it may quote the call; your Convex deployment's logs have it."
+const ConvexTroubleMessage = "The vault's storage could not be reached, or failed partway: try again shortly. Convex's own error is not carried here, as it may quote the call: see your Convex deployment's logs, or, for trouble before the call left, the browser console, where the Convex client reports its connection."
 
 /**
  * `call`, with a refusal from safebyok's functions -- a `ConvexError` carrying one of its kinds --

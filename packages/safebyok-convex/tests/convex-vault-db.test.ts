@@ -207,7 +207,7 @@ describe("convexVaultDB, refusing", () => {
     const deployment = deploy(() => { throw new Error('the auth provider is down') })
     const refusal = await TH.expectRefusal(convexVaultDB(deployment.client('u1'), deployment.api.safebyok).readBundle(u1), 'storage_unavailable')
     expect(refusal.cause).to.be.undefined
-    expect(refusal.message).to.include("your Convex deployment's logs have it")
+    expect(refusal.message).to.include("your Convex deployment's logs, or, for trouble before the call left, the browser console")
     expect(TH.thrownText(refusal)).to.not.include('the auth provider is down')
   })
 })
