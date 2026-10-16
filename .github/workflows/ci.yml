@@ -18,7 +18,7 @@ permissions:
 # Within a job every check runs whatever an earlier one found, so one failure never hides another,
 # and the job fails if any did. `lint-typecheck` and `test-build` are the two the main ruleset
 # requires. Each step is a root script: the root's own check, then every workspace package's
-# (`pnpm -r`), so a package added under packages/ or demos/ is covered with no edit here.
+# (`pnpm -r`), so a package added under packages/, demos/ or e2e/ is covered with no edit here.
 jobs:
   # Lint first, as the likelier of the two to fail for a reason worth reading, then typecheck, then
   # keep a pull request's history semi-linear (PROCESS.md): its branch may hold no merge commit;
