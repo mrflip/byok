@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { ConvexClient } from 'convex/browser'
 import * as TH from './test-helpers'
 import { fakeDeployment } from '../src/testing'
 
@@ -26,12 +27,11 @@ describe("fakeDeployment", () => {
     const deployment = deploy()
     const closed = vi.fn()
     const made = deployment.connectWith('u1', (address, opts) => {
-      const inner = deployment.client('u1')
-      expect(address).to.match(/^https:\/\//u)
-      expect(opts.unsavedChangesWarning).to.eq(false)
+      const inner = new ConvexClient(address, opts)
       return { inner, close: async () => { closed(); await inner.close() } }
     })
-    await made.inner.query(deployment.api.safebyok.getBundle, { scope: u1 })
+    await made.inner.mutation(deployment.api.safebyok.createBundle, { bundle: TH.bundleOf('u1') })
+    expect(await made.inner.query(deployment.api.safebyok.getBundle, { scope: u1 })).to.deep.equal(TH.bundleOf('u1'))
     await deployment.close()
     expect(closed).toHaveBeenCalledOnce()
   })
