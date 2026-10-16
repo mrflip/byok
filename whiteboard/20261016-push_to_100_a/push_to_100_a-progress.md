@@ -33,7 +33,9 @@
   `matters/` keeps. Thread 7 (#129): 15 rows swept (G322, G324-G334 but G323, G358-G360);
   G357 annotated (the blank-note point waits on thread 2); G323 annotated, not swept: its real-
   locales half stays NOT YET and is recorded nowhere else. The answers that went with swept rows
-  are in `matters/`. The Gripefest doc stands at 205 matters.
+  are in `matters/`. Thread 8 (#130): 25 rows swept; G517 annotated (part closed), G417 and
+  G448 annotated rather than swept (each waits on the Coach's hands: the required check, the
+  Dependabot secret). The Gripefest doc stands at 180 matters.
 * *Orchestrator:* **Coach rulings, mid-sprint** (the plan's *Coach rulings* has their words):
   the key delimiter is fixed at `^`, with no option (thread 1 rebuilds); `lockSoon()` is soft,
   `whenIdentityRevoked` goes, a `read()` refuses when a hard lock landed during its awaits, and
