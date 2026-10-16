@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: threads 1, 3 and 7 underway, 6 filing; 5a's design written, waiting on the Coach. Newer than the plan wherever they disagree.
+**Status**: threads 1, 3, 7 and 8 underway; 6 filed; 5a's design written, waiting on the Coach. Newer than the plan wherever they disagree.
 
 ## Status
 
@@ -12,9 +12,9 @@
 | 4 | refusals_and_catchup | on 3 | pending | |
 | 5a | store_base design | -- | written: `store-base-design.md`; the Coach's row in *Open Matters* | |
 | 5b | store_base build | on 4 (restacked) | pending: the Coach's word on 5a | |
-| 6 | crypto_small | main | filing | [#126](https://github.com/mrflip/safebyok/pull/126) |
+| 6 | crypto_small | main | filed #126 | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | main | underway | |
-| 8 | ci_release | main | pending | |
+| 8 | ci_release | main | underway | |
 | 9 | sweep_small | top of the line | pending | |
 | 10 | secure_floor | on 4 | pending | |
 | 11 | pg_container | main | pending | |
@@ -31,7 +31,7 @@
 * *Orchestrator:* **Sweep ledger.** At the start: the 23 no-code rows (G204, G205, G206, G478,
   G215, G291, G135, G321, G440, G443, G445, G474, G475, G235, G238, G253, G293, G376, G400,
   G444, G465, T01, G064); the Gripefest doc stands at 244 matters.
-* *Orchestrator:* **Thread 6** (ready, [#126](https://github.com/mrflip/safebyok/pull/126)):
+* *Orchestrator:* **Thread 6** (filed, [#126](https://github.com/mrflip/safebyok/pull/126)):
   `KeyDeriver` is now `Argon2idKeyDeriver | CustomKeyDeriver` with field names unchanged
   (`key_deriver_label`, `algorithm`), so 5 and 10 read them as before; a host class writes
   `implements CustomKeyDeriver`. `changePassphrase(proof, new, { unlockId? })` takes any proof;

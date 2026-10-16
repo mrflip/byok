@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: threads 1, 3, 6 and 5a underway
+* **Status**: threads 1, 3, 7, 8 underway; 6 filed (#126); 5b waits on the Coach
 
 ## Read first
 
