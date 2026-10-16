@@ -15,7 +15,7 @@
 | 9 | damaged_bundle    | filed #108 (on #107)       |
 | 10 | identity_revoked | filed #106 (on #105)        |
 | 11 | vaultdb_contract | filed #107 (on #106)       |
-| 12 | postgres_soft_cap | in review (#113)          |
+| 12 | postgres_soft_cap | review fixed; files after the restack |
 | 13 | rotation_design  | filed #105 (on #97)        |
 | 14 | rotation_shape   | waits on 11, #97 landing   |
 | 18 | rotation_adapters | waits on 14               |
