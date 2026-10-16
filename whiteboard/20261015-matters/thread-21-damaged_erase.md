@@ -54,6 +54,11 @@ root 123). `pnpm size` within every budget (`everything` 29.29 of 30 kB, `openVa
   - React reopens after `bad_option` (reads sound) or `stale_write` (made anew), and still rejects.
   - Not routed through `RefusalPolicy.heed`: no handle, no key in memory, `whenIdentityRevoked` has
     nothing to act on; documented in the doc block and security.md.
+  - **Second review (clean, no commits), minors**: the erase aims at `vault_id` only; a missing
+    `format`, non-array `unlocks` or non-string `method` counts as damage, not newer; the provider
+    reopens on any `bad_option` from the erase, misuse included; "may be newer" shares
+    `damaged_bundle` with "too damaged to name". The rule above is worded broadly on the review's
+    point: it covers every check the schema makes, not only which fields exist.
   - **Review, minor, left**: the erase aims at `vault_id` only (pinning the exact record would change
     3.5); "too damaged to name" shares the `damaged_bundle` kind; a local bundle that is not valid
     JSON cannot be cleared (`readJson` refuses it as `corrupt_record`, which the hatch says as "too damaged to name"); `vaultIdMeetsExpectation`
@@ -71,6 +76,6 @@ root 123). `pnpm size` within every budget (`everything` 29.29 of 30 kB, `openVa
     vault it is". Documented on the verb and in VAULTDB.md; the in-tree wrapper does.
 * **For the Coach**: new public surface, for the PR's open questions: `eraseDamagedVault` and
   `EraseDamagedVaultOpts` (core), `VaultDB.eraseDamagedVault` (a public verb on the base class, so a
-  wrapping adapter owes it), and `useVault().eraseDamagedVault` (React). Also: (0) confirm the rule that any change to the stored shape bumps `format`; (1) is "sound is
+  wrapping adapter owes it), and `useVault().eraseDamagedVault` (React). Also: (0) confirm the rule that any change to what a stored record may hold -- a field, a shape, or a range a check accepts -- bumps `format`; (1) is "sound is
   `bad_option`" right, or does a refusal of this kind want its own kind? (2) the demo's confirm text
   and button are placeholders for the Coach's wording.
