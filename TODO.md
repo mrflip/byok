@@ -479,7 +479,59 @@ fields; decide them together.
   that serves several clients?
 * **`unlocklabel` has no validator slot** ([#95](https://github.com/mrflip/safebyok/pull/95)). Host
   validators cannot reach it; the stored envelope checks it as plain text, and the `Label` grammar
-  is enforced only when a way in is added.
+  is enforced only when a way in is added. *Built: [#117](https://github.com/mrflip/safebyok/pull/117)
+  (the Coach: "yes"), as `validators.unlocklabel`, `Label` by default, checked where a way in is
+  added.* A stored envelope's label is still read as plain text, so a way in under a label a
+  narrowed check refuses still opens (refusing it would make the bundle `corrupt_record`, or hide
+  a way in a user relies on), and the vault's own first label, `passphrase`, is not checked. Is
+  "checked at entry only" the guarantee we mean for this one name?
+* **Two size checks, and why both stay** ([#95](https://github.com/mrflip/safebyok/pull/95)). The
+  Coach asked "why can't we check size after serialization?", then: "yes. Make a note of this in
+  the "What are these validators actually for" TODO section". `updateBox` weighs the lockbox as
+  its real serialized bytes against `maxRecordBytes` (`lockbox_too_large`): a database's limit,
+  checked at the write. `store()` estimates the vault's total against `maxVaultBytes` before the
+  lockbox is sealed (`vault_full`), each lockbox counted at twice `maxWhisperBytes` with its names
+  and note as measured: an estimate, because the vault holds no other lockbox's real bytes
+  without reading them all, and conservative, so at an exactly tight limit it may refuse a write
+  that would just fit (the docs say so, [#117](https://github.com/mrflip/safebyok/pull/117)). A
+  backend's own limit (Convex's component, Postgres) is the authority beneath both.
+* **Offer a pluggable sanitizer.** The Coach, on Convex's validator error riding along as a
+  refusal's `cause` ([#75](https://github.com/mrflip/safebyok/pull/75)): "offer a pluggable
+  sanitizer. Add a todo to offer a pluggable sanitizer. Make a sanitizer module and put the
+  function that drops it in there. Don't try to make it serve multiple purposes; but that's where
+  that decision should be made". *The module is built
+  ([#117](https://github.com/mrflip/safebyok/pull/117)):* `packages/safebyok/src/sanitizer.ts`,
+  exported as `Sanitizer`, whose `refusalFor` is where safebyok decides what of a foreign error
+  rides along on a refusal: today, nothing. A host schema that throws and every Convex failure but
+  safebyok's own refusals go through it. Still open: the pluggable seam (a host's function from a
+  foreign error to what may ride along, say to keep Convex's error on a dev deployment), where a
+  host passes it, and whether the other adapters, which still carry their client's error as
+  `cause` (Postgres, GraphQL, IndexedDB), go through it too.
+
+#### Re-examine the pluggable validators interface
+
+The Coach, on *The forgotten validators bag: harmless or loud?*
+([#104](https://github.com/mrflip/safebyok/pull/104)): "yikes parts of this sound hinky. Defaults
+are supposed to come in from eg importing safebyok/browser (I forget how it's requested) and
+otherwise we ask you to, yes, spell everything out. My bigger issue is "A storage verb called
+without your validators"; they should be deposited onto a dispatch object not passed as arguments
+-- might have misunderstood but I still need to take a closer look / would you add a section under
+the "What do the Validators actually guarantee" called "Re-examine the pluggable validators
+interface" -- include my response and your question"
+
+How it stands: `browserOpts()` (`safebyok/browser`) supplies only `keyDeriver` and `deviceDB`. The
+validators are an `openVault` option, and left out they are `DefaultValidators`, inside the vault.
+The vault then passes its bag as the last argument of every `VaultDB` verb it calls, nine of them;
+a verb called without one (a wrapper that forgets to forward it, a server calling the verbs
+itself) admits any well-formed text (`AnyTextValidators`, since #104) rather than the defaults.
+The vault itself never calls a verb bare.
+
+Our question, as the matter row put it: a storage verb called without your validators admits any
+well-formed text instead of the defaults; loud would mean a required argument on nine public verbs,
+and the recommendation was to keep it harmless, as built. And now: should a `VaultDB` carry its
+validators from construction -- a dispatch object built once, `localVaultDB(store, { validators })`
+or the vault binding its bag to the adapter at `openVault` -- rather than take them per verb? And
+then should a bare verb refuse or admit: today it admits any well-formed text.
 
 ### Pluggable label validator
 
@@ -558,7 +610,20 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
 
 * **Provide built-as-a-whole recommended KDFs, and functions to roll your own.** Follows from
   [#68](https://github.com/mrflip/safebyok/pull/68)'s `argon2idDeriver(spec)`; replaces its open
-  question of adding RFC 9106's second recommended option as a supplied spec.
+  question of adding RFC 9106's second recommended option as a supplied spec. #68's other
+  follow-ups fold in here (the Coach: "yes"):
+  - **Reserve a label prefix for the derivers we ship.** A host's own `key_deriver_label` is
+    checked against nothing; refusing host labels like `argon2id_web_*` keeps a spec we supply
+    later from colliding with one a host already stored.
+  - **Check a host-built Argon2id deriver at open, not at first unlock.** One under a host's own
+    label that declares `algorithm: 'argon2id'` gets only the generic salt check at `openVault`,
+    so a spec that cannot run (a 4-byte salt), built without the factory, fails at `unlock()` as
+    the library's plain `Error`, with no `kind`. Run the Argon2id schema whenever the algorithm is
+    `argon2id`, if the size budget allows.
+  - **Split the deriver type by algorithm.** `KeyDeriver = Partial<KeyDeriverSpec> & ...` gives
+    every deriver Argon2id's optional fields; public surface, to settle before 1.0.
+  - **Zero the derived key's bytes after use.** The passphraseKey bytes are not zeroed once
+    imported as a `CryptoKey`.
 * **CI questions left by [#72](https://github.com/mrflip/safebyok/pull/72)**, each its own
   conversation:
   - the Dependabot changeset gate recognizes a Dependabot PR by its author;
