@@ -17,7 +17,7 @@
 | 11 | vaultdb_contract | merged #107                |
 | 12 | postgres_soft_cap | merged #113               |
 | 13 | rotation_design  | merged #105                |
-| 14 | rotation_shape   | flagged; resumed on S1 and S2, then a second review |
+| 14 | rotation_shape   | second review fixed; filing #120 onto #119 |
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 (ways in: keep the proven ones, ruled) |
 | 20 | rotation_docs    | waits on 19                |
