@@ -33,3 +33,10 @@ implementation.
   container runs only the e2e suites; `packages/safebyok-postgres/tests/` still run on PGlite in
   process, because they are written against PGlite's interface. A small PGlite-shaped wrapper over
   a `pg` pool would let them run on the container too.
+
+* **A conflict handler.** G499: a pluggable hook for odd conflicts, such as a lockbox too damaged
+  to name its epoch meeting a healthy store. The settled design has none (VAULTDB.md: an erase
+  wins, the last writer wins, and the vault never clears damage on its own, so `store()` over the
+  box is the handler). The Coach (2026-10-16, sprint push_to_100_a, thread 4,
+  [#132](https://github.com/mrflip/safebyok/pull/132)): leave it here, "so that when the idea
+  keeps coming up there's some place to point to".

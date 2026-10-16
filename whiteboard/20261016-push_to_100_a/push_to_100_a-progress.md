@@ -7,7 +7,7 @@
 | # | Thread | Base | Status | PR |
 |---|---|---|---|---|
 | 1 | names_and_keys | main | filed #128 | [#128](https://github.com/mrflip/safebyok/pull/128) |
-| 2 | public_bag | on 1 (ce653fbb) | in review | [#133](https://github.com/mrflip/safebyok/pull/133) |
+| 2 | public_bag | on 1 (ce653fbb) | review flagged; fixing (YOLO 12) | [#133](https://github.com/mrflip/safebyok/pull/133) |
 | 3 | locks_and_expiry | main | filed #127 | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 (98b70b80) | filed #132 | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
@@ -16,11 +16,11 @@
 | 7 | react_tidy | main | filed #129 | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | main | filed #130 | [#130](https://github.com/mrflip/safebyok/pull/130) |
 | 9 | sweep_small | top of the line | pending | |
-| 10 | secure_floor | on 4 (57cdb168) | in review [#136](https://github.com/mrflip/safebyok/pull/136) | |
+| 10 | secure_floor | on 4 (57cdb168) | second review | [#136](https://github.com/mrflip/safebyok/pull/136) |
 | 11 | pg_container | main | filed #131 | [#131](https://github.com/mrflip/safebyok/pull/131) |
 | 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
 | 13 | epoch_expectation | on 4 (57cdb168) | underway | |
-| 14 | uncontrolled_fields | on 7 (3d62fc04) | in review | [#134](https://github.com/mrflip/safebyok/pull/134) |
+| 14 | uncontrolled_fields | on 7 (3d62fc04) | filed | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 | pending: a slot | |
 
 ## What the threads have taught

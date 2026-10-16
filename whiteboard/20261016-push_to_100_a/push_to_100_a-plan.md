@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: thread 13 underway; 2 (#133), 10 (#136) and 14 (#134) in review; 1 (#128), 3 (#127), 4 (#132), 6 (#126), 7 (#129), 8 (#130), 11 (#131) filed; 5b cleared by the Coach, cut once 4 files
+* **Status**: thread 13 underway; 2 (#133) building its review's fixes; 10 (#136) in its second review; 1 (#128), 3 (#127), 4 (#132), 6 (#126), 7 (#129), 8 (#130), 11 (#131), 14 (#134) filed; 5b cut once 2 files and 3 → 4 are restacked onto it; 15 waits for a slot
 
 ## Read first
 
@@ -216,6 +216,10 @@ handoff carries it whole. Below, the orchestrator's gloss.
   dropped server fails a test rather than crashing the run; publish the CI service on
   `127.0.0.1:5432:5432`; and add a CI step that fails when the image digest in `ci.yml` and in
   `e2e/compose.yaml` differ (Dependabot moves only the compose file's).
+* **Added, the Coach's ruling** ("put as WONTFIX", on thread 14's Chrome autocomplete question,
+  #134): an entry in `notes/wontfix.md` -- Chrome ignores `autocomplete="off"` on a password-type
+  field, so the whisper field may still be offered a saved password; avoiding it would take a
+  text field masked by the non-standard `-webkit-text-security`, which not every browser honours.
 
 ### 10. `secure_floor` -- the Coach's three Soonish lines
 
@@ -260,6 +264,14 @@ handoff carries it whole. Below, the orchestrator's gloss.
   `packages/safebyok/src/`, named for what it does, with its own doc block and tests
   (`tests/<same path>`), and have `vault.ts` use it. No behaviour change: thread 4's tests stay
   green untouched.
+* **Added, the Coach's rulings** on thread 4 (#132), sent mid-build:
+  * **Hard locks** ("yes"): `close()` and a key outlived by a refresh count as hard locks, so a
+    read in flight across either refuses, with tests; `lock()`'s doc says a clock that cannot be
+    read and `lockSoon()` past its shut time are not.
+  * **`storage_unavailable`** ("failure messages should be as fine-grained as reasonable; we can
+    assign contextual groupings if needed"): the kind stays, as the grouping; each message says
+    exactly which read or write of the device store failed. A case that wants a kind of its own
+    comes back as an open matter.
 
 ### 15. `deriver_shim` -- one KeyDeriver facade, the Coach's ruling
 
@@ -319,6 +331,13 @@ handoff carries it whole. Below, the orchestrator's gloss.
     passphrase dialog: set, lock, mistype, dismiss, enter, and start over" (7 s, on #129's
     test-build). A timing fix that only raises a timeout is not a fix.
 * **Model**: opus. **Depends on**: 7 (#129).
+* *Review* (`fixed`, #134): the reviewer committed `bb00f0a5` (`passphraseAdvice` hears the
+  passphrase in plain text; its doc, the README and `notes/security.md` say keep it on the device)
+  and `c7aaa5a5` (the changeset names the `defaultValue` removal and the `ref` passthrough). The
+  flake fixes were proven at their causes (5/240 → 0/480; 1/128 → 0/256). At filing, YOLO 14 added
+  the three advice hardenings. Left as rows: the reveal toggle's `aria-pressed`, the demo
+  `WaysIn` form, the changeset's migration framing, the demo App tests' order, host CSS against
+  `hidden`. The debounce stays out, by decision. Filed at `d9b7a5b3`.
 
 ## Coach rulings during the sprint
 
@@ -369,6 +388,11 @@ From the sprint doc's *Open Matters*, as rows are swept:
   fixed in the Coach's own branch. The `KeyDeriver` union: explain only, no action yet. Full
   question and answer for each: `20261016-push_to_100_a-resolutions.md`.
 
+* **Coach rulings, fourth batch (doc rev 4547).** `storage_unavailable` stays, its messages made
+  fine-grained (thread 13). G499's conflict handler stays NOT YET, in `NOTYET.md`, so a returning
+  idea has a place to point to. `close()` and an outlived key become hard locks (thread 13).
+  Chrome offering a saved password on the whisper field: WONTFIX (thread 9 writes the entry).
+
 ## Decisions taken in YOLO
 
 1. **Rows are swept by the orchestrator at filing**, through a subagent, one sweep at a time, not
@@ -400,6 +424,18 @@ From the sprint doc's *Open Matters*, as rows are swept:
 11. **The CI flakes go to thread 14**, first, as their own commits: it is cut from 7, which holds
     the failing demo test, and works in the same package as the `vault-provider` flake on main.
     No new thread, so the sprint stays at three agents building at once.
+12. **Thread 2's two significant review findings are fixed in the thread** (#133), then a second
+    review: `store()` carries the old bag and `registered_at` forward only when the old record
+    deciphers (a tampered bag was resealed as authentic), and a lockbox's `public_json` must equal
+    its own stable re-serialization (a deep bag made `openVault` throw a bare `RangeError`). Both
+    tighten a format born in this thread, before 1.0. Rows in *Open Matters* let the Coach object.
+13. **Thread 10's provider holds the strength test in a ref** (#136), then a second review: an
+    inline arrow reopened the vault on every parent render, and the test plays no part in
+    opening. The all-zero check stops claiming constant time.
+14. **Thread 14 adds three advice hardenings before filing** (#134), its reviewer's
+    recommendations: a superseded call's rejection is ignored, advice resets when `creating`
+    changes, and an `undefined` answer reads as `null`. One small commit, with tests, no second
+    review.
 
 ## For the Coach
 

@@ -7,6 +7,61 @@ raised (the PR body, the thread file, the `human/` entry), and the plan's *Coach
 sprint* holds the one-line version. "(empty: took the Rec)" means the Coach flipped the row to
 `proceed` without writing, which accepts the recommendation.
 
+## Fourth batch, 2026-10-16 (doc rev 4547)
+
+### Every device-store failure is `storage_unavailable` (thread 4, thread 13)
+
+* **Raised by**: thread 4 ([#132](https://github.com/mrflip/safebyok/pull/132)).
+* **Question**: **Every device-store failure is storage_unavailable (thread 4, #132).** Thread 3's
+  leftover asked for this kind only when the device's own storage fails at open. Thread 4 widened
+  it: any failure of this device's own store (reading or writing the remembered unlock or the
+  device mark) throws storage_unavailable with the cause attached, even from lock(), which still
+  locks. A kind for every condition lets a host say "your browser's storage is unavailable" and
+  offer a retry. Rec: keep.
+* **Coach's reply**: "failure messages should be as fine-grained as reasonable; we can assign
+  contextual groupings if needed" -- `proceed`.
+* **Where it went**: thread 13 keeps the kind (the grouping a host branches on) and makes each
+  message say exactly which read or write of the device store failed; a case that deserves a kind
+  of its own comes back as an open matter.
+
+### G499, the conflict hook: sweep it or shelve it? (thread 4)
+
+* **Raised by**: thread 4 ([#132](https://github.com/mrflip/safebyok/pull/132)).
+* **Question**: **G499, the conflict hook: sweep it or shelve it? (thread 4, #132)** G499 asked
+  for a pluggable handler for odd conflicts, like a lockbox too damaged to name its epoch meeting a
+  healthy store. Thread 4 settled it with one sentence in VAULTDB.md: no conflict hook; an erase
+  wins, the last writer wins, and the vault never clears damage on its own, so store() over the box
+  is the handler. The Gripefest doc still files G499 on its NOT YET shelf. Rec: sweep it: the doc
+  line states the settled design.
+* **Coach's reply**: "Leave conflict handler as NOTYET, so that when the idea keeps coming up
+  there's some place to point to" -- `proceed`.
+* **Where it went**: `NOTYET.md`, "A conflict handler"; G499 stays on the Gripefest doc's NOT YET
+  shelf.
+
+### Key drops that are not hard locks (thread 4's review, thread 13)
+
+* **Raised by**: thread 4's reviewer ([#132](https://github.com/mrflip/safebyok/pull/132)).
+* **Question**: **Key drops that are not hard locks (thread 4's review, #132).** close(), a clock
+  that cannot be read, a key outlived by a refresh, and lockSoon() past its shut time all drop the
+  key without counting as a hard lock, so a read in flight across one still returns its whisper.
+  None is a hard lock as lock()'s doc defines one. Rec: count close() and the outlived key as hard
+  locks, in thread 13, and say in lock()'s doc that the clock and soft cases are not (thread 4's
+  worker suggests the same).
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: thread 13, as recommended, with tests.
+
+### Chrome may still offer a saved password on the whisper field (thread 14)
+
+* **Raised by**: thread 14 ([#134](https://github.com/mrflip/safebyok/pull/134)).
+* **Question**: **Chrome may still offer a saved password on the whisper field (thread 14, #134).**
+  Chrome ignores autocomplete="off" on a password-type field, so the whisper field may still be
+  offered a saved password despite the password managers' ignore flags. Avoiding it means a plain
+  text field masked by a non-standard CSS property (-webkit-text-security), which not every browser
+  honours. Rec: accept, as ruled.
+* **Coach's reply**: "put as WONTFIX" -- `proceed`.
+* **Where it went**: thread 9 enters it in `notes/wontfix.md` (born in thread 3, so thread 14's
+  branch does not have it).
+
 ## Third batch, 2026-10-16 (doc rev 4104)
 
 ### The `KeyDeriver` union becomes a shim (thread 6, thread 15)

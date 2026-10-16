@@ -35,3 +35,18 @@ full question and reply for each are in `20261016-push_to_100_a-resolutions.md`.
   * `**CLAUDE.md's *Commands* is a line stale**`:
     `→ *Coach (2026-10-16):* Fixed in the Coach's own branch; nothing for the sprint.`
 * **20261016-pg_container**: none owed; thread 11's worker put its lines in before filing.
+* **20261016-refusals_and_catchup**, `thread-4-refusals_and_catchup.md` (the PR body, #132, carries them)
+  * under `**Every device-store failure is storage_unavailable**` (about line 46):
+    `→ *Coach (2026-10-16):* Keep the kind; each message as fine-grained as reasonable, groupings later if needed (thread 13).`
+  * under `**The single-flight refresh queue is hand-rolled**` (about line 63):
+    `→ *Coach (2026-10-16):* Yes, kept, but out of vault.ts: thread 13 moves it to a module of its own.`
+  * under `**A pre-existing race**` (about line 71):
+    `→ *Coach (2026-10-16):* Into TODO.md (Soonish), beside "Are we doing anyone a favor by accepting multiple passphrases?".`
+  * under the review's leftover `1. close(), an outlived relock, a clock failure and lockSoon()...` (about line 86):
+    `→ *Coach (2026-10-16):* Yes: close() and the outlived key count as hard locks; lock()'s doc says the clock and soft cases do not (thread 13).`
+  * G499 (no question of its own in the file): the PR body carries `→ *Coach (2026-10-16):* G499 stays on the NOT YET shelf (NOTYET.md).`
+* **20261016-pg_container**, `thread-11-pg_container.md` (the PR body, #131, carries them)
+  * under `"Widening to every Postgres test is a one-line change"` (about line 18):
+    `→ *Coach (2026-10-16):* NOTYET: the adapter's own tests stay on PGlite (NOTYET.md).`
+  * after the review's six minors (about lines 25-30), under 5:
+    `→ *Coach (2026-10-16):* Fix in a later thread: thread 9 takes 1-5.`
