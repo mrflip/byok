@@ -16,6 +16,7 @@ import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import { memoryStore } from '../src/string-store'
 import type { DamagedLockbox, DeviceMark, DeviceUnlock, Lockbox, LockboxSummary, PasskeyEnvelope, PasskeyProof, PassphraseEnvelope, VaultBundle, VaultScope } from '../src/types'
+import { TestDeriverNotice } from '../src/key-deriver-spec'
 import type { OpenVaultOpts } from '../src/vault'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { AnyTextValidators, DefaultValidators } from '../src/validators'
@@ -747,7 +748,9 @@ export type LoggedCall = {
 }
 
 /**
- * A VaultLogger that logs nowhere and keeps every call it hears, in order, for a test to look at.
+ * A VaultLogger that logs nowhere and keeps every call it hears, in order, for a test to look at
+ * -- bar the one notice `openVault` gives of a `test_` key deriver's label ({@link TestDeriverNotice}),
+ * which every vault opened through {@link testDeriver} would otherwise add to every count.
  *
  * @returns The `logger` to hand openVault, and the `calls` it has heard so far.
  *
@@ -759,6 +762,7 @@ export type LoggedCall = {
 export const spyLogger = () => {
   const calls: LoggedCall[] = []
   const hear = (level: keyof VaultLogger): VaultLogger[typeof level] => (message, story, err) => {
+    if (message === TestDeriverNotice) { return }
     calls.push({ level, message, story, err })
   }
   const logger: VaultLogger = { log: hear('log'), warn: hear('warn'), error: hear('error') }
