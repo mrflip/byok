@@ -60,7 +60,8 @@ What happens when `openVault` rejects depends on the error's family (safebyok's
 kind, its family, and what it means.
 
 **A condition stays in place.** Storage that cannot be reached (`storage_unavailable`), a user
-storage will not serve (`not_permitted`, as when signed out of the backend) or a stored vault
+storage no longer serves (`identity_revoked`, as when signed out of the backend, or not yet
+signed in to it) or a stored vault
 bundle that fails verification (`corrupt_record`) arrives as `openError`, a `VaultError`, with
 `vault` still null. (A damaged lockbox never stops the open: the snapshot lists it with
 `damaged: true`, for your UI to offer `erase()` or a fresh `store()`; see the `safebyok`
@@ -76,8 +77,15 @@ const VaultPanel = () => {
 }
 ```
 
-Branch on `openError.kind` for a better message: a `not_permitted` user should sign in again,
-and a `corrupt_record` will not mend on retry. Its `message` is calm and safe to show.
+Branch on `openError.kind` for a better message: an `identity_revoked` user should sign in
+again, and a `corrupt_record` will not mend on retry. Its `message` is calm and safe to show.
+
+**A sign-out the app did not hear of** -- in another tab, or a session that expired -- reaches
+the vault as storage refusing it, kind `identity_revoked`, and an open vault locks itself
+(`whenIdentityRevoked`, passed through like any other option; the `safebyok` README's *When the
+user signs out*). The snapshot reads `locked`; the next `withUnlockedVault` opens the passphrase
+dialog, whose unlock meets the same refusal and shows its message there. Once your auth says the
+user signed out, pass `userId={null}`, which closes the handle.
 
 **Misuse goes to your error boundary.** A bad label or option -- a bug in the app's code -- is
 thrown while rendering, as is anything rejected that is not a `VaultError`. Wrap the provider in

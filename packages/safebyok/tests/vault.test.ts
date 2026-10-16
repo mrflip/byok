@@ -3851,3 +3851,122 @@ describe("the logger", () => {
     for (const secret of secrets) { expect(text).to.not.include(secret) }
   })
 })
+
+/** A refusal of kind identity_revoked, as an adapter says a user signed out. */
+const signedOut = () => new VaultError('identity_revoked', 'No one is signed in, so this vault cannot be reached: sign in, then try again.')
+
+describe("when storage says the user is no longer signed in", () => {
+  /** Each vault call that reaches storage, the storage verb it reaches, and the call. */
+  const RevokedCallCases: readonly (readonly [string, 'readBundle' | 'readBox' | 'updateBox' | 'updateBundle', (vault: Vault) => Promise<unknown>])[] = [
+    ['read()',             'readBox',      (vault) => vault.read('anthropic')],
+    ['store()',            'updateBox',    (vault) => vault.store('openai', 'sk-fake-two')],
+    ['unlock()',           'readBundle',   (vault) => vault.unlock('pw one')],
+    ['changePassphrase()', 'updateBundle', (vault) => vault.changePassphrase('pw one', 'pw two')],
+  ]
+
+  for (const [callTitle, verb, call] of RevokedCallCases) {
+    it(`locks at once when ${callTitle} meets it, throws the refusal itself, and erases nothing stored`, async () => {
+      const world = makeWorld()
+      const vault = await world.openUnlocked('pw one')
+      await vault.store('anthropic', 'sk-fake-one')
+      const refusal = signedOut()
+      vi.spyOn(world.vaultDB, verb).mockRejectedValueOnce(refusal)
+      expect(await TH.expectRefusal(call(vault), 'identity_revoked')).to.eq(refusal)
+      expect(vault.getSnapshot().state).to.eq('locked')
+      expect(vault.getSnapshot().askPassphraseAt).to.be.null
+      expect(await world.rememberedUnlock()).to.be.null
+      await TH.expectRefusal(vault.read('anthropic'), 'vault_locked')
+      // Signed in again: the passphrase it had still opens it, and the lockbox is still there.
+      await vault.unlock('pw one')
+      expect(await vault.read('anthropic')).to.eq('sk-fake-one')
+    })
+  }
+
+  it("locks when a background refresh meets it, and tells the logger, having nobody to throw to", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw one')
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValue(signedOut())
+    // Any write rings the store's change bell, and the vault looks.
+    world.dbStore.write('elsewhere', '{}')
+    await vi.waitFor(() => { expect(vault.getSnapshot().state).to.eq('locked') })
+    expect(await world.rememberedUnlock()).to.be.null
+    await vi.waitFor(() => { expect(world.logged.map((heard) => heard.level)).to.deep.equal(['log', 'warn']) })
+    expect(world.logged[0]).to.deep.include({ level: 'log', story: { call: 'whenIdentityRevoked' } })
+    expect(world.logged[0]?.message).to.match(/no longer serves the user/)
+  })
+
+  it("calls subscribers with the locked snapshot", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw one')
+    const heard: string[] = []
+    vault.subscribe(() => { heard.push(vault.getSnapshot().state) })
+    vi.spyOn(world.vaultDB, 'readBox').mockRejectedValueOnce(signedOut())
+    await TH.expectRefusal(vault.read('anthropic'), 'identity_revoked')
+    expect(heard).to.deep.equal(['locked'])
+  })
+
+  it("wins over an unlock under way, as lock() does: it throws 'vault_locked' and remembers nothing", async () => {
+    const world = makeRacingWorld()
+    const vault = await world.openUnlocked('pw one')
+    await vault.lock()
+    const gate = world.holdNextDerive()
+    const unlocking = TH.expectRefusal(vault.unlock('pw one'), 'vault_locked')
+    await gate.reached
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(signedOut())
+    world.dbStore.write('elsewhere', '{}')
+    await vi.waitFor(() => { expect(world.logged.map((heard) => heard.level)).to.include('warn') })
+    gate.release()
+    await unlocking
+    expect(vault.getSnapshot().state).to.eq('locked')
+    expect(await world.rememberedUnlock()).to.be.null
+  })
+
+  it("forgets the remembered unlock when it meets the open, which then refuses", async () => {
+    const world = makeWorld()
+    const first = await world.openUnlocked('pw one')
+    first.close()
+    expect(await world.rememberedUnlock()).to.not.be.null
+    vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(signedOut())
+    await TH.expectRefusal(world.open(), 'identity_revoked')
+    expect(await world.rememberedUnlock()).to.be.null
+    expect(await world.stateOnOpen()).to.eq('locked')
+  })
+
+  it("leaves the vault as it was under whenIdentityRevoked 'stay', still throwing the refusal", async () => {
+    const world = makeWorld({ whenIdentityRevoked: 'stay' })
+    const vault = await world.openUnlocked('pw one')
+    await vault.store('anthropic', 'sk-fake-one')
+    vi.spyOn(world.vaultDB, 'readBox').mockRejectedValueOnce(signedOut())
+    await TH.expectRefusal(vault.read('anthropic'), 'identity_revoked')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(await world.rememberedUnlock()).to.not.be.null
+    expect(await vault.read('anthropic')).to.eq('sk-fake-one')
+    expect(world.logged).to.deep.equal([])
+  })
+
+  it("locks nothing for not_permitted: the vault's own user, refused one call", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw one')
+    vi.spyOn(world.vaultDB, 'readBox').mockRejectedValueOnce(new VaultError('not_permitted', 'You may not read this vault.'))
+    await TH.expectRefusal(vault.read('anthropic'), 'not_permitted')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
+    expect(await world.rememberedUnlock()).to.not.be.null
+  })
+
+  it("locks all the same, and throws the refusal, when the device store will not forget the remembered unlock", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw one')
+    const stuck = new Error('the device store is read-only')
+    vi.spyOn(world.deviceDB, 'eraseUnlock').mockRejectedValueOnce(stuck)
+    vi.spyOn(world.vaultDB, 'readBox').mockRejectedValueOnce(signedOut())
+    await TH.expectRefusal(vault.read('anthropic'), 'identity_revoked')
+    expect(vault.getSnapshot().state).to.eq('locked')
+    await TH.expectRefusal(vault.read('anthropic'), 'vault_locked')
+    expect(world.logged[0]).to.deep.include({ level: 'warn', story: { call: 'whenIdentityRevoked' }, err: stuck })
+  })
+
+  it("refuses a whenIdentityRevoked that is neither 'lock' nor 'stay'", async () => {
+    const world = makeWorld()
+    await TH.expectRefusal(world.open({ whenIdentityRevoked: 'erase' as unknown as 'lock' }), 'bad_option')
+  })
+})

@@ -243,6 +243,28 @@ package, before this compiles.
 For a sign-out, call `lockSoon()` first, then close the handle (in React, unmount the provider)
 once what was under way has settled: closing ends the grace at once.
 
+### When the user signs out
+
+A sign-out the host hears of is the host's to act on, as above. One it does not hear of -- in
+another tab, a session that expired, another user signing in -- storage tells the vault: an
+adapter whose backend knows who is signed in refuses a vault whose user is no longer that one
+with kind `identity_revoked` (`safebyok-convex`, `safebyok-postgres` and `safebyok-graphql` do;
+`safebyok-indexeddb` and `localVaultDB` keep everything on the device, and never do). The vault
+then locks at once, as `lock()` does: it drops its vaultKey, this device forgets its remembered
+unlock, and the snapshot reads `locked`. It erases nothing stored. The call that met the refusal
+throws it, and the next unlock, once the user has signed in again, asks for the passphrase. A
+background refresh that meets it has nobody to throw to: it locks all the same, and tells the
+logger.
+
+`openVault`'s `whenIdentityRevoked` chooses this: `'lock'`, the default, or `'stay'`, which only
+throws, leaving the vault as it was, for a host that locks or closes the vault on its own
+sign-out and would rather not lose the remembered unlock to a refusal it did not expect.
+
+Open the vault only once your backend knows who is signed in: a vault opened while its auth is
+still loading meets `identity_revoked` at once, and forgets the remembered unlock with it. A
+backend that tells "who are you?" from "you may not" refuses the second as `not_permitted`,
+which locks nothing.
+
 ## Logging
 
 Some things a vault cannot throw to anyone: they happen in the background, or in a call that
@@ -405,13 +427,14 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `last_unlock`         | removing the vault's last passphrase: a vault always keeps one, since a passkey can be lost with its device | Add another passphrase first; to be rid of the vault, `destroy()` it |
 | `corrupt_record`      | a stored record failed validation or decryption verification     | Nothing was changed. Do not retry; tell the user, and see a developer: the record is damaged, was moved, or came from a newer safebyok. A damaged lockbox can be removed with `erase()` or written afresh with `store()` (see *Damaged lockboxes*); a damaged vault bundle stops `openVault` |
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
-| `not_permitted`       | the storage backend refused this user: signed out, or not theirs to reach | Have the user sign in again                             |
+| `not_permitted`       | the storage backend refused the signed-in user, still the vault's own, this one call | Tell the user they may not; signing in again will not help |
+| `identity_revoked`    | the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in. The vault has locked itself (see *When the user signs out*) | Have the user sign in again, then open the vault for whoever that is |
 | `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause` |
 
 `openVault` itself can refuse with `bad_option`, `bad_label`, and, as it reads the vault from
-storage, `storage_unavailable`, `not_permitted` or `corrupt_record` (for the vault's bundle: a
-damaged lockbox never stops an open): the last three are conditions, though they surface at
-open. A refused open leaves nothing running behind it, so the host simply opens again.
+storage, `storage_unavailable`, `not_permitted`, `identity_revoked` or `corrupt_record` (for the
+vault's bundle: a damaged lockbox never stops an open): the last four are conditions, though they
+surface at open. A refused open leaves nothing running behind it, so the host simply opens again.
 
 ### Damaged lockboxes
 
