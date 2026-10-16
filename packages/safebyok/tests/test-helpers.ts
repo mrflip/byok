@@ -479,7 +479,7 @@ const jsonOrPlaceholder = (val: unknown): string => {
  * and an adapter's own tests of a line the battery cannot reach (5.4, who may reach a vault) cite
  * it the same way. A line whose title is not here is not in the contract.
  *
- * @example describe(`postgresVaultDB, 5.4: ${TH.VaultDBContract['5.4']}`, () => { ... })
+ * @example describe(`postgresVaultDB, 5.5: ${TH.VaultDBContract['5.5']}`, () => { ... })
  */
 export const VaultDBContract = Object.freeze({
   '1.1': 'What is stored reads back whole',
@@ -498,14 +498,18 @@ export const VaultDBContract = Object.freeze({
   '4.1': 'An adapter declares the most lockboxes it holds in one vault',
   '4.2': 'A new lockbox past the limit is refused, on a best effort',
   '4.3': 'A replacement is never refused for the count',
-  '4.4': 'An erase always makes room',
+  '4.4': 'Under the limit, a new lockbox lands',
   '4.5': 'Past the limit, nothing is lost',
   '4.6': "A hard limit is the backend's, or opt-in",
   '5.1': 'Every refusal is a VaultError whose kind says what to do',
   '5.2': 'A stale write means an expectation failed, and nothing else',
   '5.3': 'A refusal quotes nothing it was handed',
   '5.4': 'Only the signed-in user reaches their vaults',
+  '5.5': 'identity_revoked means the user is gone',
+  '5.6': 'not_permitted refuses one call, and locks nothing',
+  '5.7': 'An adapter with no notion of identity says neither',
   '6.1': 'subscribe hands back an unsubscribe, and calls when the vault may have changed',
+  '6.2': 'A watch that fails calls onChange',
   '7.1': 'The most it holds in one record',
   '7.2': 'The most it holds of one vault',
 } as const)
@@ -529,6 +533,12 @@ export type DescribeVaultDBOpts = {
    * `Infinity`, or fixed and too large to fill in a test, has none to give.
    */
   makeCappedVaultDB?: ((maxLockboxes: number) => VaultDBVerbs | Promise<VaultDBVerbs>) | undefined
+  /**
+   * A fresh, empty backend, as a way to make an adapter over it signed in as a given user, or
+   * signed out for null: for line 5.4, who may reach a vault; without it, that is skipped. An
+   * adapter with no notion of identity has none to give.
+   */
+  makeVaultDBFor?: (() => ((userId: string | null) => VaultDBVerbs) | Promise<(userId: string | null) => VaultDBVerbs>) | undefined
 }
 
 /** The lockbox limit {@link describeVaultDB} asks a capped adapter for. */
@@ -539,36 +549,51 @@ const CappedLockboxes = 3
  * one group of tests for each of its numbered lines that a test can reach through an adapter's
  * public verbs, each group titled by its line ({@link VaultDBContract}). Run it against an adapter
  * with a factory making a fresh, empty one per test, and -- for an adapter with a lockbox limit a
- * test can fill -- a second making one held to a given limit.
+ * test can fill -- a second making one held to a given limit, and for an adapter that serves the
+ * user signed in, a third making one signed in as anyone.
  *
  * For an adapter's own tests, from `safebyok/testing`; it runs under vitest. It checks refusals
  * by `kind` rather than by class, so an adapter passes whichever copy of the package it extends.
  *
  * @param adapterTitle - The adapter under test, as the suite's titles name it.
  * @param makeVaultDB - A fresh, empty adapter: no record in it, and none shared with another call.
- * @param opts - Optionally, `makeCappedVaultDB`, for the lockbox limit's lines.
+ * @param opts - Optionally, `makeCappedVaultDB`, for the lockbox limit's lines, and
+ *   `makeVaultDBFor`, for who may reach a vault.
  *
  * @example
  *   describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
  * @example
  *   describeVaultDB('postgresVaultDB', makeRequest, {
  *     makeCappedVaultDB: (maxLockboxes) => postgresVaultDB({ client, userId: 'u1', maxLockboxes }),
+ *     makeVaultDBFor:    () => (userId) => postgresVaultDB({ client, userId }),
  *   })
  */
 export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDBVerbs | Promise<VaultDBVerbs>, opts: DescribeVaultDBOpts = {}) => {
-  const { makeCappedVaultDB } = opts
+  const { makeCappedVaultDB, makeVaultDBFor } = opts
 
   /** The title of a group of tests for one line of the contract. */
   const lineTitle = (line: VaultDBContractLine) => `${adapterTitle}, as a VaultDB, ${line}: ${VaultDBContract[line]}`
 
   // The lockbox limit's lines run only over a capped adapter.
   const capped = makeCappedVaultDB !== undefined
+  // And who may reach a vault, only over an adapter that knows who is signed in.
+  const signsIn = makeVaultDBFor !== undefined
 
   /** A fresh adapter whose `u1` scope holds a bundle, as every lockbox write needs. */
   const withBundle = async () => {
     const vaultDB = await makeVaultDB()
     await vaultDB.createBundle(bundleOf('u1'))
     return vaultDB
+  }
+
+  /** A fresh backend whose u1 vault holds two lockboxes, and the way to sign in to it. */
+  const servedHolding = async () => {
+    if (! makeVaultDBFor) { throw new Error('describeVaultDB ran a sign-in test with no makeVaultDBFor.') }
+    const vaultDBFor = await makeVaultDBFor()
+    const owner = vaultDBFor('u1')
+    await owner.createBundle(bundleOf('u1'))
+    await storeEach(owner, ['anthropic', 'openai'])
+    return { owner, vaultDBFor }
   }
 
   /** A fresh capped adapter, its `u1` vault made and holding a new lockbox under each boxlabel. */
@@ -1024,14 +1049,30 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       const refusal = await expectRefusal(vaultDB.updateBox(scopeOf('u1'), lockbox, { vault_id: 'vault-id-gone', revision_id: null }), 'stale_write')
       expect(quotedOf(refusal, lockbox)).to.deep.equal([])
     })
-  })
 
-  describe.runIf(capped)(lineTitle('5.3'), () => {
-    it("quotes no ciphertext, boxlabel or note of a lockbox it refuses as vault_full", async () => {
+    it.runIf(capped)("quotes no ciphertext, boxlabel or note of a lockbox it refuses as vault_full", async () => {
       const vaultDB = await cappedHolding(['anthropic', 'openai', 'mistral'])
       const lockbox = boxOf('secret_project_x', 'sk-fake-quoted', { note: 'a note never to be quoted' })
       const refusal = await expectRefusal(vaultDB.updateBox(scopeOf('u1'), lockbox, noBoxYet), 'vault_full')
       expect(quotedOf(refusal, lockbox)).to.deep.equal([])
+    })
+  })
+
+  describe.runIf(signsIn)(lineTitle('5.4'), () => {
+    it("refuses another user every verb on a vault as identity_revoked, reading and writing nothing", async () => {
+      const { owner, vaultDBFor } = await servedHolding()
+      const before = await standingVault(owner, ['anthropic', 'openai', 'mistral'])
+      const attempts = everyVerbOn(vaultDBFor('u2'))
+      for (const attempt of attempts) { await expectRefusal(attempt(), 'identity_revoked') }
+      expect(await standingVault(owner, ['anthropic', 'openai', 'mistral'])).to.deep.equal(before)
+    })
+
+    it("refuses every verb while no one is signed in as identity_revoked, reading and writing nothing", async () => {
+      const { owner, vaultDBFor } = await servedHolding()
+      const before = await standingVault(owner, ['anthropic', 'openai', 'mistral'])
+      const attempts = everyVerbOn(vaultDBFor(null))
+      for (const attempt of attempts) { await expectRefusal(attempt(), 'identity_revoked') }
+      expect(await standingVault(owner, ['anthropic', 'openai', 'mistral'])).to.deep.equal(before)
     })
   })
 
@@ -1059,6 +1100,19 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
     })
   })
 }
+
+/** Every verb a stranger might try on `u1`'s vault, each as a thunk. */
+const everyVerbOn = (stranger: VaultDBVerbs) => [
+  () => stranger.readBundle(scopeOf('u1')),
+  () => stranger.createBundle(bundleOf('u1', { vault_id: 'vault-id-theirs' })),
+  () => stranger.updateBundle(bundleOf('u1', { unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }),
+  () => stranger.readBox(scopeOf('u1'), 'anthropic'),
+  () => stranger.listBoxes(scopeOf('u1')),
+  () => stranger.updateBox(scopeOf('u1'), boxOf('anthropic', 'theirs'), { vault_id: 'vault-id-u1', revision_id: 'rev-anthropic' }),
+  () => stranger.updateBox(scopeOf('u1'), boxOf('mistral', 'theirs'), noBoxYet),
+  () => stranger.eraseBox(scopeOf('u1'), 'openai', thisVault),
+  () => stranger.eraseVault(scopeOf('u1'), thisVault),
+]
 
 /** Enough lockboxes that a listing cut to a page, or a sample, would show it: 25, `box0` to `box24`. */
 const ManyBoxlabels = Object.freeze(Array.from({ length: 25 }, (_unused, ii) => `box${String(ii)}`))
