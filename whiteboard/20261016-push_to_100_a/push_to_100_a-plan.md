@@ -444,6 +444,13 @@ From the sprint doc's *Open Matters*, as rows are swept:
     recommendations: a superseded call's rejection is ignored, advice resets when `creating`
     changes, and an `undefined` answer reads as `null`. One small commit, with tests, no second
     review.
+15. **Thread 2 files with its second review `flagged`** (#133), rather than waiting unfiled: the
+    skill allows no third review, both fixes held, and the open finding (a bag or whisper nested
+    about 3,000-6,000 deep still reaches a bare `RangeError` in `store()` and in `lockSoon`'s
+    synchronous compare, before it erases the remembered unlock) is closed by an additive depth
+    cap the Coach rules on. Holding #133 would stall 5b and the 3 → 4 restack. The PR's open
+    questions name it first, and the row says #133 waits on the Coach's word before it merges;
+    if yes, thread 9 builds the cap.
 
 ## For the Coach
 
