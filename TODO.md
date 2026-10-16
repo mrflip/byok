@@ -127,3 +127,15 @@ fails safe. The likely fix: never judge the key outlived against a bundle this h
 itself. Whether several passphrases stay (above) changes how much of this matters.
 
 ## RAGEBAIT
+
+Held-back irritants: fix one once it causes major, not minor, hassle.
+
+* **An omitted public bag keeps the old one.** The Coach (2026-10-16, sprint push_to_100_a,
+  thread 2, [#133](https://github.com/mrflip/safebyok/pull/133)): "I hate optional fields but we
+  can wait for it to bug me again". `store()` without a `public` bag keeps the lockbox's bag;
+  passing `{}` empties it. The alternative, an omitted bag meaning empty, is one line.
+* **The demo's App tests depend on order.** The Coach (2026-10-16, thread 14's review,
+  [#134](https://github.com/mrflip/safebyok/pull/134)): "leave, file under RAGEBAIT". Under
+  `--sequence.shuffle`, two App tests fail after the click-through test, whose fake user stays
+  signed in; in order they pass. The fix: reset the fake sign-in in `afterEach`, or give each test
+  a fresh fake IndexedDB.

@@ -10,7 +10,61 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: 5b underway, cut from 10's restacked tip; 15 (#138) flagged, waiting on the Coach (a fix whose edit the permission check refused); the line main → 1 (#128) → 2 (#133) → 3 (#127) → 4 (#132) → 13 (#137) → 10 (#136) is restacked; 6 (#126), 7 (#129), 8 (#130), 11 (#131), 14 (#134) filed, restack at wrap-up; then 9, and 12 after 23:01Z
+* **Status**: handing over to a fresh session (the Coach's word, near the session limit): read
+  *Resume here*, below, first. 5b in progress or ready (see *Resume here*); 15 (#138) flagged, waiting on the
+  Coach; the line main → 1 (#128) → 2 (#133) → 3 (#127) → 4 (#132) → 13 (#137) → 10 (#136) is
+  restacked; 6 (#126), 7 (#129), 8 (#130), 11 (#131), 14 (#134) filed, restack before 16; then
+  16 and 17 (new, the fifth batch of rulings), 9, and 12 after 23:01Z
+
+## Resume here (for a fresh session)
+
+The sprint ran in one session until near its limit; the Coach restarts `/sprint` in a fresh one
+(YOLO, `/turbochat`), which picks up from this section. Everything else in this file stands.
+
+* **Worktrees**: this sprint's own, `/workspace/byok-push_to_100_a` (branch
+  `20261016-push_to_100_a`, the sprint PR [#125](https://github.com/mrflip/safebyok/pull/125)).
+  `/workspace/byok-store_base` (5b, `20261016-store_base`, cut from 10's restacked tip `8439aa01`,
+  sprintbase set). `/workspace/byok-deriver_shim` (15, `20261016-deriver_shim`, unfiled at
+  `46674a7b`, sprintbase `adc94772`). No other sprint worktrees exist. The main checkout
+  (`/workspace/byok`) is the Coach's: never write to it.
+* **5b** (`store_base`; its PR: `gh pr list -R mrflip/safebyok --head 20261016-store_base`):
+  asked, as the session closed, to commit and push at its next green point, open its draft PR,
+  and bring `thread-5b-store_base.md` up to date. If it reported `ready`: verify, spawn its
+  reviewer over `8439aa01...<tip>`, then "File it" through a fresh `thread-worker` reading the
+  thread file, post the review comment, sweep its 34 Gripefest rows, one row per open matter. If
+  it reported `checkpoint` (or nothing): read its thread file and `git -C` its log and status, and
+  resume it with a fresh `thread-worker` in the same worktree. The progress file's status table
+  says which.
+* **15** ([#138](https://github.com/mrflip/safebyok/pull/138)) waits on the Coach's row "An
+  overridden deriveKeyBytes skips the 32-byte check": the reviewer's fix (`keyBytesOf`, both
+  callers, a test) was refused by the permission check, so it may not be routed to another agent
+  without the Coach's yes. On yes: a fresh `thread-worker` in `/workspace/byok-deriver_shim`
+  applies it, then a second review over the new commits only, then "File it".
+* **G138**: the Gripefest sweep of row `.34138` (Vault core tab) was refused by the permission
+  check; it waits on the Coach (they delete it, or allow the write).
+* **Next, in order**: (1) 5b, as above; (2) restack 5 → 6 → 15 → 7 → 14 → 8 → 11 onto 10's tip
+  (§5.1, with the owed lines in `restack-owed-rulings.md`, and the restack notes in progress's
+  *Notes*), each conflict back to a fresh worker of that thread; if 15 still waits, it goes to
+  the line's top later instead; (3) threads 16 and 17 from the line's top, side by side, then
+  restack 17 onto 16; (4) thread 9 on top; (5) thread 12 after 2026-10-16T23:01Z; (6) wrap-up §5.
+* **Owed by the orchestrator**: the fifth batch's `→ *Coach (2026-10-16):*` lines in the PR bodies
+  ([#131](https://github.com/mrflip/safebyok/pull/131),
+  [#132](https://github.com/mrflip/safebyok/pull/132),
+  [#133](https://github.com/mrflip/safebyok/pull/133),
+  [#134](https://github.com/mrflip/safebyok/pull/134),
+  [#136](https://github.com/mrflip/safebyok/pull/136),
+  [#137](https://github.com/mrflip/safebyok/pull/137)) were not yet written when the session
+  ended: `restack-owed-rulings.md` lists them; the resolutions file has each in full. The doc
+  mirror of Plan, Progress and Resolutions is behind (the sprint doc's *Open Matters* is current).
+* **The sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98, Open
+  Matters node `d50b4c27-347b`, matters table `mnkssgs7kk7.647`, state enum `a4555458-a970`
+  (0 drafting, 1 proceed, 2 explain, 3 elevate, 4 noted). Read it `sinceRev` the last rev in the
+  resolutions file's newest heading. The Gripefest doc
+  (https://claude.ai/code/artifact/db860eaa-e42b-4b34-99e0-bb9b68256f9c) holds 126 matters; sweeps
+  go one at a time through a subagent.
+* **Standing rules from the Coach this sprint**: one row per matter, never rolled up; each
+  ruling restated beside its question (PR body, thread file, `human/`) and in full in the
+  resolutions file; a tool permission refusal goes to the Coach, never to another agent.
 
 ## Read first
 
@@ -86,8 +140,10 @@ Bases and the planned merge order. "On N" is cut from thread N's tip once N has 
   starts after that, on top of the line.
 * **9** goes last before 12, on top of the line.
 
-Planned merge order: main -> 1 -> 2 -> 3 -> 4 -> 13 -> 10 -> 5 -> 6 -> 15 -> 7 -> 14 -> 8 -> 11 -> 9 -> 12
--> the sprint PR.
+Planned merge order: main -> 1 -> 2 -> 3 -> 4 -> 13 -> 10 -> 5 -> 6 -> 15 -> 7 -> 14 -> 8 -> 11 -> 16 -> 17
+-> 9 -> 12 -> the sprint PR. **16** and **17** (the fifth batch of rulings) are cut from the line's
+top once 5 through 11 are restacked onto it; 17 restacks onto 16 when both file. If 15 still
+waits on the Coach then, it moves to just below 9.
 
 ## The threads
 
@@ -258,6 +314,27 @@ handoff carries it whole. Below, the orchestrator's gloss.
   zxcvbn as hard dependencies (a row), whitespace in the length floor (a row), a host test's
   throw passes through (a row), the `userInputs` reason never fires (a row). Filed at `3c0a63a3`.
 
+* **Added, the fifth batch of rulings (doc rev 7737)**, each in full in the resolutions file:
+  * lower the room set aside per lockbox to 1,024 bytes, and report how many more lockboxes fit
+    under the same limit (the Coach: not too many more);
+  * `store()` refuses unknown option keys with `bad_option`, through one helper shared with
+    `validators`' strict check if one serves both;
+  * extend `cipherBinding`'s part guard to a top-level `undefined` or `null` part;
+  * Lockbox and its canonical-text check in a file of their own, before the budgets are lowered;
+  * a `notes/wontfix.md` entry: an own `__proto__` key in a bag or whisper is undefined
+    behaviour, as `undefined` and functions are (no refusal);
+  * the demo's WaysIn passphrase field in a form with a hidden username, read by ref at submit;
+  * an inline `display: none` beside `hidden` on the dialog's username field;
+  * delete the Postgres README's hard-cap recipe; in its place a very short prompt a host pastes
+    to an agent, which reads the library and writes the recipe for them, explaining the
+    trade-offs; the changeset says so;
+  * the Postgres e2e helper's random names from `crypto.getRandomValues`, the helper exported
+    from the e2e Postgres helpers for the suites to share (YOLO 19);
+  * **struck**: the App tests' order (RAGEBAIT now), the `__proto__` refusal (WONTFIX now), the
+    zxcvbn optional peers (thread 16 now).
+  * **Waits on the Coach**: the `FOR SHARE` race in `races.test.ts` (the row is back at
+    `explain`/`drafting`).
+
 ### 11. `pg_container` -- the Postgres battery under real concurrency
 
 * **Touches**: `e2e/`, a compose file, `.github/workflows/ci.yml` (a new job).
@@ -372,6 +449,56 @@ handoff carries it whole. Below, the orchestrator's gloss.
   `WaysIn` form, the changeset's migration framing, the demo App tests' order, host CSS against
   `hidden`. The debounce stays out, by decision. Filed at `d9b7a5b3`.
 
+### 16. `strength_principles` -- the Coach's three principles for passphrase strength (new)
+
+* **The Coach's text** (rows on #134 and #136, doc rev 7737): "if these principles are met by
+  end of sprint I'm happy: 1. we do not offer a weaksauce strength estimator (eg just length)
+  2. the batteries-included safebyok/browser gives a good strength estimator 3. optional: the
+  customer can override or tweak the strength estimator". On the spaces gap: "this is why we are
+  not implementing the length test". On the user's names: "this doesn't seem hard, pass a bag
+  including their id, vault label". On the inline test: "can we do the same thing as we do for
+  logger?". On the provider's check: "we should be validating these at the earliest opportunity
+  and leaving them immutable".
+* **Model**: opus. **Depends on**: 10 and 14, so it is cut from the line's top once 14 is
+  restacked onto it.
+* **Gloss**: `passphraseLengthTest` stops being offered as an estimator (public surface: the
+  Coach's ruling, before 1.0); `safebyok/browser` gives `zxcvbnPassphraseTest` as the good default
+  for a browser host; a host can pass its own. The core's behaviour with no test given, and how
+  the browser default arrives without putting zxcvbn's 216 kB into `browserOpts`, are the
+  worker's design calls (YOLO), each recorded as a row. The test takes a second argument, a bag
+  with the user's id, the app label and the vault label, which the zxcvbn test hands zxcvbn as user
+  inputs. The strength test becomes an ordinary option like `logger` (YOLO 17): no ref wrapper;
+  the vault keeps it for its life; a new identity reopens; the README says build it once. The
+  core exports `checkStrengthTest` beside `checkValidators`; the provider calls it at render.
+  `@zxcvbn-ts/core` and `@zxcvbn-ts/language-common` become optional peers if that squares with
+  principle 2; if not, principle 2 wins and a row says why. The provider shows the strength
+  test's reason as the passphrase advice when the host passes no `passphraseAdvice` (the restack
+  wiring of 10 into 14). The 12-character floor inside the good estimator stays unless the worker
+  finds cause (NIST's 15 was the Rec; the Coach answered with the principles).
+
+### 17. `written_at` -- the store compare goes, and the refusals the Coach sharpened (new)
+
+* **The Coach's text** (rows on #132 and #137, doc rev 7737): "have a thread remove the
+  changed_at guarantee and make it written_at, with no information about whether a change
+  happened. Even if it's safe it raises too many questions for a library with this much to think
+  about". On a device store that never opens: "What does it cost to have the extra kind? it's
+  fundamentally important to know 'this cannot succeed, and we know wny' vs 'this cannot succeed,
+  and we know why, but it might succeed later'". On erase into a reborn vault: "as long as the
+  message says what happens 'the contents of <box> could not be erased because its vault is
+  inaccessable' or whatever".
+* **Model**: opus. **Depends on**: 5b (it touches every adapter's stored fields), so it is cut
+  from the line's top; it may run beside 16 and restack onto it.
+* **Gloss**: `store()` no longer opens the old box to compare; `changed_at` becomes
+  `written_at`, stamped on every write, in the stored record, every adapter's schema and columns
+  (Convex validators, Postgres columns and SQL, GraphQL fields), the docs and the demo. A stored
+  shape change before 1.0: no migration, no reading of the old field; the changeset says what a
+  host sees (CLAUDE.md, *What the package promises*). A kind of its own for a device store that
+  cannot succeed until something outside changes (YOLO 18), named by VOCABULARY.md and STYLE.md,
+  beside `storage_unavailable` for a failure a retry may mend. `erase()` into a reborn vault keeps
+  `stale_write`, with a message that says what happened. A store's catch-up passes
+  `identity_revoked`, `rolled_back` and `newer_format` through unchanged, unless thread 13 already
+  does (thread 4's review, Rec taken).
+
 ## Coach rulings during the sprint
 
 From the sprint doc's *Open Matters*, as rows are swept:
@@ -425,6 +552,20 @@ From the sprint doc's *Open Matters*, as rows are swept:
   fine-grained (thread 13). G499's conflict handler stays NOT YET, in `NOTYET.md`, so a returning
   idea has a place to point to. `close()` and an outlived key become hard locks (thread 13).
   Chrome offering a saved password on the whisper field: WONTFIX (thread 9 writes the entry).
+
+* **Coach rulings, fifth batch (doc rev 7737).** Passphrase strength: the Coach's three
+  principles (no weak estimator, a good one in `safebyok/browser`, host override), the test told
+  the user's id and labels, held like `logger`, checked by an exported `checkStrengthTest` --
+  thread 16. `store()`'s compare goes and `changed_at` becomes `written_at`; a kind for a device
+  store that cannot succeed; erase's message says what happened; catch-up kinds pass through --
+  thread 17. Thread 9 gains the 1,024 allowance, unknown `store()` options, the `cipherBinding`
+  guard, the Lockbox file, a `__proto__` WONTFIX, the WaysIn form, the inline `display: none`, the
+  hard-cap recipe replaced by an agent prompt, and `crypto.getRandomValues`. Kept as built: lockSoon
+  as a soft lock, an omitted bag keeping the old (RAGEBAIT), the empty bag counted, the second
+  zxcvbn dependency, a score of 3, the creation race, a throwing host test, the one-line all-zero
+  check, the demo's plain editor, the passphrase entry's default name. RAGEBAIT: the App tests'
+  order. Thread 14's changeset loses its migration framing at the restack. `FOR SHARE`: explained
+  in the doc, waiting. Full text: the resolutions file.
 
 ## Decisions taken in YOLO
 
@@ -481,6 +622,19 @@ From the sprint doc's *Open Matters*, as rows are swept:
     `openVault`, where 5b hands over the logger. Restacking 13 and 10 first (their own workers,
     each with a lease) moves those conflicts to now, where each worker knows its own code, rather
     than to the wrap-up. Thread 4 dropped `312bcd50` in its restack, as YOLO 10 corrected says.
+
+17. **The strength test becomes an ordinary option, like `logger`** (thread 16): the Coach asked
+    "can we do the same thing as we do for logger?", and `logger` reopens the vault when its
+    identity changes. Holding the test the same way drops the ref wrapper of YOLO 13 and leaves
+    the vault's options immutable for its life, as the Coach asked on the provider's check; the
+    context bag the test now receives removes the usual reason to write it inline. A row lets the
+    Coach object.
+18. **A kind of its own for a device store that cannot succeed** (thread 17): the Coach asked
+    what it costs and why it matters; the cost is one member of the kinds union, its docs, and
+    one branch where the device store opens, which buys a host the difference between "retry"
+    and "change something first". A row says so.
+19. **"yes export" on the `node:crypto` row** read as: export the random-name helper from the
+    e2e Postgres helpers so the suites share it, using `crypto.getRandomValues`. A row asks.
 
 ## For the Coach
 

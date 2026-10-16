@@ -11,7 +11,7 @@
 | 3 | locks_and_expiry | on 2 (c397b745), restacked | filed (tip 65642238) | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 (65642238), restacked | filed (tip f6d424ef) | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
-| 5b | store_base build | on 10 (8439aa01) | underway | |
+| 5b | store_base build | on 10 (8439aa01) | underway; asked to checkpoint (commit, push, draft PR, thread file) for the handoff | |
 | 6 | crypto_small | main | filed #126 | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | main | filed #129 | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | main | filed #130 | [#130](https://github.com/mrflip/safebyok/pull/130) |
@@ -22,6 +22,8 @@
 | 13 | epoch_expectation | on 4 (f6d424ef), restacked | filed (tip f89b0c42) | [#137](https://github.com/mrflip/safebyok/pull/137) |
 | 14 | uncontrolled_fields | on 7 (3d62fc04) | filed | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 (adc94772) | flagged: waits on the Coach [#138](https://github.com/mrflip/safebyok/pull/138) | |
+| 16 | strength_principles (new) | top of the line, after 11 | pending | |
+| 17 | written_at (new) | top of the line, after 11 (needs 5b) | pending | |
 
 ## What the threads have taught
 

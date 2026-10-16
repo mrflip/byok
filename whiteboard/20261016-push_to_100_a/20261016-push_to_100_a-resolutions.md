@@ -7,6 +7,449 @@ raised (the PR body, the thread file, the `human/` entry), and the plan's *Coach
 sprint* holds the one-line version. "(empty: took the Rec)" means the Coach flipped the row to
 `proceed` without writing, which accepts the recommendation.
 
+## Fifth batch, 2026-10-16 (doc rev 7737)
+
+### `store()` opens the old box to compare (thread 4)
+
+* **Raised by**: thread 4 ([#132](https://github.com/mrflip/safebyok/pull/132)).
+* **Question**: Does a store decipher the old whisper, and can a hard lock stop it? (thread 4, #132)
+  Yes, store() deciphers: when a box already stands under that label it opens it (two quick AES-GCM
+  steps, no passphrase work) and compares the plain whispers, only so that storing the same whisper
+  again keeps its changed_at. It cannot compare ciphertexts: every seal draws a fresh random IV and
+  a fresh lockbox key, so identical whispers never encrypt alike, and changing that would be new
+  cryptography and a format change. Today a store checks the key once, after its last look at
+  storage, and uses that key for the compare, the sealing and the send; a hard lock landing after
+  that check does not stop it, and the write lands, as you said it should. A retry after another
+  device's write checks again. Rec: keep the compare and the behaviour, and say both in the docs:
+  store() opens the old box to compare, and lock() lets a write past its last check land.
+* **Coach's reply**: "have a thread remove the changed_at guarantee and make it written_at, with no
+  information about whether a change happened. Even if it's safe it raises too many questions for a
+  library with this much to think about" -- `proceed`.
+* **Where it went**: thread 17, `written_at`, new: `store()` stops opening the old box, and
+  `changed_at` becomes `written_at`, stamped on every write, with no claim about whether anything
+  changed -- in the stored record, every adapter, the docs and the demo. Before 1.0, so no
+  migration; the changeset says what a host sees.
+
+### "Passphrase must contain a capital letter"? (thread 14)
+
+* **Raised by**: thread 14 ([#134](https://github.com/mrflip/safebyok/pull/134)).
+* **Question**: "Passphrase must contain a capital letter"? (thread 14, #134) You asked about
+  validations like this beside the passphrase field. The field now has room for a message of the
+  host's (passphraseAdvice), shown as the user types and announced politely; thread 10's strength
+  test fills it by default once the line is restacked. NIST SP 800-63B advises against composition
+  rules (capitals, digits, symbols): they push people to Password1! without making guessing harder.
+  Rec: no composition rules of ours; length and a strength estimate, and the slot stays open for a
+  host that insists.
+* **Coach's reply**: "if these principles are met by end of sprint I'm happy:1. we do not offer a
+  weaksauce strength estimator (eg just length)2. the batteries-included safebyok/browser gives a
+  good strength estimator3. optional: the customer can override or tweak the strength estimator" --
+  `proceed`.
+* **Where it went**: no composition rules of ours. The Coach's three principles (no weak estimator
+  such as length alone; `safebyok/browser` gives a good one; the host can override or tweak it) go
+  to thread 16, `strength_principles`, new, which must meet them by the end of the sprint.
+
+### 12 characters, or NIST's 15? (thread 10)
+
+* **Raised by**: thread 10 ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: 12 characters, or NIST's 15? (thread 10, #136) The default passphrase test asks for
+  at least 12 characters, as ruled. NIST SP 800-63B revision 4 asks for 15 when the password is the
+  only thing protecting the account, which a vault passphrase is. It is one constant,
+  MinPassphraseChars. Rec: raise it to 15 now, before 1.0, since the vault has no second factor
+  behind it.
+* **Coach's reply**: "1. we do not offer a weaksauce strength estimator (eg just length)2. the
+  batteries-included safebyok/browser gives a good strength estimator3. the customer can override or
+  tweak the strength estimator" -- `proceed`.
+* **Where it went**: answered with the same three principles; thread 16 meets them. No length-only
+  test is offered, so the 12-or-15 question becomes the floor inside the good estimator; thread 16
+  keeps 12 unless it finds cause, and says so as a row.
+
+### Spaces count toward the 12-character floor (thread 10's review)
+
+* **Raised by**: thread 10's review ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: Spaces count toward the 12-character floor (thread 10's review, #136). 'a' followed
+  by 11 spaces passes the default length test, as the ruling (12 characters, no composition rules)
+  has it; zxcvbnPassphraseTest catches it. Collapsing runs of whitespace before counting would close
+  it. Rec: leave as ruled.
+* **Coach's reply**: "this is why we are not implementing the length test" -- `proceed`.
+* **Where it went**: no length test is offered on its own (thread 16 removes it), so the gap closes
+  with it.
+
+### Should the strength test know the user's names? (thread 10)
+
+* **Raised by**: thread 10 ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: Should the strength test know the user's names? (thread 10, #136) zxcvbn can mark
+  down a passphrase built from the user's own words (their id, the vault's label) if it is handed
+  them. Ours takes only the passphrase; passing names would add a second argument to every host's
+  test. Rec: not now; keep the one-argument test.
+* **Coach's reply**: "this doesn't seem hard, pass a bag including their id, vault label" --
+  `proceed`.
+* **Where it went**: thread 16: the strength test takes a second argument, a bag carrying the user's
+  id and the vault's label (and the app label), and the zxcvbn test hands them to zxcvbn as user
+  inputs.
+
+### An inline strength test reopens the vault (thread 10's review)
+
+* **Raised by**: thread 10's review ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: An inline strength test reopens the vault: taken in YOLO (thread 10's review, #136).
+  An arrow written inline as VaultProvider's passphraseStrengthTest gets a new identity on every
+  parent render, and each one closed and reopened the vault, ending any open dialog. The test plays
+  no part in opening, so I sent it back: a ref and one stable wrapper, with tests. The all-zero
+  check's "constant time" wording is softened at the same time. Rec: proceed as taken.
+* **Coach's reply**: "can we do the same thing as we do for logger?" -- `proceed`.
+* **Where it went**: YOLO 17: the strength test becomes an option like `logger`: the vault takes it
+  at open and keeps it, and a new identity reopens the vault, as every other option does; the README
+  says to build it once. Thread 16 removes the ref wrapper. The context bag (above) removes the
+  usual reason to write it inline. A row in the doc lets the Coach object.
+
+### The provider repeats the core's not-a-function check (thread 10)
+
+* **Raised by**: thread 10 ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: The provider repeats the core's not-a-function check (thread 10, #136). To refuse a
+  passphraseStrengthTest that is not a function at render, VaultProvider now writes its own
+  bad_option check and message, and its own ?? passphraseLengthTest default, the same as the core's,
+  rather than the core exporting its parseStrengthTest. The two could drift. Rec: the worker: keep,
+  so the public surface stays narrow; the second reviewer: export a checkStrengthTest beside
+  checkValidators in a later thread, and have the provider call it.
+* **Coach's reply**: ""at render" -- we should be validating these at the earliest opportunity and
+  leaving them immutable, is that the case?" -- `proceed`.
+* **Where it went**: thread 16: the core exports `checkStrengthTest` beside `checkValidators` and
+  the provider calls it at render, the earliest the prop exists; with YOLO 17 the vault holds the
+  test unchanged for its life. The Coach's question ("is that the case?") is answered by a row in
+  the doc: not today (the ref reads the latest), yes after thread 16.
+
+### zxcvbn as hard dependencies of the core (thread 10's review)
+
+* **Raised by**: thread 10's review ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: zxcvbn as hard dependencies of the core (thread 10's review, #136). @zxcvbn-ts/core
+  and @zxcvbn-ts/language-common are dependencies of safebyok itself, so every host installs about
+  1.3 MB of dictionary even if it never uses zxcvbnPassphraseTest, and an unbundled safebyok/browser
+  import (Node SSR, Vite dev) loads it. Bundled apps are unaffected; a test keeps it out of
+  browserOpts. Rec: make them optional peers, needed only by the hosts that import the zxcvbn test,
+  in thread 9.
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: thread 16 (moved from thread 9, since it bears on the principles):
+  `@zxcvbn-ts/core` and `@zxcvbn-ts/language-common` become optional peers, needed only by hosts
+  that import the zxcvbn test.
+
+### Thread 10's strength test as thread 14's passphrase advice (threads 10 and 14)
+
+* **Raised by**: threads 10 and 14 ([#134](https://github.com/mrflip/safebyok/pull/134)).
+* **Question**: Thread 10's strength test as thread 14's passphrase advice (threads 10 and 14).
+  Thread 14 gives the passphrase field a message slot fed by a host's passphraseAdvice; thread 10
+  gives the vault a passphraseStrengthTest. They stand on different branches, so neither feeds the
+  other yet. At the restack, the provider would show the strength test's reason as the advice when
+  the host gives no passphraseAdvice, so the user hears why a passphrase is weak before pressing
+  Create. Rec: yes, at the restack.
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: thread 16, which stands on both: the provider shows the strength test's reason
+  as the advice when the host gives no `passphraseAdvice`.
+
+### A second zxcvbn dependency (thread 10)
+
+* **Raised by**: thread 10 ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: A second zxcvbn dependency (thread 10, #136). Beside @zxcvbn-ts/core (your yes),
+  thread 10 added @zxcvbn-ts/language-common, its word lists: without them zxcvbn catches only
+  repeats and sequences, and scores password1234 a perfect 4. Both ship only in the separate
+  safebyok/browser export (216 kB), never in openVault or browserOpts. Rec: yes, keep it: the test
+  is worthless without its dictionaries.
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: kept: `@zxcvbn-ts/language-common` stays beside `@zxcvbn-ts/core`.
+
+### zxcvbn's passing score (thread 10)
+
+* **Raised by**: thread 10 ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: zxcvbn's passing score (thread 10, #136). The zxcvbn test passes a passphrase that
+  scores at least 3 of 4, after the length floor. zxcvbn's own guidance treats 3 as "safely
+  unguessable" for an online attack. Rec: keep 3.
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: kept at 3 of 4.
+
+### A weak passphrase while another device creates the vault (thread 10)
+
+* **Raised by**: thread 10 ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: A weak passphrase while another device creates the vault (thread 10, #136). If this
+  device tries to create the vault with a weak passphrase at the very moment another device creates
+  it, this one is refused as weak_passphrase, though its passphrase might have been meant to unlock
+  the other's vault. Rec: accept: a retry finds the vault and unlocks it.
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: accepted as built.
+
+### A host's strength test that throws (thread 10)
+
+* **Raised by**: thread 10 ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: A host's strength test that throws (thread 10, #136). If a host's own test throws,
+  the error passes through as it came, without a kind, as a throwing makePasskey already does. Rec:
+  keep: it is the host's bug, and wrapping it would hide its message.
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: kept: the host's error passes through as it came.
+
+### A hand-written all-zero check (thread 10)
+
+* **Raised by**: thread 10 ([#136](https://github.com/mrflip/safebyok/pull/136)).
+* **Question**: A hand-written all-zero check (thread 10, #136). Refusing an all-zero derived key
+  takes one line that ORs every byte together, the shape of libsodium's sodium_is_zero, rather than
+  a new dependency (@noble/ciphers) for it. CLAUDE.md asks for your yes before anything is
+  hand-rolled, and for no home-made comparisons in crypto; thread 10's reviewer is checking it. Rec:
+  yes, keep the one line.
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: the Coach's yes to the one hand-written line, as built.
+
+### A device store that never opens (thread 13)
+
+* **Raised by**: thread 13 ([#137](https://github.com/mrflip/safebyok/pull/137)).
+* **Question**: A device store that never opens (thread 13, #137). When the browser's storage is
+  blocked outright (a private window, storage turned off), the device store fails as
+  storage_unavailable, the same kind as a passing failure, though a retry will not help. Per your
+  ruling, the message now says exactly which read or write failed and what to check. A kind of its
+  own would let a host stop offering a retry. Rec: keep the one kind; the message carries the
+  difference.
+* **Coach's reply**: "What does it cost to have the extra kind? it's fundamentally important to know
+  "this cannot succeed, and we know wny" vs "this cannot succeed, and we know why, but it might
+  succeed later"" -- `proceed`.
+* **Where it went**: YOLO 18: a kind of its own for a device store that cannot succeed until
+  something outside the vault changes (storage blocked, a private window), beside
+  `storage_unavailable` for a failure a retry may mend. Thread 17 builds it and names it by
+  VOCABULARY.md. The Coach's question ("What does it cost?") is answered by a row: one more member
+  of the kinds union, its docs, and one branch where the device store opens.
+
+### The Postgres hard-cap recipe takes an advisory lock (thread 13)
+
+* **Raised by**: thread 13 ([#137](https://github.com/mrflip/safebyok/pull/137)).
+* **Question**: The Postgres hard-cap recipe now takes an advisory lock (thread 13, #137). Every
+  Postgres write now reads the vault's bundle row FOR SHARE to compare the epoch, so the README's
+  optional hard-cap trigger, which took the same row FOR UPDATE, would deadlock two first writes. It
+  now serializes on an advisory lock keyed by a hash of the vault's scope, so two vaults may share a
+  key and wait on each other needlessly; the changeset tells hosts who installed it to replace it.
+  Rec: as built; the recipe is an unsupported extra.
+* **Coach's reply**: "delete the recipe. Provide a very short prompt for the customer to paste to an
+  agent: it will download our library and write the recipe for them, explaining the tradeoffs" --
+  `proceed`.
+* **Where it went**: thread 9: the recipe leaves the Postgres README; in its place, a short prompt a
+  host pastes to an agent, which reads the library and writes the recipe for them, explaining the
+  trade-offs. The changeset says so.
+
+### The epoch check under real Postgres concurrency (thread 13)
+
+* **Raised by**: thread 13 ([#137](https://github.com/mrflip/safebyok/pull/137)).
+* **Question**: The epoch check under real Postgres concurrency (thread 13, #137). Thread 13's FOR
+  SHARE read is tested only on PGlite, which runs one statement at a time, so a write racing an
+  epoch change is not exercised. Thread 11's container suites are where it belongs. Rec: add a race
+  to e2e/tests/postgres/races.test.ts in thread 9, once the line has both.
+* **Coach's reply**: "please explain the FOR SHARE stuff, I missed a memo" -- `explain`.
+* **Where it went**: `explain`: the fuller explanation of `FOR SHARE` is in the doc's row, back at
+  `drafting` for the Coach; the race test waits on it.
+
+### Is every `lockSoon()` a hard lock? (thread 4)
+
+* **Raised by**: thread 4 ([#132](https://github.com/mrflip/safebyok/pull/132)).
+* **Question**: Is every lockSoon() a hard lock? No (thread 4, #132). lockSoon() turns new work away
+  at once: a fresh read, store or unlock gets vault_locked, and the snapshot reads locked. But work
+  already in hand (a read, a retried store, an unlock or passphrase change under way, even in
+  another tab) finishes, and the key is truly dropped only at shut time, 5 seconds later by default.
+  A hard lock() refuses even the work in flight. The "remembered unlock" is the copy this device
+  keeps in its own storage so a reload or a new tab opens without the passphrase; lockSoon() erases
+  that copy at once, so a tab opened during the grace must ask for the passphrase. That only shuts
+  the back door for new tabs: the open handle keeps its key in memory until shut time. Rec: keep it.
+* **Coach's reply**: "I don't understand, are you saying that every call to lockSoon is a hard
+  lock?" -- `proceed`.
+* **Where it went**: kept as built: no, `lockSoon()` turns new work away at once, lets work in hand
+  finish, and drops the key at shut time; the Matter's explanation answered the Coach's earlier
+  question.
+
+### `erase()` into a reborn vault says `stale_write` (thread 4)
+
+* **Raised by**: thread 4 ([#132](https://github.com/mrflip/safebyok/pull/132)).
+* **Question**: erase() into a reborn vault says stale_write (thread 4, #132). If the vault was
+  destroyed and made anew on another device, a store or a read here says vault_locked (the old key
+  opens nothing). An erase says stale_write instead: the user asked for something to be gone, and
+  what they meant to erase is not what stands, which is news they must hear; destroy and ways-in
+  changes do the same. It makes the kinds a little uneven, so the docs say it plainly. Rec: keep.
+* **Coach's reply**: "as long as the message says what happens "the contents of <box> could not be
+  erased because its vault is inaccessable" or whatever" -- `proceed`.
+* **Where it went**: the kind stays; thread 17 makes the message say what happened, in the Coach's
+  spirit: the box's contents could not be erased because its vault is no longer the one this device
+  opened.
+
+### A failed catch-up hides the real kind (thread 4's review)
+
+* **Raised by**: thread 4's review ([#132](https://github.com/mrflip/safebyok/pull/132)).
+* **Question**: A failed catch-up hides the real kind (thread 4's review, #132). When a store's
+  catch-up is refused because the user signed out (identity_revoked), the vault was rolled back, or
+  a newer build wrote it (newer_format), the caller hears stale_write, and the real kind hides in
+  its cause; read() already passes the real kind through. The vault has locked meanwhile, so the
+  caller's next move differs. Rec: pass those kinds through unchanged, in thread 13.
+* **Coach's reply**: (empty: took the Rec) -- `proceed`.
+* **Where it went**: the Rec, taken: thread 17 passes `identity_revoked`, `rolled_back` and
+  `newer_format` through a store's catch-up unchanged, unless thread 13 already did.
+
+### The demo's whisper editor stays controlled (thread 14)
+
+* **Raised by**: thread 14 ([#134](https://github.com/mrflip/safebyok/pull/134)).
+* **Question**: The demo's whisper editor stays controlled (thread 14, #134). The demo dashboard's
+  edit form shows whispers in plain text by design and fills with the stored whisper, so it stays a
+  controlled textarea. It is the demo, not the package. Rec: leave it.
+* **Coach's reply**: "yes, the never-used-for-real maintenance dashboard in the demo can be a plain
+  text box" -- `proceed`.
+* **Where it went**: left as is: the demo's maintenance form stays a plain text box.
+
+### The demo's WaysIn passphrase field (thread 14's review)
+
+* **Raised by**: thread 14's review ([#134](https://github.com/mrflip/safebyok/pull/134)).
+* **Question**: The demo's WaysIn passphrase field (thread 14's review, #134). It now invites
+  password managers with current-password, but has no form or username field, and it reads the
+  passphrase only from onChange, so an autofill that sends no input event leaves it empty. Rec: wrap
+  it in a form with a hidden username and read it by ref at submit, in a later demo pass.
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: thread 9: a form with a hidden username around it, read by ref at submit.
+
+### The name a password manager files the passphrase under (thread 14)
+
+* **Raised by**: thread 14 ([#134](https://github.com/mrflip/safebyok/pull/134)).
+* **Question**: The name a password manager files the passphrase under (thread 14, #134). The
+  passphrase field carries a hidden username, so a manager saves the passphrase as its own entry: by
+  default "<user_id> (<vaultlabel> vault)", unlike the sign-in name, so the manager never offers to
+  overwrite the user's login password. A host with readable names passes passphraseUsername. Rec:
+  keep the default.
+* **Coach's reply**: "let's try out The passphrase field carries a hidden username, so a manager
+  saves the passphrase as its own entry: by default "<user_id> (<vaultlabel> vault)", unlike the
+  sign-in name, so the manager never offers to overwrite the user's login password. A host with
+  readable names passes passphraseUsername" -- `proceed`.
+* **Where it went**: kept as built, to try out: the default `<user_id> (<vaultlabel> vault)`, and
+  `passphraseUsername` for a host with readable names.
+
+### Thread 14's changeset reads as a migration (thread 14's review)
+
+* **Raised by**: thread 14's review ([#134](https://github.com/mrflip/safebyok/pull/134)).
+* **Question**: Thread 14's changeset reads as a migration (thread 14's review, #134). WhisperField
+  and WhisperFieldAttributes have never been released, so "a host drops value" describes surface no
+  host has used. Rec: the reviewer: rewrite it at the restack to describe the fields as they now
+  stand; the worker: keep the how-to, since a host must drop value.
+* **Coach's reply**: "don't waste time on a migration nobody needs" -- `proceed`.
+* **Where it went**: at the restack: thread 14's changeset describes the fields as they now stand,
+  with no migration how-to.
+
+### The demo's App tests depend on order (thread 14's review)
+
+* **Raised by**: thread 14's review ([#134](https://github.com/mrflip/safebyok/pull/134)).
+* **Question**: The demo's App tests depend on order (thread 14's review, #134). Under
+  --sequence.shuffle, two App tests fail whenever they run after the click-through test, because its
+  fake user stays signed in. In order they pass, so CI is green; it predates the thread. Rec: in
+  thread 9, reset the fake sign-in in afterEach (the reviewer), or give each test a fresh fake
+  IndexedDB (the worker).
+* **Coach's reply**: "leave, file under RAGEBAIT" -- `proceed`.
+* **Where it went**: left as is; filed under RAGEBAIT in `TODO.md`. Struck from thread 9.
+
+### Host CSS can un-hide the hidden username field (thread 14's review)
+
+* **Raised by**: thread 14's review ([#134](https://github.com/mrflip/safebyok/pull/134)).
+* **Question**: Host CSS can un-hide the hidden username field (thread 14's review, #134). A host
+  rule such as input { display: block } overrides [hidden], and would show the username field the
+  dialog adds for password managers. Rec: add an inline display: none beside hidden, in thread 9.
+* **Coach's reply**: "I am at peace with eventually making it optionally editable, but sure let's
+  hide it for now" -- `proceed`.
+* **Where it went**: thread 9: an inline `display: none` beside `hidden`. Making the field
+  optionally editable may come later.
+
+### Storing without a public bag keeps the old one (thread 2)
+
+* **Raised by**: thread 2 ([#133](https://github.com/mrflip/safebyok/pull/133)).
+* **Question**: Storing without a public bag keeps the old one (thread 2, #133). When a host stores
+  a new whisper under an existing label and passes no public bag, the lockbox keeps the bag it
+  already had; passing {} empties it. That was the note's rule, and the demo's "leave the note blank
+  to keep it" relies on it. The alternative, an omitted bag meaning empty, is one line. Rec: keep:
+  replacing a key should not make the host re-send its metadata.
+* **Coach's reply**: "I hate optional fields but we can wait for it to bug me again, go ahead as you
+  propose" -- `proceed`.
+* **Where it went**: kept as built; filed under RAGEBAIT in `TODO.md` (optional fields), to fix if
+  it bugs the Coach again.
+
+### The empty bag counts toward the size limit (thread 2)
+
+* **Raised by**: thread 2 ([#133](https://github.com/mrflip/safebyok/pull/133)).
+* **Question**: The empty bag counts toward the size limit (thread 2, #133). maxWhisperBytes now
+  counts the whisper and its public bag together, as ruled, and an empty bag is the two bytes {}. So
+  a whisper of exactly the limit no longer fits, by two bytes. Rec: keep; the limit is about what is
+  stored, and the README says so.
+* **Coach's reply**: "yes" -- `proceed`.
+* **Where it went**: kept as built.
+
+### Room set aside per lockbox could halve (thread 2)
+
+* **Raised by**: thread 2 ([#133](https://github.com/mrflip/safebyok/pull/133)).
+* **Question**: Room set aside per lockbox could halve (thread 2, #133). When openVault weighs a
+  vault against storage's limit, it allows 2,048 bytes per lockbox for the fields beside the
+  whisper. With the note gone they need under 1,000, so 1,024 would do; lowering it lets more
+  lockboxes fit under the same limit. Rec: lower it to 1,024 in thread 9, which re-derives the
+  limits at the end.
+* **Coach's reply**: "we can always be more generous later, as long as we don't increase the number
+  of allowed vaults by too much" -- `proceed`.
+* **Where it went**: thread 9 lowers it to 1,024 bytes, and says in its report how many more
+  lockboxes fit under the same limit, so the allowance does not grow by much.
+
+### Unknown `store()` options (thread 2's review)
+
+* **Raised by**: thread 2's review ([#133](https://github.com/mrflip/safebyok/pull/133)).
+* **Question**: Unknown store() options (thread 2's review, #133). A JavaScript caller still passing
+  store(…, { note }) is silently ignored now that note is gone, since store()'s options are not
+  checked strictly. Refusing unknown keys with bad_option, as validators does, would tell the host
+  at once. Rec: yes, in thread 9.
+* **Coach's reply**: "please do this with a helper that serves both if that's possible" --
+  `proceed`.
+* **Where it went**: thread 9: `store()` refuses unknown keys with `bad_option`, through one helper
+  shared with `validators`' strict check, if one serves both.
+
+### `cipherBinding`'s part guard (thread 2's review)
+
+* **Raised by**: thread 2's review ([#133](https://github.com/mrflip/safebyok/pull/133)).
+* **Question**: cipherBinding's part guard (thread 2's review, #133). cipherBinding refuses an
+  undefined field inside a record part, but a top-level undefined part binds as null, and a null
+  part throws a bare TypeError. The types exclude both, and every caller is internal. Rec: extend
+  the guard in thread 9; low priority.
+* **Coach's reply**: "y" -- `proceed`.
+* **Where it went**: thread 9, as recommended.
+
+### Lockbox in a module of its own (thread 2's second review)
+
+* **Raised by**: thread 2's second review ([#133](https://github.com/mrflip/safebyok/pull/133)).
+* **Question**: Lockbox in a module of its own, to save 2 kB (thread 2's second review, #133).
+  Thread 2's canonical-text check pulls safe-stable-stringify into every entry that imports
+  types.ts, so idbDeviceDB and browserOpts each grew about 2 kB, though they never touch a lockbox.
+  Moving Lockbox and its check into their own module would let them drop it; the check stays at the
+  boundary. Rec: yes, in thread 9, before it lowers the budgets.
+* **Coach's reply**: "module meaning file? yes, or else explain" -- `proceed`.
+* **Where it went**: thread 9: yes, a file of its own (`src/lockbox.ts` or the like), before it
+  lowers the budgets.
+
+### `__proto__` keys silently dropped (thread 2's second review)
+
+* **Raised by**: thread 2's second review ([#133](https://github.com/mrflip/safebyok/pull/133)).
+* **Question**: __proto__ keys silently dropped (thread 2's second review, #133). A bag or whisper
+  with an own __proto__ key loses it on the way in, because Zod's record assigns it as the
+  prototype. Nothing leaks, but the host gets back less than it stored, with no word why. Older than
+  thread 2. Rec: refuse it, as bad_option for a bag and bad_whisper for a whisper, in thread 9.
+* **Coach's reply**: "it sounds like your proposal is "we check for a crazy edge case used by people
+  who know exactly what they're doing or have nfid what they're doing, so we can make them drop the
+  weird field we would have dropped anyway". We already don't serialize undefined or functions. Note
+  it in WONTFIX as undefined behavior" -- `proceed`.
+* **Where it went**: no refusal: thread 9 writes a `notes/wontfix.md` entry -- an own `__proto__`
+  key in a bag or whisper is undefined behaviour, as `undefined` and functions already are.
+
+### `node:crypto` in a Postgres test helper (thread 11's review)
+
+* **Raised by**: thread 11's review ([#131](https://github.com/mrflip/safebyok/pull/131)).
+* **Question**: node:crypto in a Postgres test helper (thread 11's review, #131). The Postgres e2e
+  tests give each scratch database a random name, made with Node's own crypto module (randomBytes).
+  The minimal one is the web-standard crypto.getRandomValues: on Node it is the same WebCrypto
+  global the browser has, and src/ already uses only that. Nothing needs to choose between them; the
+  helper took Node's by habit, in a test file that also uses Node's file module. Exporting a shared
+  piece from a tree-shakeable file is not worth it for one line of a test helper. Rec: switch it to
+  crypto.getRandomValues in thread 9, with the other leftovers.
+* **Coach's reply**: "gotcha. yes export" -- `proceed`.
+* **Where it went**: thread 9: the helper switches to `crypto.getRandomValues`. Read in YOLO (19):
+  "yes export" means export that helper from the e2e Postgres helpers, so the suites share one; a
+  row lets the Coach correct it.
+
+
 ## Fourth batch, 2026-10-16 (doc rev 4547)
 
 ### Every device-store failure is `storage_unavailable` (thread 4, thread 13)
