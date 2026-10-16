@@ -1,0 +1,27 @@
+# Thread 12: postgres_soft_cap (2026-10-16)
+
+Branch `20261016-postgres_soft_cap`, PR [#113](https://github.com/mrflip/safebyok/pull/113), stacked on [#107](https://github.com/mrflip/safebyok/pull/107). Justify: green at the root (core 1231 passed, postgres 201 passed and 9 skipped, graphql 188, convex 311, indexeddb 118, react 97, demo 141).
+
+* **Built**: `packages/safebyok-postgres`.
+  * **The check the Coach asked for** ("don't trust my word"): the Coach's one-statement insert, in the form thread 11's verdict corrected, meets the contract's lines 3.3, 3.6, 4.2 to 4.5 and 5.2 at READ COMMITTED. I re-derived it from the contract rather than from the verdict, and ran the statement on PGlite for every outcome (landed, vault gone or made anew, boxlabel taken, full, replacement in a full vault). Not run: two real connections, since there is no Postgres server here and PGlite runs one statement at a time. The overshoot and the `23503` race are reasoned from Postgres's documented behaviour (thread 11's verdict), and the README and `notes/security.md` say so.
+  * **`InsertBoxSql`** is one lock-free statement: CTEs `vault`, `counted`, `inserted`; it answers `landed`, `vault_stands`, `box_stood`, `was_full` from one snapshot. `doUpdateBox` maps: landed is true; vault gone or boxlabel taken or not full is `stale_write` (boxlabel first, so a replacement is never `vault_full`, line 4.3); otherwise `vault_full`. A `23503` from the insert is `stale_write` (`insertBox`). One round trip on every path.
+  * **Removed**: the `lockbox_count` column, `safebyok_lockboxes_counted` function and trigger, the `FOR UPDATE` in the insert and `EraseBoxSql`, `StillFullSql`, the recount statement, and their tests and README text.
+  * **`VaultNotifySql`** (new export, also `vault-notify.sql`, listed in `files`): the NOTIFY function and its two triggers, split out of `VaultTablesSql`, which is now tables, keys and row-level security only. `VaultChangeChannel` is unchanged.
+  * **README**: tables-only; the isolation bullet (guarantees hold at READ COMMITTED, `40001` above it is `storage_unavailable`); the limit's guarantee in the contract's words (best effort, a refused write stored nothing, no lockbox lost, the count is as of the statement's start, no cost); a *vaya con dios* trigger for a hard cap; *Hearing other writes* leads with what a host without push gets (the vault's own refresh after its writes, another device's changes on its next read); the adapter-author bullets rewritten.
+  * Tests: the limit's group rewritten around the new statement (each reason a race can leave, answered by a spy; the `23503` mapping; one statement and no lock or count in any SQL sent; overshoot kept readable and recoverable), `VaultNotifySql` (word-for-word file, re-runnable, push needs it, tables-only database has no trigger or function), and the README's hard-cap SQL run on PGlite with the limit lowered to 2.
+  * `notes/security.md` (an entry, and the 2026-10-15 one trimmed), a changeset (`safebyok-postgres` minor, `safebyok-graphql` patch for its README).
+
+* **Decisions taken**:
+  * The hard-cap note is a `BEFORE INSERT` trigger that takes the bundle row `FOR UPDATE`, then counts, then raises `check_violation`: simpler than #89's counter, and tested. Its refusal is a database error, so the adapter reports it as `storage_unavailable`, not `vault_full`, and the README says so. Mapping a SQLSTATE to `vault_full` would be adapter surface the Coach did not ask for.
+  * The CTE column is `standing`, not `lockbox_count`, so a test can assert no SQL names the removed counter.
+  * No migration: the changeset gives the two `DROP` statements for a host whose tables came from an earlier build (pre-1.0).
+  * The test helpers (postgres and graphql) run `VaultNotifySql` after `VaultTablesSql`, as the push tests need; a separate tables-only PGlite lives in `vault-tables.test.ts`.
+
+* **Deviations**: none from the plan. The contract's "returns a best-effort count" stays unmet, as thread 11 decided: a write returns no count; the README states what the count is as of.
+
+* **Discoveries**:
+  * **For thread 14 (rotation)**: the insert reads the bundle from its snapshot with no lock; the foreign key re-checks only `vault_id`. A `vault_key_epoch` comparison in the lockbox write's atomic step would need the `vault` CTE's bundle read `FOR SHARE`, in that statement only (a shared lock; lockbox writers do not block each other). Nothing here stands in the way: `InsertBoxSql`'s first CTE is the one place to add it, and the README's adapter-author bullet says when it is needed. `ReplaceBoxSql` reads no bundle, so a replace needs the same read added (a CTE joining the bundle row).
+  * Skipped tests (9) in `route-recipe.test.ts` are the battery's capped and per-user lines, skipped for want of `makeCappedVaultDB` and `makeVaultDBFor` in that file: unchanged by this thread (thread 5's).
+  * A first write under a boxlabel already taken, in a vault over the host's hard-cap trigger, refuses as `storage_unavailable`, since a `BEFORE` trigger fires ahead of `ON CONFLICT`.
+
+* **For the Coach**: nothing blocking. The README's hard-cap SQL is yours to look at: it is the "vaya con dios" note in its first form, and the only SQL in the package that locks a row.
