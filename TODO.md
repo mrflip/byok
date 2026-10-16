@@ -129,6 +129,16 @@ package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
   `notes/security.md` is now part of the revocation matter above, under discussion in the sprint
   doc's Open Matters tab.
 
+## Rulings from gripes_part2 (the Coach, 2026-10-16)
+
+Recorded; no thread needed.
+
+* **`Ckeys` stays public.** Its JSON-tuple encoding is a contract.
+* **Old remembered unlocks are swept as now.** "yes, leave as is".
+* **`lockbox_too_large` stays its own error kind.** "yes. error messages should be as fine
+  grained as reasonable."
+* **Adapters written to an old contract fail as they do.** No back-compat before 1.0.
+
 ## Sand in the sandals
 
 Small irritants, each a few lines, picked up by whoever is nearby.
@@ -427,6 +437,37 @@ and 8192 bits); the cap and half of each adapter's `maxRecordBytes` are bucket w
 know not to `JSON.parse`: that is `whisper_codec`, reserved in roadmap 3, so this thread adds
 no field. The security note on ciphertext length stays until this lands.
 
+### What exactly are we guaranteeing with these validators, and where (client/server/both), and when (read, send, write, entry), and why and for whom (database limits, unexpected behavior canaries, actual constraints)
+
+The Coach's question, asked of #93's review and kept whole. Each validator (the label grammar, the
+note and whisper checks, the lockbox and vault caps) does one of three jobs: it keeps within a
+database's limits, it is a canary for unexpected behavior, or it is an actual constraint the
+design needs; and it runs at some of four moments: reading storage, sending to a server, writing
+to storage, and a user's entry. Today no document says which job a check does, for whom, or where
+it runs. Write that table, then ask of each line below whether the check sits in the right place.
+*Pluggable label validator* and *Validating the user id*, next, are the same question for two
+fields; decide them together.
+
+* **Refused text reaches the box list** ([#93](https://github.com/mrflip/safebyok/pull/93)). A box
+  stored under a name your validators now refuse lists as damaged *with that name*, so whoever can
+  write storage can put any text (huge, control characters, markup) into `snapshot.boxes`. The
+  Coach: "no changes", so it stays as it is; a host renders a damaged label as text, never as
+  markup. The alternatives, if the table says otherwise: cap or hide such labels, or give the
+  listing an opaque erase handle in place of the name.
+* **Control characters in notes.** The default note check refuses them now (the
+  validators_tightening thread). Is that the right guarantee, and where else must it hold: the
+  server, the listing, a host's own validator?
+* **Lone surrogates.** The default checks refuse them now (the validators_tightening thread),
+  because Convex refuses them in a stored string. The Coach: "Sounds like we may need to group
+  error message[s]" -- see *Group error messages?* below.
+* **Server-side names.** The Postgres route recipe, `listBoxRecords` and the GraphQL resolvers take
+  names as any text (`AnyTextValidators`); the browser's validators decide
+  ([#95](https://github.com/mrflip/safebyok/pull/95)). Is that the guarantee we mean to give a host
+  that serves several clients?
+* **`unlocklabel` has no validator slot** ([#95](https://github.com/mrflip/safebyok/pull/95)). Host
+  validators cannot reach it; the stored envelope checks it as plain text, and the `Label` grammar
+  is enforced only when a way in is added.
+
 ### Pluggable label validator
 
 A host chooses its own label grammar. Waits on the low-hanging-fruit report of what depends on
@@ -457,6 +498,31 @@ fails the listing's check (not JSON, a malformed note or timestamp) makes `listB
 listing skip a bad row, or list it marked as damaged so `erase()` can remove it (and the snapshot
 can show it)? Either way, `erase()` should not report `corrupt_record` after its own delete has
 landed because a different box broke the refresh that follows.
+
+### Group error messages?
+
+The Coach, on the lone-surrogate refusal: "Sounds like we may need to group error message[s]" --
+one refusal can name several offending values, and a host should hear them together. The Coach on
+the grain: "error messages should be as fine grained as reasonable". `lockbox_too_large` stays its
+own `kind` for that reason. A policy machine, which will want the same kinds, is coming in another
+thread (the matters sprint's `identity_revoked`).
+
+### Storing over a damaged box can race
+
+`store()` over a damaged box erases it, then writes
+([#93](https://github.com/mrflip/safebyok/pull/93)). A healthy box another device writes in
+between is lost, and if our write then fails, nothing stands. Closing it needs a revision-checked
+erase in the `VaultDB` contract. The Coach: "yes TODO it we will have a contract tightening party
+once all the adaptors share a test suite" -- it waits for that party (the matters sprint's battery
+audit; see *Audit the VaultDB implementations and grow the standard battery*).
+
+### Does Convex need a `getUserId` of that name?
+
+The Convex component calls a host function `getUserId` to learn who is signed in, and the Convex
+setup now checks at once that the host supplied one. The Coach, "soonish": "Is it reasonable to
+demand there is a function of this name? do we want a generic interface to request an identity; it
+might not be through the database". Decide whether identity is a core seam (a function the host
+passes to every adapter), and what the other adapters, which take a `user_id` in the scope, do.
 
 ### A conflict-handler hook
 
