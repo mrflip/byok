@@ -7,6 +7,88 @@ raised (the PR body, the thread file, the `human/` entry), and the plan's *Coach
 sprint* holds the one-line version. "(empty: took the Rec)" means the Coach flipped the row to
 `proceed` without writing, which accepts the recommendation.
 
+## Third batch, 2026-10-16 (doc rev 4104)
+
+### The `KeyDeriver` union becomes a shim (thread 6, thread 15)
+
+* **Raised by**: thread 6 ([#126](https://github.com/mrflip/safebyok/pull/126)); explained at the Coach's asking.
+* **Question**: **Why KeyDeriver is a union, explained (thread 6, #126).** You asked: "Why is the
+  KeyDeriver interface not uniform? I'd likely prefer a thin shim over Argon2 that speaks our
+  language." The core already calls every deriver one way, deriveKeyBytes(passphrase, salt). The
+  union (Argon2idKeyDeriver or CustomKeyDeriver) exists so the compiler insists an Argon2id
+  deriver states every parameter or none, and openVault checks them against the floors (salt
+  length, memory, passes, lanes, a 32-byte key), so a lookalike or unrunnable spec fails calmly at
+  open rather than at first unlock. It costs what you saw: a class cannot implement a union, and
+  the types cannot fully stop a custom deriver half-claiming Argon2id (the runtime check still
+  does). Your shim would have the core own the Argon2id spec and its floor check, with a host
+  supplying only a runner of (passphrase, salt, params): simpler to teach and review, and a host
+  could not misreport its parameters. It gives up a first-class route for non-Argon algorithms
+  (deferred anyway), and reshapes a surface #126 has just reshaped. Rec: adopt the shim, as its
+  own thread after #126, not blocking it.
+* **Coach's reply**: "yes, shim. Why does it give up a first-class route for non-Argon
+  algorithms? I'd have an abstract class presenting a facade that our two different derivers and
+  any conjectured other ones subclass" -- `proceed`.
+* **Where it went**: thread 15, `deriver_shim`, on 6. To the Coach's question: with an abstract
+  base class it gives up nothing -- another algorithm is another subclass with its own spec check.
+
+### The hand-rolled refresh queue (thread 4, thread 13)
+
+* **Raised by**: thread 4 ([#132](https://github.com/mrflip/safebyok/pull/132)), and its reviewer.
+* **Question**: **A hand-rolled refresh queue (thread 4, #132).** Refreshes now run one at a time,
+  and a request made meanwhile shares one more run: about 20 lines in vault.ts. No boring library
+  does exactly this (p-limit serializes but does not merge waiting requests; debounces are
+  time-based), and CLAUDE.md wants your yes before anything is hand-rolled. Thread 4's reviewer is
+  checking it now. Rec: yes, keep the 20 lines.
+* **Coach's reply**: "yes, but can it live outside vault, which is jumbo jumbo context mojo" --
+  `proceed`.
+* **Where it went**: thread 13: the queue moves to a module of its own with its own tests.
+
+### A device can trip over its own passphrase change (thread 4)
+
+* **Raised by**: thread 4 ([#132](https://github.com/mrflip/safebyok/pull/132)).
+* **Question**: **A device can trip over its own passphrase change (thread 4, #132).** Already on
+  main: while this device changes its ways in, its own refresh can judge its key outlived and
+  forget the remembered unlock just as the new one is written, so the next open asks for the
+  passphrase. It fails in the safe direction. Rec: a TODO for a small later thread: never judge
+  the key outlived against a bundle this handle wrote itself.
+* **Coach's reply**: "Add this next to "Are we doing people any favors by allowing multiple
+  passphrases" in the TODO" -- `proceed`.
+* **Where it went**: `TODO.md`, *Soonish*, "A device can trip over its own passphrase change".
+
+### Thread 11's review leftovers (thread 11, thread 9)
+
+* **Raised by**: thread 11's reviewer ([#131](https://github.com/mrflip/safebyok/pull/131)).
+* **Question**: **Thread 11's six review leftovers (#131).** Two Postgres tests claim to test the
+  lockbox limit but pass with it removed (retitle them to what they prove). The helper that waits
+  for a blocked write accepts any lock wait. The test pools have no 'error' listener, so a dropped
+  server crashes the run. The CI database listens on all interfaces (127.0.0.1 would match
+  compose). And the image digest is written twice, with Dependabot moving only one. Rec: fold the
+  first four into thread 9 (sweep_small); for the digest, a CI step that fails when the two differ
+  (the Coach split the node:crypto item into a row of its own).
+* **Coach's reply**: "yes fix in a later thread" -- `proceed`.
+* **Where it went**: thread 9, all five.
+
+### The Postgres adapter's own tests on the container (thread 11)
+
+* **Raised by**: thread 11 ([#131](https://github.com/mrflip/safebyok/pull/131)).
+* **Question**: **The Postgres adapter's own tests on the real server (thread 11, #131).** The new
+  container runs only the e2e suites; the adapter's own tests (packages/safebyok-postgres/tests/)
+  still run on PGlite in-process, because they are written against PGlite's interface. A small
+  PGlite-shaped wrapper over a pg pool would let them run on the container too, so 'every
+  Postgres test, one line' holds. Rec: a TODO, to be weighed with your row on what runs against
+  real Postgres.
+* **Coach's reply**: "NOTYET" -- `proceed`.
+* **Where it went**: `NOTYET.md`, "The Postgres adapter's own tests on a real server".
+
+### One row per matter (the process)
+
+* **Raised by**: the Coach, in *Coach notes*.
+* **Question**: (the Coach's own note)
+* **Coach's reply**: "please take the rolled up end-of-thread notes and expand each into a row so
+  that I can address them individually." -- `proceed`.
+* **Where it went**: the rolled-up rows are split, one matter each; the `turbochat` and `sprint`
+  skills now say one row per decision, never a report's leftovers rolled together.
+
 ## Second batch, 2026-10-16 (doc rev 3282)
 
 ### Uncontrolled whisper and passphrase fields (thread 14)

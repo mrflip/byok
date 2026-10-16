@@ -21,6 +21,7 @@
 | 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
 | 13 | epoch_expectation | on 4 | pending | |
 | 14 | uncontrolled_fields | on 7 (3d62fc04) | in review | [#134](https://github.com/mrflip/safebyok/pull/134) |
+| 15 | deriver_shim | on 6 | pending: a slot | |
 
 ## What the threads have taught
 

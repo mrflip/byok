@@ -40,7 +40,9 @@ every chip over to it.
 
 ## Writing a matter
 
-One decision per row. Lead with a bold handle of a few words, then **one to three sentences**: what
+One decision per row, and one row per decision: never roll a report's leftovers or a list of
+small calls into one row, even when they share a recommendation -- the Coach answers each on
+its own. Lead with a bold handle of a few words, then **one to three sentences**: what
 the matter is, why it matters, and what we recommend (**Rec:**). End with where it was raised, when
 it came from a file or a PR (`(#129)`, `(thread 7)`, `(human/…)`), so its ruling can be carried
 back there. Write in language a little less

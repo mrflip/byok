@@ -77,6 +77,7 @@ Bases and the planned merge order. "On N" is cut from thread N's tip once N has 
 * **2** on 1. **4** on 3.
 * **5** on 1 and 4: once 1, 2, 3 and 4 have filed, the orchestrator restacks 3 and 4 onto 2, so
   the code stack reads main -> 1 -> 2 -> 3 -> 4, and 5, 10 and 13 are cut from 4's restacked tip.
+* **15** on 6. In the merge order it follows 6.
 * **5 is two steps**: 5a, the design (`store-base-design.md` in this directory), written early by
   a design agent and committed here by the orchestrator; 5b, the build, which waits on the
   Coach's word on the design (a row in the sprint doc's *Open Matters*). If the rest of the
@@ -85,7 +86,7 @@ Bases and the planned merge order. "On N" is cut from thread N's tip once N has 
   starts after that, on top of the line.
 * **9** goes last before 12, on top of the line.
 
-Planned merge order: main -> 1 -> 2 -> 3 -> 4 -> 13 -> 10 -> 5 -> 6 -> 7 -> 8 -> 11 -> 9 -> 12
+Planned merge order: main -> 1 -> 2 -> 3 -> 4 -> 13 -> 10 -> 5 -> 6 -> 15 -> 7 -> 14 -> 8 -> 11 -> 9 -> 12
 -> the sprint PR.
 
 ## The threads
@@ -207,6 +208,14 @@ handoff carries it whole. Below, the orchestrator's gloss.
 
 * **Model**: sonnet. **Depends on**: the top of the line (every other filed thread but 12).
 * **Look-ahead**: lowers every size budget to the rule (G520), last.
+* **Added, the Coach's ruling** ("yes fix in a later thread", on thread 11's review leftovers,
+  #131): in `e2e/tests/postgres/`, retitle the all-at-once rounds and the REPEATABLE READ /
+  SERIALIZABLE "writers made together" cases to what they prove (bounds and read-back, not the
+  cap); make `untilStatementBlocked` wait for the write under test, not any lock wait (filter on
+  the device's pid or its statement); give the `pg` pools and clients an `'error'` listener so a
+  dropped server fails a test rather than crashing the run; publish the CI service on
+  `127.0.0.1:5432:5432`; and add a CI step that fails when the image digest in `ci.yml` and in
+  `e2e/compose.yaml` differ (Dependabot moves only the compose file's).
 
 ### 10. `secure_floor` -- the Coach's three Soonish lines
 
@@ -245,6 +254,34 @@ handoff carries it whole. Below, the orchestrator's gloss.
 * **Touches**: `safebyok-indexeddb`, `safebyok-convex`'s component, `safebyok-postgres`,
   `safebyok-graphql`'s recipe and README, the battery flag.
 * **Model**: opus. **Depends on**: 4.
+* **Added, the Coach's ruling** on thread 4's hand-rolled refresh queue (#132): "yes, but can it
+  live outside vault, which is jumbo jumbo context mojo". Move the one-at-a-time,
+  one-more-run-for-everyone-who-asked queue out of `vault.ts` into a small module of its own in
+  `packages/safebyok/src/`, named for what it does, with its own doc block and tests
+  (`tests/<same path>`), and have `vault.ts` use it. No behaviour change: thread 4's tests stay
+  green untouched.
+
+### 15. `deriver_shim` -- one KeyDeriver facade, the Coach's ruling
+
+* **What**, the Coach's words, on the `KeyDeriver` union (#126, explained in *Open Matters*):
+  "yes, shim. Why does it give up a first-class route for non-Argon algorithms? I'd have an
+  abstract class presenting a facade that our two different derivers and any conjectured other
+  ones subclass". So `KeyDeriver` becomes an abstract class: the core calls one method on it, the
+  base class holds the shared work (the parameter spec and its floor check, the output's length,
+  wiping), and each deriver -- the web Argon2id, `safebyok-fastkey`'s WebAssembly one, the cheap
+  test derivers, and any other algorithm a host or a later thread adds -- subclasses it and
+  supplies only its runner and its own spec check. Nothing is given up for non-Argon
+  algorithms: one would be another subclass with its own spec, and the core's checks for
+  Argon2id's floors live in the Argon2id family, not in `openVault`. `class X extends KeyDeriver`
+  replaces `implements`, so the union and the "a class cannot implement a union" trouble go.
+* **Touches**: `key-deriver.ts`, `key-deriver-spec.ts`, `openVault`'s deriver check,
+  `envelope.ts`'s call, `safebyok-fastkey`, the test derivers, `notes/security.md`, the README
+  and changeset (an exported type changes shape before 1.0: say what a host writes now).
+* **Model**: opus. **Depends on**: 6 (#126), cut from its tip.
+* **Look-ahead**: thread 10 (on 4) adds the all-zero-output refusal where the core receives a
+  deriver's output; at the restack it may move into the base class's one method. Put the
+  base-class design in the thread file before building it, as a short sketch with the method
+  names, so the reviewer can check it against the Coach's words.
 
 ### 14. `uncontrolled_fields` -- cleared by the Coach; underway, cut from 7 (3d62fc04)
 

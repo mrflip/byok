@@ -28,3 +28,8 @@ implementation.
   and not planned soon -- a real screen reader over the passphrase dialog, real shadow-DOM hosting,
   and a real browser rather than jsdom. G356 stays open for it.
 
+* **The Postgres adapter's own tests on a real server.** The Coach (2026-10-16, sprint
+  push_to_100_a, thread 11, [#131](https://github.com/mrflip/safebyok/pull/131)): not now. The
+  container runs only the e2e suites; `packages/safebyok-postgres/tests/` still run on PGlite in
+  process, because they are written against PGlite's interface. A small PGlite-shaped wrapper over
+  a `pg` pool would let them run on the container too.

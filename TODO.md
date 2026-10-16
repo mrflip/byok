@@ -117,4 +117,13 @@ caller must name which to replace (`unlockId`) or the call is refused -- but "th
 complicated for a user to tolerate or a customer to implement UX for". Beside NOT YET G530
 (should we collect more than one password at all).
 
+### A device can trip over its own passphrase change
+
+The Coach (2026-10-16), on thread 4's report ([#132](https://github.com/mrflip/safebyok/pull/132)):
+add it here, beside the multiple-passphrases question. Already on main: while a device changes
+its ways in, its own refresh (rung by its own write) can judge the key outlived and forget the
+remembered unlock just as the new one is written, so the next open asks for the passphrase. It
+fails safe. The likely fix: never judge the key outlived against a bundle this handle wrote
+itself. Whether several passphrases stay (above) changes how much of this matters.
+
 ## RAGEBAIT

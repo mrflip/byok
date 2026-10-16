@@ -192,9 +192,9 @@ follows the resume that finishes it.
    précis -- under one lead line of your own (thread, verdict, PR link when there is one).
    **Cycle its open matters to the Coach.** Every worker and reviewer report ends with an *Open
    matters* list. When the sprint keeps an *Open Matters* tab (`/turbochat`), each new item
-   becomes a `drafting` row in the same pass as the relay -- the minor leftovers of one report
-   may share a row when they share a recommendation -- tagged with where it was raised (`#N`,
-   thread N), so its ruling can be carried back. An item you leave out, say why in the relay.
+   becomes a `drafting` row of its own in the same pass as the relay -- one item, one row, never
+   a report's leftovers rolled up together, so the Coach can answer each -- tagged with where it
+   was raised (`#N`, thread N), so its ruling can be carried back. An item you leave out, say why in the relay.
    Nothing open is left only in chat.
 3. **Tend the documents.** Keep the status table and status lines current, and revise later
    threads' glosses where a thread's discoveries changed them. When a thread files, add a
