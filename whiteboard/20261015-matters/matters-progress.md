@@ -10,7 +10,7 @@
 | 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | waits on 11                |
 | 6 | race_helper       | waiting on thread 5        |
-| 7 | indexeddb_fixes   | in review (#109)           |
+| 7 | indexeddb_fixes   | review fixed; files after 9 |
 | 8 | size_rule         | filed #99 (commits on it)  |
 | 9 | damaged_bundle    | review fixed; files after 11 |
 | 10 | identity_revoked | filed #106 (on #105)        |
@@ -37,7 +37,10 @@ after a `vault_full`); the Postgres verdict holds as reasoning (at REPEATABLE RE
 `40001`; only SERIALIZABLE). 4.4 retitled "Under the limit, a new lockbox lands". 11 writes #106's
 five lines in, being second. *Review* of 9: fixed two (a mixed-deriver message no longer says every
 passphrase is damaged; `askPasskey` skips a passkey whose salt isn't 32 bytes); no bypass or
-downgrade found.
+downgrade found. *Review* of 7: fixed one (`settle` kept a failed request's real error, which
+bubbles to the transaction while `transaction.error` is still null); the key range holds exactly
+the vault's lockboxes (JSON strings self-delimit). Noted: a worker used `git stash`, which every
+worktree shares -- now a ground rule against it.
 
 * **Thread 7 (#109), indexeddb_fixes.** `listBoxes`/`eraseVault` read `boxRange(scope)` (an
   `IDBKeyRange` over the tuple-JSON lockbox prefix) instead of the whole shelf; every request goes

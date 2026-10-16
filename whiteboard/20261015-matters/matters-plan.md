@@ -27,6 +27,9 @@ Beyond CLAUDE.md, and STYLE.md and VOCABULARY.md before naming anything or writi
 * **The base is main** at `c4c070f` (big_feats and `/turbochat` merged). Push only with an
   explicit refspec:
   `git -c credential.helper= -c credential.helper='!gh auth git-credential' push origin <branch>:<branch>`.
+* **Never `git stash`** in a worktree: the stash is one ref shared by every worktree and the
+  main checkout (which holds the Coach's stashes), so a pop can take another's entry. Check work
+  out of the way with a local commit instead.
 * **No backward compatibility** (CLAUDE.md, and the Coach again here): a stored shape that
   changes reads old records as corrupt, and the changeset says so.
 * **The gripes line is open beside us**, and is not yet on this base. Built on main from before
