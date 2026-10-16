@@ -4,12 +4,24 @@
 
 | #   | Thread                | Status   |
 | --- | --------------------- | -------- |
-| 1   | validators_tightening | underway |
+| 1   | validators_tightening | in review (#104) |
 | 2   | convex_setup_check    | filed #102 |
-| 3   | test_hygiene          | in review (#103) |
+| 3   | test_hygiene          | filed #103 |
 | 4   | docs_rulings          | filed #101 |
 
 ## What the threads have taught
+
+* **Thread 3 (#103), test_hygiene.** `tallyWatches` counts each watch closed at most once;
+  `expectRefusal` asserts `instanceOf(VaultError)` (matching `isVaultError`; the pending
+  `20261015-thin_tests` changeset now agrees, and the new one names the ESM/CJS split as a second
+  way to see two classes); `beforeNextCall`/`holdNextCall` keep a per-method queue, one arming per
+  call, on a plain method or an existing spy; `convexRefusalOf` tested; the demo's vaults close
+  after each test and its panels wipe their stores. *Review:* fixed two (the panel tests asserted
+  before the shelf read, so passed without the wipe; `world.seed` leaked a vault on a refusal).
+  The queue came after the review, at the orchestrator's word, restoring base's arm-twice
+  behaviour (76 lines, tested, unreviewed). Left, minor: a prototype-level spy is shadowed after
+  restore; the demo's ordered test pair breaks under `-t`/`.only`; `stateOnOpen` leaves its vault
+  open. `Vault.close()` twice unsubscribes twice: a matter row for the Coach.
 
 * **Thread 2 (#102), convex_setup_check.** `SafebyokComponent.api(opts)` refuses a bag without a
   `getUserId` function, and `new SafebyokComponent(component)` a non-object component (a forgotten
