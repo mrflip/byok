@@ -6,13 +6,26 @@
 | - | ----------------- | -------------------------- |
 | 1 | hkdf_info         | filed #97                  |
 | 2 | release_age       | filed #96                  |
-| 3 | passkey_button_ux | resumed: review's fixes    |
+| 3 | passkey_button_ux | in review (second round)   |
 | 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | waiting on the gripes line |
 | 6 | race_helper       | waiting on thread 5        |
 | 7 | indexeddb_fixes   | waiting on the gripes line |
+| 8 | size_rule         | underway (on #99)          |
+| 9 | damaged_bundle    | underway (stacked on #97)  |
+| 10 | identity_revoked | underway                   |
+| 11 | vaultdb_contract | pending                    |
+| 12 | postgres_soft_cap | waiting on 11             |
+| 13 | rotation_design  | pending                    |
+| 14 | rotation_build   | waiting on 13 and the gripes line |
 
 ## What the threads have taught
+
+*Orchestrator (part 2, 2026-10-16):* a new orchestrator session took over in YOLO; see the plan's
+*Part 2*. Thread 3's worker finished its review round (`60bc87e8`, pushed to #98) before the old
+session ended; it never filed, so a second reviewer and a fresh worker finish it. The
+`convex-test@0.0.61` exclusion (thread 2) ages at 2026-10-16T23:01Z: the first thread to file after
+that removes it.
 
 * **Thread 2 (#96), release_age.** Seven days, strict; the lockfile re-resolved, ten floors lowered
   to aged releases, the big_feats hand pins retired. One exclusion, `convex-test@0.0.61`, ages at

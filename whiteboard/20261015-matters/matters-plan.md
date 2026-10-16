@@ -1,13 +1,15 @@
 # Sprint matters -- plan
 
 * **Date**: 2026-10-15
-* **Mode**: normal. A question a worker can't settle becomes a row in the Coach's Open Matters tab,
-  and the thread waits for it; minor calls are recorded and ride along.
+* **Mode**: normal for wave 1; **YOLO from part 2** (2026-10-16, a new orchestrator session, the
+  Coach: "big_feats part 2, yolo mode"). Judgment calls a competent Coach would call two-way doors
+  are taken and listed under *Decisions taken in YOLO*; a one-way call still becomes a matter row.
 * **Review level**: medium
 * **At once**: 3 threads
 * **Issued by**: flip (the Coach), through the Open Matters tab of the big_feats sprint doc
   (`/turbochat`): each thread below is a row they set to `proceed`, with their answer verbatim.
-* **Status**: wave 1 (threads 1 to 4) underway; wave 2 (threads 5 to 7) waits on the gripes line.
+* **Status**: part 2 underway (threads 3, 8, 9, 10); wave 1's 1, 2, 4 filed; wave 2 (5 to 7) and
+  the rotation build (14) wait on the gripes line, mid-restack in another session.
 
 ## Read first
 
@@ -175,13 +177,178 @@ range over the scope's prefix, not the whole store, and the bell's BroadcastChan
 when its vault closes. The orchestrator's answer to the Coach: a follow-on, nothing deeper -- but
 the key range is built on how rows are keyed, which #92 changes, so it waits for that.
 
+## Part 2: the Coach's second round of proceeds (YOLO)
+
+From the Open Matters tab, 2026-10-16. Each thread quotes the row and the Coach's answer verbatim.
+The gripes line is being restacked onto main by its own session, in `/workspace/byok-restack`:
+never touch that directory. Rows that needed no thread are under *Swept without a thread*.
+
+### Wave 3: cut now
+
+#### 3, continued. passkey_button_ux (#98)
+
+Its review-round commits (`fd83bf1f..60bc87e8`) get a second review, then it files. The Coach
+ruled on its two matters: **the dialog's swap to a notice**: "LGTM" (kept). **The hand-written
+error boundary**: the Coach's rubric -- "if it's a zod situation, where even if they didn't,
+something else they're installing does anyway ... I'd prefer a library. If our code is perfectly
+readable and most libraries are also running around rolling their own, and we would often be the
+only one inviting r-e-b to the party, skip it." *Orchestrator:* skip it, so the class stays.
+`react-error-boundary` reaches about 8% of React installs (14.9M a week against React's 188M), no
+major framework or UI kit depends on it (Next, React Router, Sentry roll their own), and the
+equivalent call sites are no shorter. Its `onError` would also hand us the error object, which our
+no-argument callback deliberately never sees. The PR's body records the ruling.
+
+#### 8. size_rule (sonnet) -- commits on #99
+
+> **Size budgets: +3 kB, or a percentage? (#99)** Rec: keep +3 kB for the big bundles, and use
+> +50% (at least 1 kB) for anything under 5 kB. The Coach: "The rule you propose sounds good, but
+> have it also choose a roundish number to avoid rebase conflicts. (i.e. 2_500 not 2_431 bytes,
+> 150_000 not 146_000 bytes) An orchestrator is encouraged to guess at a target and have a late
+> thread lower it"
+
+*Gloss.* Worktree `../byok-size_rule` on #99's own branch, `20261015-small_sweep`; no new PR.
+Re-derive every `.size-limit.json` budget by the rule (measured + 3 kB at 5 kB and over; measured
++ 50%, at least + 1 kB, under it), then round **up** to a round number (two significant figures
+is the spirit: 2.5 kB, 6 kB, 23 kB, 150 kB). Write the rule where the next person raising a budget
+looks (beside `.size-limit.json`'s use in PROCESS.md, or the file that documents `pnpm size`), and
+fold the Coach's second sentence into `.claude/skills/sprint/SKILL.md`'s size guidance (thread 4's
+text): the orchestrator guesses the sprint's target up front, and a late thread lowers the budgets
+to the rule once the sprint's sizes are known. `tools:` and `docs:`.
+
+#### 9. damaged_bundle -- stacked on #97
+
+> **A tampered vault says "wrong passphrase" (#97).** Rec: a later thread gives a damaged bundle
+> its own calm message, probably after trying every way in. The Coach: "yes, use fine-grained
+> error messages; if there become too many we can group them"
+>
+> **Bind the passphrase key's Argon2 settings too? (#97)** Rec: leave it out; security.md says
+> why. The Coach: "yes, leave the settings out. If anything went in it would be more like a
+> difficulty measure; relegate to security.md"
+
+*Gloss.* Cut from #97's tip (`ec0c9f18`); its PR says "Stacked on #97". AES-GCM fails the same
+way for a wrong key and for altered additional data, so a single failed envelope cannot tell
+"wrong passphrase" from "damaged". Find what *can* be known and say exactly that: e.g. a
+structurally invalid bundle or envelope; a bundle every one of whose ways in fails where at least
+one should not (a passkey that answered, a remembered unlock whose key is held); a lockbox that
+fails under a vault key that just opened others. Each distinct, knowable cause gets its own `kind`
+and a calm message saying what to do (VOCABULARY.md has the words; the gripes line's #93 calls a
+lockbox that fails to open "damaged", so use that word for the same idea). Do not claim tampering
+the code cannot know; where the cause is ambiguous, the message says so plainly ("the passphrase
+didn't open this vault: check it, or the stored vault may be damaged"). New error kinds are public
+surface: name them in the PR's open questions. Also the Coach's Argon2 ruling: one sentence in
+`notes/security.md`'s binding entry (#97's) -- if any Argon2 setting were ever bound, it would be
+as a difficulty measure (a floor on cost), not as a binding. `vault:` / `docs:`.
+
+#### 10. identity_revoked (opus)
+
+> **Does a vault lock on sign-out?** When storage answers `not_permitted` (the user has signed
+> out), should the vault lock itself and drop its keys? From the Convex sprint. Rec: yes. The
+> Coach: "storage adapters should provide fine-grained guidance. If "not permitted" should be
+> interpreted as "user has changed / is not logged in", have them send back a "identity_revoked"
+> message. Can we consolidate a policy module that makes decisions about whether identity_revoked
+> implies a lock, delete, whatever?"
+
+*Gloss.* From main. Today an adapter's refusal is `not_permitted` whatever its cause. Give the
+storage error vocabulary a distinct `identity_revoked` (the signed-in identity is gone or changed)
+beside `not_permitted` (this identity may not do that), have each adapter that can tell the two
+apart say which (Convex certainly; Postgres and GraphQL as far as their host hooks allow;
+IndexedDB never revokes), and put the vault's response in one small, documented policy -- a
+module the vault consults, with a default (Rec: lock, dropping keys; never erase local data on a
+revocation) and a host override if it comes naturally. Design first, in the thread file: the
+signals, the default policy and why, and what a host sees (`subscribe`/snapshot, the React
+binding's dialog). Keep core edits additive where the gripes line also edits (`vault.ts`, the
+error module), so its restack stays cheap. New kinds and any policy option are public surface:
+name them in the PR's open questions. `storage:` / `vault:`.
+
+#### 11. vaultdb_contract -- the Coach's note on the Postgres cap
+
+> The Coach (Your notes): "postgres cap -- see tab. - launch one worker to expand the manifesto
+> seen there into a design contract, and to compare it with the test, aligning test group titles
+> with lines in the contract or lines of the contract with test group titles (don't turn the
+> contract into a bullet-point soup; but if a line in the contract implies a test, let's have that
+> test) - if something like the statement I proposed (don't trust my word for it) would meet the
+> guarantee I propose, launch another worker to rip out all that other garbage and do something
+> that doesn't involve a black belt in psql DDL, disruptive locks and an extra table"
+
+*Gloss.* Read `matter-postgres_cap.md` in this directory: the Coach's contract is its *Your
+thoughts*. Write it up as the `VaultDB` design contract (prose, with the guarantees as numbered
+lines the tests can name; answer the Coach's inline questions -- which layer owns the versioned
+update, what a limited listing promises -- from the code, or record them as open). Put it where
+the `VaultDB` interface is documented for adapter authors (a `docs/` or the core's README section
+that already describes `VaultDB`; check before making a new file). Then align the standard battery
+(`describeVaultDB` in `safebyok/testing`) with it: group titles that cite the contract's lines, and
+a test for every line that implies one and lacks it. Thread 5 later audits each adapter against
+this contract, so leave per-adapter work to it, except where a new battery test fails an adapter
+today: then mark it `.todo`/`.skip` with the reason, and list it in the report. `docs:` / `tests:`.
+
+#### 12. postgres_soft_cap (sonnet) -- stacked on 11
+
+> (the second half of the Coach's note above)
+
+*Gloss.* Cut from thread 11's tip once it files. *Orchestrator's reading* (the worker checks it,
+"don't trust my word for it"): the Coach's one-statement insert -- `INSERT ... SELECT ... WHERE
+(SELECT count(*) ...) < cap RETURNING ...` -- meets the contract they proposed, which asks for a
+best-effort soft max, an insert that is refused only if it didn't happen, and a best-effort count;
+under concurrency two inserts may both pass and overshoot by a few, which the contract allows. If
+the worker finds it does meet it, `safebyok-postgres` drops the `lockbox_count` column, the
+trigger, the `FOR UPDATE` lock, `StillFullSql` and their migration text for that statement; the
+README states the count's guarantee in the contract's words and offers the *vaya con dios* note
+for a host who wants a hard cap. If it does not, report `blocked` with why.
+
+#### 13. rotation_design (opus) -- documents only
+
+> The Coach (Your notes): "The revocation/key rotation tab: make it a sprint (a) and also add the
+> NOTYET described in it". In the tab: "Yes, do (a)" and "Do we have a way to invalidate other
+> devices that is legit under apple/google strict privacy matters -- to lock all entryways on a
+> given device? The UX work needed to support this is non-trivial, so it should be a NOTYET, but
+> let's make sure the data we need is in there"
+
+*Gloss.* Read `matter-revocation.md` in this directory. A design, in
+`whiteboard/20261016-rotation/`, for (a) vault-key rotation when a way in is removed: a fresh
+vaultKey, every lockbox re-encrypted, the remaining envelopes re-wrapped, atomic or resumable over
+a store that has no transactions (the contract thread 11 writes), what a second device mid-rotation
+sees, and the `unlock_epoch` rollback check the tab mentions. And the NOTYET: per-device
+invalidation -- what a device must record (a per-device identifier on each envelope it adds? which
+identifiers Apple's and Google's privacy rules allow, and which they forbid) so that "lock every
+way in this device added" is possible later; the design names the stored fields the build adds now.
+Its thread breakdown becomes thread 14 (and more) in this plan. Stored-shape changes are a contract
+(pre-1.0, so no compat); name them in the PR's open questions. Also add the NOTYET to `TODO.md`
+(thread 4 owned TODO in wave 1; it has filed). `plan:` / `docs:`.
+
+### Wave 4: waits
+
+* **14. rotation_build**: from thread 13's design, after the gripes line lands (it rewrites the
+  lockbox listing and erasure that rotation walks).
+* Wave 2 (threads 5 to 7) as before. Thread 5 now audits against thread 11's contract.
+
+### Swept without a thread
+
+* **`safebyok` as a peer of every adapter**: already so on main (every adapter's `package.json`
+  lists it under `peerDependencies`, `workspace:^`). Nothing to do.
+* **Convex's `react` dev dependency**: kept. The Coach's question -- a separate `safebyok-e2e` for
+  cross-harness tests -- goes back as a matter with a recommendation.
+* **Housekeeping**: the deletion was refused by this session's permission check; a read-only survey
+  lists what is safe to remove, for the Coach to run.
+
+## Decisions taken in YOLO
+
+1. Part 2 continues this sprint, its worktree and its doc, rather than starting a new one: the
+   Coach's answers and the elevated tabs stay where they were written.
+2. The error boundary stays hand-written (thread 3): the Coach's rubric says "skip it".
+3. Threads 10 to 13 are cut from main now, not after the gripes line: they keep shared-file edits
+   additive, and the restack absorbs the rest.
+4. The Argon2 note rides thread 9 (stacked on #97) instead of a commit on #97 itself.
+5. Thread 3 finishing (a second review and filing) runs beside three new threads, slightly over the
+   cap of 3: it is a light thread with no builder.
+
 ## Not in this sprint
 
 * **Elevated**, for the Coach to take to another session: the Postgres vault cap, revocation and
   server signing, and the store base class (tabs under Open Matters).
-* **Still drafting** in Open Matters: lock on sign-out, `destroy()`'s edge cases, label grammar on
-  the server, the first-emit deviation, the `openVault` subscription leak, `safebyok` as a peer,
-  Convex's `react` dev dependency, housekeeping, the gripes session's open PRs.
+* **Still drafting** in Open Matters (part 2): `destroy()`'s edge cases, label grammar on the
+  server (the Coach: "leave alone"), the gripes session's open PRs, the two lines colliding; and,
+  re-explained for the Coach, the first-emit deviation and the `openVault` subscription leak (the
+  leak is already fixed on main, #61).
 * `addPasskey`'s shape: kept as built (the Coach: "LGTM"); thread 4 records it.
 
 ## For the Coach
