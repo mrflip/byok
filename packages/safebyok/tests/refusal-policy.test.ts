@@ -77,6 +77,28 @@ describe("RefusalPolicy.heed", () => {
     expect(listBoxes).toHaveBeenCalledWith(scope)
   })
 
+  /** Each heeded verb, and the arguments a vault hands it, validators last. */
+  const VerbArgsCases = [
+    ['readBundle',   [scope, AnyTextValidators]],
+    ['createBundle', [TH.bundleOf('u1'), AnyTextValidators]],
+    ['updateBundle', [TH.bundleOf('u1'), TH.thisVault, AnyTextValidators]],
+    ['readBox',      [scope, 'anthropic', AnyTextValidators]],
+    ['listBoxes',    [scope, AnyTextValidators]],
+    ['updateBox',    [scope, 'anthropic', TH.thisVault, AnyTextValidators]],
+    ['eraseBox',     [scope, 'anthropic', TH.thisVault, AnyTextValidators]],
+    ['eraseVault',   [scope, TH.thisVault, AnyTextValidators]],
+  ] as const
+
+  for (const [verb, args] of VerbArgsCases) {
+    it(`passes ${verb} every argument it is given, validators included`, async () => {
+      const vaultDB = localVaultDB(memoryStore())
+      const spied = vi.spyOn(vaultDB, verb).mockResolvedValue(undefined)
+      const heeded = RefusalPolicy.heed(vaultDB, () => Promise.resolve())
+      await (heeded[verb] as (...given: readonly unknown[]) => Promise<unknown>)(...args)
+      expect(spied).toHaveBeenCalledWith(...args)
+    })
+  }
+
   it("hands a refusal to onRefusal, waits for it, then rejects with that very refusal", async () => {
     const vaultDB = localVaultDB(memoryStore())
     const refusal = signedOut()
