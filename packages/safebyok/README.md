@@ -429,7 +429,7 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `too_many_unlocks`    | a passphrase or passkey added to a vault already holding `MaxUnlocks` (8) ways in | Tell the user to remove one first             |
 | `last_unlock`         | removing the vault's last passphrase: a vault always keeps one, since a passkey can be lost with its device | Add another passphrase first; to be rid of the vault, `destroy()` it |
 | `corrupt_record`      | a stored record failed validation as storage read it back: storage's own word, from a `VaultDB` called directly. A vault call says what it means for the vault instead, as one of the three below | Nothing was changed. Do not retry; see a developer: the record is damaged, was moved, or came from a newer safebyok |
-| `damaged_bundle`      | the vault's stored bundle failed its checks (not a shape this package writes, or naming another vault), so no way in can be tried: `openVault` refuses it | Nothing was changed, and a retry will not mend it. Tell the user the vault cannot be opened; restore its bundle from a backup, if there is one |
+| `damaged_bundle`      | the vault's stored bundle failed its checks (not a shape this package writes, or naming another vault), so no way in can be tried: `openVault` refuses it | Nothing was changed, and a retry will not mend it. Tell the user the vault cannot be opened; restore its bundle from a backup, if there is one, or, if the user chooses to start over, `eraseDamagedVault()` (see *A vault that cannot be opened*) |
 | `damaged_unlock`      | a way in is stored in a form this package never writes (a salt of the wrong length, or not base64url), so it cannot be tried: the passkey asked for, the passphrase `unlockId` aims at, or every passphrase the vault has. Other ways in are still tried | Unlock another way, then `removeUnlock()` the damaged one and add it again |
 | `damaged_lockbox`     | a lockbox failed its checks as read, or would not open under the vault's own vaultKey, or opened to no whisper: altered in storage, or moved there from elsewhere | Nothing was changed. Offer `erase()`, or a fresh `store()` over it (see *Damaged lockboxes*) |
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
@@ -441,6 +441,35 @@ Part of normal operation. Each can reach the user; the app decides how.
 storage, `storage_unavailable`, `not_permitted`, `identity_revoked` or `damaged_bundle` (a
 damaged lockbox never stops an open): the last four are conditions, though they surface at open.
 A refused open leaves nothing running behind it, so the host simply opens again.
+
+### A vault that cannot be opened
+
+A stored bundle that fails its checks makes `openVault` refuse with `damaged_bundle`, and `destroy()`
+needs a handle that was never made. `eraseDamagedVault` is the way to clear such a vault and start
+over. It takes the options `openVault` took (only the vault's names and its two stores matter) and
+erases that vault's stored bundle and lockboxes through the `VaultDB`, and the unlock this device
+remembers for it through the `DeviceDB`: what `destroy()` does, for this one case. Whatever the
+vault held is gone for good, so ask the user first.
+
+```ts
+try {
+  vault = await openVault(opts)
+} catch (err) {
+  if (isVaultError(err, 'damaged_bundle') && await userAgreesToStartOver()) {
+    await eraseDamagedVault(opts)
+    vault = await openVault(opts)   // absent: a new vault is made on the next unlock
+  }
+}
+```
+
+It refuses a vault that is sound, with `bad_option` and nothing erased: a vault that opens is
+deleted through its handle's `destroy()`. With no vault stored it erases only the device's
+remembered unlock, so a call cut short can be made again. It needs the stored record's `vault_id`
+to aim the erase, so a bundle too damaged to show one is refused as `damaged_bundle` still, with
+nothing erased: the backend's own tools can clear it. So is any backend that checks a record before
+it hands it over, as `safebyok-graphql`'s server does: there a damaged row is the backend's to
+clear. `safebyok-react` hands `eraseDamagedVault()` down beside `retryOpen`. A `VaultDB` that
+wraps another's public verbs hands `VaultDB.eraseDamagedVault` on too (`VAULTDB.md`, line 3.5).
 
 ### Damaged lockboxes
 

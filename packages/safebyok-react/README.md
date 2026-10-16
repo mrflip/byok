@@ -85,6 +85,21 @@ const VaultPanel = () => {
 Branch on `openError.kind` for a better message: an `identity_revoked` user should sign in
 again, and a `damaged_bundle` will not mend on retry. Its `message` is calm and safe to show.
 
+For a `damaged_bundle`, the one way forward is to erase the vault and start over:
+`eraseDamagedVault()` from `useVault()` does that (the `safebyok` README's *A vault that cannot be
+opened*) and opens again, with the provider's own options. The user's lockboxes in it are lost for
+good, so ask first:
+
+```tsx
+const { openError, eraseDamagedVault } = useVault()
+if (openError?.kind === 'damaged_bundle') {
+  return <button onClick={() => { if (confirm('Erase your vault and start over?')) { void eraseDamagedVault() } }}>Start over</button>
+}
+```
+
+It does nothing for any other `openError`, or none, and rejects with storage's refusal (say,
+`storage_unavailable`) if the erase fails, leaving `openError` as it was.
+
 **A sign-out the app did not hear of** -- in another tab, or a session that expired -- reaches
 the vault as storage refusing it, kind `identity_revoked`, and an open vault locks itself
 (`whenIdentityRevoked`, passed through like any other option; the `safebyok` README's *When the

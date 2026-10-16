@@ -732,7 +732,8 @@ security expert who knows what questions to ask.
   under the derived key with the stored IV and comparing ciphertexts -- it works only against
   GCM's structure, needs the vaultKey's bytes, and is a construction of our own. A bundle that
   fails its checks cannot be destroyed through a vault handle (`openVault` refuses it, and `destroy()`
-  needs a handle); it is left in place, as every damaged remote record is.
+  needs a handle); it is left in place, as every damaged remote record is, until the host calls
+  `eraseDamagedVault` (next entry).
 * 2026-10-16: `postgresVaultDB`'s lockbox limit is a best effort (VaultDB contract, lines 4.2 to
   4.5), not a guarantee: the insert counts the vault's lockboxes in a `count(*)` over its own
   statement's snapshot, with no lock and no counter, so writers racing for the last places under
@@ -749,3 +750,20 @@ security expert who knows what questions to ask.
   The notify trigger is no longer installed by `VaultTablesSql`: a host opts in with
   `VaultNotifySql`, and without it nothing is pushed (the vault refreshes after its own writes).
   Not run against concurrent connections: the tests are on PGlite, one statement at a time.
+* 2026-10-16: **`eraseDamagedVault`, the one way to erase a vault without a handle** (the Coach:
+  "yes"). `destroy()` deliberately needs no unlock ("owning the account is enough"), but needs a
+  handle the vault's own reading made; a bundle that fails its checks gave none. The new call
+  erases a vault `openVault` refuses as `damaged_bundle` and no other: it refuses (`bad_option`,
+  nothing erased) a bundle that reads back sound, so it cannot become a way round `destroy()`'s
+  care, and it erases through `VaultDB.eraseDamagedVault`, which reads the record as stored,
+  takes its `vault_id`, and aims the adapter's `doEraseVault` at that one vault, so a vault made
+  anew meanwhile survives as `stale_write`. Like `destroy()` it needs no passphrase, and it is as
+  strong as the backend's own authorization of who may erase that user's rows (the contract's
+  5.4): a user can already erase their own vault by `destroy()`, so it widens nothing for them,
+  and widens nothing for anyone else. It also erases the remembered unlock, on this device only.
+  **For review**: (1) the erase's expectation is the `vault_id` read from a record that is, by
+  definition, untrusted; it can only aim the erase at the row it read, in the caller's own
+  scope, so a forged `vault_id` in a damaged row erases that row and nothing else; (2) `localVaultDB`
+  and `idbVaultDB` now erase a whole vault on the `vault_id` alone (the contract's line 3.5 always
+  said so), where they had also required a readable `unlock_epoch`, which kept exactly the
+  damaged vaults from being erased; lockbox writes and `eraseBox` still need the epoch.
