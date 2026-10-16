@@ -928,7 +928,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   const readBoxOrThrow = async (boxlabel: string) => {
     const label = Names.check(rules, 'boxlabel', boxlabel)
-    const lockbox = await damagedAs(vaultDB.readBox(scope, label, rules), damagedLockbox(label))
+    const lockbox = await damagedAs(vaultDB.readBox(scope, label, rules), damagedLockbox)
     if (lockbox === null) { throw absentBox() }
     return lockbox
   }
@@ -958,11 +958,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       )
       whisperBytes = await decipherBytes(lockboxKey, whisperCiphered, boxBinding(vaultId, header, 'whisper_ciphered'))
     } catch {
-      throw new VaultError('damaged_lockbox', `The lockbox '${lockbox.boxlabel}' is damaged: it would not open under this vault's key, as if altered in storage or moved there from somewhere else. It was left as it is; erase it, or store its whisper again over it.`)
+      throw new VaultError('damaged_lockbox', "That lockbox is damaged: it would not open under this vault's key, as if altered in storage or moved there from somewhere else. It was left as it is; erase it, or store its whisper again over it.")
     }
     const checked = Whisper.safeParse(parseJsonOrNull(new TextDecoder().decode(whisperBytes)))
     if (! checked.success) {
-      throw new VaultError('damaged_lockbox', `The lockbox '${lockbox.boxlabel}' opened, but what was inside is not a whisper this package knows, so it is damaged. It was left as it is; erase it, or store its whisper again over it.`)
+      throw new VaultError('damaged_lockbox', "That lockbox opened, but what was inside is not a whisper this package knows, so it is damaged. It was left as it is; erase it, or store its whisper again over it.")
     }
     return checked.data
   }
@@ -1313,8 +1313,8 @@ export type EraseDamagedVaultOpts = Pick<OpenVaultOpts, 'applabel' | 'userId' | 
  */
 export const eraseDamagedVault = async (opts: EraseDamagedVaultOpts): Promise<void> => {
   if (! isBag(opts)) { throw new VaultError('bad_option', 'eraseDamagedVault takes one bag of options: applabel, userId, vaultlabel, vaultDB and deviceDB, as openVault did.') }
-  const validators = parseValidators(opts.validators)
-  const scope = Names.checkScope(Names.rulesOf(validators), { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
+  const rules = Names.rulesOf(opts.validators)
+  const scope = Names.checkScope(rules, { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
   const vaultDB = parseVaultDB(opts.vaultDB)
   if (typeof vaultDB.eraseDamagedVault !== 'function') {
     throw new VaultError('bad_option', "vaultDB has no eraseDamagedVault: a storage adapter that hands each call on to another's must hand this one on too.")
@@ -1322,7 +1322,7 @@ export const eraseDamagedVault = async (opts: EraseDamagedVaultOpts): Promise<vo
   const deviceDB = parseDeviceDB(opts.deviceDB)
   // The vault first: a sound one refuses, and then the device keeps what it remembers of it. A
   // retry after a failure here finds the vault gone, and still clears the device.
-  await vaultDB.eraseDamagedVault(scope, validators)
+  await vaultDB.eraseDamagedVault(scope, rules)
   await deviceDB.eraseUnlock(scope)
 }
 
@@ -1342,7 +1342,8 @@ const damagedAs = async <ResultT>(reading: Promise<ResultT>, damaged: (opts: Err
 
 const damagedBundle = (opts: ErrorOptions) => new VaultError('damaged_bundle', "This vault's stored record is damaged, so no passphrase or passkey can be tried against it, and it can't be opened. It was left as it is: the app's support may be able to restore it.", opts)
 
-const damagedLockbox = (boxlabel: string) => (opts: ErrorOptions) => new VaultError('damaged_lockbox', `The lockbox '${boxlabel}' is stored damaged, so it can't be read. It was left as it is; erase it, or store its whisper again over it.`, opts)
+// The refusal never quotes the boxlabel: a host's validators may admit any text, a mistaken paste among it.
+const damagedLockbox = (opts: ErrorOptions) => new VaultError('damaged_lockbox', "That lockbox is stored damaged, so it can't be read. It was left as it is; erase it, or store its whisper again over it.", opts)
 
 /** A thrown value, for a logger: an Error as it is, anything else -- which may be anything at all -- as null. */
 const asError = (thrown: unknown): Error | null => (thrown instanceof Error ? thrown : null)
