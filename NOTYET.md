@@ -1,7 +1,10 @@
 # NOT YET
 
-Reasonable tasks that we do not plan to do in the near term. Do not anticipate them in your
-implementation.
+Two shelves of deferred work. Do not anticipate either in your implementation.
+
+## NOTYET
+
+Reasonable tasks that we do not plan to do in the near term.
 
 * **Lock out a device: every way in it added.** From another device, the user locks out a lost or
   compromised one: its passkeys removed, its remembered unlock void, and nothing it holds reading
@@ -22,3 +25,8 @@ implementation.
     data the fingerprinting rules care about), or none (the device list shows when each was added
     and last used). Encrypting a user-typed label inside the vault is the likely answer; check it
     against the host app's privacy review, which owns what its users are told.
+
+## RAGEBAIT
+
+Fixes for a known irritant, held back on purpose. When the problem described causes major, not
+minor, hassle, address it. Until then, leave it be.

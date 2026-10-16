@@ -3,7 +3,8 @@
 Three shelves. **Roadmapped**: the order we build in, in flight or next, each a sprint or a thread.
 **Side quests**: straightforward, likely to be done, not needed yet; pick one up when the roadmap
 is blocked. **Soonish**: wanted, but a design question stands in the way; the note says which.
-What is reasonable but deferred is in `NOTYET.md`: do not anticipate it in your implementation.
+What is reasonable but deferred, and what waits until its irritant becomes a real hassle (RAGEBAIT),
+is in `NOTYET.md`: do not anticipate either in your implementation.
 
 ## Sand in the sandals
 
@@ -83,5 +84,3 @@ and `lockSoon()` already gives a grace in which work started before it finishes 
 `lock()` and a sign-out have no separate meaning yet. Decide: does `lock()` mean "now" (nothing
 started before it hands back a whisper after it), and if so, is a re-check after storage enough,
 or does the whisper's decryption also need to be refused once the key is gone?
-
-## RAGEBAIT
