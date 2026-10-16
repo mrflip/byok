@@ -97,7 +97,8 @@ const FamilyCases = [
   ["last_unlock",         "condition", 'removing the last passphrase is refused, and the user told why'],
   ["corrupt_record",      "condition", 'a damaged record is told to the user, not thrown at the developer'],
   ["stale_write",         "condition", 'another device writing first is a fact of syncing'],
-  ["not_permitted",       "condition", 'a signed-out user signs in again'],
+  ["not_permitted",       "condition", 'a call refused to the signed-in owner is told to them'],
+  ["identity_revoked",    "condition", 'a signed-out user signs in again'],
   ["storage_unavailable", "condition", 'unreachable storage is tried again shortly'],
 ] as const
 
@@ -113,7 +114,8 @@ describe("each kind's family", () => {
 
 const ConditionCases = [
   [new VaultError('storage_unavailable', 'The vault storage could not be reached.'), true,  'a condition VaultError'],
-  [new VaultError('not_permitted', 'Sign in to reach this vault.'),                  true,  'a signed-out refusal'],
+  [new VaultError('identity_revoked', 'Sign in to reach this vault.'),               true,  'a signed-out refusal'],
+  [new VaultError('not_permitted', 'You may not change this vault.'),                true,  'a refusal of the signed-in user'],
   [new VaultError('bad_label', 'A label is 2-40 lowercase letters.'),                false, 'a misuse VaultError'],
   [new VaultError('vault_closed', 'This vault handle was closed.'),                  false, 'a closed handle, misuse too'],
   [new Error('storage_unavailable'),                                                false, 'a plain Error, even one whose message names a condition'],

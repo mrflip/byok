@@ -11,8 +11,9 @@ export type VaultContextShape = {
   vault: Vault | null
   /**
    * Why the vault could not be opened, when it is a condition the app can show in place:
-   * storage that cannot be reached (`storage_unavailable`), a user storage will not serve
-   * (`not_permitted`), a stored record that fails verification (`corrupt_record`). Null while
+   * storage that cannot be reached (`storage_unavailable`), a user storage no longer serves
+   * (`identity_revoked`, as when signed out of the backend, or not yet signed in to it), a stored
+   * record that fails verification (`corrupt_record`). Null while
    * opening, once open, and while signed out. Misuse -- a bad label or option -- never lands
    * here: the provider throws it to the nearest error boundary.
    *
@@ -104,7 +105,7 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
  *   </VaultProvider>
  */
 export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps) => {
-  const { applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators } = opts
+  const { applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators, whenIdentityRevoked } = opts
   // The vault reopens when a check changes, never for a bag rebuilt in render around the same ones.
   const applabelCheck = validators?.applabel
   const vaultlabelCheck = validators?.vaultlabel
@@ -132,7 +133,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     // Listed one by one so the effect re-runs on each; `satisfies` fails the build if an openVault
     // option is ever added and not passed through.
     const checks = { applabel: applabelCheck, vaultlabel: vaultlabelCheck, boxlabel: boxlabelCheck, userId: userIdCheck, note: noteCheck } satisfies Record<keyof VaultValidators, unknown>
-    const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators: checks } satisfies Record<keyof OpenVaultOpts, unknown>
+    const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators: checks, whenIdentityRevoked } satisfies Record<keyof OpenVaultOpts, unknown>
     void openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
@@ -152,7 +153,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
       setOpenFailure(null)
       setOpenError(null)
     }
-  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt])
+  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, whenIdentityRevoked, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt])
 
   const retryOpen = useCallback(() => {
     if (openError !== null) { setOpenAttempt((prev) => prev + 1) }

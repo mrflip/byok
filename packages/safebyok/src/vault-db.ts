@@ -73,7 +73,11 @@ export type StoredLockbox = { boxlabel: string, lockbox: unknown }
  *    erase's names only the vault, never a revision: within the right vault, an erase wins.
  *  * **Enforce who may reach which rows.** Your backend should let a signed-in user reach only
  *    their own records: safebyok's encryption protects the contents, your authorization decides
- *    who may fetch or overwrite them at all. Refuse with a VaultError of kind `not_permitted`.
+ *    who may fetch or overwrite them at all. When no one is signed in, or someone other than the
+ *    scope's `user_id` is, refuse with a VaultError of kind `identity_revoked`: the vault locks
+ *    itself on it, so say it only when the user really is gone -- never for a passing fault, which
+ *    is `storage_unavailable`. When the signed-in user is the scope's own but may not make this
+ *    call, refuse with kind `not_permitted`, which locks nothing.
  *  * **Don't repair.** Return a record exactly as stored, or null when there is none. safebyok
  *    validates everything it reads back; a damaged record is safebyok's to refuse, never yours to
  *    fix or quietly drop.

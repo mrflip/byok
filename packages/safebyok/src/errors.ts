@@ -10,7 +10,7 @@
  *   show a message, retry, or tell them to free room. `vault_locked`, `wrong_passphrase`,
  *   `wrong_passkey`, `passkey_unavailable`, `absent_box`, `absent_vault`, `absent_unlock`,
  *   `whisper_too_large`, `lockbox_too_large`, `vault_full`, `too_many_unlocks`, `last_unlock`, `corrupt_record`,
- *   `stale_write`, `not_permitted`, `storage_unavailable`.
+ *   `stale_write`, `not_permitted`, `identity_revoked`, `storage_unavailable`.
  *
  * `vault_full` means a new lockbox in a vault already holding its `maxLockboxes` (a limit the
  * client keeps), and also that storage has no room for the write (a limit of the backend's own,
@@ -20,6 +20,12 @@
  * over what storage holds in one record. `bad_label` is a label the app passed that fails the
  * vault's check, a misuse -- a label the user types is checked first, with `Label` or with the
  * host's own `validators.boxlabel`.
+ *
+ * `identity_revoked` is storage saying that the user this vault was opened for is no longer the
+ * one signed in -- signed out, or another user signed in -- and the vault locks itself as it
+ * throws it (openVault's `whenIdentityRevoked`): the user signs in again, and the host opens the
+ * vault for whoever that is. `not_permitted` is the signed-in user, still the vault's own, refused
+ * one call: signing in again will not help.
  *
  * The package README's *Errors* section lists what each kind means and what to do about it.
  */
@@ -43,7 +49,8 @@ export const VaultErrorKindVals = [
   'corrupt_record',      // a stored record failed validation or decryption verification
   'unknown_key_deriver', // the vault names a key deriver this handle was not built with
   'stale_write',         // storage changed since this device read it, so the write was refused
-  'not_permitted',       // the storage backend refused this user: signed out, or not theirs to reach
+  'not_permitted',       // the storage backend refused the signed-in user this call: not theirs to make
+  'identity_revoked',    // the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in
   'storage_unavailable', // the storage backend could not be reached, or failed
 ] as const
 export type VaultErrorKind = typeof VaultErrorKindVals[number]
@@ -115,6 +122,7 @@ export const VaultErrorFamilyForKind = {
   unknown_key_deriver: 'misuse',
   stale_write:         'condition',
   not_permitted:       'condition',
+  identity_revoked:    'condition',
   storage_unavailable: 'condition',
 } as const satisfies Readonly<Record<VaultErrorKind, VaultErrorFamily>>
 
