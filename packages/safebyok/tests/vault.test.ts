@@ -883,11 +883,11 @@ describe("the times a vault keeps", () => {
     await vault.store('anthropic', 'sk-fake')
     const box = JSON.stringify({ ...storedRowOf(world, 'anthropic'), changed_at: world.clock.now() + 0.5 })
     world.dbStore.write(u1BoxCkey('anthropic'), box)
-    await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
+    await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
     expect(world.dbStore.read(u1BoxCkey('anthropic'))).to.eq(box)
     const bundle = JSON.stringify({ ...storedBundleOf(world), registered_at: world.clock.now() + 0.5 })
     world.dbStore.write(u1BundleCkey, bundle)
-    await TH.expectRefusal(world.open(), 'corrupt_record')
+    await TH.expectRefusal(world.open(), 'damaged_bundle')
     expect(world.dbStore.read(u1BundleCkey)).to.eq(bundle)
   })
 
@@ -898,7 +898,7 @@ describe("the times a vault keeps", () => {
     const { registered_at: _registered, changed_at: _changed, ...row } = storedRowOf(world, 'anthropic')
     const olden = JSON.stringify({ ...row, created_at: '2026-10-14T00:00:00.000Z', updated_at: '2026-10-14T00:00:00.000Z' })
     world.dbStore.write(u1BoxCkey('anthropic'), olden)
-    await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
+    await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
     expect(world.dbStore.read(u1BoxCkey('anthropic'))).to.eq(olden)
   })
 
@@ -908,7 +908,7 @@ describe("the times a vault keeps", () => {
     const { registered_at: _registered, ...row } = storedBundleOf(world)
     const olden = JSON.stringify({ ...row, created_at: '2026-10-14T00:00:00.000Z', updated_at: '2026-10-14T00:00:00.000Z' })
     world.dbStore.write(u1BundleCkey, olden)
-    await TH.expectRefusal(world.open(), 'corrupt_record')
+    await TH.expectRefusal(world.open(), 'damaged_bundle')
     expect(world.dbStore.read(u1BundleCkey)).to.eq(olden)
   })
 })
@@ -1338,7 +1338,7 @@ describe("the host's validators", () => {
     expect(await world.stateOnOpen({ validators: { boxlabel: undefined } })).to.eq('absent')
   })
 
-  it("check every lockbox read back: one stored with a note the vault's checks refuse lists as damaged, and reads as corrupt", async () => {
+  it("check every lockbox read back: one stored with a note the vault's checks refuse lists as damaged, and reads as damaged_lockbox", async () => {
     const world = makeWorld()
     const roomy = await world.openUnlocked('pw', { validators: AnyScript })
     await roomy.store('anthropic', 'sk-fake', { note: 'n'.repeat(300) })
@@ -1346,7 +1346,7 @@ describe("the host's validators", () => {
     // The default note check refuses a note of 300 characters: narrowing the checks strands it.
     const narrow = await world.open()
     expect(narrow.getSnapshot().boxes).to.deep.equal([{ boxlabel: 'anthropic', damaged: true }])
-    await TH.expectRefusal(narrow.read('anthropic'), 'corrupt_record')
+    await TH.expectRefusal(narrow.read('anthropic'), 'damaged_lockbox')
     await narrow.unlock('pw')
     await narrow.store('anthropic', 'sk-new')
     expect(TH.summaryOf(narrow.getSnapshot().boxes[0])?.note).to.be.null
@@ -1495,7 +1495,7 @@ const withTweakedCiphertext = (row: Record<string, unknown>): string => {
   return JSON.stringify({ ...row, whisper_ciphered: { ...ciphered, ciphertext_b64: tweaked } })
 }
 
-/** Ways a stored lockbox row can be spoiled so that it reads as 'corrupt_record'. */
+/** Ways a stored lockbox row can be spoiled so that it reads as 'damaged_lockbox'. */
 const SpoiledBoxes = [
   [withTweakedCiphertext,                                                                        'whose ciphertext was altered, so it fails verification'],
   [({ whisper_ciphered: _gone, ...row }: Record<string, unknown>) => JSON.stringify(row),       'missing its whisper, so it is no lockbox this package knows'],
@@ -1511,7 +1511,7 @@ describe("erase and destroy", () => {
       await vault.store('anthropic', 'sk-ant-fake')
       await vault.store('openai', 'sk-openai-fake', { note: 'work account' })
       world.dbStore.write(u1BoxCkey('anthropic'), spoil(storedRowOf(world, 'anthropic')))
-      await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
+      await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
       await vault.erase('anthropic')
       expect(world.dbStore.read(u1BoxCkey('anthropic'))).to.be.null
       expect(boxlabelsOf(vault)).to.deep.equal(['openai'])
@@ -1625,13 +1625,13 @@ describe("damaged lockboxes", () => {
     })
   }
 
-  it("read and use refuse a damaged lockbox as 'corrupt_record', handing the callback nothing, and leave it as it is", async () => {
+  it("read and use refuse a damaged lockbox as 'damaged_lockbox', handing the callback nothing, and leave it as it is", async () => {
     const [spoil] = DamagedListings[1]
     const { world, vault } = await worldWithDamagedBox(spoil)
     const spoiled = world.dbStore.read(u1BoxCkey('anthropic'))
     const callback = vi.fn()
-    await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
-    await TH.expectRefusal(vault.use('anthropic', callback), 'corrupt_record')
+    await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
+    await TH.expectRefusal(vault.use('anthropic', callback), 'damaged_lockbox')
     expect(callback).not.toHaveBeenCalled()
     expect(world.dbStore.read(u1BoxCkey('anthropic'))).to.eq(spoiled)
     expect(vault.getSnapshot().boxes[0]).to.deep.equal({ boxlabel: 'anthropic', damaged: true })
@@ -1794,7 +1794,7 @@ describe("tampering", () => {
     const row = JSON.parse(world.dbStore.read(ckey ?? '') ?? '{}') as { whisper_ciphered: { ciphertext_b64: string } }
     row.whisper_ciphered.ciphertext_b64 = TH.tweakB64(row.whisper_ciphered.ciphertext_b64)
     world.dbStore.write(ckey ?? '', JSON.stringify(row))
-    const err = await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
+    const err = await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
     expect(err.message).to.not.include('sk-fake')
     expect(world.dbStore.read(ckey ?? '')).to.not.be.null  // preserved for forensics, never auto-deleted
   })
@@ -1805,7 +1805,7 @@ describe("tampering", () => {
     await vault.store('victim_box', 'sk-fake')
     const fromCkey = world.dbStore.ckeys().find((candidate) => candidate.includes('victim_box'))
     world.dbStore.write(u1BoxCkey('other_box'), world.dbStore.read(fromCkey ?? '') ?? '')
-    await TH.expectRefusal(vault.read('other_box'), 'corrupt_record')
+    await TH.expectRefusal(vault.read('other_box'), 'damaged_lockbox')
   })
 
   for (const [spoil, blurb] of SpoiledShells) {
@@ -1817,7 +1817,7 @@ describe("tampering", () => {
       const row = JSON.parse(world.dbStore.read(ckey) ?? '{}') as Record<string, unknown>
       const spoiled = JSON.stringify(spoil(row))
       world.dbStore.write(ckey, spoiled)
-      await TH.expectRefusal(vault.read('anthropic'), 'corrupt_record')
+      await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
       expect(world.dbStore.read(ckey)).to.eq(spoiled)
     })
   }
@@ -1828,14 +1828,98 @@ describe("tampering", () => {
     const bundle = JSON.parse(world.dbStore.read(u1BundleCkey) ?? '{}') as { registered_at: number }
     world.dbStore.write(u1BundleCkey, JSON.stringify({ ...bundle, registered_at: bundle.registered_at - 1 }))
     const vault = await world.open({ deviceDB: memoryDeviceDB() })
-    await TH.expectRefusal(vault.unlock('pw'), 'wrong_passphrase')
+    const err = await TH.expectRefusal(vault.unlock('pw'), 'wrong_passphrase')
+    // The decryption fails as for a typo, so the message names both, and claims neither.
+    expect(err.message).to.include('Check for typos')
+    expect(err.message).to.include('the stored vault may be damaged')
   })
 
-  it("a bundle that does not parse makes the open itself refuse, deleting nothing", async () => {
+  it("a bundle that does not parse makes the open itself refuse as damaged_bundle, storage's refusal its cause, deleting nothing", async () => {
     const world = makeWorld()
     world.dbStore.write(u1BundleCkey, '{"format":"not-a-vault"}')
-    await TH.expectRefusal(world.open(), 'corrupt_record')
+    const err = await TH.expectRefusal(world.open(), 'damaged_bundle')
+    expect(err.message).to.include("can't be opened")
+    expect((err.cause as VaultError).kind).to.eq('corrupt_record')
     expect(world.dbStore.read(u1BundleCkey)).to.eq('{"format":"not-a-vault"}')
+  })
+
+  it("a lockbox that will not open under the vault's own key is named as damaged, with the remedy", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    await vault.store('anthropic', 'sk-fake')
+    const row = JSON.parse(world.dbStore.read(u1BoxCkey('anthropic')) ?? '{}') as { whisper_ciphered: { ciphertext_b64: string } }
+    row.whisper_ciphered.ciphertext_b64 = TH.tweakB64(row.whisper_ciphered.ciphertext_b64)
+    world.dbStore.write(u1BoxCkey('anthropic'), JSON.stringify(row))
+    const err = await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
+    expect(err.message).to.include("The lockbox 'anthropic' is damaged")
+    expect(err.message).to.include('erase it')
+    await vault.erase('anthropic')
+    expect(boxlabelsOf(vault)).to.deep.equal([])
+  })
+})
+
+/** u1's stored bundle in `world`, its second way in spoiled by `spoil`. */
+const spoilSecondUnlock = (world: ReturnType<typeof makeWorld>, spoil: Record<string, unknown>) => {
+  const bundle = JSON.parse(world.dbStore.read(u1BundleCkey) ?? '{}') as { unlocks: Record<string, unknown>[] }
+  const unlocks = bundle.unlocks.map((envelope, ii) => (ii === 1 ? { ...envelope, ...spoil } : envelope))
+  world.dbStore.write(u1BundleCkey, JSON.stringify({ ...bundle, unlocks }))
+}
+
+/**
+ * A vault of passphrases `pw` and `spare`, the spare's salt spoiled in storage, freshly opened
+ * locked. 'c2FsdA' decodes, so passes the schema, but to four bytes: no 16-byte deriver made it.
+ */
+const vaultWithDamagedSpare = async () => {
+  const world = makeWorld()
+  const vault = await world.openUnlocked('pw')
+  await vault.store('anthropic', 'sk-fake')
+  const spareId = await vault.addPassphrase('pw', 'spare', { unlocklabel: 'spare' })
+  spoilSecondUnlock(world, { salt_b64: 'c2FsdA' })
+  const fresh = await world.open({ deviceDB: memoryDeviceDB() })
+  return { world, fresh, spareId }
+}
+
+describe("a way in stored damaged", () => {
+
+  it("shuts out no other: the vault's sound passphrase still opens it", async () => {
+    const { fresh } = await vaultWithDamagedSpare()
+    await fresh.unlock('pw')
+    expect(await fresh.read('anthropic')).to.eq('sk-fake')
+  })
+
+  it("refuses its own passphrase as wrong_passphrase, saying a damaged way in went untried", async () => {
+    const { fresh } = await vaultWithDamagedSpare()
+    const err = await TH.expectRefusal(fresh.unlock('spare'), 'wrong_passphrase')
+    expect(err.message).to.include('stored damaged')
+    expect(err.message).to.not.include('spare')
+  })
+
+  it("refuses an unlock aimed at it as damaged_unlock, and is removed by a sound way in", async () => {
+    const { fresh, spareId } = await vaultWithDamagedSpare()
+    await TH.expectRefusal(fresh.unlock('spare', { unlockId: spareId }), 'damaged_unlock')
+    expect(fresh.getSnapshot().state).to.eq('locked')
+    await fresh.removeUnlock('pw', spareId)
+    expect(unlocklabelsOf(fresh)).to.deep.equal(['passphrase'])
+  })
+
+  it("a passkey stored damaged refuses its answer as damaged_unlock, and the passphrase still opens", async () => {
+    const { world, laptop } = await vaultWithPasskey()
+    const shortSalt = toB64(new Uint8Array(16))
+    spoilSecondUnlock(world, { prf_salt_b64: shortSalt })
+    const fresh = await world.open({ deviceDB: memoryDeviceDB() })
+    const err = await TH.expectRefusal(fresh.unlock({ ...laptop, prfSaltB64: shortSalt }), 'damaged_unlock')
+    expect(err.message).to.include('Unlock with a passphrase')
+    await fresh.unlock('pw')
+    expect(fresh.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("a passkey whose answer no longer opens a bundle altered in storage is told that its way in may be damaged", async () => {
+    const { world, laptop } = await vaultWithPasskey()
+    const bundle = JSON.parse(world.dbStore.read(u1BundleCkey) ?? '{}') as { registered_at: number }
+    world.dbStore.write(u1BundleCkey, JSON.stringify({ ...bundle, registered_at: bundle.registered_at - 1 }))
+    const fresh = await world.open({ deviceDB: memoryDeviceDB() })
+    const err = await TH.expectRefusal(fresh.unlock(laptop), 'wrong_passkey')
+    expect(err.message).to.include('may be damaged')
   })
 })
 
@@ -2154,13 +2238,13 @@ describe("several passphrases", () => {
     expect(everything).to.include('"unlocklabel":"spare"')
   })
 
-  it("a bundle in the shape before unlock envelopes reads as corrupt, and is left as it is", async () => {
+  it("a bundle in the shape before unlock envelopes reads as a damaged bundle, and is left as it is", async () => {
     const world = makeWorld()
     const { unlocks: _unlocks, ...rest } = TH.bundleOf('u1')
     const oldText = JSON.stringify({ ...rest, key_deriver_label: 'test_digest_v0', passphrase_salt_b64: 'c2FsdA', vault_key_passphrase_wrapped: TH.fakeCiphered('old') })
     const bundleCkey = Ckeys.bundle(TH.scopeOf('u1'))
     world.dbStore.write(bundleCkey, oldText)
-    await TH.expectRefusal(world.open(), 'corrupt_record')
+    await TH.expectRefusal(world.open(), 'damaged_bundle')
     expect(world.dbStore.read(bundleCkey)).to.eq(oldText)
   })
 })
@@ -3159,7 +3243,7 @@ describe("a failed open", () => {
     const world = makeWorld()
     world.dbStore.write(u1BundleCkey, '{"format":"not-a-vault"}')
     const tally = TH.tallyWatches(world.vaultDB)
-    await TH.expectRefusal(world.open(), 'corrupt_record')
+    await TH.expectRefusal(world.open(), 'damaged_bundle')
     expect(tally).to.deep.equal({ opened: 1, closed: 1 })
   })
 
@@ -3800,7 +3884,7 @@ describe("the logger", () => {
     expect(world.logged).to.have.lengthOf(0)
   })
 
-  it("warns when a background refresh fails, storage's refusal its error", async () => {
+  it("warns when a background refresh fails, with the refusal as its error", async () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')
     await vault.store('anthropic', 'sk-fake')
@@ -3808,7 +3892,7 @@ describe("the logger", () => {
     await TH.wakeupAtNextTick()
     expect(world.logged.map((heard) => heard.level)).to.deep.equal(['warn'])
     expect(world.logged[0]?.story).to.deep.equal({ call: 'refresh' })
-    expect((world.logged[0]?.err as VaultError).kind).to.eq('corrupt_record')
+    expect((world.logged[0]?.err as VaultError).kind).to.eq('damaged_bundle')
     expect(vault.getSnapshot().boxes).to.have.lengthOf(1)  // the snapshot stands as it was
   })
 

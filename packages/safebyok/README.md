@@ -417,8 +417,8 @@ Part of normal operation. Each can reach the user; the app decides how.
 | Kind                  | What happened                                                    | What to do                                              |
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
 | `vault_locked`        | a whisper was asked for before the vault was unlocked            | Ask for the passphrase and `unlock()`, then retry (`safebyok-react`'s `withUnlockedVault` does) |
-| `wrong_passphrase`    | the passphrase did not unlock the vault, or was empty            | Ask again                                               |
-| `wrong_passkey`       | the passkey's answer did not unlock the vault, or answered for another salt | Ask the passkey again, or ask for a passphrase  |
+| `wrong_passphrase`    | the passphrase did not unlock the vault, or was empty. A passphrase envelope altered in storage refuses its passphrase in just the same way, so the message says that the stored vault may be damaged | Ask again                                               |
+| `wrong_passkey`       | the passkey's answer did not unlock the vault, or answered for another salt. An answer for the envelope's own salt that does not open it most likely means the envelope was altered in storage, and the message says so | Ask for a passphrase; if it works, the user may remove that passkey and add it again |
 | `passkey_unavailable` | this browser or authenticator cannot answer for a passkey unlock: no WebAuthn, or no PRF extension | Offer the passphrase instead; on `createPasskey`, tell the user this device cannot be a fingerprint unlock |
 | `absent_box`          | no lockbox under that label                                      | Offer to create it, or refresh the list: it may have been erased elsewhere |
 | `absent_vault`        | the vault has never been created, or was deleted elsewhere, and the call will not create it | Unlock with a new passphrase to create it |
@@ -428,16 +428,19 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `vault_full`          | a new lockbox in a vault already holding its `maxLockboxes`, a lockbox whose names and note would take the vault past its storage's `maxVaultBytes`, or a write the storage backend has no room for | Tell the user to erase a lockbox first; the host may raise `maxLockboxes` where the backend allows |
 | `too_many_unlocks`    | a passphrase or passkey added to a vault already holding `MaxUnlocks` (8) ways in | Tell the user to remove one first             |
 | `last_unlock`         | removing the vault's last passphrase: a vault always keeps one, since a passkey can be lost with its device | Add another passphrase first; to be rid of the vault, `destroy()` it |
-| `corrupt_record`      | a stored record failed validation or decryption verification     | Nothing was changed. Do not retry; tell the user, and see a developer: the record is damaged, was moved, or came from a newer safebyok. A damaged lockbox can be removed with `erase()` or written afresh with `store()` (see *Damaged lockboxes*); a damaged vault bundle stops `openVault` |
+| `corrupt_record`      | a stored record failed validation as storage read it back: storage's own word, from a `VaultDB` called directly. A vault call says what it means for the vault instead, as one of the three below | Nothing was changed. Do not retry; see a developer: the record is damaged, was moved, or came from a newer safebyok |
+| `damaged_bundle`      | the vault's stored bundle failed its checks (not a shape this package writes, or naming another vault), so no way in can be tried: `openVault` refuses it | Nothing was changed, and a retry will not mend it. Tell the user the vault cannot be opened; restore its bundle from a backup, if there is one |
+| `damaged_unlock`      | a way in is stored in a form this package never writes (a salt of the wrong length, or not base64url), so it cannot be tried: the passkey asked for, the passphrase `unlockId` aims at, or every passphrase the vault has. Other ways in are still tried | Unlock another way, then `removeUnlock()` the damaged one and add it again |
+| `damaged_lockbox`     | a lockbox failed its checks as read, or would not open under the vault's own vaultKey, or opened to no whisper: altered in storage, or moved there from elsewhere | Nothing was changed. Offer `erase()`, or a fresh `store()` over it (see *Damaged lockboxes*) |
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
 | `not_permitted`       | the storage backend refused the signed-in user, still the vault's own, this one call | Tell the user they may not; signing in again will not help |
 | `identity_revoked`    | the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in. The vault has locked itself (see *When the user signs out*) | Have the user sign in again, then open the vault for whoever that is |
 | `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause` |
 
 `openVault` itself can refuse with `bad_option`, `bad_label`, and, as it reads the vault from
-storage, `storage_unavailable`, `not_permitted`, `identity_revoked` or `corrupt_record` (for the
-vault's bundle: a damaged lockbox never stops an open): the last four are conditions, though they
-surface at open. A refused open leaves nothing running behind it, so the host simply opens again.
+storage, `storage_unavailable`, `not_permitted`, `identity_revoked` or `damaged_bundle` (a
+damaged lockbox never stops an open): the last four are conditions, though they surface at open.
+A refused open leaves nothing running behind it, so the host simply opens again.
 
 ### Damaged lockboxes
 
@@ -446,7 +449,7 @@ record naming another boxlabel than the one it is stored under, one from a newer
 one stored under a boxlabel or with a note the vault's `validators` now refuse -- is listed in the snapshot as damaged, `{ boxlabel, damaged: true }`, sorted among the sound
 ones, which carry `damaged: false`. The rest of the vault opens and works as ever. `read()` and
 `use()` refuse a damaged lockbox (`bad_label` for one under a name the checks refuse,
-`corrupt_record` otherwise); `erase()` removes it by the name it is listed under, whatever the
+`damaged_lockbox` otherwise); `erase()` removes it by the name it is listed under, whatever the
 boxlabel check now says, and `store()` writes a fresh lockbox over it -- except under a name the
 check refuses, which `store()` refuses with `bad_label`, writing nothing, since the lockbox it
 made would list as damaged still. A damaged lockbox's boxlabel is whatever text it is stored
@@ -462,7 +465,7 @@ for (const box of vault.getSnapshot().boxes) {
 
 Damage the listing cannot see -- altered ciphertext, a missing or malformed ciphered field --
 shows only when the lockbox is read: it lists as sound, `read()` refuses it with
-`corrupt_record`, and `erase()` removes it. `store()` starts afresh over any record it cannot
+`damaged_lockbox`, and `erase()` removes it. `store()` starts afresh over any record it cannot
 read as a lockbox -- every one the snapshot lists as damaged, and one missing or mangling a
 ciphered field -- carrying nothing from it, neither its note nor when it was first stored. A
 record that reads but will not decipher, its ciphertext altered, is replaced as any other, its

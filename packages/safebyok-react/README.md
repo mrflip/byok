@@ -65,7 +65,7 @@ kind, its family, and what it means.
 **A condition stays in place.** Storage that cannot be reached (`storage_unavailable`), a user
 storage no longer serves (`identity_revoked`, as when signed out of the backend, or not yet
 signed in to it) or a stored vault
-bundle that fails verification (`corrupt_record`) arrives as `openError`, a `VaultError`, with
+bundle that fails its checks (`damaged_bundle`) arrives as `openError`, a `VaultError`, with
 `vault` still null. (A damaged lockbox never stops the open: the snapshot lists it with
 `damaged: true`, for your UI to offer `erase()` or a fresh `store()`; see the `safebyok`
 README's *Damaged lockboxes*.) Show it where the vault's UI would be, and offer `retryOpen()`, which clears it and
@@ -81,7 +81,7 @@ const VaultPanel = () => {
 ```
 
 Branch on `openError.kind` for a better message: an `identity_revoked` user should sign in
-again, and a `corrupt_record` will not mend on retry. Its `message` is calm and safe to show.
+again, and a `damaged_bundle` will not mend on retry. Its `message` is calm and safe to show.
 
 **A sign-out the app did not hear of** -- in another tab, or a session that expired -- reaches
 the vault as storage refusing it, kind `identity_revoked`, and an open vault locks itself

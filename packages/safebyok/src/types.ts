@@ -192,7 +192,7 @@ export type LockboxSummary = Z.infer<typeof LockboxSummary>
  * another version of safebyok -- listed under the boxlabel it is stored under, with nothing else
  * from it trusted. It sits in a vault's snapshot beside the {@link LockboxSummary}s, sorted among
  * them, so a UI can offer to remove it: `erase()` removes it and `store()` writes a fresh lockbox
- * over it, while `read()` and `use()` refuse it with kind 'corrupt_record'.
+ * over it, while `read()` and `use()` refuse it with kind 'damaged_lockbox'.
  *
  * @example
  *   for (const box of snapshot.boxes) {

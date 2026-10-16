@@ -224,7 +224,7 @@ describe("VaultProvider", () => {
     fireEvent.click(screen.getByText('grab'))
     fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'the wrong one' } })
     fireEvent.click(screen.getByText('Unlock'))
-    await screen.findByText("That passphrase didn't unlock the vault. Check for typos and try again.")
+    await screen.findByText(/^That passphrase didn't unlock the vault. Check for typos and try again./)
 
     fireEvent.change(screen.getByPlaceholderText('vault passphrase'), { target: { value: 'the right one' } })
     fireEvent.click(screen.getByText('Unlock'))
@@ -506,7 +506,7 @@ describe("VaultProvider", () => {
       ["storage_unavailable", 'storage that cannot be reached'],
       ["identity_revoked",    'a user storage no longer serves, as when signed out of the backend'],
       ["not_permitted",       'a call storage refuses the signed-in user'],
-      ["corrupt_record",      'a stored record that fails verification'],
+      ["damaged_bundle",      'a stored vault that fails its checks'],
     ] as const
 
     for (const [kind, blurb] of ConditionCases) {

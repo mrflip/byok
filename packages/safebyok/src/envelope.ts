@@ -129,10 +129,15 @@ export const sealPassphrase = async (
  * order the bundle lists them, and the first that opens ends the search. An envelope refusing to
  * open IS the passphrase check: there is no comparison.
  *
+ * An envelope whose salt is not base64url of `keyDeriver.salt_bytes` bytes is damaged: its
+ * deriver never made such a salt. It is passed over, costing no derivation, and the others are
+ * tried as ever, so one damaged way in shuts out no other.
+ *
  * Refuses with kind `absent_unlock` when `unlockId` names no passphrase envelope of the bundle,
- * `unknown_key_deriver` when every envelope it would try was made by a key
- * deriver other than `keyDeriver`, `corrupt_record` when one it would try has a salt that is not
- * base64url, or not `keyDeriver.salt_bytes` long, and `wrong_passphrase` when none it tried opens.
+ * `unknown_key_deriver` when every envelope it would try was made by a key deriver other than
+ * `keyDeriver`, `damaged_unlock` when every one it would try is damaged, and `wrong_passphrase`
+ * when none it tried opens. That last is all the envelopes can say: a wrong passphrase and an
+ * envelope altered in storage fail alike, so its message names both.
  *
  * @returns Both lives of the vaultKey, and the `unlock_id` of the envelope that opened.
  */
@@ -152,17 +157,23 @@ export const openWithPassphrase = async (
   if (derivable.length === 0) {
     throw new VaultError('unknown_key_deriver', 'This vault was made with a key deriver this package does not carry: update safebyok, or open the vault where it was made.')
   }
-  // Checked for every envelope before the first derivation, so the outcome never hangs on order:
-  // a salt the deriver's own label says it never made is a damaged record, not a wrong passphrase.
-  // (Here rather than in the record's schema, which every entry point's bundle carries whole.)
-  if (derivable.some((envelope) => saltBytesOf(envelope.salt_b64)?.length !== keyDeriver.salt_bytes)) {
-    throw new VaultError('corrupt_record', "One of this vault's passphrases is stored with a salt its key deriver could not have made: the bundle is damaged. It was left as it is.")
+  // Sorted out before the first derivation, so the outcome never hangs on order. (Checked here
+  // rather than in the record's schema, which every entry point's bundle carries whole.)
+  const sound = derivable.filter((envelope) => saltBytesOf(envelope.salt_b64)?.length === keyDeriver.salt_bytes)
+  if (sound.length === 0) {
+    const told = unlockId === undefined
+      ? "Every passphrase of this vault is stored damaged, so none could be tried. Unlock with a passkey, if the vault has one, then add a new passphrase. The vault was left as it is."
+      : "That passphrase's way into the vault is stored damaged, so it could not be tried. Unlock another way, then remove it and add the passphrase again. The vault was left as it is."
+    throw new VaultError('damaged_unlock', told)
   }
-  for (const envelope of derivable) {
+  for (const envelope of sound) {
     const opened = await tryPassphrase(keyDeriver, passphrase, scope, bundle, envelope)
     if (opened !== null) { return { ...opened, unlockId: envelope.unlock_id } }
   }
-  throw new VaultError('wrong_passphrase', "That passphrase didn't unlock the vault. Check for typos and try again.")
+  if (sound.length < derivable.length) {
+    throw new VaultError('wrong_passphrase', "That passphrase didn't unlock the vault, and one of its passphrases is stored damaged, so could not be tried. Check for typos and try again; if it was that one, unlock another way.")
+  }
+  throw new VaultError('wrong_passphrase', "That passphrase didn't unlock the vault. Check for typos and try again. If you're sure it's right, the stored vault may be damaged.")
 }
 
 /** An envelope's salt as bytes, or null when its base64url text is not base64url. */
@@ -276,9 +287,12 @@ export const sealPasskey = async (
  * to try in turn: a credential has at most one envelope in a vault.
  *
  * Refuses with kind `absent_unlock` when no passkey envelope of the bundle is that credential's
- * (or the one `unlockId` names is not), `corrupt_record` when its envelope's salt is not base64url
- * of {@link PasskeySaltBytes} bytes, and `wrong_passkey` when the answer is for another salt than
- * the envelope's, or does not open it.
+ * (or the one `unlockId` names is not), `damaged_unlock` when its envelope's salt is not
+ * base64url of {@link PasskeySaltBytes} bytes, and `wrong_passkey` when the answer is for another
+ * salt than the envelope's, or does not open it. An answer for the envelope's own credential and
+ * salt that does not open it is most likely an envelope altered in storage, but a passkey asked
+ * without user verification answers differently, and the vault cannot tell how it was asked: so
+ * it is `wrong_passkey`, and its message names both.
  *
  * @returns Both lives of the vaultKey, and the `unlock_id` of the envelope that opened.
  */
@@ -295,9 +309,9 @@ export const openWithPasskey = async (
   if (envelope === undefined) {
     throw new VaultError('absent_unlock', "None of this vault's passkeys is the one that answered: it may have been removed on another device, or be a passkey for another vault. Look again at the snapshot's unlocks.")
   }
-  // A salt no envelope this package writes could hold is a damaged record, not a wrong passkey.
+  // A salt no envelope this package writes could hold is a damaged way in, not a wrong passkey.
   if (saltBytesOf(envelope.prf_salt_b64)?.length !== PasskeySaltBytes) {
-    throw new VaultError('corrupt_record', "This vault's passkey is stored with a salt this package could not have made: the bundle is damaged. It was left as it is.")
+    throw new VaultError('damaged_unlock', "This passkey's way into the vault is stored damaged, so it could not be tried. Unlock with a passphrase, then remove this passkey and add it again. The vault was left as it is.")
   }
   if (envelope.prf_salt_b64 !== passkey.prfSaltB64) {
     throw new VaultError('wrong_passkey', "The passkey answered for a different salt than this vault keeps for it: ask it again with the prf_salt_b64 the snapshot's unlocks list.")
@@ -306,7 +320,7 @@ export const openWithPasskey = async (
   const passkeyKey = await passkeyKeyOf(passkey.prfBytes, envelopeBinding)
   const opened = await tryUnwrap(passkeyKey, envelopeBinding, envelope.vault_key_wrapped)
   if (opened === null) {
-    throw new VaultError('wrong_passkey', "That passkey's answer didn't unlock the vault. Try the passkey again, or unlock with a passphrase.")
+    throw new VaultError('wrong_passkey', "That passkey answered, but its answer didn't unlock the vault: its stored way in may be damaged. Unlock with a passphrase; if that works, remove this passkey and add it again.")
   }
   return { ...opened, unlockId: envelope.unlock_id }
 }

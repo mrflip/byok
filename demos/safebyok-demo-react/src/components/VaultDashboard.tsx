@@ -26,7 +26,7 @@ export const VaultDashboard = () => {
   // backend -- is shown here, in place, with a way to try again. (Misuse would have gone to an
   // error boundary instead.)
   // A damaged record will not mend on retry, so it gets no Retry button.
-  if (openError?.kind === 'corrupt_record') {
+  if (openError?.kind === 'damaged_bundle') {
     return <p className="gripe">{"Your vault's stored record is damaged, so it can't be opened. "}{openError.message}</p>
   }
   if (openError !== null) {

@@ -108,24 +108,56 @@ describe("Envelope.openWithPassphrase", () => {
     await expectRefusal(Envelope.openWithPassphrase(alienDeriver, 'first', scope, bundle), 'unknown_key_deriver')
   })
 
-  it("refuses as corrupt_record, deriving nothing, when an envelope it would try has a salt of another length", async () => {
-    const vaultKey = await makeVaultKey()
-    // 'c2FsdA' is four bytes: base64url that decodes, so it passes the schema, but no 16-byte deriver made it.
-    const bundle = bundleWith([await sealed('first', 'one', vaultKey), { ...await sealed('second', 'two', vaultKey), salt_b64: 'c2FsdA' }])
-    const { keyDeriver, derivations } = countingDeriver()
-    await expectRefusal(Envelope.openWithPassphrase(keyDeriver, 'first', scope, bundle), 'corrupt_record')
-    expect(derivations).not.toHaveBeenCalled()
-  })
+  // A salt no deriver of its label could have made: each decodes, or not, but never to 16 bytes.
+  const DamagedSaltCases = [
+    ["c2FsdA",       'a salt of another length, base64url that decodes and so passes the schema'],
+    ["not base64!",  'a salt of text that is not base64url'],
+    ["aaaaa",        'a salt of base64url letters that decode to no whole bytes'],
+  ] as const
 
-  for (const [saltB64, blurb] of [['not base64!', 'text that is not base64url'], ['aaaaa', 'base64url letters that decode to no whole bytes']] as const) {
-    it(`refuses as corrupt_record, deriving nothing, when an envelope it would try has a salt of ${blurb}`, async () => {
+  describe("over an envelope stored damaged", () => {
+    for (const [saltB64, blurb] of DamagedSaltCases) {
+      it(`passes over one with ${blurb}, deriving nothing for it, and opens a sound one`, async () => {
+        const vaultKey = await makeVaultKey()
+        const bundle = bundleWith([{ ...await sealed('first', 'one', vaultKey), salt_b64: saltB64 }, await sealed('second', 'two', vaultKey)])
+        const { keyDeriver, derivations } = countingDeriver()
+        const opened = await Envelope.openWithPassphrase(keyDeriver, 'second', scope, bundle)
+        expect(opened.unlockId).to.eq('unlock-two')
+        expect(derivations).toHaveBeenCalledTimes(1)
+      })
+    }
+
+    it("refuses as wrong_passphrase, saying a damaged one went untried, when no sound one opens", async () => {
       const vaultKey = await makeVaultKey()
-      const bundle = bundleWith([await sealed('first', 'one', vaultKey), { ...await sealed('second', 'two', vaultKey), salt_b64: saltB64 }])
+      const bundle = bundleWith([await sealed('first', 'one', vaultKey), { ...await sealed('second', 'two', vaultKey), salt_b64: 'c2FsdA' }])
+      const err = await expectRefusal(Envelope.openWithPassphrase(TH.testDeriver, 'second', scope, bundle), 'wrong_passphrase')
+      expect(err.message).to.include('stored damaged')
+    })
+
+    it("refuses as damaged_unlock, deriving nothing, when every one it would try is damaged", async () => {
+      const vaultKey = await makeVaultKey()
+      const bundle = bundleWith([{ ...await sealed('first', 'one', vaultKey), salt_b64: 'c2FsdA' }, { ...await sealed('second', 'two', vaultKey), salt_b64: 'aaaaa' }])
       const { keyDeriver, derivations } = countingDeriver()
-      await expectRefusal(Envelope.openWithPassphrase(keyDeriver, 'first', scope, bundle), 'corrupt_record')
+      const err = await expectRefusal(Envelope.openWithPassphrase(keyDeriver, 'first', scope, bundle), 'damaged_unlock')
+      expect(err.message).to.include('Every passphrase')
       expect(derivations).not.toHaveBeenCalled()
     })
-  }
+
+    it("refuses as damaged_unlock an aim at a damaged one, though a sound one stands beside it", async () => {
+      const vaultKey = await makeVaultKey()
+      const bundle = bundleWith([await sealed('first', 'one', vaultKey), { ...await sealed('second', 'two', vaultKey), salt_b64: 'c2FsdA' }])
+      const err = await expectRefusal(Envelope.openWithPassphrase(TH.testDeriver, 'first', scope, bundle, 'unlock-two'), 'damaged_unlock')
+      expect(err.message).to.include("That passphrase's way into the vault")
+    })
+  })
+
+  it("says, refusing a passphrase no envelope opens, that the stored vault may be damaged", async () => {
+    const vaultKey = await makeVaultKey()
+    const bundle = bundleWith([await sealed('first', 'one', vaultKey)])
+    const err = await expectRefusal(Envelope.openWithPassphrase(TH.testDeriver, 'wrong', scope, bundle), 'wrong_passphrase')
+    expect(err.message).to.include('Check for typos')
+    expect(err.message).to.include('the stored vault may be damaged')
+  })
 
   it("passes over envelopes another deriver made, and opens one this deriver did", async () => {
     const vaultKey = await makeVaultKey()
@@ -254,14 +286,22 @@ describe("Envelope.openWithPasskey", () => {
     await expectRefusal(Envelope.openWithPasskey({ ...laptop, prfBytes: new Uint8Array(32) }, scope, bundle), 'wrong_passkey')
   })
 
-  it("refuses as corrupt_record an envelope whose salt is not base64url of 32 bytes", async () => {
+  it("refuses as damaged_unlock an envelope whose salt is not base64url of 32 bytes", async () => {
     const vaultKey = await makeVaultKey()
     const laptop = await TH.passkeyOf('laptop')
     const envelope = await sealedPasskey(laptop, 'laptop', vaultKey)
     for (const prfSaltB64 of ['not base64url!', toB64(new Uint8Array(16))]) {
       const bundle = bundleWith([{ ...envelope, prf_salt_b64: prfSaltB64 }])
-      await expectRefusal(Envelope.openWithPasskey({ ...laptop, prfSaltB64 }, scope, bundle), 'corrupt_record')
+      await expectRefusal(Envelope.openWithPasskey({ ...laptop, prfSaltB64 }, scope, bundle), 'damaged_unlock')
     }
+  })
+
+  it("says, refusing an answer for its own salt that does not open it, that the way in may be damaged", async () => {
+    const laptop = await TH.passkeyOf('laptop')
+    const bundle = bundleWith([await sealedPasskey(laptop, 'laptop', await makeVaultKey())])
+    const err = await expectRefusal(Envelope.openWithPasskey({ ...laptop, prfBytes: new Uint8Array(32) }, scope, bundle), 'wrong_passkey')
+    expect(err.message).to.include('may be damaged')
+    expect(err.message).to.include('Unlock with a passphrase')
   })
 
   it("never refuses with the answer in the error", async () => {
