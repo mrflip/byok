@@ -177,6 +177,11 @@ TH.bootDatabaseFirst()
 TH.describeVaultDB('the README route recipe, over postgresVaultDB', async () => {
   const route = await routeOver()
   return TH.perUser((userId) => browserFor(route, userId))
+}, {
+  makeVaultDBFor: async () => {
+    const route = await routeOver()
+    return (userId) => browserFor(route, userId)
+  },
 })
 
 describe("the README route recipe", () => {
@@ -189,17 +194,6 @@ describe("the README route recipe", () => {
     await vault.store('anthropic_api_key', 'sk-ant-test-not-a-real-key')
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
     vault.close()
-  })
-
-  it("carries a refusal's kind across: another user's vault is identity_revoked, a stale write stale_write", async () => {
-    const route = await routeOver()
-    const browser = browserFor(route, 'u1')
-    const notMine = await TH.refusalOf(browser.readBundle(TH.scopeOf('u2')))
-    expect(notMine).to.be.instanceOf(VaultError)
-    expect(notMine.kind).to.eq('identity_revoked')
-    await browser.createBundle(TH.bundleOf('u1'))
-    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 7 }))
-    expect(stale.kind).to.eq('stale_write')
   })
 
   it("locks the browser's vault at its next call once the session signs out, erasing nothing", async () => {
@@ -219,12 +213,6 @@ describe("the README route recipe", () => {
     await vault.unlock('correct horse battery staple')
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
     vault.close()
-  })
-
-  it("refuses a signed-out browser with identity_revoked", async () => {
-    const route = await routeOver()
-    const refusal = await TH.refusalOf(browserFor(route, null).readBundle(TH.scopeOf('u1')))
-    expect(refusal.kind).to.eq('identity_revoked')
   })
 
   it("answers 400 to anything but a vault verb, a malformed body among them, and the client says so as storage_unavailable", async () => {

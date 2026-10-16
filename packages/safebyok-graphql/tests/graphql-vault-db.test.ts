@@ -23,6 +23,7 @@ TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB ov
     const schema = TH.schemaOver(await TH.emptyDatabase())
     return (userId) => TH.browserFor(schema, userId)
   },
+  pushes: true,
 })
 
 const u1 = TH.scopeOf('u1')
@@ -178,16 +179,6 @@ describe("graphqlVaultDB, its refusals", () => {
     expect(notMine.kind).to.eq('identity_revoked')
     expect(notMine.message).to.eq('This vault belongs to another user than the one signed in: a signed-in user reaches only their own vaults. If the user changed, open the vault for the new one.')
     expect(notMine.cause).to.be.undefined
-  })
-
-  it("refuses a stale write with stale_write, and a signed-out browser with identity_revoked", async () => {
-    const schema = TH.schemaOver(await TH.emptyDatabase())
-    const browser = TH.browserFor(schema, 'u1')
-    await browser.createBundle(TH.bundleOf('u1'))
-    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 7 }))
-    expect(stale.kind).to.eq('stale_write')
-    const signedOut = await TH.refusalOf(TH.browserFor(schema, null).readBundle(u1))
-    expect(signedOut.kind).to.eq('identity_revoked')
   })
 
   it("refuses with storage_unavailable when the database is down, never saying what the driver said", async () => {

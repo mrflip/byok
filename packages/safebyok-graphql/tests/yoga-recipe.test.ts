@@ -73,6 +73,11 @@ const browserFor = (route: (request: Request) => Promise<Response>, userId: stri
 TH.describeVaultDB('the README Yoga recipe, over postgresVaultDB', async () => {
   const route = await routeOver()
   return TH.perUser((userId) => browserFor(route, userId))
+}, {
+  makeVaultDBFor: async () => {
+    const route = await routeOver()
+    return (userId) => browserFor(route, userId)
+  },
 })
 
 describe("the README Yoga recipe", () => {
@@ -85,20 +90,6 @@ describe("the README Yoga recipe", () => {
     await vault.store('anthropic_api_key', 'sk-ant-test-not-a-real-key')
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
     vault.close()
-  })
-
-  it("carries a refusal's kind across Yoga's error masking: another user's vault is identity_revoked, a stale write stale_write", async () => {
-    const browser = browserFor(await routeOver(), 'u1')
-    const notMine = await TH.refusalOf(browser.readBundle(TH.scopeOf('u2')))
-    expect(notMine.kind).to.eq('identity_revoked')
-    await browser.createBundle(TH.bundleOf('u1'))
-    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 7 }))
-    expect(stale.kind).to.eq('stale_write')
-  })
-
-  it("refuses a signed-out browser with identity_revoked", async () => {
-    const refusal = await TH.refusalOf(browserFor(await routeOver(), null).readBundle(TH.scopeOf('u1')))
-    expect(refusal.kind).to.eq('identity_revoked')
   })
 
   it("never sends the driver's own error to the browser, not even in Yoga's development mode", async () => {

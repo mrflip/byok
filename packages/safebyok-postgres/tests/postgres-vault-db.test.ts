@@ -21,6 +21,7 @@ TH.describeVaultDB('postgresVaultDB over PGlite', async () => {
     const db = await TH.emptyDatabase()
     return (userId) => TH.requestFor(db, userId)
   },
+  pushes: true,
 })
 
 const u1 = TH.scopeOf('u1')
@@ -206,19 +207,6 @@ describe("postgresVaultDB, what it stores", () => {
     }])
   })
 
-  it("keeps text exactly as written: no unicode normalization, in a note or a user_id", async () => {
-    const db = await TH.emptyDatabase()
-    // 'é' as e and a combining accent (NFD), beside the precomposed form (NFC), and an emoji.
-    const userId = 'café-café'
-    const vaultDB = TH.requestFor(db, userId)
-    await vaultDB.createBundle(TH.bundleOf(userId))
-    const note = 'café \u{1F511} café'
-    await vaultDB.updateBox(TH.scopeOf(userId), TH.boxOf('anthropic', 'one', { note }), { vault_id: `vault-id-${userId}`, revision_id: null })
-    const lockbox = await vaultDB.readBox(TH.scopeOf(userId), 'anthropic')
-    expect(lockbox?.note).to.eq(note)
-    expect(await vaultDB.readBundle(TH.scopeOf(userId))).to.deep.equal(TH.bundleOf(userId))
-  })
-
   it("lists lockboxes without asking for their ciphered fields", async () => {
     const db = await TH.emptyDatabase()
     const spy = TH.spyClient(db)
@@ -242,17 +230,6 @@ describe("postgresVaultDB, what it stores", () => {
     await vaultDB.eraseBox(u1, 'anthropic', thisVault)
     await vaultDB.eraseVault(u1, thisVault)
     expect(spy.sent).to.have.lengthOf(7)
-  })
-
-  it("refuses a bundle naming another vault_id than the one it replaces, writing nothing", async () => {
-    const db = await TH.emptyDatabase()
-    const vaultDB = TH.requestFor(db, 'u1')
-    await vaultDB.createBundle(TH.bundleOf('u1'))
-    const impostor = { ...TH.bundleOf('u1'), vault_id: 'vault-id-impostor', unlock_epoch: 2 }
-    // The core's VaultDB refuses it before the adapter's half sees it: no vault ever writes one.
-    const refusal = await TH.refusalOf(vaultDB.updateBundle(impostor, { vault_id: 'vault-id-u1', unlock_epoch: 1 }))
-    expect(refusal.kind).to.eq('bad_option')
-    expect(await vaultDB.readBundle(u1)).to.deep.equal(TH.bundleOf('u1'))
   })
 
   it("leaves no lockbox standing when its bundle goes: erasing the vault takes them in the same statement", async () => {
