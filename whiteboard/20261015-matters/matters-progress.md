@@ -24,7 +24,7 @@
 | 15 | e2e_home         | held: the Coach weighs options (Open Matters) |
 | 16 | late_unlock      | filed #110 (on #109)       |
 | 17 | validation_note  | waits on #101 merging      |
-| 21 | damaged_erase    | second review (#115)       |
+| 21 | damaged_erase    | filing onto #114 (2nd review clean) |
 | 22 | flake_fixes      | underway (on #110)         |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
@@ -51,6 +51,11 @@
   app"), fails safe where newer and damaged can't be told apart, and `notes/security.md` records the
   rule that any stored-shape change bumps `format` (to the Coach as a matter). Also: the provider
   reopens after `bad_option`/`stale_write`; the hatch goes through `RefusalPolicy.heed`.
+  *Second review: clean.* `mayBeNewer` refuses unknown format/method/count; zod strips unknown keys,
+  so extra fields read sound. The rule must be broad -- "any change to what a stored record may
+  hold, a field, a shape, or a range a check accepts, bumps `format`" -- or relaxed checks under
+  the same format still read as damage (the Coach's row). Declining `heed` is sound (no handle, no
+  key). Left: erase aims at `vault_id` only; "may be newer" shares `damaged_bundle`.
 
 * **Thread 5 (#114), vaultdb_battery.** Audited all five adapters; did all but Convex here. New
   battery tests: 1.1/1.2 (text never normalized), five races under 3.2-3.5, a `pushes: true` option
