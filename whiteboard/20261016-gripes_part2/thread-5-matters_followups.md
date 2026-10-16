@@ -1,8 +1,11 @@
 # Thread 5: matters_followups (2026-10-16)
 
 Branch `20261016-matters_followups`, PR [#117](https://github.com/mrflip/safebyok/pull/117), stacked
-on [#101](https://github.com/mrflip/safebyok/pull/101). Justify: green -- root 123, core 1181,
+on [#101](https://github.com/mrflip/safebyok/pull/101). Justify: green -- root 123, core 1183,
 convex 298, react 75, indexeddb 108, postgres 162, graphql 159, argon2-wasm 44, demo 136.
+Review: `fixed`, two commits (a taken unlocklabel or passkey refused without quoting the label;
+an empty unlocklabel refused as `bad_label` at entry). After it, at the orchestrator's word: the
+Convex message also points at the browser console, and TODO notes the sanitizer's reach.
 `pnpm size` within every budget (`DefaultValidators` 3.75 of 4 kB).
 
 * **Built**, one commit per item, in the plan's order:
