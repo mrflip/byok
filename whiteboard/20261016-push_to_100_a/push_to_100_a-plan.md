@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: threads 4, 8, 11 underway; 1, 7 in review; 3 (#127), 6 (#126) filed; 5b waits on the Coach
+* **Status**: thread 4 underway; 1 rebuilding to a Coach ruling; 8 and 11 in review; 3 (#127), 6 (#126), 7 (#129) filed; 5b cleared by the Coach, cut once 4 files
 
 ## Read first
 
@@ -105,6 +105,9 @@ handoff carries it whole. Below, the orchestrator's gloss.
   5's base class inherits `bindValidators` and the delimiter checks, so put them where a base
   class can own them later (on `VaultDB`, not repeated per adapter). 13 adds a term to each
   adapter's write: keep the adapters' write paths legible.
+* **Changed by the Coach's ruling** (the joiner row): no host-chosen join, split or delimiter.
+  `^` is fixed; `ckeyDelimiter` goes from every surface. `^` joins the name floor for every
+  adapter (YOLO 7). Rebuilt after its first review; a second reviewer covers the new commits.
 
 ### 2. `public_bag` -- drop `note`, add the bound `public` bag, reserve the two codec fields
 
@@ -125,15 +128,18 @@ handoff carries it whole. Below, the orchestrator's gloss.
 * **Look-ahead**: 4 stacks on it and rewrites `refresh`/`store`/`destroy` in the same file. 6
   changes `changePassphrase` to take any proof (G072): keep the renewal in one place a proof of
   any kind passes through, so 6 adds a proof kind without re-plumbing the window. G119 and
-  G516's first bullet are **not** in this thread unless the Coach flips their row in the sprint
-  doc (then they become a thread on top of 4).
+  G516's first bullet went to thread 4 once the Coach ruled (see 4).
 
 ### 4. `refusals_and_catchup` -- one catch-up before a kind is named, damage quarantined
 
 * **Touches**: `vault.ts`, `vault-db.ts`, `errors.ts` (`newer_format`), `types.ts` (`syncing`,
   `DamagedLockbox.revision_id`), VAULTDB.md, READMEs. ~~`safebyok-react` (`VaultProvider`:
   G333)~~ -- pulled forward by thread 7.
-* **Added**: thread 3's review leftovers (1, 2, 3, 5, 6, 7 in the progress document).
+* **Added**: thread 3's review leftovers (1, 2, 3, 5, 6, 7 in the progress document). And four
+  Coach rulings, sent mid-build: `lockSoon()` is a soft lock (an unlock under way finishes);
+  `whenIdentityRevoked` goes whole ('stay' dropped, G119 part one); a `read()` refuses when a hard
+  lock landed during its awaits (G119 part two); a refresh meeting `rolled_back` drops the key, one
+  rule with `identity_revoked` in `refusal-policy.ts`, no knob (G516's first bullet).
 * **Model**: opus. **Depends on**: 3.
 * **Look-ahead**: 5 builds the base class on its `vault-db.ts`; 10 and 13 are cut from it. 7
   adds the G333 test against the provider this thread changes.
@@ -144,7 +150,19 @@ handoff carries it whole. Below, the orchestrator's gloss.
   of what 1 and 4 change); the orchestrator commits it here, mirrors it to the sprint doc, and
   opens a row for the Coach. Started at once.
 * **5b, build**: a thread-worker on 4's restacked tip, adapter by adapter, the battery green at
-  each, once the Coach's row says proceed.
+  each. **The Coach said proceed**, with comments in the design (the *Store base design* tab):
+  - every adapter factory takes one options bag: `myDatabaseVaultDB({ ...options })`, e.g.
+    `convexVaultDB({ client, api, logger })`, `localVaultDB({ store, logger })`;
+  - `openVault` hands its logger to the adapter by default (an adapter's own `logger` wins). If
+    that takes more than a little code, given the entry point plus a bag of options that most
+    hosts fill from `safebyok/browser`, build what the design says and report it, and the
+    orchestrator files a TODO;
+  - `reportError` checked at call time stands; the Coach filed a TODO to review call-time work
+    that could be composed once or memoized;
+  - a second unsubscribe stays silent (the Coach asked whether it should warn; the answer is a
+    row in *Open Matters*, default no);
+  - no `bindValidators` (thread 1 built none: drop that part of the design); no ShelfVaultDB (a
+    TODO).
 * **Model**: opus. **Depends on**: 1 and 4, and the Coach's word on 5a.
 * **Look-ahead**: 9 moves test helpers into `safebyok/testing` (G380): leave shared helpers
   where 9 can find them.
@@ -165,8 +183,8 @@ handoff carries it whole. Below, the orchestrator's gloss.
   React README, `demos/`. Also the entry-field items of `whiteboard/20261015-push_to_100/`.
 * **Model**: opus (the dialog keying and the provider are the risk). **Depends on**: nothing
   (cut from main; meets 3's rename and 4's `VaultProvider` change at the restack).
-* **Notes**: the `@formatjs/intl-relativetimeformat` polyfill is **not** added as a dependency:
-  wire the presence check and name it in the README (the Coach's yes is an open row). The
+* **Notes**: the `@formatjs/intl-relativetimeformat` polyfill is **not** added as a dependency,
+  and, as the Coach ruled, there is no presence check: the README says how to guarantee it. The
   far-future rule is 3's (`>= FarFuture - MinuteMillis`): use it with a local constant if 3 has
   not landed, and say so. There is no `safebyok-react` size-limit entry today: report the
   measure, and thread 8 adds the line. The note's password-manager ignore attributes are
@@ -205,6 +223,8 @@ handoff carries it whole. Below, the orchestrator's gloss.
   dictionaries are large, so measure first and say what each choice costs. Check the release is
   over seven days old (PROCESS.md, *Dependencies*). Its size-limit line is appended at the end of
   `.size-limit.json`. No meter UI anywhere.
+* **Added**: refuse an all-zero derived key as `bad_option` (G032; the Coach's yes): thread 6
+  wipes the deriver's output after use, so a host deriver that caches it would hand back zeros.
 * **Note**: the three Soonish lines become rows the orchestrator sweeps; the worker writes their
   settlement in its thread file.
 
@@ -225,6 +245,13 @@ handoff carries it whole. Below, the orchestrator's gloss.
 * **Touches**: `safebyok-indexeddb`, `safebyok-convex`'s component, `safebyok-postgres`,
   `safebyok-graphql`'s recipe and README, the battery flag.
 * **Model**: opus. **Depends on**: 4.
+
+### 14. `uncontrolled_fields` -- proposed, waits on its row
+
+* **What**: `WhisperField` and the passphrase field become uncontrolled, so neither secret is
+  copied into the input's `value` attribute (React 19 does that for a controlled input; thread
+  7's review found it). Changes both fields' props.
+* **Model**: opus. **Depends on**: 7, and the Coach's `proceed` on its row in *Open Matters*.
 
 ## Coach rulings during the sprint
 
@@ -250,6 +277,20 @@ From the sprint doc's *Open Matters*, as rows are swept:
   `@zxcvbn-ts/core` as a runtime dependency of `safebyok` (thread 10's gloss has the shape). And a
   new NOTYET: "Break out dependencies, including -fastkey, into a -utils or -bestpractices
   package".
+* **Store base design** (5): proceed, with the comments in 5's gloss.
+* **No `bindValidators`** (1): accepted, as built.
+* **The key joiner** (1), the Coach's words: "don't let a host set the key join and split, or
+  specify a different character". So `^`, fixed.
+* **`lockSoon()`** (3), the Coach's words: "lockSoon is a soft lock". Flipped in thread 4.
+* **An all-zero derived key** (6, G032): yes, refuse it as `bad_option`. In thread 10.
+* **Passkey changing a passphrase** (6, G072): keep as built, and a TODO: "Are we doing anyone a
+  favor by accepting multiple passphrases?" (beside NOTYET G530).
+* **ShelfVaultDB** (5): not this sprint; a TODO.
+* **Lock promises** (G119, G516), from the Coach's notes: drop 'stay' ("Remove 'stay' please");
+  a read in flight refuses once a hard lock lands ("no more reading if the goons are at the
+  door"); `rolled_back` on a refresh drops the key, one rule with the sign-out, no knob ("one
+  rule, simple to reason about"). All three in thread 4.
+* **A new TODO**, the Coach's note: "Identity should not be tied to the backing database".
 
 ## Decisions taken in YOLO
 
@@ -267,6 +308,13 @@ From the sprint doc's *Open Matters*, as rows are swept:
 6. **6 and 7 are cut from main** despite overlapping 3 and 4 in `vault.ts` and the React
    provider; their workers resolve at the restack. Serializing them would idle two slots for
    hours.
+7. **`^` joins the name floor for every adapter** once the Coach ruled the delimiter fixed:
+   otherwise a Convex, Postgres or GraphQL host whose names hold `^` meets `bad_label` only from
+   the browser's device store, at `openVault`, with no remedy. One refusal, at entry, everywhere.
+8. **Thread 7 files without a second review** of its post-review changes: they remove code to
+   a Coach ruling (the polyfill check), add documentation, and at most memoize one formatter.
+9. **The lock rulings go to thread 4**, mid-build, not to a new thread on top of it: they live
+   in `refusal-policy.ts` and the lock code that thread 4 already holds.
 
 ## For the Coach
 
@@ -274,8 +322,11 @@ From the sprint doc's *Open Matters*, as rows are swept:
   the threads build to: `user_id`'s charset (1), the Standard Schema landing (1), the adapters'
   logger option name (5), the `Intl.RelativeTimeFormat` polyfill dependency and the "hint"
   question (7), a strength library (10), which suites run against the Postgres container (11).
-* **5b waits on your word** on `store-base-design.md` (a row in *Open Matters*).
-* **G119 and G516's first bullet**: the preplan's *Your word first*. A `proceed` on their row
-  adds a small thread on top of 4.
+* **Two rows in *Open Matters***: the uncontrolled secret fields (14), and whether a second
+  unsubscribe should warn (your question in the design).
+* **From thread 8, only your hands**: add `node-compat (22)` to the branch ruleset; check whether
+  the `releasing` environment's `RELEASE_APP_PRIVATE_KEY` reaches a Dependabot
+  `pull_request_target` run (else add it as a Dependabot secret); CLAUDE.md's *Commands* lines
+  for `pnpm justify` and `pnpm size` are a line stale (justify now runs size).
 * The preplan's *Only your hands*, *Real devices*, *Design first* and *NOT YET* lists stand as
   written there; nothing in this sprint touches them.

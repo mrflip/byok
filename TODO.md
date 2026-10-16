@@ -33,6 +33,15 @@ Straightforward, likely to be done, not needed yet. Each is a thread cut from `m
   "bump `format`" when a schema changes under the same literal, so a loosened check (`.min(1)`
   to `.min(0)`) cannot ship unmarked.
 
+* **Work done at call time that could be composed once.** The Coach (2026-10-16, on the store
+  base design): review all code for things done at call time that can be composed once after a
+  certain readiness milestone has been met, or memoized -- `reportError`'s presence check in the
+  base `VaultDB`'s guarded `subscribe` is one.
+* **`ShelfVaultDB`, a base for key-value stores.** From the store base design (sprint
+  push_to_100_a, thread 5a): a connector writes one atomic step and the base writes every verb
+  on top of it, folding `localVaultDB` and `idbVaultDB` into it. It needs a three-line promise
+  chain we would hand-roll, so it waits for a design. The Coach (2026-10-16): agree, a TODO.
+
 ## Soonish
 
 Wanted; each has a design question to settle first, named here.
@@ -83,5 +92,20 @@ and `lockSoon()` already gives a grace in which work started before it finishes 
 `lock()` and a sign-out have no separate meaning yet. Decide: does `lock()` mean "now" (nothing
 started before it hands back a whisper after it), and if so, is a re-check after storage enough,
 or does the whisper's decryption also need to be refused once the key is gone?
+
+### Identity should not be tied to the backing database
+
+The Coach (2026-10-16). Today a vault's scope (`applabel`, `user_id`, `vaultlabel`) is the
+storage adapter's notion of who the user is, and the adapter raises `identity_revoked` when its
+own sign-in changes. Decide what identity a vault answers to when it does not come from the
+database that stores it.
+
+### Are we doing anyone a favor by accepting multiple passphrases?
+
+The Coach (2026-10-16), on the passkey-changing-a-passphrase row ([#126](https://github.com/mrflip/safebyok/pull/126),
+G072): keep as built -- when a vault has several passphrases and the proof is a passkey, the
+caller must name which to replace (`unlockId`) or the call is refused -- but "this is too
+complicated for a user to tolerate or a customer to implement UX for". Beside NOT YET G530
+(should we collect more than one password at all).
 
 ## RAGEBAIT
