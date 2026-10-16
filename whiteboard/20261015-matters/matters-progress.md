@@ -22,7 +22,7 @@
 | 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
 | 20 | rotation_docs    | waits on 19                |
 | 15 | e2e_home         | in review (#111)           |
-| 16 | late_unlock      | in review (#110)           |
+| 16 | late_unlock      | review fixed; files after 7 |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | waits on #108 filing       |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
