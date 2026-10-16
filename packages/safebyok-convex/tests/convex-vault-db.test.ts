@@ -33,6 +33,7 @@ for (const [clientTitle, connect] of ClientCases) {
     const deployment = deploy()
     return TH.perUser((userId) => convexVaultDB(connect(deployment, userId === '' ? null : userId), deployment.api.safebyok))
   }, {
+    comparesVaultKeyEpoch: false,
     makeVaultDBFor: () => {
       const deployment = deploy()
       return (userId) => convexVaultDB(connect(deployment, userId), deployment.api.safebyok)
@@ -200,7 +201,7 @@ describe("convexVaultDB, refusing", () => {
     const bundle = await vaultDB.readBundle(u1)
     const vaultId = bundle?.vault_id ?? ''
     for (const [ii, bytes] of [...Array.from({ length: 8 }, () => 900_000), 120_000].entries()) {
-      await vaultDB.updateBox(u1, TH.heavyBox(`heavy_${String(ii)}`, bytes), { vault_id: vaultId, revision_id: null })
+      await vaultDB.updateBox(u1, TH.heavyBox(`heavy_${String(ii)}`, bytes), { vault_id: vaultId, revision_id: null, vault_key_epoch: 1 })
     }
     const refusal = await TH.expectRefusal(vault.store('anthropic_api_key', 'x'.repeat(40_000)), 'vault_full')
     expect(refusal.message).to.eq('This vault is full: erase a lockbox to make room, then try again.')
@@ -221,13 +222,15 @@ describe("a record the deployment refused", () => {
   // Distinctive values throughout, so that finding one in what is thrown means it was quoted.
   const subject = 'user_quotable'
   const scope = { applabel: 'quotable_app', user_id: subject, vaultlabel: 'quotable_vault' }
-  const standing = TH.bundleOf(subject, { ...scope, unlock_epoch: 52_871 })
+  const quotableKey = { vault_key_epoch: 52_874, prior_vault_key: { vault_key_epoch: 52_873, vault_key_wrapped: TH.fakeCiphered('prior_quotable') } }
+  const quotableUnlocks = [TH.envelopeOf('quotable_phrase', { vault_key_epoch: 52_874, device_id: 'device_quotable', registered_at: Date.UTC(2026, 8, 17) })]
+  const standing = TH.bundleOf(subject, { ...scope, ...quotableKey, unlock_epoch: 52_871, unlocks: quotableUnlocks })
   const nextBundle = { ...standing, unlock_epoch: 52_872, vault_key_passphrase_wrapped: TH.fakeCiphered('rewrapped_quotable') }
-  const lockbox = TH.boxOf('quotable_box', 'quotable_rev', { note: 'a quotable note' })
+  const lockbox = TH.boxOf('quotable_box', 'quotable_rev', { note: 'a quotable note', vault_key_epoch: 52_874 })
 
   const RefusedWrites: [string, unknown, (vaultDB: ReturnType<typeof convexVaultDB>) => Promise<unknown>][] = [
     ['updateBundle', nextBundle, (vaultDB) => vaultDB.updateBundle(nextBundle, { vault_id: standing.vault_id, unlock_epoch: 52_871 })],
-    ['updateBox',    lockbox,    (vaultDB) => vaultDB.updateBox(scope, lockbox, { vault_id: standing.vault_id, revision_id: null })],
+    ['updateBox',    lockbox,    (vaultDB) => vaultDB.updateBox(scope, lockbox, { vault_id: standing.vault_id, revision_id: null, vault_key_epoch: 52_874 })],
   ]
 
   for (const [verb, record, write] of RefusedWrites) {
@@ -261,7 +264,7 @@ describe("a record the deployment refused", () => {
     const deployment = deploy()
     const client = deployment.client(subject)
     await convexVaultDB(client, deployment.api.safebyok).createBundle(standing)
-    const expected = { vault_id: standing.vault_id, revision_id: null }
+    const expected = { vault_id: standing.vault_id, revision_id: null, vault_key_epoch: lockbox.vault_key_epoch }
     const quotedArgs = misnoted({ scope, lockbox: toConvexLockbox(lockbox), expected })
     await expect(client.mutation(deployment.api.safebyok.updateBox, quotedArgs)).rejects.toThrow('quoted_by_convex')
     const quoting: ConvexVaultClient = {

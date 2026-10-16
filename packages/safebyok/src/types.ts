@@ -129,6 +129,13 @@ export const VaultScope = Z.object({
 })
 export type VaultScope = Z.infer<typeof VaultScope>
 
+/**
+ * Which vaultKey a record stands for: 1 for a vault's first, and one more for each vaultKey that
+ * replaces the one before. A bundle's `vault_key_epoch` is its envelopes' vaultKey; a lockbox's,
+ * the vaultKey its lockboxKey is wrapped under.
+ */
+const vaultKeyEpoch = Z.int().check(Z.positive())
+
 /** A WebCrypto key handle, as a record holds one. Never bytes: a handle, and nothing but. */
 const cryptoKeyHandle = Z.custom<CryptoKey>((val) => val instanceof CryptoKey, 'a CryptoKey handle')
 
@@ -145,9 +152,14 @@ const cryptoKeyHandle = Z.custom<CryptoKey>((val) => val instanceof CryptoKey, '
  * only as text; every VaultDB verb checks them with the vault's validators.
  */
 export const Lockbox = Z.object({
-  format:              Z.literal('safebyok-lockbox-v1'),
+  format:              Z.literal('safebyok-lockbox-v2'),
   boxlabel:            Z.string(),
   revision_id:         Z.string().check(Z.minLength(1)),
+  /**
+   * Which vaultKey this lockbox's lockboxKey is wrapped under: the bundle's `vault_key_epoch` when
+   * it was written. Public, so a locked vault's listing shows which lockboxes stand under which.
+   */
+  vault_key_epoch:     vaultKeyEpoch,
   /** This lockbox's lockboxKey, wrapped under the vaultKey. */
   lockbox_key_wrapped: Ciphered,
   /** The whisper, ciphered under this lockbox's lockboxKey. */
@@ -176,7 +188,7 @@ const summaryNote = Z._default(Z.nullable(Z.string()), null)
  * `damaged` false. This, or a {@link DamagedLockbox}, is what a VaultDB's `listBoxes` returns
  * and a vault's snapshot holds, readable while locked.
  *
- * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', registered_at, changed_at }).note  // null
+ * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', vault_key_epoch: 1, registered_at, changed_at }).note  // null
  */
 export const LockboxSummary = Z.extend(
   Z.omit(Lockbox, { format: true, lockbox_key_wrapped: true, whisper_ciphered: true }),
@@ -234,6 +246,15 @@ export const PassphraseEnvelope = Z.object({
   key_deriver_label: Z.string().check(Z.minLength(1)),
   /** This envelope's passphraseSalt: fresh for every envelope, and for every change of its passphrase. */
   salt_b64:          Z.string().check(Z.minLength(1)),
+  /** The `vault_key_epoch` of the vaultKey this envelope wraps: in a sound bundle, the bundle's own. */
+  vault_key_epoch:   vaultKeyEpoch,
+  /**
+   * The id the device that added this way in keeps for the vault in its device mark: random, one
+   * per vault per device, never drawn from the device itself. Kept when the envelope is sealed anew.
+   */
+  device_id:         Z.string().check(Z.minLength(1)),
+  /** When this way in was added, an {@link EpochMillis}. Kept when the envelope is sealed anew. */
+  registered_at:     EpochMillis,
   /** The vaultKey, wrapped under the passphraseKey: decrypting this IS the passphrase check. */
   vault_key_wrapped: Ciphered,
 })
@@ -263,6 +284,15 @@ export const PasskeyEnvelope = Z.object({
   credential_id:     Z.string().check(Z.minLength(1)),
   /** The salt the passkey's PRF is evaluated over: {@link PasskeySaltBytes} random bytes, fresh for every envelope. */
   prf_salt_b64:      Z.string().check(Z.minLength(1)),
+  /** The `vault_key_epoch` of the vaultKey this envelope wraps: in a sound bundle, the bundle's own. */
+  vault_key_epoch:   vaultKeyEpoch,
+  /**
+   * The id the device that added this way in keeps for the vault in its device mark: random, one
+   * per vault per device, never drawn from the device itself. Kept when the envelope is sealed anew.
+   */
+  device_id:         Z.string().check(Z.minLength(1)),
+  /** When this way in was added, an {@link EpochMillis}. Kept when the envelope is sealed anew. */
+  registered_at:     EpochMillis,
   /** The vaultKey, wrapped under the passkeyKey: decrypting this IS the passkey check. */
   vault_key_wrapped: Ciphered,
 })
@@ -331,26 +361,51 @@ export type PasskeyProof = {
 }
 
 /**
+ * The vaultKey before a bundle's own, wrapped under its own: `vault_key_wrapped` opens only under
+ * the vaultKey that replaced it, so a holder of the older vaultKey gains nothing from it.
+ */
+const PriorVaultKey = Z.object({
+  vault_key_epoch:   vaultKeyEpoch,
+  vault_key_wrapped: Ciphered,
+})
+
+/** True when a bundle holds the vaultKey just before its own as its prior, from its second vaultKey on, and no prior before then. */
+const priorFits = (bundle: { vault_key_epoch: number, prior_vault_key?: { vault_key_epoch: number } }): boolean => (
+  bundle.prior_vault_key === undefined
+    ? bundle.vault_key_epoch === 1
+    : bundle.prior_vault_key.vault_key_epoch === bundle.vault_key_epoch - 1
+)
+
+/**
  * The per-vault record the storage layer holds so any device can unlock the vault: its scope,
  * its `vault_id`, and its `unlocks`, each an {@link UnlockEnvelope} wrapping the one vaultKey.
  * All of it is safe in the open; none of it opens without a passphrase or a passkey.
  *
  * `unlock_epoch` goes up by one on every change to the unlocks -- a passphrase or passkey
  * added, removed or changed -- so other devices and remembered unlocks know to ask again.
+ * `vault_key_epoch` says which vaultKey the unlocks wrap, and from a vault's second vaultKey on,
+ * `prior_vault_key` holds the one before it.
  */
 export const VaultBundle = Z.object({
-  format:              Z.literal('safebyok-vault-v1'),
+  format:              Z.literal('safebyok-vault-v2'),
   applabel:            Z.string(),
   user_id:             Z.string(),
   vaultlabel:          Z.string(),
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
   vault_id:            Z.string().check(Z.minLength(1)),
   unlock_epoch:        Z.int().check(Z.positive()),
+  /** Which vaultKey the unlocks wrap: 1 for the vault's first, one more for each that replaces it. */
+  vault_key_epoch:     vaultKeyEpoch,
+  /**
+   * The vaultKey before this one, wrapped under this one, at the `vault_key_epoch` just below the
+   * bundle's: absent while the bundle's is 1, and present from then on.
+   */
+  prior_vault_key:     Z.exactOptional(PriorVaultKey),
   /** The ways into the vault, each wrapping the one vaultKey: see {@link UnlockEnvelope}. */
   unlocks:             unlockList,
   /** When the vault was made, an {@link EpochMillis}; never changed. */
   registered_at:       EpochMillis,
-})
+}).check(Z.refine(priorFits, "A bundle holds the vaultKey just before its own as prior_vault_key, from its second vaultKey on, and none before then"))
 export type VaultBundle = Z.infer<typeof VaultBundle>
 
 /**
@@ -375,6 +430,28 @@ export const DeviceUnlock = Z.object({
   ask_passphrase_at: EpochMillis,
 })
 export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
+
+/**
+ * What a device keeps of a vault, locked or not, on its own storage: its own random `device_id`
+ * for the vault, which every way in it adds carries, and the highest `unlock_epoch` it has seen the
+ * vault's bundle at, so that an older copy of the bundle storage hands back later is refused
+ * (kind 'rolled_back'). Nothing in it is secret. One per scope: a vault made anew under the scope,
+ * with another `vault_id`, starts a mark of its own, under a new `device_id`. `lock()` leaves it;
+ * `destroy()` erases it.
+ */
+export const DeviceMark = Z.object({
+  format:       Z.literal('safebyok-mark-v1'),
+  applabel:     Z.string(),
+  user_id:      Z.string(),
+  vaultlabel:   Z.string(),
+  /** This device's id for the vault: random, minted the first time it reads or makes the vault. */
+  device_id:    Z.string().check(Z.minLength(1)),
+  /** The vault this mark is of. */
+  vault_id:     Z.string().check(Z.minLength(1)),
+  /** The highest `unlock_epoch` this device has seen the vault's bundle at. */
+  unlock_epoch: Z.int().check(Z.positive()),
+})
+export type DeviceMark = Z.infer<typeof DeviceMark>
 
 /**
  * How many hours an entered passphrase lasts on the device before the vault asks for it again,

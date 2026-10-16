@@ -30,7 +30,7 @@ Three layers share the work, and each guarantee below belongs to one of them.
   failed resolves `false`, and the vault decides what happens next.
 
 So the versioned update is split: the adapter owns the atomic compare-and-write (lines 3.1 to
-3.5), and the vault owns the read before it and the retry after it. "Last write wins" is the
+3.5, and 3.8), and the vault owns the read before it and the retry after it. "Last write wins" is the
 vault's policy over the adapter's guarantee, not something an adapter implements.
 
 ## The baseline
@@ -150,6 +150,18 @@ all, and the vault's next read shows which.
 once from different devices, all land: none refuses as `stale_write`, none fails for contention,
 and no host retries. Only writes to one lockbox -- or an erase of the vault -- can collide, and
 then line 3.3 or 3.4 says which wins.
+
+**3.8. A lockbox write lands only under the vaultKey that stands.** A lockbox carries the
+`vault_key_epoch` of the vaultKey its lockboxKey is wrapped under, and its write's expectation
+names the same one (the base class refuses a lockbox whose epoch is not the expected one, as
+`bad_option`, before the adapter sees it). `updateBox` writes only while the scope's standing
+bundle has that `vault_key_epoch`, as well as the `vault_id` and revision of line 3.3, compared in
+the same atomic step as the write; otherwise it refuses as `stale_write` and writes nothing. So a
+lockbox only ever lands sealed under the vaultKey its bundle stands for. The vault does not read
+the bundle before each write, so only storage can refuse a device that still holds a vaultKey
+since replaced and has not looked at the bundle meanwhile: an adapter that skips this comparison
+lets that device seal a new whisper that whoever held the replaced vaultKey can open. Erases name
+no `vault_key_epoch` (line 3.4): an erase reveals nothing.
 
 ## 4. The lockbox limit
 

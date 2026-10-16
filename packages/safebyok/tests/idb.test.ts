@@ -79,6 +79,26 @@ describe("idbDeviceDB", () => {
     expect(rows.map((row) => row.ckey)).to.deep.equal([Ckeys.unlock(TH.scopeOf('u2'))])
   })
 
+  it("keeps every device mark through a sweep: a mark's ckey is one this version files", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    await deviceDB.writeMark(TH.markOf('u1'))
+    await deviceDB.readUnlock(TH.scopeOf('u1'))
+    const rows = await inspectIdbDeviceDB({ dbName }).rows()
+    expect(rows.map((row) => row.ckey)).to.deep.equal([Ckeys.mark(TH.scopeOf('u1'))])
+  })
+
+  it("reads a mark that does not pass its check as none, and drops it", async () => {
+    const dbName = TH.freshDbName()
+    const shelf = createStore(`${dbName}:device_db`, 'records')
+    await set(Ckeys.mark(TH.scopeOf('u1')), { ...TH.markOf('u1'), unlock_epoch: 'one' }, shelf)
+    const deviceDB = idbDeviceDB({ dbName })
+    expect(await deviceDB.readMark(TH.scopeOf('u1'))).to.be.null
+    expect(await inspectIdbDeviceDB({ dbName }).rows()).to.have.lengthOf(0)
+  })
+
   it("rings the device shelf's bell when a read sweeps, so an inspector stops showing the swept rows", async () => {
     const dbName = TH.freshDbName()
     const shelf = createStore(`${dbName}:device_db`, 'records')
