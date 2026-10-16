@@ -45,6 +45,10 @@ export const {
 
 Run your usual Convex codegen, and your clients reach these as `api.safebyok.*`.
 
+`api` checks that `getUserId` is a function as your `convex/safebyok.ts` loads, and throws a
+`VaultError` of kind `bad_option` that says what to pass if it is not, rather than leaving the
+mistake for the first request.
+
 * **Who may reach a vault.** Each function refuses a caller who is signed out (`getUserId`
   answers null, undefined or empty), or whose id is not the vault's `user_id`, with a
   `ConvexError` whose `data` is `{ kind: 'not_permitted', message }`. The kind is the safebyok
