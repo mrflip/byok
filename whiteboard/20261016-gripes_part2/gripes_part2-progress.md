@@ -8,9 +8,27 @@
 | 2   | convex_setup_check    | filed #102 |
 | 3   | test_hygiene          | filed #103 |
 | 4   | docs_rulings          | filed #101 |
-| 5   | matters_followups     | underway |
+| 5   | matters_followups     | filed #117 |
 
 ## What the threads have taught
+
+* **Thread 5 (#117), matters_followups.** `Sanitizer.refusalFor` (new `src/sanitizer.ts`): a
+  foreign error never rides as a refusal's `cause`; the host-schema drop and every Convex failure
+  that isn't our own refusal go through it (`storage_unavailable`, no cause; the message points
+  at the deployment's logs, or the browser console for trouble before the call left). erase reads
+  storage once; `read()`/`use()` document `bad_label`; the vault-total estimate is called
+  conservative; `validators.unlocklabel`, checked where a way in is added (not on read; the first
+  `passphrase` exempt); a second `close()` returns early; `TODO.md` gains the size-check note, the
+  pluggable sanitizer (and that `asStorageTrouble`, Postgres and GraphQL still carry a cause), the
+  KDF follow-ups, and "Re-examine the pluggable validators interface". *Review:* fixed two (a
+  taken unlocklabel or duplicate passkey was refused quoting the label; an empty unlocklabel a
+  host admits failed late as `bad_option`, now `bad_label` at entry). Left, minor: safebyok's own
+  Convex refusals still carry the `ConvexError` as cause; two near-copy storage-trouble messages.
+  For the Coach (matter rows): Convex drops every foreign cause; `unlocklabel` entry-only.
+
+*Orchestrator (round 2):* #115 merged the matters line (#105 to #115) into main (`23f263a`)
+while #117 was in review. The restack onto it conflicts from #104's first commit
+(`notes/security.md`, `vault-provider.tsx`); each thread's worker restacks its own, bottom-up.
 
 *Orchestrator (round 2):* #99 (the matters sprint's small_sweep: size budgets by rule,
 `justify:root`, TODO) merged under the line; restacked onto main at `5090c1a` with no conflicts,
