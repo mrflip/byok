@@ -10,13 +10,13 @@
 | 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | waits on 11                |
 | 6 | race_helper       | waiting on thread 5        |
-| 7 | indexeddb_fixes   | next                       |
+| 7 | indexeddb_fixes   | underway (on #105)         |
 | 8 | size_rule         | filed #99 (commits on it)  |
 | 9 | damaged_bundle    | resumed on #97's restacked tip |
 | 10 | identity_revoked | in review (#106)           |
 | 11 | vaultdb_contract | resumed on b60e516         |
 | 12 | postgres_soft_cap | waiting on 11             |
-| 13 | rotation_design  | filing #105 (onto the line's top) |
+| 13 | rotation_design  | filed #105 (on #97)        |
 | 14 | rotation_shape   | waits on 11, #97 landing   |
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
@@ -54,8 +54,8 @@
   `reentryHours` prop for `vault.reentryWindowMs`, so #98's three bad-`reentryHours` tests went with
   the prop. `.size-limit.json`: main's two new entries (validators 8.5 kB, DefaultValidators 4 kB)
   predate the rule; validators measures 8.15 kB, so a thread that grows it widens it by the rule
-  (about 12 kB). **New threads stack on the line's top (#97's branch, or whatever has filed above
-  it).** Local tags `<branch>-prerestack3` hold the old tips.
+  (about 12 kB). **New threads stack on the line's top: now #105** (main → #96 → #99 → #98 → #97 →
+  #105). Local tags `<branch>-prerestack3` hold the old tips.
 
 *Orchestrator (2026-10-16 ~01:35Z):* the previous orchestrator session ended mid-sprint; threads
 9, 10, 11 and 13 stopped with nothing committed (9 and 10 left work in progress in their

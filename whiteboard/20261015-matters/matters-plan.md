@@ -407,6 +407,9 @@ The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes
 7. The two TODO tick-offs (first-emit, `openVault` leak) ride thread 13, which already edits TODO.
 8. Threads 10, 11 and 13, interrupted when the last session ended, are resumed on the new main;
    thread 9 resumes on #97's restacked tip.
+9. The cap of 3 counts threads being built; a thread in review or filing doesn't hold a slot.
+10. New threads are cut from the line's top, not main, so they file without a restack (the Coach's
+    one-stack preference); a thread cut from main earlier is restacked onto the top when it files.
 
 ## Not in this sprint
 
