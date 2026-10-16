@@ -880,7 +880,8 @@ class RoundTripVaultDB extends VaultDB {
       throw vaultFull()
     }
     const meets = (rows: Rows) => {
-      if (! vaultIs(rows, scope, expected) || ((rows.get(ckey) as Lockbox | undefined)?.revision_id ?? null) !== expected.revision_id) { return false }
+      const standingRevision = (rows.get(ckey) as Lockbox | undefined)?.revision_id ?? null
+      if (! vaultIs(rows, scope, expected) || ! vaultKeyIs(rows, scope, expected) || standingRevision !== expected.revision_id) { return false }
       if (! this.opts.countsApart && full(rows)) {
         if (this.opts.keepsRefused) { rows.set(ckey, lockbox) }
         throw vaultFull()
@@ -939,6 +940,7 @@ class RoundTripVaultDB extends VaultDB {
 }
 
 const vaultIs = (rows: Rows, scope: VaultScope, expected: { vault_id: string }) => (rows.get(Ckeys.bundle(scope)) as VaultBundle | undefined)?.vault_id === expected.vault_id
+const vaultKeyIs = (rows: Rows, scope: VaultScope, expected: { vault_key_epoch: number }) => (rows.get(Ckeys.bundle(scope)) as VaultBundle | undefined)?.vault_key_epoch === expected.vault_key_epoch
 
 const boxesIn = (rows: Rows, scope: VaultScope): StoredLockbox[] => [...rows]
   .map(([ckey, lockbox]) => ({ boxlabel: Ckeys.isBoxIn(scope)(ckey) ? Ckeys.boxlabelOf(ckey) : null, lockbox }))
