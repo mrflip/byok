@@ -1813,7 +1813,7 @@ describe("tampering", () => {
       const world = makeWorld()
       const vault = await world.openUnlocked('pw')
       await vault.store('anthropic', 'sk-fake', { note: 'work account' })
-      const ckey = world.dbStore.ckeys().find((candidate) => candidate.startsWith('box:')) ?? ''
+      const ckey = world.dbStore.ckeys().find((candidate) => isU1Box(candidate)) ?? ''
       const row = JSON.parse(world.dbStore.read(ckey) ?? '{}') as Record<string, unknown>
       const spoiled = JSON.stringify(spoil(row))
       world.dbStore.write(ckey, spoiled)
@@ -1825,8 +1825,8 @@ describe("tampering", () => {
   it("a bundle whose registered_at was altered opens to no passphrase: it is bound into every way in", async () => {
     const world = makeWorld()
     await world.openUnlocked('pw')
-    const bundle = JSON.parse(world.dbStore.read('vault:acme:u1:main') ?? '{}') as { registered_at: number }
-    world.dbStore.write('vault:acme:u1:main', JSON.stringify({ ...bundle, registered_at: bundle.registered_at - 1 }))
+    const bundle = JSON.parse(world.dbStore.read(u1BundleCkey) ?? '{}') as { registered_at: number }
+    world.dbStore.write(u1BundleCkey, JSON.stringify({ ...bundle, registered_at: bundle.registered_at - 1 }))
     const vault = await world.open({ deviceDB: memoryDeviceDB() })
     await TH.expectRefusal(vault.unlock('pw'), 'wrong_passphrase')
   })
