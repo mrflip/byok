@@ -10,7 +10,7 @@ description:
 
 > **Changed for safebyok-convex** from get-convex/agent-skills at `191a5c33` (Apache-2.0; the
 > changes are listed in `../README.md`). Here the shape is settled: `safebyok-convex` is a
-> **packaged** component (`whiteboard/20261014-convex/design.md`), whose host app authenticates
+> **packaged** component (`winboard/20261014-convex/design.md`), whose host app authenticates
 > through a `getUserId(ctx)` callback rather than `@convex-dev/auth`. Never run `npx convex dev`
 > or push to a deployment; if codegen needs a Convex login or a deployment, stop and ask the
 > Coach for that exact step.
@@ -35,7 +35,7 @@ API.
 
 ## Workflow
 
-1. Confirm what you are building against `whiteboard/20261014-convex/design.md`
+1. Confirm what you are building against `winboard/20261014-convex/design.md`
    and the sprint plan, rather than asking afresh.
 2. Read `references/packaged-components.md`: the shape is settled (below).
 3. Decide whether a component is justified. Prefer normal app code or a regular

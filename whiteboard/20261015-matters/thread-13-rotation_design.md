@@ -57,9 +57,9 @@ from main at `b60e516`, then stacked on #97 (the line main → #96 → #99 → #
   * **Thread 10's [#106](https://github.com/mrflip/safebyok/pull/106)** has
     `whenIdentityRevoked: 'lock' | 'stay'`. Section 7 covers both.
   * The orchestrator's item "a failed `openVault` leaks its subscription" **is not in `TODO.md`**,
-    on main or in #99: its only mention is `human/20261015-sprint_convex_vaultdb_done.md`, which
+    on main or in #99: its only mention is `winboard/20261014-convex_vaultdb/20261015-sprint_convex_vaultdb_done-human.md`, which
     agents don't edit. Nothing was struck.
-  * The first-emit ruling's design.md is `whiteboard/20261014-convex/design.md`, not under
+  * The first-emit ruling's design.md is `winboard/20261014-convex/design.md`, not under
     `packages/safebyok-convex`.
   * [#99](https://github.com/mrflip/safebyok/pull/99)'s *Revocation and server signing* bullet in
     TODO's *Open from big_feats* now points at this design (a `plan:` commit at filing, once
