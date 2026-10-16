@@ -13,17 +13,39 @@
 | 7 | indexeddb_fixes   | next                       |
 | 8 | size_rule         | filed #99 (commits on it)  |
 | 9 | damaged_bundle    | resumed on #97's restacked tip |
-| 10 | identity_revoked | resumed, rebasing onto b60e516 |
+| 10 | identity_revoked | in review (#106)           |
 | 11 | vaultdb_contract | resumed on b60e516         |
 | 12 | postgres_soft_cap | waiting on 11             |
-| 13 | rotation_design  | resumed on b60e516         |
-| 14 | rotation_build   | waits on 13                |
+| 13 | rotation_design  | filing #105 (onto the line's top) |
+| 14 | rotation_shape   | waits on 11, #97 landing   |
+| 18 | rotation_adapters | waits on 14               |
+| 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
+| 20 | rotation_docs    | waits on 19                |
 | 15 | e2e_home         | queued                     |
 | 16 | late_unlock      | queued (cut from the line's top) |
 | 17 | validation_note  | waits on #101 merging      |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
+
+* **Thread 13 (#105), rotation_design.** Design in `whiteboard/20261016-rotation/rotation-design.md`.
+  "Re-wrap the remaining envelopes" is impossible (an envelope's key is a passphrase or a passkey
+  touch the vault never keeps), so rotation keeps only the ways in proven during it and removes the
+  rest; a key pair per way in (HPKE) would be new cryptography -- **the Coach's call, an Open
+  Matters row, gating thread 19**. One atomic bundle write commits the new vaultKey (with the old
+  one wrapped under it), then a resumable walk re-encrypts lockboxes by conditional writes; needs
+  one new contract line, `LockboxExpectation.vault_key_epoch`, compared atomically by every adapter
+  (thread 11 should carry it). Today a restored older bundle brings a removed way in back: the
+  design adds a device mark and a `rolled_back` refusal. NOTYET data: a per-vault random
+  `device_id` on each envelope. The build: 14 rotation_shape (opus), 18 rotation_adapters
+  (sonnet), 19 rotation_verb (opus), 20 rotation_docs (sonnet). The `openVault` leak was never in
+  TODO; first-emit struck. *Review:* none, documents only.
+* **Thread 10 (#106), identity_revoked.** `identity_revoked` (the opened-for user is gone) beside
+  a narrower `not_permitted`; `src/refusal-policy.ts` decides (lock by default; nothing stored is
+  erased); `openVault({ whenIdentityRevoked: 'lock' | 'stay' })`; Convex and Postgres refuse a
+  signed-out or other user as `identity_revoked`; Convex's failed watch now calls `onChange`. Its
+  thread file holds five lines the VaultDB contract should carry (threads 11 and 5). Size: 245 B
+  over main's budget, inside the line's (#99).
 
 * **The restack (#96 to #99 onto `b60e516`).** One line, bottom to top: #96 `34171fd`, #99
   `88b7b05`, #98 `4eb2d74`, #97 `8d665aa` (#97 on top: it rewrote `vault.ts` logic main also
