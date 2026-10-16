@@ -1,7 +1,7 @@
 # Thread 1: validators_tightening (2026-10-16)
 
 Branch `20261016-validators_tightening`, PR [#104](https://github.com/mrflip/safebyok/pull/104),
-cut from main at b60e516 (main had not moved at filing). Justify: green -- root 123, safebyok 1163, indexeddb 108, postgres 162,
+cut from main at b60e516 (main had not moved at filing). Justify (after the restack): green -- root 154, safebyok 1328, indexeddb 139, postgres 217, react 110, convex 327, demo 153, argon2-wasm 44, graphql 205. Before it: root 123, safebyok 1163, indexeddb 108, postgres 162,
 react 74, convex 282, demo 131, argon2-wasm 44, graphql 159. `pnpm size` within every budget.
 
 * **Built**
@@ -53,6 +53,18 @@ react 74, convex 282, demo 131, argon2-wasm 44, graphql 159. `pnpm size` within 
   first matched the whole text, which overflowed V8's regex stack on ~10M characters and came out
   as "threw rather than answering"; they now search for a stray character instead (a test runs
   12M characters). Its findings 2-4 left as they are, on the PR.
+* **Restack** onto main at 58b132a6 (the matters line, #105 to #118), tagged
+  `20261016-validators_tightening-prerestack3` and `-prerestack4`. Conflicts were in
+  `notes/security.md` (the entries kept side by side) and `vault-provider.tsx` (main's rewritten
+  provider, with the `checkValidators` call put back into it). Beyond the conflicts:
+  `eraseDamagedVault`, new in main, gets the same bag treatment as the other nine verbs. It
+  refuses a misspelt bag, and hands its verb the vault's rules, where it had passed the raw bag.
+  Its verb, handed none, admits any well-formed text. Two of main's tests now pass
+  `DefaultValidators` explicitly. `damaged_lockbox`'s three refusals no longer quote the boxlabel,
+  as `absent_box` already did not. Main's test titled "is named as damaged" now checks that the
+  message says "That lockbox is damaged" without naming it. A new test covers both paths.
+  Sizes after: `everything` 29.53 of 30 kB, `openVault` 20.87 of 23, `validators` 3.86,
+  `DefaultValidators` 3.74 of 4.
 * **Deviations**: none from the plan's items. The `updateBundle` fix is beyond it, found while
   checking every call site.
 * **Discoveries**
