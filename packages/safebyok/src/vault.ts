@@ -1,7 +1,7 @@
 import * as Z from 'zod/mini'
 import { DeviceUnlock, LockboxSummary, type DamagedLockbox, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, PasskeySaltBytes, VaultBundle, type VaultScope, Whisper, wallClock, type Clock, type PasskeyProof, type UnlockEnvelope, type UnlockSummary } from './types'
 import * as Names from './names'
-import { AnyTextValidators, Label, type NameValidator, type VaultValidators } from './validators'
+import type { VaultValidators } from './validators'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import { MaxSaltBytes, ensureSuppliedSpecKept } from './key-deriver-spec'
@@ -121,8 +121,9 @@ export type OpenVaultOpts = {
   logger?: VaultLogger | undefined
   /**
    * The checks for the vault's names and notes, as a {@link VaultValidators} bag: each field given
-   * replaces ours outright (`Label` for each label, `UserId` for the user, `LockboxNote` for a
-   * note, from `safebyok/validators`), and each left out keeps ours. Each is a Zod schema that
+   * replaces ours outright (`Label` for each label, an unlock's `unlocklabel` among them, `UserId`
+   * for the user, `LockboxNote` for a note, from `safebyok/validators`), and each left out keeps
+   * ours. Each is a Zod schema that
    * checks synchronously, and only checks: what passes is kept exactly as given. Kind
    * 'bad_option' for a bag holding anything else, or a field it does not know.
    */
@@ -260,7 +261,8 @@ export type Vault = {
    *
    * Refuses with kind 'wrong_passphrase' when `proof` opens nothing (or `newPassphrase` is
    * empty), 'wrong_passkey' or 'absent_unlock' for a passkey's answer that does not open the
-   * vault, 'bad_label' for an unlocklabel that fails the label rules or is already taken, and
+   * vault, 'bad_label' for an unlocklabel that fails the vault's unlocklabel check (by default
+   * `Label`; a host's own in openVault's `validators`), is empty or is already taken, and
    * 'too_many_unlocks' when the vault already holds {@link MaxUnlocks}: remove one first. Like
    * `changePassphrase()`, it moves the unlockEpoch, so every other device locks; it leaves
    * this one unlocked, and throws kind 'stale_write' when another device changed the vault's ways
@@ -375,12 +377,17 @@ export type Vault = {
    * The whisper in `boxlabel`. Requires unlocked; kind 'absent_box' when there is none, and
    * 'damaged_lockbox' when its stored record fails its checks, or will not open under the vault's
    * key: `erase()` it, or `store()` over it.
+   * A boxlabel the vault's check refuses is kind 'bad_label', a malformed name and also one a
+   * lockbox stands under, stored under other checks, which the snapshot lists as damaged:
+   * `erase()` clears that lockbox, by the name it was stored under.
    */
   read(boxlabel: string): Promise<Whisper>
   /**
    * Hand the whisper to `callback` and return its result: the shape that discourages parking a
    * secret in state. Requires unlocked; kind 'bad_option', before anything is read, for a
-   * `callback` that is not a function.
+   * `callback` that is not a function. Refuses `boxlabel` as `read()` does: 'absent_box',
+   * 'corrupt_record', and 'bad_label' for a name the vault's check refuses, even one a lockbox
+   * listed as damaged stands under, which `erase()` clears.
    *
    * @example await vault.use('anthropic_api_key', (whisper) => callAnthropic(whisper))
    */
@@ -414,6 +421,7 @@ export type Vault = {
    * Release subscriptions and refuse further calls, dropping the vaultKey from memory. Forgets
    * nothing stored: this device's remembered unlock stays, and the next open picks it up. An
    * `unlock()` still under way takes nothing up, remembers nothing, and throws kind 'vault_closed'.
+   * A second `close()` does nothing.
    */
   close(): void
 }
@@ -446,10 +454,12 @@ const UnreadBundle = Symbol.for('safebyok.unread_bundle')
  */
 export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   if (! isBag(opts)) { throw new VaultError('bad_option', 'openVault takes one bag of options: applabel, userId, vaultlabel, vaultDB, deviceDB and keyDeriver at least.') }
-  const rules = Names.rulesOf(parseValidators(opts.validators))
+  const rules = Names.rulesOf(opts.validators)
   // The same checks, but any text for a boxlabel: for reaching a lockbox that already stands under
-  // a name the boxlabel check refuses, which erase() alone does, by the name it stands under.
-  const standingRules: Names.NameRules = { ...rules, boxlabel: AnyTextValidators.boxlabel }
+  // a name the boxlabel check refuses, which erase() alone does, by the name it stands under. Any
+  // text at all, not AnyTextValidators' well-formed text: a host's own check may have let a lone
+  // surrogate stand.
+  const standingRules: Names.NameRules = { ...rules, boxlabel: Z.string() }
   const scope = Names.checkScope(rules, { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
   const { applabel, vaultlabel } = scope
   const givenVaultDB = parseVaultDB(opts.vaultDB)
@@ -651,7 +661,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       unlock_epoch:     standing.unlock_epoch + 1,
       unlocks,
     }
-    await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch }))
+    await refreshOnStale(vaultDB.updateBundle(next, { vault_id: standing.vault_id, unlock_epoch: standing.unlock_epoch }, rules))
     bundle = next
     // The change has landed, whatever happens now: a shut meanwhile leaves only its unlock untaken.
     await takeUpUnlock(proven, next, shutsThen)
@@ -667,16 +677,16 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   /** Refuse a new passkey whose credential is already one of `standing`'s ways in. */
   const ensureNewCredential = (standing: VaultBundle, passkey: PasskeyProof) => {
-    const taken = standing.unlocks.find((envelope) => envelope.method === 'passkey' && envelope.credential_id === passkey.credentialId)
-    if (taken !== undefined) {
-      throw new VaultError('bad_option', `That passkey is already a way into this vault, labelled '${taken.unlocklabel}': the snapshot's unlocks list each passkey's credential_id.`)
+    // Neither refusal here quotes an unlocklabel: a host's unlocklabel check may admit any text.
+    if (standing.unlocks.some((envelope) => envelope.method === 'passkey' && envelope.credential_id === passkey.credentialId)) {
+      throw new VaultError('bad_option', "That passkey is already a way into this vault: the snapshot's unlocks list each passkey's credential_id, beside its unlocklabel.")
     }
   }
 
   /** Refuse a new way in labelled `unlocklabel` that `standing` has no room or label for. */
   const ensureRoomForUnlock = (standing: VaultBundle, unlocklabel: string) => {
     if (standing.unlocks.some((envelope) => envelope.unlocklabel === unlocklabel)) {
-      throw new VaultError('bad_label', `This vault already has a way in labelled '${unlocklabel}': pick another unlocklabel. The snapshot's unlocks list the labels taken.`)
+      throw new VaultError('bad_label', "This vault already has a way in under that unlocklabel: pick another. The snapshot's unlocks list the labels taken.")
     }
     if (standing.unlocks.length >= MaxUnlocks) {
       throw new VaultError('too_many_unlocks', `This vault already holds its limit of ${String(MaxUnlocks)} ways in: remove one before adding another.`)
@@ -889,24 +899,19 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
 
   /**
-   * `boxlabel` as text, for erase(), which reaches a lockbox by the name it was stored under: one
-   * the vault's boxlabel check refuses -- stored under other checks -- still stands, listed as
-   * damaged. A refused boxlabel with no lockbox under it is kind 'bad_label'.
+   * `boxlabel` as text, once a lockbox stands under it, for erase(), which reaches a lockbox by the
+   * name it was stored under: one the vault's boxlabel check refuses -- stored under other checks
+   * -- still stands, listed as damaged, and so does a record that fails verification. With no
+   * lockbox under it, a refused boxlabel is kind 'bad_label' and a passing one 'absent_box'.
+   * Storage is read once.
    */
   const checkStandingBoxlabel = async (boxlabel: string): Promise<string> => {
     const label = Names.check(standingRules, 'boxlabel', boxlabel)
-    if (! Names.admits(rules, 'boxlabel', label) && await readBoxOrDamaged(label) === null) {
+    if (await readBoxOrDamaged(label) === null) {
       Names.check(rules, 'boxlabel', label)
+      throw absentBox()
     }
     return label
-  }
-
-  /**
-   * Refuse, as 'absent_box', a boxlabel with no lockbox under it. A record there that fails
-   * verification still stands: what is stored under the boxlabel is there, whatever it holds.
-   */
-  const ensureBoxStands = async (boxlabel: string) => {
-    if (await readBoxOrDamaged(boxlabel) === null) { throw absentBox() }
   }
 
   /**
@@ -926,7 +931,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
 
   const readBoxOrThrow = async (boxlabel: string) => {
     const label = Names.check(rules, 'boxlabel', boxlabel)
-    const lockbox = await damagedAs(vaultDB.readBox(scope, label, rules), damagedLockbox(label))
+    const lockbox = await damagedAs(vaultDB.readBox(scope, label, rules), damagedLockbox)
     if (lockbox === null) { throw absentBox() }
     return lockbox
   }
@@ -956,11 +961,11 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       )
       whisperBytes = await decipherBytes(lockboxKey, whisperCiphered, boxBinding(vaultId, header, 'whisper_ciphered'))
     } catch {
-      throw new VaultError('damaged_lockbox', `The lockbox '${lockbox.boxlabel}' is damaged: it would not open under this vault's key, as if altered in storage or moved there from somewhere else. It was left as it is; erase it, or store its whisper again over it.`)
+      throw new VaultError('damaged_lockbox', "That lockbox is damaged: it would not open under this vault's key, as if altered in storage or moved there from somewhere else. It was left as it is; erase it, or store its whisper again over it.")
     }
     const checked = Whisper.safeParse(parseJsonOrNull(new TextDecoder().decode(whisperBytes)))
     if (! checked.success) {
-      throw new VaultError('damaged_lockbox', `The lockbox '${lockbox.boxlabel}' opened, but what was inside is not a whisper this package knows, so it is damaged. It was left as it is; erase it, or store its whisper again over it.`)
+      throw new VaultError('damaged_lockbox', "That lockbox opened, but what was inside is not a whisper this package knows, so it is damaged. It was left as it is; erase it, or store its whisper again over it.")
     }
     return checked.data
   }
@@ -1063,7 +1068,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       parsePassphrase(newPassphrase, 'addPassphrase')
       if (! newPassphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
       const proof = parseProof(givenProof)
-      const unlocklabel = parseUnlocklabel(labelling, 'addPassphrase')
+      const unlocklabel = parseUnlocklabel(rules, labelling, 'addPassphrase')
       const naming = { unlock_id: randomId(), unlocklabel }
       await reviseUnlocks(proof, undefined, {
         check: (standing) => { ensureRoomForUnlock(standing, unlocklabel) },
@@ -1076,7 +1081,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       ensureOpen()
       const proof = parseProof(givenProof)
       parsePasskeyMaker(makePasskey)
-      const unlocklabel = parseUnlocklabel(labelling, 'addPasskey')
+      const unlocklabel = parseUnlocklabel(rules, labelling, 'addPasskey')
       const naming = { unlock_id: randomId(), unlocklabel }
       const added = await reviseUnlocks(proof, undefined, {
         check:  (standing) => { ensureRoomForUnlock(standing, unlocklabel) },
@@ -1202,7 +1207,6 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     erase: async (boxlabel) => {
       ensureUnlocked()
       const label = await checkStandingBoxlabel(boxlabel)
-      await ensureBoxStands(label)
       keyInHand()
       // Lands only in the vault this device holds keys for, whatever revision of the box stands:
       // a vault destroyed and made anew elsewhere refuses it. That is its only expectation, and
@@ -1224,6 +1228,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     },
 
     close: () => {
+      // A second close does nothing: an adapter's unsubscribe may count down a watch it shares.
+      if (closed) { return }
       closed = true
       // A shut in memory only: an unlock under way takes nothing up, and the remembered unlock stays.
       shutsSoFar += 1
@@ -1311,8 +1317,8 @@ export type EraseDamagedVaultOpts = Pick<OpenVaultOpts, 'applabel' | 'userId' | 
  */
 export const eraseDamagedVault = async (opts: EraseDamagedVaultOpts): Promise<void> => {
   if (! isBag(opts)) { throw new VaultError('bad_option', 'eraseDamagedVault takes one bag of options: applabel, userId, vaultlabel, vaultDB and deviceDB, as openVault did.') }
-  const validators = parseValidators(opts.validators)
-  const scope = Names.checkScope(Names.rulesOf(validators), { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
+  const rules = Names.rulesOf(opts.validators)
+  const scope = Names.checkScope(rules, { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
   const vaultDB = parseVaultDB(opts.vaultDB)
   if (typeof vaultDB.eraseDamagedVault !== 'function') {
     throw new VaultError('bad_option', "vaultDB has no eraseDamagedVault: a storage adapter that hands each call on to another's must hand this one on too.")
@@ -1320,7 +1326,7 @@ export const eraseDamagedVault = async (opts: EraseDamagedVaultOpts): Promise<vo
   const deviceDB = parseDeviceDB(opts.deviceDB)
   // The vault first: a sound one refuses, and then the device keeps what it remembers of it. A
   // retry after a failure here finds the vault gone, and still clears the device.
-  await vaultDB.eraseDamagedVault(scope, validators)
+  await vaultDB.eraseDamagedVault(scope, rules)
   await deviceDB.eraseUnlock(scope)
 }
 
@@ -1340,7 +1346,8 @@ const damagedAs = async <ResultT>(reading: Promise<ResultT>, damaged: (opts: Err
 
 const damagedBundle = (opts: ErrorOptions) => new VaultError('damaged_bundle', "This vault's stored record is damaged, so no passphrase or passkey can be tried against it, and it can't be opened. It was left as it is: the app's support may be able to restore it.", opts)
 
-const damagedLockbox = (boxlabel: string) => (opts: ErrorOptions) => new VaultError('damaged_lockbox', `The lockbox '${boxlabel}' is stored damaged, so it can't be read. It was left as it is; erase it, or store its whisper again over it.`, opts)
+// The refusal never quotes the boxlabel: a host's validators may admit any text, a mistaken paste among it.
+const damagedLockbox = (opts: ErrorOptions) => new VaultError('damaged_lockbox', "That lockbox is stored damaged, so it can't be read. It was left as it is; erase it, or store its whisper again over it.", opts)
 
 /** A thrown value, for a logger: an Error as it is, anything else -- which may be anything at all -- as null. */
 const asError = (thrown: unknown): Error | null => (thrown instanceof Error ? thrown : null)
@@ -1428,12 +1435,16 @@ const parseUnlockId = (candidate: string): string => {
   return checked.data
 }
 
-const parseUnlocklabel = (candidate: { unlocklabel: string } | undefined, call: 'addPassphrase' | 'addPasskey'): string => {
-  const checked = Label.safeParse(candidate?.unlocklabel)
-  if (! checked.success) {
-    throw new VaultError('bad_label', `${call} needs an unlocklabel, what the user calls this way in: 2-40 lowercase letters and digits, words joined by single underscores, starting with a letter.`)
+/**
+ * `opts.unlocklabel`, once it passes the vault's unlocklabel check: kind 'bad_label' otherwise.
+ * Never empty, whatever the check admits, as a stored way in has a label.
+ */
+const parseUnlocklabel = (rules: Names.NameRules, candidate: { unlocklabel: string } | undefined, call: 'addPassphrase' | 'addPasskey'): string => {
+  const unlocklabel: unknown = candidate?.unlocklabel
+  if (typeof unlocklabel !== 'string' || unlocklabel === '') {
+    throw new VaultError('bad_label', `${call} needs an unlocklabel, what the user calls this way in, as text that is not empty.`)
   }
-  return checked.data
+  return Names.check(rules, 'unlocklabel', unlocklabel)
 }
 
 /**
@@ -1500,26 +1511,6 @@ const noteToStore = (given: string | null | undefined, prev: Lockbox | null): st
 
 // The refusal never quotes the boxlabel: a host's validators may admit any text, a mistaken paste among it.
 const absentBox = () => new VaultError('absent_box', 'No lockbox stands under that boxlabel in this vault: its snapshot lists the ones it holds.')
-
-/** A schema a host may hand in `validators`: a Zod 4 schema, classic or mini, which carries `_zod`. */
-const nameValidator = Z.optional(Z.custom<NameValidator>((candidate) => isBag(candidate) && '_zod' in candidate))
-
-/** What `validators` may hold: a schema or undefined for each field it knows, and no other field. */
-const validatorsShape = Z.optional(Z.strictObject({
-  applabel:   nameValidator,
-  vaultlabel: nameValidator,
-  boxlabel:   nameValidator,
-  userId:     nameValidator,
-  note:       nameValidator,
-}))
-
-/** The host's `validators`, checked for shape only: the schemas are the host's, kept as handed in. */
-const parseValidators = (candidate: VaultValidators | undefined): VaultValidators | undefined => {
-  if (! validatorsShape.safeParse(candidate).success) {
-    throw new VaultError('bad_option', 'validators is a bag of Zod schemas, each checking one of applabel, vaultlabel, boxlabel, userId and note: leave out any field to keep its default check.')
-  }
-  return candidate
-}
 
 /** True when `record` names `scope`: the same app, user and vault. */
 const isOfScope = (record: VaultScope, scope: VaultScope): boolean => (

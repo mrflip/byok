@@ -45,6 +45,10 @@ export const {
 
 Run your usual Convex codegen, and your clients reach these as `api.safebyok.*`.
 
+`api` checks that `getUserId` is a function as your `convex/safebyok.ts` loads, and throws a
+`VaultError` of kind `bad_option` that says what to pass if it is not, rather than leaving the
+mistake for the first request.
+
 * **Who may reach a vault.** Each function refuses a caller who is signed out (`getUserId`
   answers null, undefined or empty), or whose id is not the vault's `user_id`, with a
   `ConvexError` whose `data` is `{ kind: 'identity_revoked', message }`: the user the vault was
@@ -102,8 +106,10 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
 * **Refusals** are `VaultError`s, of the kinds in the *Errors* tables of the
   [`safebyok` README](../safebyok/README.md), which say what each means and what a host does.
   The Convex functions throw two, `identity_revoked` and `vault_full`; a write that came too late is
-  a `stale_write`; and `storage_unavailable` is anything else Convex reported, with Convex's own
-  error as its `cause`.
+  a `stale_write`; and `storage_unavailable` is anything else Convex reported. It carries nothing
+  of Convex's own error, which on a dev deployment may quote the call's arguments (names, notes,
+  ciphertext): your deployment's logs have it, or, for trouble before the call left, the browser
+  console, where the Convex client reports its connection.
 * **Offline, a call waits** for the connection, as every Convex call does, rather than failing.
   Convex resends a mutation when it reconnects, so a write may land after any timeout you set:
   show progress, but don't report it failed.
@@ -134,8 +140,10 @@ Three tables, inside the component, beside nothing of your app's:
   they keep.)
 * `user_id` leads the bundle and lockbox indexes, so one user's rows are one range of each.
 * **Any text is a name** to the component: it never sees the vault's `validators`, which check
-  every name and note on the client. Convex itself refuses a string that is not valid Unicode (an
-  unpaired surrogate), as `storage_unavailable`; keep such text out with your own validators.
+  every name and note on the client. Convex's documentation requires every string to be valid
+  Unicode, so safebyok's checks, `AnyTextValidators` among them, refuse a lone surrogate (half of a
+  character) before it is sent. A host's own schema that admits one sends it as written: what the
+  Convex server then says is its own, and reaches you as `storage_unavailable`.
 * **A vault's tally** counts its lockboxes and their bytes as Convex weighs them, kept in step
   by every lockbox write and erase in the same transaction. A vault written before tallies
   were kept has none, and reads as ever: its next lockbox write counts it, reading the vault

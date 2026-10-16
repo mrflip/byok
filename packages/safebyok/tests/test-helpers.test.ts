@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { localVaultDB, memoryStore, openVault, type StringStore } from '../src/index'
 import { Ciphered, fromB64, toB64 } from '../src/crypto'
 import { VaultError } from '../src/errors'
@@ -101,6 +101,77 @@ describe("beforeNextCall", () => {
   })
 })
 
+describe("beforeNextCall on a method already spied on", () => {
+  it("records each call once, the intercepted one included", async () => {
+    const heard: string[] = []
+    const target = { fetchRow: (ckey: string) => { heard.push(`fetched ${ckey}`); return Promise.resolve(ckey.length) } }
+    const spy = vi.spyOn(target, 'fetchRow')
+    TH.beforeNextCall(target, 'fetchRow', () => { heard.push('errand'); return Promise.resolve() })
+    expect(await target.fetchRow('one')).to.eq(3)
+    expect(await target.fetchRow('three')).to.eq(5)
+    expect(spy).to.have.callCount(2)
+    expect(heard).to.deep.equal(['errand', 'fetched one', 'fetched three'])
+  })
+
+  it("goes on through a vi.fn's implementation, for the next call only", async () => {
+    const target = { fetchRow: vi.fn((ckey: string) => Promise.resolve(ckey.length)) }
+    const heard: string[] = []
+    TH.beforeNextCall(target, 'fetchRow', () => { heard.push('errand'); return Promise.resolve() })
+    expect(await target.fetchRow('one')).to.eq(3)
+    expect(await target.fetchRow('three')).to.eq(5)
+    expect(target.fetchRow).to.have.callCount(2)
+    expect(heard).to.deep.equal(['errand'])
+  })
+
+  it("can be armed again once its call has gone through", async () => {
+    const target = { fetchRow: (ckey: string) => Promise.resolve(ckey.length) }
+    const spy = vi.spyOn(target, 'fetchRow')
+    const heard: string[] = []
+    TH.beforeNextCall(target, 'fetchRow', () => { heard.push('first'); return Promise.resolve() })
+    await target.fetchRow('one')
+    TH.beforeNextCall(target, 'fetchRow', () => { heard.push('second'); return Promise.resolve() })
+    await target.fetchRow('one')
+    expect(heard).to.deep.equal(['first', 'second'])
+    expect(spy).to.have.callCount(2)
+  })
+})
+
+describe("beforeNextCall armed more than once", () => {
+  const Targets = [
+    ["a plain method",            () => ({ fetchRow: (ckey: string) => Promise.resolve(ckey.length) })],
+    ["a method already spied on", () => { const target = { fetchRow: (ckey: string) => Promise.resolve(ckey.length) }; vi.spyOn(target, 'fetchRow'); return target }],
+  ] as const
+
+  for (const [blurb, makeTarget] of Targets) {
+    it(`runs one errand per call, in the order armed, on ${blurb}`, async () => {
+      const target = makeTarget()
+      const heard: string[] = []
+      TH.beforeNextCall(target, 'fetchRow', () => { heard.push('first errand'); return Promise.resolve() })
+      TH.beforeNextCall(target, 'fetchRow', () => { heard.push('second errand'); return Promise.resolve() })
+      await target.fetchRow('a')
+      expect(heard).to.deep.equal(['first errand'])
+      await target.fetchRow('bb')
+      expect(heard).to.deep.equal(['first errand', 'second errand'])
+      await target.fetchRow('ccc')
+      expect(heard).to.have.lengthOf(2)
+    })
+  }
+
+  it("holds two calls at their own gates, one per call", async () => {
+    const target = { fetchRow: (ckey: string) => Promise.resolve(ckey) }
+    const firstGate = TH.holdNextCall(target, 'fetchRow')
+    const secondGate = TH.holdNextCall(target, 'fetchRow')
+    const first = target.fetchRow('one')
+    await firstGate.reached
+    const second = target.fetchRow('two')
+    await secondGate.reached
+    firstGate.release()
+    secondGate.release()
+    expect(await Promise.all([first, second])).to.deep.equal(['one', 'two'])
+    expect(await target.fetchRow('three')).to.eq('three')
+  })
+})
+
 describe("holdNextCall", () => {
   it("holds the next call at a gate until released; a later call goes straight through", async () => {
     const heard: string[] = []
@@ -136,6 +207,25 @@ describe("tallyWatches", () => {
     expect(tally).to.deep.equal({ opened: 1, closed: 0 })
     vault.close()
     expect(tally).to.deep.equal({ opened: 1, closed: 1 })
+  })
+
+  it("counts a watch closed once, so a double close cannot hide another watch's leak", () => {
+    const vaultDB = localVaultDB(memoryStore())
+    const tally = TH.tallyWatches(vaultDB)
+    const first = vaultDB.subscribe(TH.scopeOf('u1'), () => undefined)
+    vaultDB.subscribe(TH.scopeOf('u1'), () => undefined)
+    first()
+    first()
+    expect(tally).to.deep.equal({ opened: 2, closed: 1 })
+  })
+
+  it("shows no leak after a refused open, as its @example has it", async () => {
+    const vaultDB = localVaultDB(memoryStore())
+    vi.spyOn(vaultDB, 'readBundle').mockRejectedValue(new VaultError('not_permitted', "That vault belongs to someone else."))
+    const tally = TH.tallyWatches(vaultDB)
+    await TH.expectRefusal(openVault(TH.memoryVaultOpts({ vaultDB })), 'not_permitted')
+    expect(tally.opened).to.eq(1)
+    expect(tally.opened - tally.closed).to.eq(0)
   })
 })
 
@@ -338,23 +428,19 @@ describe("expectRefusal", () => {
     expect(await TH.expectRefusal(Promise.reject(refusal), 'vault_locked')).to.eq(refusal)
   })
 
-  it("takes a VaultError from another copy of the package, by name and kind", async () => {
+  it("fails the test when the operation resolves, or refuses with anything but a VaultError of the kind", async () => {
     // As another copy's VaultError is: a subclass of Error that names itself, with a kind.
     class LookalikeError extends Error {
       override readonly name = 'VaultError'
       readonly kind = 'vault_locked'
     }
-    const lookalike = new LookalikeError('Unlock the vault first.')
-    expect(await TH.expectRefusal(Promise.reject(lookalike), 'vault_locked')).to.eq(lookalike)
-  })
-
-  it("fails the test when the operation resolves, or refuses otherwise", async () => {
     const NotQuite = [
-      [Promise.resolve('fine'),                                    /operation resolved/],
-      [Promise.reject(new VaultError('bad_label', 'Not a label.')), /kind/],
-      [Promise.reject(new Error('plain trouble')),                 /name/],
+      [Promise.resolve('fine'),                                     /operation resolved/],
+      [Promise.reject(new VaultError('bad_label', 'Not a label.')),  /kind/],
+      [Promise.reject(new Error('plain trouble')),                  /instance of VaultError/],
+      [Promise.reject(new LookalikeError('Unlock the vault first.')), /instance of VaultError/],
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- a host's adapter may reject with anything, and the helper must say so
-      [Promise.reject('a bare string'),                            /instance of Error/],
+      [Promise.reject('a bare string'),                             /instance of VaultError/],
     ] as const
     for (const [operation, complaint] of NotQuite) {
       await expect(TH.expectRefusal(operation, 'vault_locked')).rejects.toThrow(complaint)

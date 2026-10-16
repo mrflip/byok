@@ -6,9 +6,9 @@ import { VaultScope } from '../src/types'
 import * as TH from './test-helpers'
 
 describe("safebyok/validators, as an entry point", () => {
-  it("exports the default checks, their bounds, and the schemas a host's forms use", () => {
+  it("exports the default checks, their bounds, and the schemas a host's forms use, and no record schema", () => {
     expect(Object.keys(Validators)).to.have.members([
-      'AnyTextValidators', 'DefaultValidators', 'EpochMillis', 'Label', 'LabelPattern', 'LockboxNote', 'MaxLabelChars', 'MaxNoteChars', 'MaxUserIdChars', 'UserId', 'Whisper',
+      'AnyTextValidators', 'DefaultValidators', 'Label', 'LabelPattern', 'LockboxNote', 'MaxLabelChars', 'MaxNoteChars', 'MaxUserIdChars', 'UserId',
     ])
   })
 })
@@ -46,11 +46,14 @@ const UserIdCases = [
   ["user|2fJ8:google",           true,   'an id in whatever form the host app issues, colons and capitals and all'],
   ["u".repeat(100),              true,   'a hundred characters is the ceiling'],
   ["\u{4E00}".repeat(100),       true,   'a hundred characters, however many bytes each'],
+  ["user_\u{1F511}",              true,   'an emoji, whole: both halves of its surrogate pair'],
   // refused:
   ["",                           false,  'an empty id names no one'],
   ["u".repeat(101),              false,  'a hundred and one is one too many'],
   [42,                           false,  'a number is not an id'],
   [null,                         false,  'null names no one'],
+  ["user_\u{D83D}",                false,  'half of an emoji: a lone high surrogate'],
+  ["\u{DD11}user",                 false,  'the other half, alone at the start: a lone low surrogate'],
 ] as const
 
 describe("UserId", () => {
@@ -70,6 +73,14 @@ describe("UserId", () => {
     expect(UserId.parse('user|2fJ8:google')).to.eq('user|2fJ8:google')
     expect(UserId.safeParse('').success).to.be.false
     expect(UserId.safeParse('u'.repeat(101)).success).to.be.false
+    expect(UserId.safeParse('u\u{D800}').success).to.be.false
+  })
+
+  it("says, without quoting the id, that it holds half of a character", () => {
+    const said = JSON.stringify(UserId.safeParse('alice\u{D800}').error?.issues.map((issue) => issue.message))
+    expect(said).to.include('well-formed Unicode')
+    expect(said).to.include('lone surrogate')
+    expect(said).to.not.include('alice')
   })
 })
 
@@ -96,18 +107,43 @@ const NoteCases = [
   ["work account",         true,   'a few words'],
   ["",                     true,   'even empty text'],
   ["n".repeat(256),        true,   'two hundred fifty-six characters is the ceiling'],
+  ["rotated\tin March",     true,   'a tab'],
+  ["work\nrotated in March", true,  'a newline'],
+  ["key \u{1F511}",          true,   'an emoji, whole'],
+  ["Mixed: עברית, ไทย",     true,   'any script'],
   // refused:
   ["n".repeat(257),        false,  'two hundred fifty-seven is one too many'],
+  ["work\r\naccount",       false,  'a carriage return, which a textarea never hands up'],
+  ["beep\u{7}",            false,  'a C0 control character: the bell'],
+  ["nul\0",             false,  'a NUL'],
+  ["esc\u{1B}[31mred",      false,  'an escape, as a terminal colour code starts'],
+  ["del\u{7F}",             false,  'DEL'],
+  ["next\u{85}line",        false,  'a C1 control character: next line'],
+  ["csi\u{9B}",             false,  'the last C1 control character'],
+  ["key \u{D83D}",            false,  'half of an emoji: a lone surrogate'],
   [null,                   false,  'null: a lockbox with no note stores no note field'],
   [42,                     false,  'a number is not a note'],
 ] as const
+
+/** What LockboxNote says of a note it refuses: its issues' messages, as one text. */
+const noteRefusalSaid = (note: string) => JSON.stringify(LockboxNote.safeParse(note).error?.issues.map((issue) => issue.message))
 
 describe("LockboxNote", () => {
   for (const [candidate, expected, blurb] of NoteCases) {
     it(blurb, () => { expect(LockboxNote.safeParse(candidate).success).to.eq(expected) })
   }
 
-  it("hands a note back as it is", () => { expect(LockboxNote.parse('work account')).to.eq('work account') })
+  it("hands a note back as it is, as its examples show", () => {
+    expect(LockboxNote.parse('work account')).to.eq('work account')
+    expect(LockboxNote.parse('work account\nrotated in March')).to.eq('work account\nrotated in March')
+    expect(LockboxNote.safeParse('beep\u{7}').success).to.be.false
+  })
+
+  it("says which characters it refuses, without quoting the note", () => {
+    expect(noteRefusalSaid('secret-ish\u{7}')).to.include('no control characters but tab and newline')
+    expect(noteRefusalSaid('secret-ish\u{D800}')).to.include('lone surrogate')
+    expect(noteRefusalSaid('secret-ish\u{7}') + noteRefusalSaid('secret-ish\u{D800}')).to.not.include('secret-ish')
+  })
 })
 
 describe("MaxNoteChars", () => {
@@ -125,14 +161,38 @@ describe("MaxNoteChars", () => {
 })
 
 describe("AnyTextValidators", () => {
-  it("admits any text in every field, and nothing that is not text", () => {
+  it("admits any well-formed text in every field, and nothing that is not text", () => {
     for (const check of Object.values(AnyTextValidators)) {
       expect(check.safeParse('').success).to.be.true
       expect(check.safeParse('Mixed: English, עברית, العربية, ไทย, \u{202E}').success).to.be.true
+      expect(check.safeParse('control\u{7} and\r\nemoji \u{1F511}').success).to.be.true
       expect(check.safeParse('n'.repeat(100_000)).success).to.be.true
       expect(check.safeParse(42).success).to.be.false
     }
     expect(Object.isFrozen(AnyTextValidators)).to.be.true
+  })
+
+  it("refuses, in every field, text holding a lone surrogate: half of a character", () => {
+    for (const check of Object.values(AnyTextValidators)) {
+      expect(check.safeParse('key \u{D83D}').success).to.be.false
+      expect(check.safeParse('\u{DD11} key').success).to.be.false
+      expect(check.safeParse('\u{DD11}\u{D83D}').success).to.be.false
+    }
+  })
+
+  it("answers for text of millions of characters, refusing a lone surrogate at its very end", () => {
+    const vast = 'n'.repeat(12_000_000)
+    expect(AnyTextValidators.note.safeParse(vast).success).to.be.true
+    expect(AnyTextValidators.note.safeParse(`${vast}\u{D800}`).success).to.be.false
+    const said = JSON.stringify(LockboxNote.safeParse(`${vast}\u{0007}\u{D800}`).error?.issues.map((issue) => issue.message))
+    expect(said).to.include('at most 256 characters')
+    expect(said).to.include('no control characters')
+    expect(said).to.include('lone surrogate')
+  })
+
+  it("passes and refuses as its examples show", () => {
+    expect(AnyTextValidators.boxlabel.safeParse('Work: מפתח API').success).to.be.true
+    expect(AnyTextValidators.boxlabel.safeParse('key \u{D83D}').success).to.be.false
   })
 
   it("composes with a default, as its second example shows", () => {
@@ -143,8 +203,8 @@ describe("AnyTextValidators", () => {
 })
 
 describe("DefaultValidators", () => {
-  it("checks each label with Label, the user with UserId, and a note with LockboxNote", () => {
-    expect(DefaultValidators).to.deep.equal({ applabel: Label, vaultlabel: Label, boxlabel: Label, userId: UserId, note: LockboxNote })
+  it("checks each label with Label, an unlocklabel included, the user with UserId, and a note with LockboxNote", () => {
+    expect(DefaultValidators).to.deep.equal({ applabel: Label, vaultlabel: Label, boxlabel: Label, userId: UserId, note: LockboxNote, unlocklabel: Label })
     expect(DefaultValidators.applabel).to.eq(Label)
     expect(DefaultValidators.userId).to.eq(UserId)
     expect(DefaultValidators.note).to.eq(LockboxNote)

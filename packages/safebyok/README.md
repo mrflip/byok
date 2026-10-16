@@ -66,9 +66,10 @@ makes for itself. Any option you pass after the spread replaces the default it n
   window onto its rows for a debug panel. The IndexedDB vault store, `idbVaultDB`, is a package
   of its own, `safebyok-indexeddb`.
 * `safebyok/validators` -- the checks for names and notes (`Label`, `UserId`, `LockboxNote`,
-  `DefaultValidators`, `AnyTextValidators`), their bounds (`MaxLabelChars`, `LabelPattern`,
-  `MaxUserIdChars`, `MaxNoteChars`) and the `Whisper` and `EpochMillis` schemas, for a form, a
-  server or another library to check what the vault will. All are in the main entry too.
+  `DefaultValidators`, `AnyTextValidators`) and their bounds (`MaxLabelChars`, `LabelPattern`,
+  `MaxUserIdChars`, `MaxNoteChars`), for a form, a server or another library to check what the
+  vault will, at a few kB. All are in the main entry too, with the record schemas (`Whisper`,
+  `EpochMillis` and the rest).
 
 `openVault` takes its `keyDeriver` and `deviceDB` from you, with no default behind them. A
 default would be imported by `openVault` itself, so every app would ship it, used or not: a
@@ -80,10 +81,12 @@ marked `sideEffects: false`: what you never import never ships.
 
 ## Names, notes, and your own checks
 
-By default a label (`applabel`, `vaultlabel`, `boxlabel`) is lowercase words of letters and
-digits joined by single underscores, 2 to 40 characters (`Label`); a `userId` is text of 1 to 100
-characters (`UserId`); and a note is text of at most 256 characters (`LockboxNote`). That suits
-API keys. A host that wants more -- labels in Hebrew, Arabic or Thai, a password manager's
+By default a label (`applabel`, `vaultlabel`, `boxlabel`, and the `unlocklabel` of each way in
+you add) is lowercase words of letters and digits joined by single underscores, 2 to 40
+characters (`Label`); a `userId` is text of 1 to 100 characters (`UserId`); and a note is text
+of at most 256 characters, with no control characters but tab and newline (`LockboxNote`). That suits API keys. Every default, `AnyTextValidators`
+included, refuses text that is not well-formed Unicode: a lone surrogate, half of a character such
+as an emoji, which text cut off mid-character holds and which storage such as Convex refuses. A host that wants more -- labels in Hebrew, Arabic or Thai, a password manager's
 long notes, its own auth's id shape -- passes its own Zod schemas as `validators`, and each
 **replaces** ours outright:
 
@@ -105,15 +108,25 @@ await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team acc
   makes of it: a name is bound into the ciphertext and names its rows, so a schema that trims or
   lowercases would otherwise send the same user to another vault.
 * **The refusal is the vault's own**: kind `bad_label` (`bad_option` for a note), naming the
-  field, never quoting the name or your schema's issues. A schema must check synchronously; one
-  that is async or throws is refused as `bad_option`, carrying nothing of what it threw.
+  field, never quoting the name or your schema's issues. Where one of our checks refused, it says
+  what was wrong (too long, a control character, not well-formed); your schema's, it names only.
+  A schema must check synchronously; one that is async or throws is refused as `bad_option`,
+  carrying nothing of what it threw.
+* **A misspelt field is refused**, as `bad_option`: `boxLabel` would otherwise leave the default
+  check quietly in place. `checkValidators(bag)` runs that check alone, for a binding or wrapper
+  that takes the bag apart (`VaultProvider` does).
 * **Every name is checked everywhere**, records read back included. Narrow a check later and a
   lockbox stored under a name or note the new one refuses is listed as damaged (see *Damaged
   lockboxes*). `erase()` still reaches it by the name it was stored under; `store()` refuses a
-  refused name, and stores afresh over a box whose note alone is refused.
+  refused name, and stores afresh over a box whose note alone is refused. An `unlocklabel` is
+  checked only as a way in is added: one already stored still opens the vault, whatever the
+  check says now, and the first way in, which the vault names `passphrase`, is not checked.
 * **Sizes follow the names.** Each `store()` weighs its lockbox -- whisper, names and note -- and
   refuses one heavier than the backend holds in a record (`lockbox_too_large`), or one that
-  would take the vault past what the backend holds of a vault (`vault_full`).
+  would take the vault past what the backend holds of a vault (`vault_full`). The record is
+  weighed as its real serialized bytes; the vault's total is a conservative estimate made before
+  the lockbox is sealed (each counted at twice `maxWhisperBytes`, with its names and note as
+  measured), so at a `maxVaultBytes` set exactly tight it may refuse a write that would just fit.
 * Labels of any text are shown to your users as written: mind what bidirectional and invisible
   characters can make one look like.
 
@@ -142,8 +155,9 @@ are part of the stored format: use these, not a join of your own, and every vers
 rows.
 
 Your `do*` methods take any text as a name: the public verbs check every name and note, with the
-vault's `validators`, which each takes as its last argument. An adapter that hands its calls on
-to another VaultDB's public verbs passes them `AnyTextValidators`, as its own have checked.
+vault's `validators`, which each takes as its last argument. Handed none, a verb admits any
+well-formed text (`AnyTextValidators`), so an adapter that hands its calls on to another VaultDB's
+public verbs need pass nothing, its own having checked.
 
 ## Key derivation
 
@@ -435,7 +449,7 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
 | `not_permitted`       | the storage backend refused the signed-in user, still the vault's own, this one call | Tell the user they may not; signing in again will not help |
 | `identity_revoked`    | the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in. The vault has locked itself (see *When the user signs out*) | Have the user sign in again, then open the vault for whoever that is |
-| `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause` |
+| `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause`, unless it may quote the call (Convex's) |
 
 `openVault` itself can refuse with `bad_option`, `bad_label`, and, as it reads the vault from
 storage, `storage_unavailable`, `not_permitted`, `identity_revoked` or `damaged_bundle` (a

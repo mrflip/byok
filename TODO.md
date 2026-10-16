@@ -129,6 +129,16 @@ package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
   `notes/security.md` is now part of the revocation matter above, under discussion in the sprint
   doc's Open Matters tab.
 
+## Rulings from gripes_part2 (the Coach, 2026-10-16)
+
+Recorded; no thread needed.
+
+* **`Ckeys` stays public.** Its JSON-tuple encoding is a contract.
+* **Old remembered unlocks are swept as now.** "yes, leave as is".
+* **`lockbox_too_large` stays its own error kind.** "yes. error messages should be as fine
+  grained as reasonable."
+* **Adapters written to an old contract fail as they do.** No back-compat before 1.0.
+
 ## Sand in the sandals
 
 Small irritants, each a few lines, picked up by whoever is nearby.
@@ -427,6 +437,105 @@ and 8192 bits); the cap and half of each adapter's `maxRecordBytes` are bucket w
 know not to `JSON.parse`: that is `whisper_codec`, reserved in roadmap 3, so this thread adds
 no field. The security note on ciphertext length stays until this lands.
 
+### What exactly are we guaranteeing with these validators, and where (client/server/both), and when (read, send, write, entry), and why and for whom (database limits, unexpected behavior canaries, actual constraints)
+
+The Coach's question, asked of #93's review and kept whole. Each validator (the label grammar, the
+note and whisper checks, the lockbox and vault caps) does one of three jobs: it keeps within a
+database's limits, it is a canary for unexpected behavior, or it is an actual constraint the
+design needs; and it runs at some of four moments: reading storage, sending to a server, writing
+to storage, and a user's entry. Today no document says which job a check does, for whom, or where
+it runs. Write that table, then ask of each line below whether the check sits in the right place.
+*Pluggable label validator* and *Validating the user id*, next, are the same question for two
+fields; decide them together.
+
+* **Refused text reaches the box list** ([#93](https://github.com/mrflip/safebyok/pull/93)). A box
+  stored under a name your validators now refuse lists as damaged *with that name*, so whoever can
+  write storage can put any text (huge, control characters, markup) into `snapshot.boxes`. The
+  Coach: "no changes", so it stays as it is; a host renders a damaged label as text, never as
+  markup. The alternatives, if the table says otherwise: cap or hide such labels, or give the
+  listing an opaque erase handle in place of the name.
+* **Control characters in notes.** The default note check refuses them now
+  ([#104](https://github.com/mrflip/safebyok/pull/104)): the C0 characters (carriage return
+  included), DEL and the C1 characters, except tab and newline. Is that the right guarantee, and
+  where else must it hold: the server, the listing, a host's own validator?
+* **Lone surrogates.** `UserId`, `LockboxNote` and every `AnyTextValidators` field refuse them now
+  ([#104](https://github.com/mrflip/safebyok/pull/104)): a label as `bad_label`, a note as
+  `bad_option`. The reason is that Convex refuses them in a stored string, though its own refusal
+  text could not be verified (convex-test admits them). The Coach: "Sounds like we may need to
+  group error message[s]" -- see *Group error messages?* below.
+* **Well-formedness under a host's own schema**
+  ([#104](https://github.com/mrflip/safebyok/pull/104)). Should well-formed text be a floor under
+  a host's own validator too? A host's `z.string()` still admits a lone surrogate, which Convex
+  then refuses.
+* **`AnyTextValidators` admits control characters in labels**
+  ([#104](https://github.com/mrflip/safebyok/pull/104)), and they reach `snapshot.boxes`.
+* **A bare `VaultDB` verb** ([#104](https://github.com/mrflip/safebyok/pull/104)). A verb called
+  without a validators bag now admits any well-formed text instead of the defaults, so a wrapper
+  that forgets the bag cannot refuse what the vault passed; a bare caller loses the label grammar
+  and the note length cap. Is "any well-formed text" the right guarantee there?
+* **Server-side names.** The Postgres route recipe, `listBoxRecords` and the GraphQL resolvers take
+  names as any text (`AnyTextValidators`); the browser's validators decide
+  ([#95](https://github.com/mrflip/safebyok/pull/95)). Is that the guarantee we mean to give a host
+  that serves several clients?
+* **`unlocklabel` has no validator slot** ([#95](https://github.com/mrflip/safebyok/pull/95)). Host
+  validators cannot reach it; the stored envelope checks it as plain text, and the `Label` grammar
+  is enforced only when a way in is added. *Built: [#117](https://github.com/mrflip/safebyok/pull/117)
+  (the Coach: "yes"), as `validators.unlocklabel`, `Label` by default, checked where a way in is
+  added.* A stored envelope's label is still read as plain text, so a way in under a label a
+  narrowed check refuses still opens (refusing it would make the bundle `corrupt_record`, or hide
+  a way in a user relies on), and the vault's own first label, `passphrase`, is not checked. Is
+  "checked at entry only" the guarantee we mean for this one name?
+* **Two size checks, and why both stay** ([#95](https://github.com/mrflip/safebyok/pull/95)). The
+  Coach asked "why can't we check size after serialization?", then: "yes. Make a note of this in
+  the "What are these validators actually for" TODO section". `updateBox` weighs the lockbox as
+  its real serialized bytes against `maxRecordBytes` (`lockbox_too_large`): a database's limit,
+  checked at the write. `store()` estimates the vault's total against `maxVaultBytes` before the
+  lockbox is sealed (`vault_full`), each lockbox counted at twice `maxWhisperBytes` with its names
+  and note as measured: an estimate, because the vault holds no other lockbox's real bytes
+  without reading them all, and conservative, so at an exactly tight limit it may refuse a write
+  that would just fit (the docs say so, [#117](https://github.com/mrflip/safebyok/pull/117)). A
+  backend's own limit (Convex's component, Postgres) is the authority beneath both.
+* **Offer a pluggable sanitizer.** The Coach, on Convex's validator error riding along as a
+  refusal's `cause` ([#75](https://github.com/mrflip/safebyok/pull/75)): "offer a pluggable
+  sanitizer. Add a todo to offer a pluggable sanitizer. Make a sanitizer module and put the
+  function that drops it in there. Don't try to make it serve multiple purposes; but that's where
+  that decision should be made". *The module is built
+  ([#117](https://github.com/mrflip/safebyok/pull/117)):* `packages/safebyok/src/sanitizer.ts`,
+  exported as `Sanitizer`, whose `refusalFor` is where safebyok decides what of a foreign error
+  rides along on a refusal: today, nothing. A host schema that throws and every Convex failure but
+  safebyok's own refusals go through it. Still open: the pluggable seam (a host's function from a
+  foreign error to what may ride along, say to keep Convex's error on a dev deployment), where a
+  host passes it, and whether the other adapters, which still carry their client's error as
+  `cause` (Postgres, GraphQL, IndexedDB), go through it too.
+  - The core's `asStorageTrouble` (`vault-db.ts`), and so every adapter's failure that is not a
+    VaultError, and the Postgres and GraphQL adapters still attach their client's error as
+    `cause` (`notes/security.md` says so): how far the sanitizer reaches is this entry's decision.
+
+#### Re-examine the pluggable validators interface
+
+The Coach, on *The forgotten validators bag: harmless or loud?*
+([#104](https://github.com/mrflip/safebyok/pull/104)): "yikes parts of this sound hinky. Defaults
+are supposed to come in from eg importing safebyok/browser (I forget how it's requested) and
+otherwise we ask you to, yes, spell everything out. My bigger issue is "A storage verb called
+without your validators"; they should be deposited onto a dispatch object not passed as arguments
+-- might have misunderstood but I still need to take a closer look / would you add a section under
+the "What do the Validators actually guarantee" called "Re-examine the pluggable validators
+interface" -- include my response and your question"
+
+How it stands: `browserOpts()` (`safebyok/browser`) supplies only `keyDeriver` and `deviceDB`. The
+validators are an `openVault` option, and left out they are `DefaultValidators`, inside the vault.
+The vault then passes its bag as the last argument of every `VaultDB` verb it calls, nine of them;
+a verb called without one (a wrapper that forgets to forward it, a server calling the verbs
+itself) admits any well-formed text (`AnyTextValidators`, since #104) rather than the defaults.
+The vault itself never calls a verb bare.
+
+Our question, as the matter row put it: a storage verb called without your validators admits any
+well-formed text instead of the defaults; loud would mean a required argument on nine public verbs,
+and the recommendation was to keep it harmless, as built. And now: should a `VaultDB` carry its
+validators from construction -- a dispatch object built once, `localVaultDB(store, { validators })`
+or the vault binding its bag to the adapter at `openVault` -- rather than take them per verb? And
+then should a bare verb refuse or admit: today it admits any well-formed text.
+
 ### Pluggable label validator
 
 A host chooses its own label grammar. Waits on the low-hanging-fruit report of what depends on
@@ -458,6 +567,31 @@ listing skip a bad row, or list it marked as damaged so `erase()` can remove it 
 can show it)? Either way, `erase()` should not report `corrupt_record` after its own delete has
 landed because a different box broke the refresh that follows.
 
+### Group error messages?
+
+The Coach, on the lone-surrogate refusal: "Sounds like we may need to group error message[s]" --
+one refusal can name several offending values, and a host should hear them together. The Coach on
+the grain: "error messages should be as fine grained as reasonable". `lockbox_too_large` stays its
+own `kind` for that reason. A policy machine, which will want the same kinds, is coming in another
+thread (the matters sprint's `identity_revoked`).
+
+### Storing over a damaged box can race
+
+`store()` over a damaged box erases it, then writes
+([#93](https://github.com/mrflip/safebyok/pull/93)). A healthy box another device writes in
+between is lost, and if our write then fails, nothing stands. Closing it needs a revision-checked
+erase in the `VaultDB` contract. The Coach: "yes TODO it we will have a contract tightening party
+once all the adaptors share a test suite" -- it waits for that party (the matters sprint's battery
+audit; see *Audit the VaultDB implementations and grow the standard battery*).
+
+### Does Convex need a `getUserId` of that name?
+
+The Convex component calls a host function `getUserId` to learn who is signed in, and the Convex
+setup now checks at once that the host supplied one. The Coach, "soonish": "Is it reasonable to
+demand there is a function of this name? do we want a generic interface to request an identity; it
+might not be through the database". Decide whether identity is a core seam (a function the host
+passes to every adapter), and what the other adapters, which take a `user_id` in the scope, do.
+
 ### A conflict-handler hook
 
 Ruled "with the retry work": a way for a host to hear about an erase-versus-update collision
@@ -479,7 +613,20 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
 
 * **Provide built-as-a-whole recommended KDFs, and functions to roll your own.** Follows from
   [#68](https://github.com/mrflip/safebyok/pull/68)'s `argon2idDeriver(spec)`; replaces its open
-  question of adding RFC 9106's second recommended option as a supplied spec.
+  question of adding RFC 9106's second recommended option as a supplied spec. #68's other
+  follow-ups fold in here (the Coach: "yes"):
+  - **Reserve a label prefix for the derivers we ship.** A host's own `key_deriver_label` is
+    checked against nothing; refusing host labels like `argon2id_web_*` keeps a spec we supply
+    later from colliding with one a host already stored.
+  - **Check a host-built Argon2id deriver at open, not at first unlock.** One under a host's own
+    label that declares `algorithm: 'argon2id'` gets only the generic salt check at `openVault`,
+    so a spec that cannot run (a 4-byte salt), built without the factory, fails at `unlock()` as
+    the library's plain `Error`, with no `kind`. Run the Argon2id schema whenever the algorithm is
+    `argon2id`, if the size budget allows.
+  - **Split the deriver type by algorithm.** `KeyDeriver = Partial<KeyDeriverSpec> & ...` gives
+    every deriver Argon2id's optional fields; public surface, to settle before 1.0.
+  - **Zero the derived key's bytes after use.** The passphraseKey bytes are not zeroed once
+    imported as a `CryptoKey`.
 * **CI questions left by [#72](https://github.com/mrflip/safebyok/pull/72)**, each its own
   conversation:
   - the Dependabot changeset gate recognizes a Dependabot PR by its author;

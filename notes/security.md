@@ -777,3 +777,34 @@ security expert who knows what questions to ask.
   accepts -- bumps `format`**, so that an older build can tell newer from damaged. Where it cannot tell, it refuses: the hatch fails safe. Not routed through
   `RefusalPolicy.heed`: there is no handle to lock and no key in memory, so `whenIdentityRevoked`
   has nothing to act on, and the hatch's own last step is erasing the remembered unlock.
+* 2026-10-16: **the checks tightened, and a forgotten bag made harmless.** Every default check,
+  `AnyTextValidators` included, refuses text that is not well-formed Unicode (a lone surrogate),
+  and the default note check refuses control characters but tab and newline; a host's own schema
+  is untouched. A refusal by one of our checks now passes on that check's message, which quotes
+  nothing; a host schema's issues are still never passed on. **A `VaultDB` verb handed no
+  validators now admits any well-formed text** (`AnyTextValidators`), where it used to apply the
+  defaults: a wrapper that forgets to forward the vault's bag can no longer refuse a well-formed
+  name the vault's own checks passed. The vault passes its bag to every verb (a test spies each
+  one); it had left it off `updateBundle`, so a host with a wider `userId` check could not change
+  a passphrase. Before the change, a server calling the verbs bare got the default checks; it now
+  gets text-only checks, which is what the shipped server recipes already passed. The same holds
+  for `eraseDamagedVault` and its verb. A `damaged_lockbox` refusal no longer quotes the boxlabel,
+  as `absent_box` already did not.
+* 2026-10-16: **a foreign error that may quote stays behind.** `Sanitizer.refusalFor`
+  (`src/sanitizer.ts`, exported as `Sanitizer`) is the one place that decides what of a foreign
+  error rides along on the refusal thrown in its place: today, nothing -- no `cause`, no text, no
+  property. Two callers: a host's schema that throws (`bad_option`, as since #95), and
+  `convexVaultDB`, which now throws every Convex failure that is not one of safebyok's own
+  refusals as `storage_unavailable` carrying nothing of Convex's error. That error is a plain
+  `Error` whose text, on a dev deployment, quotes the call's arguments (scope, names, notes,
+  ciphertext; never plaintext or keys), and the client cannot tell a validator's refusal from any
+  other server error but by its text, so all of them are dropped. The cost is debugging: the
+  deployment's logs keep the full error. The other adapters still carry their client's error as
+  `cause`, as above.
+* 2026-10-16: **`validators.unlocklabel`**, a sixth slot, checks the label of each way in a host
+  adds (`addPassphrase`, `addPasskey`), `Label` by default, refused as `bad_label` without
+  quoting it, as the other names are. It is checked only there: a stored unlock envelope's
+  `unlocklabel` is still read as plain text, so a way in stored under a label a narrowed check
+  refuses still opens the vault and lists as it is. Refusing it on read would make the bundle
+  `corrupt_record` and lock the user out of their own vault, or hide a way in they rely on. The
+  first way in, named `passphrase` by the vault itself, is not checked.

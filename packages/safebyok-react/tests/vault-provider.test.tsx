@@ -561,6 +561,19 @@ describe("VaultProvider", () => {
     expect(vault.getSnapshot().state).to.eq('unlocked')
   })
 
+  it("passes the unlocklabel check through: a way in labelled as the host's check allows is added", async () => {
+    const { Grab, opened } = grabber()
+    render(
+      <VaultProvider {...makeWorld().props} userId="u1" validators={{ unlocklabel: AnyTextValidators.unlocklabel }}>
+        <Grab />
+      </VaultProvider>,
+    )
+    const vault = await opened()
+    await vault.unlock('correct horse battery staple')
+    await vault.addPassphrase('correct horse battery staple', 'a spare passphrase', { unlocklabel: 'Written down, in the drawer' })
+    expect(vault.getSnapshot().unlocks.map((unlock) => unlock.unlocklabel)).to.deep.equal(['passphrase', 'Written down, in the drawer'])
+  })
+
   it("passes the logger through: what the vault has nobody to throw to reaches it", async () => {
     const spy = TH.spyLogger()
     let reading = Date.UTC(2026, 9, 15)
@@ -593,6 +606,22 @@ describe("VaultProvider", () => {
       await expectShown('boundary')
       expect(caught).to.have.length(1)
       expect(isVaultError(caught[0], 'bad_label')).to.be.true
+    })
+
+    it("throws a validators bag with a misspelt field to the error boundary, rather than keep the default check unseen", async () => {
+      hushConsole()
+      const caught: unknown[] = []
+      const misspelt = { boxLabel: AnyTextValidators.boxlabel } as unknown as VaultValidators
+      render(
+        <CatchingBoundary caught={caught}>
+          <VaultProvider {...makeWorld().props} userId={null} validators={misspelt}>
+            <Probe />
+          </VaultProvider>
+        </CatchingBoundary>,
+      )
+      await expectShown('boundary')
+      expect(isVaultError(caught[0], 'bad_option')).to.be.true
+      expect((caught[0] as Error).message).to.include('spelling')
     })
 
     it("throws a bad option to the error boundary, as the very VaultError", async () => {

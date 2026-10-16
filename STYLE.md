@@ -193,6 +193,11 @@ Vitest, in each package's `tests/`, path for path with its `src/`: `src/foo/bar.
   allowed: `await expect(promise).rejects.toThrow(...)` and `toMatchSnapshot()`.
 * `eslint-plugin-chai-expect` catches a bare `expect(x)` or a method left uncalled. It knows only
   the methods in `ChaiMethods` (the core's `eslint.config.mjs`): a new one goes on that list.
+* **A helper named `expect...` must assert.** The linter (`vitest/expect-expect`) counts a call to
+  any function named `expect...` as an assertion, so a test whose only check is such a helper
+  passes. Name it for what it does: if the helper should not assert, give it a different name
+  (`check...`, `read...`); if it should, make it assert and keep the name. Never add an assertion
+  to a helper merely to make the rule happy.
 * **Every use case of an exported function has a test, and every `@example` has one.**
 * **Each example ties to a plausible failure mode.** Ask what null, undefined and a missing value
   mean; what an absurd type does (`seal(42)`); what a not-quite-absurd one does (a salt one byte

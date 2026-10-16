@@ -3,7 +3,7 @@ import * as ZClassic from 'zod'
 import * as Z from 'zod/mini'
 import * as Names from '../src/names'
 import { VaultError, type VaultErrorKind } from '../src/errors'
-import { DefaultValidators, Label, LockboxNote, UserId } from '../src/validators'
+import { AnyTextValidators, DefaultValidators, Label, LockboxNote, UserId } from '../src/validators'
 import * as TH from './test-helpers'
 
 /** The VaultError `attempt` throws, checked for its kind. */
@@ -21,6 +21,29 @@ const refusalOf = (attempt: () => unknown, kind: VaultErrorKind): VaultError => 
 /** A boxlabel check a 1Password-style host might pass: any text at all, up to 200 characters. */
 const AnyBoxlabel = ZClassic.string().min(1).max(200)
 
+describe("Names.checkValidators", () => {
+  it("hands back the bag it was handed, as its first example shows", () => {
+    const validators = { boxlabel: ZClassic.string().max(200) }
+    expect(Names.checkValidators(validators)).to.eq(validators)
+    expect(Names.checkValidators(undefined)).to.be.undefined
+    expect(Names.checkValidators({ boxlabel: undefined, note: Z.string() })).to.have.property('note')
+    expect(Names.checkValidators(AnyTextValidators)).to.eq(AnyTextValidators)
+    expect(Names.checkValidators({ unlocklabel: Z.string() })).to.have.property('unlocklabel')
+  })
+
+  it("refuses a misspelt field as 'bad_option', as its second example shows, rather than keep the default unseen", () => {
+    const err = refusalOf(() => Names.checkValidators({ boxLabel: ZClassic.string() } as never), 'bad_option')
+    expect(err.message).to.include('spelling')
+  })
+
+  it("refuses a bag of anything but schemas, or no bag at all, as 'bad_option'", () => {
+    const misfits = ['acme', 42, null, { boxlabel: 'Label' }, { boxlabel: /^[a-z]+$/ }, { userID: ZClassic.string() }]
+    for (const misfit of misfits) {
+      expect(refusalOf(() => Names.checkValidators(misfit as never), 'bad_option').message).to.include('validators')
+    }
+  })
+})
+
 describe("Names.rulesOf", () => {
   it("keeps ours for every field a host leaves out", () => {
     expect(Names.rulesOf()).to.deep.equal(DefaultValidators)
@@ -33,6 +56,12 @@ describe("Names.rulesOf", () => {
     expect(rules.applabel).to.eq(Label)
     expect(rules.userId).to.eq(UserId)
     expect(rules.note).to.eq(LockboxNote)
+    expect(rules.unlocklabel).to.eq(Label)
+    expect(Names.rulesOf({ unlocklabel: AnyBoxlabel }).unlocklabel).to.eq(AnyBoxlabel)
+  })
+
+  it("refuses a misspelt field, as checkValidators does", () => {
+    expect(refusalOf(() => Names.rulesOf({ boxLabel: ZClassic.string() } as never), 'bad_option').message).to.include('spelling')
   })
 
   it("keeps ours for a field given as undefined, as the example shows", () => {
@@ -89,6 +118,38 @@ describe("Names.check", () => {
     const noteErr = refusalOf(() => Names.check(rules, 'note', `sk-fake ${'n'.repeat(300)}`), 'bad_option')
     expect(noteErr.message).to.include('note')
     expect(noteErr.message).to.not.include('sk-fake')
+  })
+
+  it("says what one of our own checks found wrong, quoting nothing", () => {
+    const rules = Names.rulesOf()
+    const cases = [
+      ['boxlabel', 'sk-fake-UPPER',         'lowercase words'],
+      ['boxlabel', `sk-fake${'x'.repeat(40)}`, 'at most forty characters'],
+      ['userId',   '',                      "can't be empty"],
+      ['userId',   'sk-fake\u{D800}',         'lone surrogate'],
+      ['note',     'sk-fake\u{7}',         'no control characters but tab and newline'],
+      ['note',     'sk-fake\u{DD11}',         'well-formed Unicode'],
+    ] as const
+    for (const [field, candidate, said] of cases) {
+      const err = refusalOf(() => Names.check(rules, field, candidate), field === 'note' ? 'bad_option' : 'bad_label')
+      expect(err.message).to.include(`vault's ${field} check`)
+      expect(err.message).to.include(said)
+      expect(err.message).to.not.include('sk-fake')
+    }
+    const anyText = Names.rulesOf(AnyTextValidators)
+    expect(refusalOf(() => Names.check(anyText, 'boxlabel', 'key \u{D83D}'), 'bad_label').message).to.include('lone surrogate')
+  })
+
+  it("names a host check that refuses, and that the check is the host's, saying nothing of why", () => {
+    const rules = Names.rulesOf({ boxlabel: ZClassic.string().max(5, 'too long for our forms') })
+    const err = refusalOf(() => Names.check(rules, 'boxlabel', 'sk-fake-long'), 'bad_label')
+    expect(err.message).to.include("boxlabel check passed in openVault's validators")
+    expect(err.message).to.not.include('too long for our forms')
+  })
+
+  it("refuses a candidate that is not text, saying so", () => {
+    expect(refusalOf(() => Names.check(Names.rulesOf(), 'boxlabel', undefined), 'bad_label').message).to.include('not text')
+    expect(refusalOf(() => Names.check(Names.rulesOf(), 'note', 42), 'bad_option').message).to.include('not text')
   })
 
   it("never quotes a host check's own issues, which may quote the candidate", () => {

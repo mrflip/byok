@@ -208,11 +208,12 @@ describe("convexVaultDB, refusing", () => {
     vault.close()
   })
 
-  it("makes any other failure storage_unavailable, keeping Convex's error as the cause", async () => {
+  it("makes any other failure storage_unavailable, carrying nothing of Convex's error", async () => {
     const deployment = deploy(() => { throw new Error('the auth provider is down') })
     const refusal = await TH.expectRefusal(convexVaultDB(deployment.client('u1'), deployment.api.safebyok).readBundle(u1), 'storage_unavailable')
-    expect(refusal.cause).to.be.instanceOf(Error)
-    expect(refusal.cause).to.not.be.instanceOf(ConvexError)
+    expect(refusal.cause).to.be.undefined
+    expect(refusal.message).to.include("your Convex deployment's logs, or, for trouble before the call left, the browser console")
+    expect(TH.thrownText(refusal)).to.not.include('the auth provider is down')
   })
 })
 
@@ -235,9 +236,8 @@ describe("a record the deployment refused", () => {
       const client = deployment.client(subject)
       await convexVaultDB(client, deployment.api.safebyok).createBundle(standing)
       // The core strips a field it does not know, so this one strays in on the wire, past it,
-      // where Convex's validator refuses the call. convex-test's validator names the field and
-      // quotes nothing; a dev deployment's quotes the arguments too, into the error this
-      // refusal keeps as its cause (notes/security.md).
+      // where Convex's validator refuses the call. convex-test's validator names the field; a
+      // dev deployment's quotes the arguments too (notes/security.md). The refusal carries none of it.
       const straying: ConvexVaultClient = {
         query:    client.query.bind(client),
         onUpdate: client.onUpdate.bind(client),
@@ -245,8 +245,9 @@ describe("a record the deployment refused", () => {
       }
       const vaultDB = convexVaultDB(straying, deployment.api.safebyok)
       const refusal = await TH.expectRefusal(write(vaultDB), 'storage_unavailable')
-      expect(TH.thrownText(refusal.cause)).to.include('stray_field')
+      expect(refusal.cause).to.be.undefined
       const thrown = TH.thrownText(refusal)
+      expect(thrown).to.not.include('stray_field')
       const quotables = TH.leafTexts({ scope, record })
       for (const leaf of quotables) {
         expect(thrown).to.not.include(leaf)
@@ -255,7 +256,29 @@ describe("a record the deployment refused", () => {
       expect(await vaultDB.readBox(scope, 'quotable_box')).to.be.null
     })
   }
+
+  it("is quoted nowhere in what updateBox throws when Convex's validator quotes the refused argument", async () => {
+    const deployment = deploy()
+    const client = deployment.client(subject)
+    await convexVaultDB(client, deployment.api.safebyok).createBundle(standing)
+    const expected = { vault_id: standing.vault_id, revision_id: null }
+    const quotedArgs = misnoted({ scope, lockbox: toConvexLockbox(lockbox), expected })
+    await expect(client.mutation(deployment.api.safebyok.updateBox, quotedArgs)).rejects.toThrow('quoted_by_convex')
+    const quoting: ConvexVaultClient = {
+      query:    client.query.bind(client),
+      onUpdate: client.onUpdate.bind(client),
+      mutation: (mutationRef, args) => client.mutation(mutationRef, misnoted(args)),
+    }
+    const vaultDB = convexVaultDB(quoting, deployment.api.safebyok)
+    const refusal = await TH.expectRefusal(vaultDB.updateBox(scope, lockbox, expected), 'storage_unavailable')
+    expect(refusal.cause).to.be.undefined
+    expect(TH.thrownText(refusal)).to.not.include('quoted_by_convex')
+    expect(await vaultDB.readBox(scope, 'quotable_box')).to.be.null
+  })
 })
+
+/** `args` with its lockbox's note not text, past the core's checks: convex-test's validator quotes it. */
+const misnoted = <ArgsT extends object>(args: ArgsT): ArgsT => ({ ...args, lockbox: { ...(args as { lockbox?: object }).lockbox, note: ['quoted_by_convex'] } })
 
 /** Resolves once every message already sent to `vaultDB`'s client has arrived: one round trip behind them. */
 const caughtUp = async (vaultDB: ReturnType<typeof convexVaultDB>) => { await vaultDB.readBundle(u1) }

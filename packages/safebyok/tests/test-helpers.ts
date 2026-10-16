@@ -11,14 +11,14 @@
 import { describe, expect, it, vi } from 'vitest'
 import { toB64, type Ciphered } from '../src/crypto'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
-import type { VaultError, VaultErrorKind } from '../src/errors'
+import { VaultError, type VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import { memoryStore } from '../src/string-store'
 import type { DamagedLockbox, DeviceUnlock, Lockbox, LockboxSummary, PasskeyEnvelope, PasskeyProof, PassphraseEnvelope, VaultBundle, VaultScope } from '../src/types'
 import type { OpenVaultOpts } from '../src/vault'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
-import { AnyTextValidators } from '../src/validators'
+import { AnyTextValidators, DefaultValidators } from '../src/validators'
 
 /** A Lockbox as the core writes one: a note, or no note field at all, never an undefined one. */
 type WrittenLockbox = Omit<Lockbox, 'note'> & { note?: string }
@@ -297,7 +297,9 @@ export type AsyncVerbOf<Target> = {
 /**
  * Has `meanwhile` run inside the next call to `target[verb]`, before the call itself goes on: for
  * slipping another device's doings, or a pause, between a vault's look at storage and its write.
- * Only the next call is touched; later ones go straight through.
+ * Only the next call is touched; later ones go straight through, unless armed again: each arming
+ * is for one call, in the order armed. A method the test already spies on keeps counting its
+ * calls, each once.
  *
  * @param target - The object whose method to intercept: an adapter, a deriver.
  * @param verb - The method, one returning a promise.
@@ -307,15 +309,46 @@ export type AsyncVerbOf<Target> = {
  *   TH.beforeNextCall(vaultDB, 'updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
  */
 export const beforeNextCall = <Target extends object>(target: Target, verb: AsyncVerbOf<Target> & string, meanwhile: () => Promise<unknown>): void => {
-  // Typed loosely from here: the caller's types were checked at the signature.
-  type AsyncFn = (...args: unknown[]) => Promise<unknown>
-  const original = (target as unknown as Record<string, AsyncFn | undefined>)[verb]?.bind(target)
-  if (original === undefined) { throw new TypeError(`beforeNextCall found no method ${verb} to intercept.`) }
-  vi.spyOn(target as unknown as Record<string, AsyncFn>, verb).mockImplementationOnce(async (...args: unknown[]) => {
+  const method = (target as unknown as Record<string, AsyncFn | undefined>)[verb]
+  if (method === undefined) { throw new TypeError(`beforeNextCall found no method ${verb} to intercept.`) }
+  // Armed already, once per call: this errand waits its turn behind the others.
+  const waiting = errandsAt.get(method)
+  if (waiting !== undefined) {
+    waiting.push(meanwhile)
+    return
+  }
+  const original = originalOf.get(method) ?? method
+  if (original === method && vi.isMockFunction(method)) {
+    // A mock of the test's own stands here: stand in front of it for one call, and call it
+    // through, so it records that call once. A second spy on top of it would record it twice.
+    const errands = [meanwhile]
+    const standIn = async (...args: unknown[]) => {
+      const errand = errands.shift()
+      if (errands.length === 0) { Reflect.set(target, verb, method) }
+      await errand?.()
+      return await method.apply(target, args)
+    }
+    errandsAt.set(standIn, errands)
+    Reflect.set(target, verb, standIn)
+    return
+  }
+  // Otherwise our own spy, whose once-implementations vitest runs one per call, in order.
+  const spy = vi.spyOn(target as unknown as Record<string, AsyncFn>, verb)
+  originalOf.set(spy, original)
+  spy.mockImplementationOnce(async (...args: unknown[]) => {
     await meanwhile()
-    return await original(...args)
+    return await original.apply(target, args)
   })
 }
+
+/** Typed loosely: the caller's types were checked at the signature. */
+type AsyncFn = (...args: unknown[]) => Promise<unknown>
+
+/** The errands still waiting to run, by the stand-in {@link beforeNextCall} put in front of a test's own mock. */
+const errandsAt = new WeakMap<object, (() => Promise<unknown>)[]>()
+
+/** The method a spy of {@link beforeNextCall}'s own stands in front of. */
+const originalOf = new WeakMap<object, AsyncFn>()
 
 /**
  * Holds the next call to `target[verb]` at a gate (see {@link makeGate}) until the test releases
@@ -344,6 +377,9 @@ export const holdNextCall = <Target extends object>(target: Target, verb: AsyncV
  * `subscribe`: for a test that a failed open, a close or a lock leaves no watch running that
  * nobody could end. Each watch still reaches the adapter's own `subscribe`.
  *
+ * A watch counts as closed the first time it is closed: closing it again changes nothing, so a
+ * double close cannot stand in for a watch that was never closed.
+ *
  * @param vaultDB - The adapter whose watches to count.
  * @returns The tally, live: `opened` and `closed`, each a count so far.
  *
@@ -358,8 +394,12 @@ export const tallyWatches = (vaultDB: Pick<VaultDB, 'subscribe'>) => {
   vi.spyOn(vaultDB, 'subscribe').mockImplementation((scope, onChange) => {
     tally.opened += 1
     const unsubscribe = subscribe(scope, onChange)
+    let closedYet = false
     return () => {
-      tally.closed += 1
+      if (! closedYet) {
+        closedYet = true
+        tally.closed += 1
+      }
       unsubscribe()
     }
   })
@@ -1003,7 +1043,7 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
         [() => vaultDB.updateBundle(bundleOf('u1', { unlock_epoch: 3 }), { vault_id: 'vault-id-u1', unlock_epoch: 2 }),                 'stale_write'],
         [() => vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'late'), { vault_id: 'vault-id-u1', revision_id: 'rev-other' }),      'stale_write'],
         [() => vaultDB.updateBox(scopeOf('u1'), boxOf('mistral', 'late'), { vault_id: 'vault-id-gone', revision_id: null }),             'stale_write'],
-        [() => vaultDB.updateBox(scopeOf('u1'), boxOf('mistral', 'late', { note: 'n'.repeat(257) }), noBoxYet),                         'bad_option'],
+        [() => vaultDB.updateBox(scopeOf('u1'), boxOf('mistral', 'late', { note: 'n'.repeat(257) }), noBoxYet, DefaultValidators),      'bad_option'],
         [() => vaultDB.eraseBox(scopeOf('u1'), 'anthropic', { vault_id: 'vault-id-gone' }),                                               'stale_write'],
         [() => vaultDB.eraseVault(scopeOf('u1'), { vault_id: 'vault-id-gone' }),                                                          'stale_write'],
       ] as const
@@ -1112,18 +1152,18 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
   describe(lineTitle('5.1'), () => {
     it("refuses a malformed scope or boxlabel as bad_label, before storage sees it", async () => {
       const vaultDB = await withBundle()
-      await expectRefusal(vaultDB.readBundle({ ...scopeOf('u1'), vaultlabel: 'not-a-label' }), 'bad_label')
-      await expectRefusal(vaultDB.readBox(scopeOf('u1'), 'not:a:label'), 'bad_label')
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('Not_a_label', 'one'), noBoxYet), 'bad_label')
-      await expectRefusal(vaultDB.eraseBox({ ...scopeOf('u1'), user_id: '' }, 'anthropic', thisVault), 'bad_label')
+      await expectRefusal(vaultDB.readBundle({ ...scopeOf('u1'), vaultlabel: 'not-a-label' }, DefaultValidators), 'bad_label')
+      await expectRefusal(vaultDB.readBox(scopeOf('u1'), 'not:a:label', DefaultValidators), 'bad_label')
+      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('Not_a_label', 'one'), noBoxYet, DefaultValidators), 'bad_label')
+      await expectRefusal(vaultDB.eraseBox({ ...scopeOf('u1'), user_id: '' }, 'anthropic', thisVault, DefaultValidators), 'bad_label')
       const overlongScope = scopeOf('u'.repeat(101))
-      await expectRefusal(vaultDB.listBoxes(overlongScope), 'bad_label')
+      await expectRefusal(vaultDB.listBoxes(overlongScope, DefaultValidators), 'bad_label')
     })
 
     it("refuses a malformed record or expectation, or a bundle under another vault_id, as bad_option, before storage sees it", async () => {
       const vaultDB = await withBundle()
       const overlong = boxOf('anthropic', 'one', { note: 'n'.repeat(257) })
-      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), overlong, noBoxYet), 'bad_option')
+      await expectRefusal(vaultDB.updateBox(scopeOf('u1'), overlong, noBoxYet, DefaultValidators), 'bad_option')
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: '' }), 'bad_option')
       await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { unlock_epoch: 0 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'bad_option')
       await expectRefusal(vaultDB.updateBundle(bundleOf('u1', { vault_id: 'vault-id-new', unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'bad_option')
@@ -1398,9 +1438,8 @@ const NotRefused = Symbol('not refused')
 
 /**
  * The VaultError `operation` rejected with, once the test has checked it is one, of `kind`; the
- * test fails if `operation` resolves. Checked by name and `kind`, not by class: an adapter built
- * on the published package throws that package's VaultError, a different class from `src/`'s. A
- * test that means to prove the class adds its own `instanceOf`.
+ * test fails if `operation` resolves, or rejects with anything else: a plain Error, a lookalike
+ * from another copy of the package, a VaultError of another kind.
  *
  * @param operation - The call that should refuse.
  * @param kind - The refusal's expected `kind`.
@@ -1419,8 +1458,7 @@ export const expectRefusal = async (operation: Promise<unknown>, kind: VaultErro
     refusal = err
   }
   expect(refusal, `expected a refusal of kind '${kind}', but the operation resolved`).to.not.eq(NotRefused)
-  expect(refusal).to.be.instanceOf(Error)
-  expect(refusal).to.have.property('name', 'VaultError')
+  expect(refusal).to.be.instanceOf(VaultError)
   expect(refusal).to.have.property('kind', kind)
   return refusal as VaultError
 }
