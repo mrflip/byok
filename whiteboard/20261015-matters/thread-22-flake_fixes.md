@@ -1,6 +1,6 @@
 # Thread 22: flake_fixes (2026-10-16)
 
-Branch `20261016-flake_fixes`, PR [#118](https://github.com/mrflip/safebyok/pull/118), stacked on #110. Justify: green (core 1246 passed | 18 skipped, react 102, convex 311 | 14 skipped, demo 141 | 9 skipped).
+Branch `20261016-flake_fixes`, PR [#118](https://github.com/mrflip/safebyok/pull/118), against main (the line it stood on has merged). Justify: green (core 1246 passed | 18 skipped, react 102, convex 311 | 14 skipped, demo 141 | 9 skipped).
 
 * **Built**:
   * Convex's "lists, signs and erases the 1365 lockboxes..." has a 120 s ceiling and a one-line comment saying why (it was `30_000`, the default itself). The fill is as it was.
@@ -20,7 +20,14 @@ Branch `20261016-flake_fixes`, PR [#118](https://github.com/mrflip/safebyok/pull
 * **Deviations**: the plan called this a `tests:` thread; it pulls in a one-file product fix to `safebyok-react` (with its changeset) because the race is the product's. Declared in the PR.
 
 * **Discoveries**: a dialog an action opens before React's passive effects have run is rare for a person (a click inside the few milliseconds between the commit and the effect flush) but easy for code: any host effect or event handler that calls `withUnlockedVault` right as the vault appears.
-  A pending dialog opened by a stale action while `vault` is `null` (after a sign-out) is now ended by the next open-effect cleanup rather than at the `null`-to-vault change. It would be shown over the next vault and its action retried on the closed handle; no test or path I found does this, and it was equally possible before once the new vault had set.
+  The stale-action case I called unlikely was real, and my change had widened it: see the review follow-up.
   Do not poll with `pgrep -f "vitest run"` from a shell whose own command line contains that text.
 
 * **For the Coach**: nothing blocking.
+
+## Review follow-up
+
+* The reviewer's `client:` fix. With the dialog's ending moved into the open effect's cleanup, an action whose `vault_locked` refusal reaches `withUnlockedVault` after its vault went (a host action holding the refusal back past a sign-out) opened a dialog that nothing ended: it showed over the next user's vault, or hung on an unmount while signed out. My thread had widened the window to the whole signed-out stretch. `awaitUnlock` now resolves `null` at once while there is no vault (`vaultRef`), a new test holds such a refusal across a sign-out, and the changeset says so.
+* The reviewer's `tests:` fix: the Convex ceiling's comment names the real work (landing 1365 lockboxes, a mutation each) and drops a machine-dependent local time.
+* One suppression the reviewer added: `eslint-disable-next-line unicorn/prefer-promise-with-resolvers` in the new test, following the file's own precedent.
+* Rebase: onto main after the line merged; the one conflict was `vault-provider.tsx`, where main's `eraseDamagedVault` sat beside the lines I moved (`endAsking` above the open effect); both kept.
