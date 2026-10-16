@@ -17,13 +17,13 @@
 | 11 | vaultdb_contract | merged #107                |
 | 12 | postgres_soft_cap | merged #113               |
 | 13 | rotation_design  | merged #105                |
-| 14 | rotation_shape   | underway (cut from main 23f263a) |
+| 14 | rotation_shape   | in review #120 (on main cc32761; files onto #119) |
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 (ways in: keep the proven ones, ruled) |
 | 20 | rotation_docs    | waits on 19                |
 | 15 | e2e_home         | filed #111 (on main)       |
 | 16 | late_unlock      | merged #110                |
-| 17 | validation_note  | waits on #101 merging      |
+| 17 | validation_note  | unblocked (#101 merged); the Coach decides scope |
 | 21 | damaged_erase    | merged #115                |
 | 22 | flake_fixes      | filed #118 (on main)       |
 | -- | the line #98-#115 | merged 2026-10-16 03:09 (main 23f263a) |
