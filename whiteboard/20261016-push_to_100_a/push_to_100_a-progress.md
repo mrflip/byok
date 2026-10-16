@@ -23,14 +23,11 @@
 
 ## What the threads have taught
 
-* *Orchestrator:* **Two new NOTYET rows** to add to the Gripefest doc's *Notyet matters* tab
-  (the live NOTYET shelf once #124 merges), with thread 6's sweep: "Option to let the user add a
-  hint on their passphrase"; "Break out dependencies, including -fastkey, into a -utils or
-  -bestpractices package".
 
 * *Orchestrator:* **Sweep ledger.** At the start: the 23 no-code rows (G204, G205, G206, G478,
   G215, G291, G135, G321, G440, G443, G445, G474, G475, G235, G238, G253, G293, G376, G400,
-  G444, G465, T01, G064); the Gripefest doc stands at 244 matters.
+  G444, G465, T01, G064). Thread 6 (#126): its 14 rows; NOTYET rows G531 (passphrase hint) and
+  G532 (a -utils or -bestpractices package) added. The Gripefest doc stands at 232 matters.
 * *Orchestrator:* **Thread 6** (filed, [#126](https://github.com/mrflip/safebyok/pull/126)):
   `KeyDeriver` is now `Argon2idKeyDeriver | CustomKeyDeriver` with field names unchanged
   (`key_deriver_label`, `algorithm`), so 5 and 10 read them as before; a host class writes
