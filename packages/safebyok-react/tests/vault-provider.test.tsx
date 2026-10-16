@@ -369,6 +369,57 @@ describe("VaultProvider", () => {
       expect(await reading).to.eq('sk-fake')
       await waitFor(() => { expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null })
     })
+
+    it("keeps a dialog asking through a change that is no unlock: a lockbox arriving, a lock", async () => {
+      const world = await lockedWorld()
+      render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = watched(world.latest().withUnlockedVault(() => vault.read('anthropic_api_key')))
+      await screen.findByPlaceholderText('vault passphrase')
+      const elsewhere = await openVault({ ...world.props, deviceDB: memoryDeviceDB(), userId: 'u1' })
+      await elsewhere.unlock('pw')
+      await elsewhere.store('openai_api_key', 'sk-also-fake')
+      elsewhere.close()
+      await waitFor(() => { expect(vault.getSnapshot().boxes).to.have.lengthOf(2) })
+      await vault.lock()
+      await TH.wakeupAtNextTick()
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.not.be.null
+      expect(reading.outcome).to.eq('pending')
+      fireEvent.click(screen.getByText('Cancel'))
+      await waitFor(() => { expect(reading.outcome).to.be.null })
+    })
+
+    it("leaves another user's dialog asking when the last user's cancelled unlock finishes late", async () => {
+      const world = await lockedWorld()
+      const other = await openVault({ ...world.props, deviceDB: memoryDeviceDB(), userId: 'u2' })
+      await other.unlock('pw2')
+      await other.store('anthropic_api_key', 'sk-other-fake')
+      other.close()
+      const gate = TH.makeGate()
+      const slowDeriver = { ...TH.testDeriver, deriveKeyBytes: async (passphrase: string, saltBytes: Uint8Array) => { await gate.pass(); return await TH.testDeriver.deriveKeyBytes(passphrase, saltBytes) } }
+      const { rerender } = render(world.tree('u1', slowDeriver))
+      const vault = await world.opened()
+      const first = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+      fireEvent.click(screen.getByText('Unlock'))
+      await gate.reached
+      fireEvent.click(screen.getByText('Cancel'))
+      expect(await first).to.be.null
+
+      rerender(world.tree('u2', slowDeriver))
+      await waitFor(() => { expect(world.latest().vault).to.not.be.null })
+      const vault2 = world.latest().vault
+      if (vault2 === null || vault2 === vault) { throw new Error('the provider opened no vault for u2') }
+      const second = watched(world.latest().withUnlockedVault(() => vault2.read('anthropic_api_key')))
+      await screen.findByPlaceholderText('vault passphrase')
+      gate.release()
+      await TH.wakeupAtNextTick()
+      expect(vault2.getSnapshot().state).to.eq('locked')
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.not.be.null
+      expect(second.outcome).to.eq('pending')
+      fireEvent.click(screen.getByText('Cancel'))
+      await waitFor(() => { expect(second.outcome).to.be.null })
+    })
   })
 
   it("asks for a keyDeriver outright, as openVault does", () => {
