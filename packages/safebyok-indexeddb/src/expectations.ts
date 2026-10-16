@@ -43,6 +43,20 @@ export const vaultMeetsExpectation = (standing: unknown, expected: EraseExpectat
 )
 
 /**
+ * True when the bundle standing names the vault `expected` names, and nothing more is compared:
+ * what erasing a whole vault needs, so that a vault whose bundle is too damaged to show an epoch
+ * can still be erased.
+ *
+ * @param standing - The bundle row standing in storage, or undefined when there is none.
+ * @param expected - The vault the erase is aimed at.
+ *
+ * @example vaultIdMeetsExpectation({ vault_id: 'v1', unlock_epoch: 'garbled' }, { vault_id: 'v1' })  // true
+ */
+export const vaultIdMeetsExpectation = (standing: unknown, expected: EraseExpectation): boolean => (
+  fieldOf(standing, 'vault_id') === expected.vault_id
+)
+
+/**
  * True when the bundle and lockbox standing are the ones `expected` names: the bundle of its
  * vault, and the lockbox at its revision -- or, for a null `revision_id`, no lockbox at all.
  *

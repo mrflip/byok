@@ -418,6 +418,7 @@ const servingOnly = (userId: string | null, store: StringStore): TH.VaultDBVerbs
     updateBox:      async (scope, lockbox, expected, validators) => { permitted(scope); await shared.updateBox(scope, lockbox, expected, validators) },
     eraseBox:       async (scope, boxlabel, expected, validators) => { permitted(scope); await shared.eraseBox(scope, boxlabel, expected, validators) },
     eraseVault:     async (scope, expected, validators) => { permitted(scope); await shared.eraseVault(scope, expected, validators) },
+    eraseDamagedVault: async (scope, validators) => { permitted(scope); await shared.eraseDamagedVault(scope, validators) },
     subscribe:      (scope, onChange, validators) => { permitted(scope); return shared.subscribe(scope, onChange, validators) },
   }
 }
