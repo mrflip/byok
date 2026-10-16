@@ -507,19 +507,29 @@ copy, or whose site data was cleared, cannot tell, and takes the older copy as i
 
 When the vault's storage was restored from an older copy on purpose, each device that saw a
 newer one accepts it by forgetting its mark of the vault, through the `DeviceDB` it opens the vault
-with, and opening it again. Whatever the older copy holds stands then, ways in removed since
-included, so ask the user first:
+with, and opening it again. Whether the restore was on purpose is for the app to know, from its
+own backend or its operators, and not for the user to guess: storage that rolls a vault back on
+its own meets the user with the same refusal, so a prompt asking "was your vault restored?" turns
+the check off for whoever the check is there to stop.
 
 ```ts
 try {
   vault = await openVault(opts)
 } catch (err) {
-  if (isVaultError(err, 'rolled_back') && await userConfirmsTheRestore()) {
-    await opts.deviceDB.eraseMark({ applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
-    vault = await openVault(opts)
-  }
+  if (! isVaultError(err, 'rolled_back') || ! await storageWasRestoredOnPurpose()) { throw err }
+  await opts.deviceDB.eraseMark({ applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
+  vault = await openVault(opts)
 }
 ```
+
+Close any handle already open on the vault first; `rolled_back` also reaches an open handle, from
+`unlock()`, a change to the ways in or a store. Whatever the older copy holds stands then, so tell
+the user what that means: ways in removed since, and passphrases since changed, open the vault
+again, and a passphrase added or changed since opens it no longer. The unlock this device
+remembered is from the newer copy, so it lapses, and the user enters a passphrase again. The
+device takes a new `device_id` for the vault, so the ways in it adds from then on carry a different
+one than those it added before. A restore for a vault refused as `damaged_bundle` meets the same
+refusal on every device that saw a newer copy than the backup.
 
 ### Damaged lockboxes
 

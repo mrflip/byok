@@ -4525,13 +4525,14 @@ const rolledBackWorld = async () => {
 
 /**
  * The README's recipe for a vault whose storage was restored from an older copy on purpose: open
- * it, and on 'rolled_back', once the user confirms, erase this device's mark and open it again.
+ * it, and on 'rolled_back', when the host knows of the restore, erase this device's mark and open
+ * it again; any other refusal goes on up.
  */
-const openAcceptingRestore = async (opts: OpenVaultOpts, userConfirmsRestore: () => Promise<boolean>): Promise<Vault> => {
+const openAcceptingRestore = async (opts: OpenVaultOpts, storageWasRestoredOnPurpose: () => Promise<boolean>): Promise<Vault> => {
   try {
     return await openVault(opts)
   } catch (err) {
-    if (! isVaultError(err, 'rolled_back') || ! await userConfirmsRestore()) { throw err }
+    if (! isVaultError(err, 'rolled_back') || ! await storageWasRestoredOnPurpose()) { throw err }
     await opts.deviceDB.eraseMark({ applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
     return await openVault(opts)
   }
@@ -4656,7 +4657,7 @@ describe("a bundle rolled back", () => {
     expect(await markIn(world)).to.deep.include({ unlock_epoch: 2 })
   })
 
-  it("is still refused by the README's recipe when the user does not confirm the restore", async () => {
+  it("is still refused by the README's recipe when the host knows of no restore", async () => {
     const { world, vault, older } = await rolledBackWorld()
     vault.close()
     world.dbStore.write(u1BundleCkey, older)
