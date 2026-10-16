@@ -8,8 +8,8 @@
 | 2 | release_age       | merged #96                 |
 | 3 | passkey_button_ux | merged #98                 |
 | 4 | small_sweep       | merged #99                 |
-| 5 | vaultdb_battery   | merged #114; helpers sweep and Postgres cap duplicates left |
-| 6 | race_helper       | filed #119 (on #111)       |
+| 5 | vaultdb_battery   | merged #114; the rest to a new sprint (Big Feats Next: 5a trims, 5b helpers sweep) |
+| 6 | race_helper       | merged #119                |
 | 7 | indexeddb_fixes   | merged #109                |
 | 8 | size_rule         | merged with #99            |
 | 9 | damaged_bundle    | merged #108                |
@@ -17,16 +17,18 @@
 | 11 | vaultdb_contract | merged #107                |
 | 12 | postgres_soft_cap | merged #113               |
 | 13 | rotation_design  | merged #105                |
-| 14 | rotation_shape   | filed #120 (on #119)       |
-| 18 | rotation_adapters | waits on 14               |
-| 19 | rotation_verb    | waits on 18 (ways in: keep the proven ones, ruled) |
-| 20 | rotation_docs    | waits on 19                |
-| 15 | e2e_home         | filed #111 (on main)       |
+| 14 | rotation_shape   | merged #120                |
+| 15 | e2e_home         | merged #111                |
 | 16 | late_unlock      | merged #110                |
-| 17 | validation_note  | unblocked (#101 merged); the Coach decides scope |
+| 17 | validation_note  | not started: unblocked (#101 merged), not in the Coach's next sprints; open |
+| 18 | rotation_adapters | to a new sprint (Big Feats Next) |
+| 19 | rotation_verb    | to a new sprint (Big Feats Next) |
+| 20 | rotation_docs    | to a new sprint (Big Feats Next) |
 | 21 | damaged_erase    | merged #115                |
-| 22 | flake_fixes      | filed #118 (on main)       |
-| -- | the line #98-#115 | merged 2026-10-16 03:09 (main 23f263a) |
+| 22 | flake_fixes      | merged #118                |
+
+**Closed 2026-10-16.** The plan for 18-20 and 5's remainder is the doc's *Big Feats Next* tab;
+the Coach launches them as new sprints. Open questions: the doc's *Open Matters* tab (eleven rows).
 
 ## What the threads have taught
 
