@@ -338,7 +338,7 @@ describe("VaultProvider", () => {
       expect(await second).to.be.null
     })
 
-    it("an unlock finishing after Cancel neither closes nor settles a newer dialog", async () => {
+    it("an unlock finishing after Cancel closes a newer dialog too, and runs the actions waiting on it", async () => {
       const world = await lockedWorld()
       const gate = TH.makeGate()
       const slowDeriver = { ...TH.testDeriver, deriveKeyBytes: async (passphrase: string, saltBytes: Uint8Array) => { await gate.pass(); return await TH.testDeriver.deriveKeyBytes(passphrase, saltBytes) } }
@@ -351,15 +351,23 @@ describe("VaultProvider", () => {
       fireEvent.click(screen.getByText('Cancel'))
       expect(await first).to.be.null
 
-      const second = watched(world.latest().withUnlockedVault(() => Promise.reject(new VaultError('vault_locked', 'Locked.'))))
+      const second = watched(world.latest().withUnlockedVault(() => vault.read('anthropic_api_key')))
       await screen.findByPlaceholderText('vault passphrase')
-      gate.release()
-      await waitFor(() => { expect(vault.getSnapshot().state).to.eq('unlocked') })
-      await TH.wakeupAtNextTick()
-      expect(screen.queryByPlaceholderText('vault passphrase')).to.not.be.null
       expect(second.outcome).to.eq('pending')
-      fireEvent.click(screen.getByText('Cancel'))
-      await waitFor(() => { expect(second.outcome).to.be.null })
+      gate.release()
+      await waitFor(() => { expect(second.outcome).to.eq('sk-fake') })
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    })
+
+    it("closes a dialog the vault unlocks under without it, and runs the actions waiting on it", async () => {
+      const world = await lockedWorld()
+      render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      await vault.unlock('pw')
+      expect(await reading).to.eq('sk-fake')
+      await waitFor(() => { expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null })
     })
   })
 
