@@ -433,23 +433,25 @@ export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 
 /**
  * What a device keeps of a vault, locked or not, on its own storage: its own random `device_id`
- * for the vault, which every way in it adds carries, and the highest `unlock_epoch` it has seen the
- * vault's bundle at, so that an older copy of the bundle storage hands back later is refused
- * (kind 'rolled_back'). Nothing in it is secret. One per scope: a vault made anew under the scope,
+ * for the vault, which every way in it adds carries, and the highest `unlock_epoch` and
+ * `vault_key_epoch` it has seen the vault's bundle at, so that an older copy of the bundle storage
+ * hands back later is refused (kind 'rolled_back'). Nothing in it is secret. One per scope: a vault made anew under the scope,
  * with another `vault_id`, starts a mark of its own, under a new `device_id`. `lock()` leaves it;
  * `destroy()` erases it.
  */
 export const DeviceMark = Z.object({
-  format:       Z.literal('safebyok-mark-v1'),
-  applabel:     Z.string(),
-  user_id:      Z.string(),
-  vaultlabel:   Z.string(),
+  format:          Z.literal('safebyok-mark-v1'),
+  applabel:        Z.string(),
+  user_id:         Z.string(),
+  vaultlabel:      Z.string(),
   /** This device's id for the vault: random, minted the first time it reads or makes the vault. */
-  device_id:    Z.string().check(Z.minLength(1)),
+  device_id:       Z.string().check(Z.minLength(1)),
   /** The vault this mark is of. */
-  vault_id:     Z.string().check(Z.minLength(1)),
+  vault_id:        Z.string().check(Z.minLength(1)),
   /** The highest `unlock_epoch` this device has seen the vault's bundle at. */
-  unlock_epoch: Z.int().check(Z.positive()),
+  unlock_epoch:    Z.int().check(Z.positive()),
+  /** The highest `vault_key_epoch` this device has seen the vault's bundle at. */
+  vault_key_epoch: vaultKeyEpoch,
 })
 export type DeviceMark = Z.infer<typeof DeviceMark>
 

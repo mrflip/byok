@@ -289,6 +289,8 @@ const MarkCases = [
   [TH.markOf('u1', { device_id: '' }),                  false,  'an empty device_id'],
   [TH.markOf('u1', { vault_id: '' }),                   false,  'an empty vault_id'],
   [TH.markOf('u1', { unlock_epoch: 0 }),                false,  'an epoch starts at one'],
+  [TH.markOf('u1', { vault_key_epoch: 0 }),             false,  'a vaultKey epoch starts at one'],
+  [TH.omitting(TH.markOf('u1'), 'vault_key_epoch'),     false,  'a mark missing the vaultKey epoch it has seen'],
 ] as const
 
 describe("DeviceMark", () => {
