@@ -120,7 +120,10 @@ await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team acc
   refused name, and stores afresh over a box whose note alone is refused.
 * **Sizes follow the names.** Each `store()` weighs its lockbox -- whisper, names and note -- and
   refuses one heavier than the backend holds in a record (`lockbox_too_large`), or one that
-  would take the vault past what the backend holds of a vault (`vault_full`).
+  would take the vault past what the backend holds of a vault (`vault_full`). The record is
+  weighed as its real serialized bytes; the vault's total is a conservative estimate made before
+  the lockbox is sealed (each counted at twice `maxWhisperBytes`, with its names and note as
+  measured), so at a `maxVaultBytes` set exactly tight it may refuse a write that would just fit.
 * Labels of any text are shown to your users as written: mind what bidirectional and invisible
   characters can make one look like.
 
