@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DeviceUnlock, EpochMillis, FarFuture, FarPast, ForeverMs, Lockbox, LockboxSummary, MaxUnlocks, VaultBundle, VaultScope, Whisper } from '../src/types'
+import { DeviceMark, DeviceUnlock, EpochMillis, FarFuture, FarPast, ForeverMs, Lockbox, LockboxSummary, MaxUnlocks, VaultBundle, VaultScope, Whisper } from '../src/types'
 import * as TH from './test-helpers'
 
 const WhisperCases = [
@@ -55,6 +55,9 @@ const OldIso = '2026-10-14T00:00:00.000Z'
 const { registered_at: _bundleTime, ...bundleWithoutTime } = TH.bundleOf('u1')
 const { unlocks: _unlocks, ...bundleWithoutUnlocks } = TH.bundleOf('u1')
 const { unlock_epoch: _epoch, ...bundleWithoutEpoch } = TH.bundleOf('u1')
+const { vault_key_epoch: _keyEpoch, ...bundleWithoutKeyEpoch } = TH.bundleOf('u1')
+const { prior_vault_key: _prior, ...rotatedWithoutPrior } = TH.rotatedBundleOf('u1')
+const priorAt = (vaultKeyEpoch: number) => ({ vault_key_epoch: vaultKeyEpoch, vault_key_wrapped: TH.fakeCiphered('prior') })
 /** The three fields a bundle held its one passphrase in, before `unlocks`. */
 const EnvelopeFieldsOfOld = {
   key_deriver_label:            'test_digest_v0',
@@ -68,7 +71,7 @@ const BundleCases = [
   // regular usage:
   [TH.bundleOf('u1'),                                       true,   'a whole bundle'],
   // refused, as a damaged or foreign record:
-  [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },    false,  'a format this version does not know'],
+  [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v3' },    false,  'a format this version does not know'],
   [{ ...TH.bundleOf('u1'), unlock_epoch: 0 },                false,  'an epoch starts at one'],
   [{ ...TH.bundleOf('u1'), unlock_epoch: 1.5 },              false,  'an epoch is a whole number'],
   [{ ...TH.bundleOf('u1'), vault_id: '' },                   false,  'an empty vault_id'],
@@ -82,6 +85,15 @@ const BundleCases = [
   [{ ...bundleWithoutTime, created_at: OldIso, updated_at: OldIso }, false, 'a bundle from before its time was named registered_at'],
   [{ ...bundleWithoutUnlocks, ...EnvelopeFieldsOfOld },      false,  'a bundle from before its unlocks were a list of envelopes'],
   [{ ...bundleWithoutEpoch, passphrase_epoch: 1 },           false,  'a bundle from before its epoch was named unlock_epoch'],
+  [{ ...bundleWithoutKeyEpoch, format: 'safebyok-vault-v1' }, false, 'a bundle from before vaultKey epochs'],
+  [bundleWithoutKeyEpoch,                                   false,  'a bundle missing its vault_key_epoch'],
+  [{ ...TH.bundleOf('u1'), vault_key_epoch: 0 },             false,  'a vaultKey epoch starts at one'],
+  // the prior vaultKey: none at the first, the one just before from the second on
+  [TH.rotatedBundleOf('u1'),                                true,   'a bundle at its second vaultKey, holding the first as its prior'],
+  [rotatedWithoutPrior,                                     false,  'a bundle past its first vaultKey with no prior'],
+  [{ ...TH.bundleOf('u1'), prior_vault_key: priorAt(1) },    false,  'a bundle at its first vaultKey holding a prior'],
+  [{ ...TH.rotatedBundleOf('u1'), vault_key_epoch: 3 },      false,  'a prior that is not the vaultKey just before'],
+  [{ ...TH.rotatedBundleOf('u1'), prior_vault_key: { vault_key_epoch: 1 } }, false, 'a prior with no wrap'],
 ] as const
 
 const manyEnvelopes = (count: number) => Array.from({ length: count }, (_unused, ii) => TH.envelopeOf(`phrase${String(ii)}`))
@@ -105,6 +117,10 @@ const UnlockListCases = [
   [[TH.envelopeOf('Not_a_label')],                                         true,   'an unlocklabel outside the label grammar: the vault checks the grammar when it adds a way in, and a stored record only needs text'],
   [[TH.envelopeOf('passphrase', { salt_b64: '' })],                        false,  'an empty salt'],
   [[TH.envelopeOf('passphrase', { unlock_id: '' })],                       false,  'an empty unlock_id'],
+  [[TH.envelopeOf('passphrase', { device_id: '' })],                       false,  'an empty device_id'],
+  [[TH.passkeyEnvelopeOf('laptop', { registered_at: 1_792_022_400 })],    false,  'a registered_at in epoch seconds'],
+  [[TH.envelopeOf('passphrase', { vault_key_epoch: 0 })],                  false,  'a vaultKey epoch of zero'],
+  [[TH.envelopeOf('passphrase', { vault_key_epoch: 2 })],                  true,   "an envelope at another vaultKey epoch than the bundle's: a damaged way in, which an unlock passes over"],
 ] as const
 
 describe("VaultBundle's unlocks", () => {
@@ -133,7 +149,9 @@ const LockboxCases = [
   [{ ...notelessBox, note: 'n'.repeat(257) },              true,   'a note of any length: the validators check notes, not the record'],
   [{ ...notelessBox, boxlabel: 'Ключ API: מפתח' },        true,   'a boxlabel of any text'],
   [{ ...notelessBox, note: 42 },                           false,  'a note that is not text'],
-  [{ ...notelessBox, format: 'safebyok-lockbox-v2' },      false,  'a format this version does not know'],
+  [{ ...notelessBox, format: 'safebyok-lockbox-v3' },      false,  'a format this version does not know'],
+  [{ ...notelessBox, format: 'safebyok-lockbox-v1' },      false,  'a lockbox from before vaultKey epochs'],
+  [{ ...notelessBox, vault_key_epoch: 1.5 },               false,  'a vaultKey epoch that is not a whole number'],
   [{ ...notelessBox, changed_at: FarFuture + 1 },          false,  'a changed_at past FarFuture'],
   [{ ...notelessBox, registered_at: Infinity },            false,  'a registered_at that never comes'],
   [{ ...notelessBox, changed_at: null },                   false,  'a null changed_at'],
@@ -170,7 +188,7 @@ describe("LockboxSummary", () => {
 
   it("strips the two ciphered fields and the format from a whole lockbox, and marks it undamaged", () => {
     const summary = LockboxSummary.parse(TH.boxOf('anthropic_api_key', 'a1'))
-    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'note', 'registered_at', 'changed_at', 'damaged'])
+    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'vault_key_epoch', 'note', 'registered_at', 'changed_at', 'damaged'])
     expect(summary.damaged).to.be.false
   })
 })
@@ -260,4 +278,21 @@ describe("EpochMillis", () => {
     expect(EpochMillis.safeParse(1_792_022_400_000.5).success).to.be.false
     expect(EpochMillis.safeParse(Infinity).success).to.be.false
   })
+})
+
+const MarkCases = [
+  // regular usage:
+  [TH.markOf('u1'),                                     true,   'a whole mark'],
+  [TH.markOf('u1', { unlock_epoch: 40 }),                true,   'a mark of a vault seen at a later epoch'],
+  // refused, as a damaged or foreign record:
+  [TH.markOf('u1', { format: 'safebyok-mark-v2' as never }), false, 'a format this version does not know'],
+  [TH.markOf('u1', { device_id: '' }),                  false,  'an empty device_id'],
+  [TH.markOf('u1', { vault_id: '' }),                   false,  'an empty vault_id'],
+  [TH.markOf('u1', { unlock_epoch: 0 }),                false,  'an epoch starts at one'],
+] as const
+
+describe("DeviceMark", () => {
+  for (const [candidate, expected, blurb] of MarkCases) {
+    it(blurb, () => { expect(DeviceMark.safeParse(candidate).success).to.eq(expected) })
+  }
 })

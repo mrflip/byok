@@ -41,7 +41,7 @@ const devicesOverOneDatabase: TH.MakeVaultDBDevices = (turnstile) => {
   return () => idbVaultDB({ dbName })
 }
 
-TH.describeVaultDB('idbVaultDB', () => idbVaultDB({ dbName: TH.freshDbName() }), { pushes: true, makeDevices: devicesOverOneDatabase })
+TH.describeVaultDB('idbVaultDB', () => idbVaultDB({ dbName: TH.freshDbName() }), { pushes: true, makeDevices: devicesOverOneDatabase, comparesVaultKeyEpoch: false })
 
 describe("idbVaultDB's devices, for the battery's races", () => {
   it("open every write's transaction through the race's turnstile", async () => {
@@ -85,7 +85,7 @@ describe("idbVaultDB", () => {
     const dbName = TH.freshDbName()
     const vaultDB = idbVaultDB({ dbName })
     await vaultDB.createBundle(TH.bundleOf('u1'))
-    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 })
     expect(await inspectIdbVaultDB({ dbName }).rows()).to.deep.equal([
       { ckey: '["box","acme","u1","main","anthropic"]', row: TH.boxOf('anthropic', 'one') },
       { ckey: '["vault","acme","u1","main"]',           row: TH.bundleOf('u1') },
@@ -109,7 +109,7 @@ describe("idbVaultDB", () => {
     const lookalike = TH.scopeOf('u1","main')
     for (const user of ['u1', 'u12', 'u2']) {
       await vaultDB.createBundle(TH.bundleOf(user))
-      await vaultDB.updateBox(TH.scopeOf(user), TH.boxOf('anthropic', user), { vault_id: `vault-id-${user}`, revision_id: null })
+      await vaultDB.updateBox(TH.scopeOf(user), TH.boxOf('anthropic', user), { vault_id: `vault-id-${user}`, revision_id: null, vault_key_epoch: 1 })
     }
     await set(boxCkey(lookalike, 'x'), TH.boxOf('x', 'lookalike'), rawShelf(dbName))
     const rangedGetAll = vi.spyOn(IDBObjectStore.prototype, 'getAll')
@@ -160,7 +160,7 @@ describe("idbVaultDB", () => {
     const vaultDB = idbVaultDB({ dbName })
     for (const user of ['u1', 'u2']) {
       await vaultDB.createBundle(TH.bundleOf(user))
-      await vaultDB.updateBox(TH.scopeOf(user), TH.boxOf('anthropic', 'one'), { vault_id: `vault-id-${user}`, revision_id: null })
+      await vaultDB.updateBox(TH.scopeOf(user), TH.boxOf('anthropic', 'one'), { vault_id: `vault-id-${user}`, revision_id: null, vault_key_epoch: 1 })
     }
     await set(bundleCkey(TH.scopeOf('u1')), { vault_id: 'vault-id-u1', unlock_epoch: 'one' }, rawShelf(dbName))
     const soundRefusal = await TH.refusalOf(vaultDB.eraseDamagedVault(TH.scopeOf('u2')))
@@ -230,7 +230,7 @@ describe("idbVaultDB, every verb one transaction", () => {
     const lookalike = TH.scopeOf('u1","main')
     for (const user of ['u1', 'u12', 'u2']) {
       await vaultDB.createBundle(TH.bundleOf(user))
-      await vaultDB.updateBox(TH.scopeOf(user), TH.boxOf('anthropic', user), { vault_id: `vault-id-${user}`, revision_id: null })
+      await vaultDB.updateBox(TH.scopeOf(user), TH.boxOf('anthropic', user), { vault_id: `vault-id-${user}`, revision_id: null, vault_key_epoch: 1 })
     }
     await set(boxCkey(lookalike, 'x'), TH.boxOf('x', 'lookalike'), rawShelf(dbName))
     const wholeShelf = vi.spyOn(IDBObjectStore.prototype, 'getAllKeys')
@@ -254,7 +254,7 @@ describe("idbVaultDB, every verb one transaction", () => {
     const dbName = TH.freshDbName()
     const vaultDB = idbVaultDB({ dbName })
     await vaultDB.createBundle(TH.bundleOf('u1'))
-    await vaultDB.updateBox(scope, TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    await vaultDB.updateBox(scope, TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 })
     const failing = vi.spyOn(IDBObjectStore.prototype, 'delete').mockImplementationOnce(function (this: IDBObjectStore, ckey) {
       this.delete(ckey)
       throw new DOMException('the disk is full', 'QuotaExceededError')

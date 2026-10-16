@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { localVaultDB, memoryStore, openVault, type StringStore } from '../src/index'
 import { Ciphered, fromB64, toB64 } from '../src/crypto'
 import { VaultError } from '../src/errors'
-import { Lockbox, PasskeySaltBytes, VaultBundle, VaultScope, type DeviceUnlock } from '../src/types'
+import { Lockbox, PasskeySaltBytes, VaultBundle, VaultScope, type DeviceMark, type DeviceUnlock } from '../src/types'
 import * as Ckeys from '../src/ckeys'
 import { VaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation, type StoredLockbox } from '../src/vault-db'
 import * as TH from './test-helpers'
@@ -629,11 +629,15 @@ const ckeyOf = (scope: VaultScope) => `${scope.applabel}:${scope.user_id}:${scop
 
 TH.describeDeviceDB('describeDeviceDB, over the smallest honest DeviceDB', () => {
   const rows = new Map<string, DeviceUnlock>()
+  const marks = new Map<string, DeviceMark>()
   return {
     readUnlock:  (scope) => Promise.resolve(rows.get(ckeyOf(scope)) ?? null),
     writeUnlock: (unlock) => { rows.set(ckeyOf(unlock), unlock); return Promise.resolve() },
     eraseUnlock: (scope) => { rows.delete(ckeyOf(scope)); return Promise.resolve() },
-    eraseAll:    () => { rows.clear(); return Promise.resolve() },
+    readMark:    (scope) => Promise.resolve(marks.get(ckeyOf(scope)) ?? null),
+    writeMark:   (mark) => { marks.set(ckeyOf(mark), mark); return Promise.resolve() },
+    eraseMark:   (scope) => { marks.delete(ckeyOf(scope)); return Promise.resolve() },
+    eraseAll:    () => { rows.clear(); marks.clear(); return Promise.resolve() },
   }
 })
 
@@ -687,7 +691,7 @@ describe("perUser", () => {
     const { vaultDB, store } = counted()
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.createBundle(TH.bundleOf('u2'))
-    await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
+    await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null, vault_key_epoch: 1 })
     expect(await servingOnly('u2', store).readBox(TH.scopeOf('u2'), 'anthropic')).to.deep.equal(TH.boxOf('anthropic', 'two'))
     expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
   })
@@ -696,7 +700,7 @@ describe("perUser", () => {
     const { vaultDB, store } = counted()
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.createBundle(TH.bundleOf('u2'))
-    await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null })
+    await vaultDB.updateBox(TH.scopeOf('u2'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u2', revision_id: null, vault_key_epoch: 1 })
     await vaultDB.updateBundle({ ...TH.bundleOf('u2'), unlock_epoch: 2 }, { vault_id: 'vault-id-u2', unlock_epoch: 1 })
     vaultDB.subscribe(TH.scopeOf('u2'), () => undefined)()
     await vaultDB.eraseBox(TH.scopeOf('u2'), 'anthropic', { vault_id: 'vault-id-u2' })

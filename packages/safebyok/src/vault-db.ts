@@ -20,18 +20,20 @@ const BundleExpectation = Z.object({
 })
 
 /**
- * What a lockbox update was written for and read: the vault whose vaultKey sealed it, and the
- * `revision_id` of the lockbox the writer read under its boxlabel, or null when there was none.
- * The update lands only while the scope's standing bundle has that `vault_id` and the standing
- * lockbox has that `revision_id` -- or, for null, while there is no lockbox there at all. Plain
- * JSON, so it crosses any wire as-is.
+ * What a lockbox update was written for and read: the vault and the vaultKey that sealed it -- its
+ * `vault_id`, and the `vault_key_epoch` the lockbox carries -- and the `revision_id` of the lockbox
+ * the writer read under its boxlabel, or null when there was none. The update lands only while the
+ * scope's standing bundle has that `vault_id` and that `vault_key_epoch`, and the standing lockbox
+ * has that `revision_id` -- or, for null, while there is no lockbox there at all. Plain JSON, so it
+ * crosses any wire as-is.
  *
- * @example { vault_id: bundle.vault_id, revision_id: prev?.revision_id ?? null }
+ * @example { vault_id: bundle.vault_id, revision_id: prev?.revision_id ?? null, vault_key_epoch: bundle.vault_key_epoch }
  */
 export type LockboxExpectation = Z.infer<typeof LockboxExpectation>
 const LockboxExpectation = Z.object({
-  vault_id:    VaultBundle.shape.vault_id,
-  revision_id: Z.nullable(Lockbox.shape.revision_id),
+  vault_id:        VaultBundle.shape.vault_id,
+  revision_id:     Z.nullable(Lockbox.shape.revision_id),
+  vault_key_epoch: VaultBundle.shape.vault_key_epoch,
 })
 
 /**
@@ -66,7 +68,8 @@ export type StoredLockbox = { boxlabel: string, lockbox: unknown }
  *    fields are base64url text), so any backend that can hold JSON can hold a vault, as-is.
  *  * **Never look inside.** Every secret field arrives encrypted; nothing you hold can open a
  *    vault, and nothing safebyok does ever needs you to understand a record -- only to compare a
- *    few public fields (`vault_id`, `unlock_epoch`, `revision_id`) before a write.
+ *    few public fields (`vault_id`, `unlock_epoch`, `vault_key_epoch`, `revision_id`) before a
+ *    write.
  *  * **Write only as expected.** Every update and erase carries an expectation of what stands in
  *    storage, and writes only if it still does: check and write in one atomic step (a
  *    transaction, a conditional write), and resolve `false` when the expectation fails. An
@@ -214,11 +217,13 @@ export abstract class VaultDB {
 
   /**
    * Write `lockbox` under its boxlabel, only while the scope's standing bundle has the
-   * `vault_id` in `expected` and the standing lockbox has its `revision_id` (or, for null, there
-   * is none). Refuses with kind `stale_write` otherwise -- including when the scope holds no
-   * bundle -- and writes nothing. A backend that holds each vault to a limit of its own refuses
-   * a write past it with kind `vault_full`, writing nothing. A lockbox heavier than the
-   * backend's `maxRecordBytes` is refused with kind `lockbox_too_large` before storage sees it.
+   * `vault_id` and `vault_key_epoch` in `expected` and the standing lockbox has its `revision_id`
+   * (or, for null, there is none). Refuses with kind `stale_write` otherwise -- including when the
+   * scope holds no bundle -- and writes nothing. A backend that holds each vault to a limit of its
+   * own refuses a write past it with kind `vault_full`, writing nothing. A lockbox heavier than the
+   * backend's `maxRecordBytes` is refused with kind `lockbox_too_large` before storage sees it. A
+   * lockbox is written under the vaultKey it was sealed with, so its `vault_key_epoch` must be the
+   * one in `expected`: kind 'bad_option' otherwise.
    */
   async updateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation, validators?: VaultValidators): Promise<void> {
     const rules = rulesFor(validators)
@@ -227,6 +232,9 @@ export abstract class VaultDB {
     const outgoing = checkOutgoing(Lockbox, lockbox, 'lockbox')
     if (outgoing.note !== undefined) { Names.check(rules, 'note', outgoing.note) }
     const expectation = checkOutgoing(LockboxExpectation, expected, 'lockbox expectation')
+    if (outgoing.vault_key_epoch !== expectation.vault_key_epoch) {
+      throw new VaultError('bad_option', "updateBox writes a lockbox under the vaultKey it was sealed with: the lockbox's vault_key_epoch must be the expected one.")
+    }
     const recordBytes = jsonBytes({ ...asked, ...outgoing })
     if (recordBytes > this.maxRecordBytes) {
       throw new VaultError('lockbox_too_large', `That lockbox weighs ${String(recordBytes)} bytes, over the ${String(this.maxRecordBytes)} its storage holds in one record, so nothing was written: store a smaller whisper, or a shorter note or boxlabel.`)
@@ -341,8 +349,9 @@ export abstract class VaultDB {
   protected abstract doListBoxes(scope: VaultScope): Promise<StoredLockbox[]>
   /**
    * Store `lockbox` under its boxlabel if, and only if, the scope's standing bundle has
-   * `expected.vault_id` and the standing lockbox has `expected.revision_id` -- or, when that is
-   * null, no lockbox stands there. True when it was written; false, writing nothing, otherwise.
+   * `expected.vault_id` and `expected.vault_key_epoch`, and the standing lockbox has
+   * `expected.revision_id` -- or, when that is null, no lockbox stands there: all compared in the
+   * same atomic step as the write. True when it was written; false, writing nothing, otherwise.
    */
   protected abstract doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation): Promise<boolean>
   /**
@@ -471,17 +480,24 @@ const unnamedBundle = (opts?: ErrorOptions) => new VaultError('damaged_bundle', 
 const newerBundle = () => new VaultError('damaged_bundle', "This vault's stored record is in a form this version of the app does not know. It may have been written by a newer version, which opens it, so nothing was erased: update the app and try again.")
 
 /**
+ * The bundle formats earlier versions of this package wrote: a record in one is older, never newer,
+ * and fails today's checks as damage does.
+ */
+const OlderBundleFormats: ReadonlySet<unknown> = new Set(['safebyok-vault-v1'])
+
+/**
  * True when a record that fails this version's checks may be one a later version writes, which
- * is not damage: it names a `format` this version does not know (of any type), holds an unlock
- * `method` it does not know, or holds more unlocks than {@link MaxUnlocks}. These are all this
- * version can tell from damage; anything else that fails is taken for damage. Any change to what
- * a stored record may hold -- a field, a shape, or a range a check accepts -- therefore bumps
- * `format`.
+ * is not damage: it names a `format` this version neither writes nor wrote before (of any type),
+ * holds an unlock `method` it does not know, or holds more unlocks than {@link MaxUnlocks}. These
+ * are all this version can tell from damage; anything else that fails is taken for damage. Any
+ * change to what a stored record may hold -- a field, a shape, or a range a check accepts --
+ * therefore bumps `format`.
  */
 const mayBeNewer = (raw: unknown): boolean => {
   if (typeof raw !== 'object' || raw === null) { return false }
   const { format, unlocks } = raw as { format?: unknown, unlocks?: unknown }
-  if (format !== undefined && ! VaultBundle.shape.format.safeParse(format).success) { return true }
+  const knownFormat = VaultBundle.shape.format.safeParse(format).success || OlderBundleFormats.has(format)
+  if (format !== undefined && ! knownFormat) { return true }
   if (! Array.isArray(unlocks)) { return false }
   if (unlocks.length > MaxUnlocks) { return true }
   return unlocks.some((envelope: unknown) => {
@@ -537,6 +553,7 @@ const checkRecord = <RecordT>(recordSchema: Z.ZodMiniType<RecordT>, raw: unknown
 const StandingBundle = Z.object({ vault_id: Z.string(), unlock_epoch: Z.number() })
 const StandingVault = Z.object({ vault_id: Z.string() })
 const StandingBox = Z.object({ revision_id: Z.string() })
+const StandingVaultKey = Z.object({ vault_key_epoch: Z.number() })
 
 /** True when the bundle row standing in storage is the one `expected` names. */
 const bundleMeetsExpectation = (standingBundle: unknown, expected: BundleExpectation): boolean => {
@@ -562,9 +579,15 @@ const vaultIdMeetsExpectation = (standingBundle: unknown, expected: { vault_id: 
   return standing.success && standing.data.vault_id === expected.vault_id
 }
 
+/** True when the bundle row standing in storage stands for the vaultKey `expected` names. */
+const vaultKeyMeetsExpectation = (standingBundle: unknown, expected: { vault_key_epoch: number }): boolean => {
+  const standing = StandingVaultKey.safeParse(standingBundle)
+  return standing.success && standing.data.vault_key_epoch === expected.vault_key_epoch
+}
+
 /** True when the bundle and lockbox rows standing in storage are the ones `expected` names. */
 const lockboxMeetsExpectation = (standingBundle: unknown, standingBox: unknown, expected: LockboxExpectation): boolean => {
-  if (! vaultMeetsExpectation(standingBundle, expected)) { return false }
+  if (! vaultMeetsExpectation(standingBundle, expected) || ! vaultKeyMeetsExpectation(standingBundle, expected)) { return false }
   if (standingBox === null || standingBox === undefined) { return expected.revision_id === null }
   const box = StandingBox.safeParse(standingBox)
   return box.success && box.data.revision_id === expected.revision_id
