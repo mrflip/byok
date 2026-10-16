@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: threads 2 and 4 underway; 11 in review; 1 (#128), 3 (#127), 6 (#126), 7 (#129), 8 (#130) filed; 5b cleared by the Coach, cut once 4 files
+* **Status**: threads 2 and 14 underway; 4 in review (#132); 1 (#128), 3 (#127), 6 (#126), 7 (#129), 8 (#130), 11 (#131) filed; 5b cleared by the Coach, cut once 4 files
 
 ## Read first
 
@@ -246,12 +246,42 @@ handoff carries it whole. Below, the orchestrator's gloss.
   `safebyok-graphql`'s recipe and README, the battery flag.
 * **Model**: opus. **Depends on**: 4.
 
-### 14. `uncontrolled_fields` -- proposed, waits on its row
+### 14. `uncontrolled_fields` -- cleared by the Coach; underway, cut from 7 (3d62fc04)
 
 * **What**: `WhisperField` and the passphrase field become uncontrolled, so neither secret is
   copied into the input's `value` attribute (React 19 does that for a controlled input; thread
   7's review found it). Changes both fields' props.
-* **Model**: opus. **Depends on**: 7, and the Coach's `proceed` on its row in *Open Matters*.
+* **Added, the Coach's rulings (2026-10-16, Open Matters):**
+  * **Keep the eyeball, and room for pleasant validations.** The Coach: "does this still let me
+    have an eyeball to see the password? Pleasant validations next to it? (\"passphrase must
+    contain a capital letter\"?)". An uncontrolled field keeps its reveal toggle (it flips the
+    input's `type`), and the passphrase field gets a message beside it, tied by
+    `aria-describedby` and announced politely, fed by a host callback. No composition rules of our
+    own ("must contain a capital letter"): NIST SP 800-63B advises against them, and the Coach's
+    thread 10 ruling already says no meter of ours; thread 10's `passphraseStrengthTest()` is what
+    feeds that message once the line is restacked (14 sits above 10). Record the capital-letter
+    question as an open matter, Rec: length and strength, not composition.
+  * **Two fields, two jobs.** The Coach: "we need to offer two different things: 1) a field for
+    entering a secret to store; this is best NOT offered to a password generator to complete or
+    for a generator to manufacture; 2) a field for entering a passphrase tied to this URL -- that
+    should be in every way the bestest most bestpractices compliant and password manager friendly
+    field there is". So `WhisperField` turns autofill and generators away (no
+    `autocomplete="new-password"`; `autocomplete="off"` and the password-manager ignore attributes
+    `safebyok/utils` exports), and the passphrase field invites them: a real `<form>`, `type`
+    `password`, `autocomplete` `new-password` when setting and `current-password` when entering,
+    with a username the manager can file it under (the vault's user, in a hidden
+    `autocomplete="username"` field). Cite the sources (WHATWG autofill, the password managers'
+    own guidance) in the thread file.
+  * **CI flakes, first.** CI is red on several of the sprint's PRs. The worker reproduces them,
+    finds the cause and fixes it before anything else, as its own commit(s):
+    `packages/safebyok-react/tests/vault-provider.test.tsx` > `eraseDamagedVault`, both "opens
+    again, and still rejects, when the erase finds storage changed: it reads sound now" (774:55,
+    "promise resolved undefined instead of rejecting") and "erases the vault openError says is
+    damaged ... opens a fresh one" -- on main already, seen on the node-compat jobs of #125, thread 4's
+    draft and #128; and `demos/safebyok-demo-react/tests/App.test.tsx` > "clicks through the
+    passphrase dialog: set, lock, mistype, dismiss, enter, and start over" (7 s, on #129's
+    test-build). A timing fix that only raises a timeout is not a fix.
+* **Model**: opus. **Depends on**: 7 (#129).
 
 ## Coach rulings during the sprint
 
@@ -291,6 +321,16 @@ From the sprint doc's *Open Matters*, as rows are swept:
   door"); `rolled_back` on a refresh drops the key, one rule with the sign-out, no knob ("one
   rule, simple to reason about"). All three in thread 4.
 * **A new TODO**, the Coach's note: "Identity should not be tied to the backing database".
+* **Coach rulings, second batch (2026-10-16, after the session limit).** Thread 14 proceeds,
+  with the eyeball kept, a validation message beside the passphrase field, and the two fields'
+  two jobs (thread 14's entry has the words). A second unsubscribe stays silent. The provider not
+  reopening on `bad_option`, with `retryOpen()` to mend the race, stands. NOTYET: the React
+  binding under a real screen reader, shadow-DOM host and browser (G356 stays). TODO: `postgres`
+  and `node-compat (22)` become required checks (the ruleset is the Coach's). Noted: thread 11's
+  answers to the side questions, and thread 8's two unproven release paths (the Coach watches the
+  first failed release and the first Dependabot runtime PR). CLAUDE.md's stale *Commands* lines:
+  fixed in the Coach's own branch. The `KeyDeriver` union: explain only, no action yet. Full
+  question and answer for each: `20261016-push_to_100_a-resolutions.md`.
 
 ## Decisions taken in YOLO
 
@@ -315,6 +355,11 @@ From the sprint doc's *Open Matters*, as rows are swept:
    a Coach ruling (the polyfill check), add documentation, and at most memoize one formatter.
 9. **The lock rulings go to thread 4**, mid-build, not to a new thread on top of it: they live
    in `refusal-policy.ts` and the lock code that thread 4 already holds.
+10. **Thread 4 may raise the `openVault` budget**, that line only, to the rule's round number:
+    CI found it 1.7 kB over on thread 4's draft. Thread 9 lowers every budget at the end.
+11. **The CI flakes go to thread 14**, first, as their own commits: it is cut from 7, which holds
+    the failing demo test, and works in the same package as the `vault-provider` flake on main.
+    No new thread, so the sprint stays at three agents building at once.
 
 ## For the Coach
 

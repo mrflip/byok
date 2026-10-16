@@ -107,7 +107,15 @@ The same facts, to different readers, at different altitudes. Every channel is w
   line: `ready` | `filed` | `blocked` | `abandoned`, branch, PR number once there is one,
   justify results. Then: a few sentences of what you built; deviations and suppressions
   (`eslint-disable`, `ts-expect-error`); questions, split **blocking** and **minor**; the exact
-  state you left your worktree in. No file dumps: point at your thread file.
+  state you left your worktree in. No file dumps: point at your thread file. End every report
+  with **Open matters**: each question you leave open anywhere (PR, thread file, `human/`), one
+  line each, a bold handle and your recommendation, so the orchestrator can put every one before
+  the Coach (in a sprint's *Open Matters* tab, when it keeps one). Repeat one from an earlier
+  report only if it changed.
+* **A Coach ruling, relayed to you** on a question you raised: put a one-line restatement beside
+  the question wherever it stands -- the PR description, your thread file, your `human/` entry --
+  as `→ *Coach (YYYY-MM-DD):* <the ruling, briefly>`, and push it with your next push. Leave the
+  question in place: the ruling sits next to it, it does not replace it.
 
 ## Never
 

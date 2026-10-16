@@ -9,6 +9,15 @@ What is reasonable but deferred is in `NOTYET.md`: do not anticipate it in your 
 
 Small irritants, each a few lines, picked up by whoever is nearby.
 
+* **`node-compat (22)` a required check.** The Coach (2026-10-16, sprint push_to_100_a, thread 8,
+  [#130](https://github.com/mrflip/safebyok/pull/130)): add `node-compat (22)` to the main
+  ruleset's required checks. CI's node-compat job gates on Node 22, the platform floor, and only
+  reports on the newest Node (`continue-on-error` for the rest of the matrix). A workflow cannot
+  make a check required: the ruleset is the Coach's to change.
+* **`postgres` a required check, once it has run a while.** The Coach (2026-10-16, sprint
+  push_to_100_a, thread 11, [#131](https://github.com/mrflip/safebyok/pull/131)): once the
+  `postgres` CI job has run green for a while, add it to the main ruleset's required checks.
+
 ## Roadmapped
 
 In order. A later item that depends on an earlier one says so.

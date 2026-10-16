@@ -22,3 +22,9 @@ implementation.
     data the fingerprinting rules care about), or none (the device list shows when each was added
     and last used). Encrypting a user-typed label inside the vault is the likely answer; check it
     against the host app's privacy review, which owns what its users are told.
+
+* **The React binding under real assistive technology and real hosts.** The Coach (2026-10-16,
+  sprint push_to_100_a, thread 7, [#129](https://github.com/mrflip/safebyok/pull/129)): not done,
+  and not planned soon -- a real screen reader over the passphrase dialog, real shadow-DOM hosting,
+  and a real browser rather than jsdom. G356 stays open for it.
+

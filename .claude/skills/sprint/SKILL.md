@@ -79,6 +79,10 @@ curated summary of what the threads have taught, newer than the plan wherever th
 Each worker writes its own section to `thread-<N>-<label>.md` in the same directory of its own
 branch, so no two writers ever share a file.
 
+**`<YYYYMMDD-sprint_name>-resolutions.md`** -- yours too, begun at the first ruling: every
+matter the Coach resolved, the full question and the full reply (§3, *Carry each ruling back*).
+It is mirrored like the other files.
+
 Commit both (`plan:`), push the sprint branch, and file it at once as a **draft** PR against
 `main` (documents only, a `plan:` title): the *sprint PR*. It is yours, and you commit to it
 freely as the sprint runs. Each thread commits its own `thread-<N>-<label>.md` and `human/` entry
@@ -186,6 +190,12 @@ follows the resume that finishes it.
    branch. Trust the reports for the rest -- do not re-review the diff.
 2. **Relay, whole.** Put the report in chat verbatim -- the Coach reads the entire bolus, not a
    précis -- under one lead line of your own (thread, verdict, PR link when there is one).
+   **Cycle its open matters to the Coach.** Every worker and reviewer report ends with an *Open
+   matters* list. When the sprint keeps an *Open Matters* tab (`/turbochat`), each new item
+   becomes a `drafting` row in the same pass as the relay -- the minor leftovers of one report
+   may share a row when they share a recommendation -- tagged with where it was raised (`#N`,
+   thread N), so its ruling can be carried back. An item you leave out, say why in the relay.
+   Nothing open is left only in chat.
 3. **Tend the documents.** Keep the status table and status lines current, and revise later
    threads' glosses where a thread's discoveries changed them. When a thread files, add a
    `*Review:*` line under its entry from the reviewer's report -- what it fixed, and each
@@ -197,7 +207,19 @@ follows the resume that finishes it.
    on who should read it. Keep the progress document under about 5,000 words: every later
    worker reads it whole. Mark what you add with `*Orchestrator:*`; never edit a worker's
    thread file. Commit (`plan:`) and push to the sprint PR; mirror at the milestones §1 names.
-4. **Decide** (§4), refill the frontier, and wait for the next report. If the Coach has
+4. **Carry each ruling back.** When the Coach resolves a matter (a chat answer, or a row flipped
+   to `proceed`), do three things beside acting on it:
+   - **The resolutions file**: append to `<YYYYMMDD-sprint_name>-resolutions.md` in the sprint
+     directory the question in full, as it was put, and the Coach's reply in full, word for word,
+     with where it was raised and where the work went; newest batch first.
+   - **Beside the question**: a one-line restatement, `→ *Coach (YYYY-MM-DD):* <the ruling>`,
+     wherever the question stands -- the PR description, the thread file, the `human/` entry.
+     A live worker does it on its branch when you relay the ruling; for a filed thread whose
+     worker is gone, edit the PR description yourself (`gh pr edit`), and note the thread file and
+     `human/` lines as owed in the progress document, to be added at the restack (the one edit
+     you make to a worker's file).
+   - **The plan**: one line in its *Coach rulings* list.
+5. **Decide** (§4), refill the frontier, and wait for the next report. If the Coach has
    interjected in chat meanwhile, fold their guidance in first.
 
 ## 4. Continue, resume, or stop
@@ -256,10 +278,13 @@ When the last thread files (or the sprint pauses for good):
    (`--force-with-lease=<branch>:<old sha>`), and rewrite each PR's first line to "Stacked on
    #N, in the line main → #A → #B → …". Check the bottom stands on today's `origin/main`, not on
    an unmerged PR whose commits `main` already holds under other SHAs.
+   As you restack each branch, add the restatement lines the progress document lists as owed to
+   its thread file and `human/` entry (§3, *Carry each ruling back*), in one `plan:` commit on
+   that branch.
 2. **Close the sprint PR.** Set both documents' status lines; add
    `human/YYYYMMDD-sprint_<name>_done.md` -- the sprint in a paragraph, the PRs in merge order
    with their "Stacked on" notes, YOLO decisions if any, and the open questions gathered in one
-   place; commit. Tag the tip and push the tag (`sprint/YYYYMMDD-<name>`), so its history stays
+   place (what the Coach resolved stays in the resolutions file: point to it); commit. Tag the tip and push the tag (`sprint/YYYYMMDD-<name>`), so its history stays
    on GitHub. Then squash the sprint branch into one commit on top of the line, push it with a
    lease, and take the PR out of draft (`gh pr ready`). It is the line's top: merging it merges
    everything.
