@@ -17,7 +17,7 @@
 | 11 | vaultdb_contract | merged #107                |
 | 12 | postgres_soft_cap | merged #113               |
 | 13 | rotation_design  | merged #105                |
-| 14 | rotation_shape   | second review fixed; filing #120 onto #119 |
+| 14 | rotation_shape   | filed #120 (on #119)       |
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 (ways in: keep the proven ones, ruled) |
 | 20 | rotation_docs    | waits on 19                |
@@ -35,7 +35,7 @@
   byte-identical. The "mainly main" ruleset requires test-build, lint-typecheck and both CodeQL
   checks, with **strict up-to-date**: every PR goes BEHIND whenever main moves, and merging the top
   takes all. #107's test-build hit the Convex timeout flake twice; rerun requested. **The whole line
-  merged with #115 (main `23f263a`). The line now: main `cc32761` → #111 → #119 (top), restacked after the gripes line merged; justify green at the top.**
+  merged with #115 (main `23f263a`). The line now: main `cc32761` → #111 → #119 → #120 (top), restacked after the gripes line merged; justify green at the top.**
 
 * **Thread 21 (#115), damaged_erase.** `eraseDamagedVault(opts)` erases a vault `openVault` refuses
   as `damaged_bundle`, and the device's remembered unlock; a sound vault is refused (`bad_option`),
