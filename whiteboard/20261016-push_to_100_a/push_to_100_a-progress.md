@@ -37,8 +37,10 @@
   G448 annotated rather than swept (each waits on the Coach's hands: the required check, the
   Dependabot secret). Thread 1 (#128): 20 rows swept from the Validators tab (G172, G061, G074,
   G118, G123, G173-G176, G179, G181-G185, G476, G232, G289, T02, T03); G177 annotated (its note
-  half goes with thread 2); no joiner row stood. The Gripefest doc stands at 160 matters; thread
-  11's sweep (G203, G288; G524 annotated) is under way.
+  half goes with thread 2); no joiner row stood. Thread 11 (#131): G203 and G288 swept, G524
+  annotated (its Postgres half). G203's answer asked about the other databases and Playwright;
+  thread 11 answered, and the Coach noted it (the resolutions file). The Gripefest doc stands at
+  158 matters.
 * *Orchestrator:* **Rulings carried back** (the sprint skill's §3, new this sprint): the Coach's
   rulings are in `20261016-push_to_100_a-resolutions.md` in full, and a `→ *Coach:*` line goes
   beside each question in its PR. Lines owed to filed threads' files and `human/` entries are
