@@ -1,9 +1,9 @@
 # Thread 14: rotation_shape (2026-10-16)
 
-Branch `20261016-rotation_shape`, PR #120, stacked on #119 (main `cc32761` → #111 → #119). Justify green: root 154, core 1430
-(+22 skipped), IndexedDB 140 (+12 skipped, 1 todo), Postgres 219 (+15, 2 todo), React 111, argon2
-44, Convex 345 (+24, 2 todo), GraphQL 207 (+15, 2 todo), demo 162 (+11). `pnpm size` green with
-`everything` raised 30 to 34 kB (measured 30.5 kB; +3 kB, rounded up).
+Branch `20261016-rotation_shape`, PR #120, stacked on #119 (main `cc32761` → #111 → #119). Justify green on #119: root 155, core 1609 (+33
+skipped), IndexedDB 144 (+13, 1 todo), Postgres 225 (+19, 2 todo), React 111, argon2 44, Convex 278
+(+11, 1 todo), GraphQL 212 (+19, 2 todo), e2e 85 (+11, 1 todo), demo 162 (+15). `pnpm size` green with
+`everything` raised 30 to 34 kB (measured 30.63 kB; +3 kB, rounded up).
 
 * **Built** (the design's section 3, 5 and 8, `whiteboard/20261016-rotation/rotation-design.md`):
   - `VaultBundle` is `safebyok-vault-v2`: `vault_key_epoch` (1 for now), `prior_vault_key`
@@ -99,4 +99,4 @@ read before the write (`4b94ab1c`, another tab making and changing the vault mea
 rethrows every other refusal, and says what accepting costs (`ff6273d8`). Mine: the design's
 section 8 says the same; the README's `eraseDamagedVault` snippet rethrows too. Left, minor: the
 `rolled_back` message names `eraseMark`; two tabs may each mint a `device_id` after the recipe.
-
+On #119, its round-trip test adapter now compares `vault_key_epoch` too (it runs line 3.8).
