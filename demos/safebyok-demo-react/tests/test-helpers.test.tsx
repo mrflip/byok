@@ -32,6 +32,14 @@ describe("makeWorld", () => {
     expect(screen.getByTestId('boxes').textContent).to.eq('anthropic_api_key')
   })
 
+  it("closes the vault it seeds through, even when a store is refused", async () => {
+    const world = TH.makeWorld()
+    const tally = TH.tallyWatches(world.vaultDB)
+    await TH.expectRefusal(world.seed({ '': 'sk-ant-test-not-a-real-key' }), 'bad_label')
+    expect(tally.opened).to.eq(1)
+    expect(tally.opened - tally.closed).to.eq(0)
+  })
+
   it("opens the same vault from outside the page, in the acme app as scopeOf has it", async () => {
     const world = TH.makeWorld()
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
