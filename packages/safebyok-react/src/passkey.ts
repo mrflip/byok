@@ -103,11 +103,13 @@ export const createPasskey = async (opts: CreatePasskeyOpts): Promise<PasskeyPro
 /**
  * The answer of whichever of a vault's passkeys the user touches: what `vault.unlock` (or any
  * change's proof) takes. `unlocks` is the snapshot's list, whole; the browser offers the user each
- * passkey in it, and asks the one chosen for its answer over that passkey's own salt.
+ * passkey in it, and asks the one chosen for its answer over that passkey's own salt. A passkey
+ * stored damaged -- its `credential_id` or `prf_salt_b64` not base64url -- is left out, and the
+ * others offered as ever.
  *
  * Resolves null when the user dismisses the prompt (or lets it time out, or has none of these
  * passkeys at hand). Refuses with kind 'absent_unlock' when `unlocks` holds no passkey,
- * 'corrupt_record' when one's `credential_id` or `prf_salt_b64` is not base64url,
+ * 'damaged_unlock' when every one it holds is stored damaged,
  * 'passkey_unavailable' when the browser has no WebAuthn or the passkey gives no PRF answer, and
  * 'bad_option' when `opts.rpId` does not fit this page.
  *
@@ -117,9 +119,13 @@ export const createPasskey = async (opts: CreatePasskeyOpts): Promise<PasskeyPro
  */
 export const askPasskey = async (unlocks: readonly UnlockSummary[], opts: AskPasskeyOpts = {}): Promise<PasskeyProof | null> => {
   ensureAvailable()
-  const passkeys = unlocks.flatMap((unlock) => (unlock.method === 'passkey' ? [askable(unlock)] : []))
-  if (passkeys.length === 0) {
+  const listed = unlocks.filter((unlock) => unlock.method === 'passkey')
+  if (listed.length === 0) {
     throw new VaultError('absent_unlock', 'This vault has no passkey to ask: unlock it with a passphrase, then add one.')
+  }
+  const passkeys = listed.flatMap((unlock) => askable(unlock) ?? [])
+  if (passkeys.length === 0) {
+    throw new VaultError('damaged_unlock', "Every passkey of this vault is stored damaged, so none can be asked. Unlock with a passphrase, then remove the passkeys and add them again.")
   }
   const asked = await askAuthenticator(() => navigator.credentials.get({
     publicKey: {
@@ -140,7 +146,7 @@ export const askPasskey = async (unlocks: readonly UnlockSummary[], opts: AskPas
   return proofOf(credentialId, answering.saltBytes, answer)
 }
 
-/** A passkey of the vault's, its credential id and salt as bytes for WebAuthn. */
+/** A passkey of the vault's, its credential id and salt as bytes for WebAuthn; null when either is not base64url. */
 const askable = (unlock: UnlockSummary & { method: 'passkey' }) => {
   try {
     return {
@@ -148,8 +154,8 @@ const askable = (unlock: UnlockSummary & { method: 'passkey' }) => {
       credentialBytes: fromB64(unlock.credential_id) as Uint8Array<ArrayBuffer>,
       saltBytes:       fromB64(unlock.prf_salt_b64) as Uint8Array<ArrayBuffer>,
     }
-  } catch (err) {
-    throw new VaultError('corrupt_record', "One of this vault's passkeys is stored with a credential_id or prf_salt_b64 that is not base64url: the bundle is damaged. Unlock with a passphrase.", { cause: err })
+  } catch {
+    return null
   }
 }
 
