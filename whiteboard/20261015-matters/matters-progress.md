@@ -8,7 +8,7 @@
 | 2 | release_age       | filed #96                  |
 | 3 | passkey_button_ux | filed #98                  |
 | 4 | small_sweep       | filed #99                  |
-| 5 | vaultdb_battery   | underway (on #107)         |
+| 5 | vaultdb_battery   | in review (#114)           |
 | 6 | race_helper       | waiting on thread 5        |
 | 7 | indexeddb_fixes   | filed #109 (on #108)       |
 | 8 | size_rule         | filed #99 (commits on it)  |
@@ -28,6 +28,18 @@
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
+
+* **Thread 5 (#114), vaultdb_battery.** Audited all five adapters; did all but Convex here. New
+  battery tests: 1.1/1.2 (text never normalized), five races under 3.2-3.5, a `pushes: true` option
+  for 6.1 (wired for local, IndexedDB, Postgres, GraphQL); `makeVaultDBFor` on the Postgres route
+  and GraphQL Yoga recipes; duplicates trimmed. The recipes' test-only `x-test-user` header is now
+  URI-encoded (a header holds only Latin-1). **Convex gets no capped factory** (its 8000 limit is a
+  constant inside the component; no honest way to lower it). **Proposed split for the rest:**
+  Convex after #111's ruling (add `pushes`, trim duplicates); Postgres's cap duplicates after thread
+  12; a helpers sweep (`TH.expectRefusal`, `eventually`/`changeCounter` into `safebyok/testing`).
+  **For thread 6:** a second-device factory (two adapters over one backend, no shared connection or
+  lock), writers that really overshoot (4.5), and a way to know a watch is live (to retire
+  `watchSettled`'s 50 ms guess).
 
 *Orchestrator (~02:40Z):* the Coach merged #99 expecting the line above it to go too; a merge
 takes only what is beneath. At the Coach's word ("restack any other prs on main so that closing
