@@ -93,8 +93,8 @@ export type StoredLockbox = { boxlabel: string, lockbox: unknown }
  * every name and note with them, going in and coming back. Left out, they are `AnyTextValidators`:
  * any well-formed text passes. So a VaultDB that hands each call on to another VaultDB's public
  * verbs need pass nothing, its own verbs having checked every name already, and one that forgets
- * to never has a name refused that the vault's own checks passed. Your `do*` methods never see
- * them: they take any text as a name.
+ * to never has a well-formed name refused that the vault's own checks passed. Your `do*` methods
+ * never see them: they take any text as a name.
  */
 export abstract class VaultDB {
   /**
@@ -396,7 +396,8 @@ const listedOrDamaged = (rules: Names.NameRules, { boxlabel, lockbox }: StoredLo
 
 /**
  * The checks a public verb runs, from the `validators` it was handed: any well-formed text where
- * it was handed none, so that a caller forgetting the vault's bag refuses nothing the vault passed.
+ * it was handed none, so that a caller forgetting the vault's bag refuses nothing well-formed the
+ * vault passed.
  */
 const rulesFor = (validators: VaultValidators | undefined): Names.NameRules => Names.rulesOf(validators ?? AnyTextValidators)
 
