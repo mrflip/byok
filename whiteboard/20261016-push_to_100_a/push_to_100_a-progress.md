@@ -19,7 +19,7 @@
 | 10 | secure_floor | on 4 (57cdb168) | filed | [#136](https://github.com/mrflip/safebyok/pull/136) |
 | 11 | pg_container | main | filed #131 | [#131](https://github.com/mrflip/safebyok/pull/131) |
 | 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
-| 13 | epoch_expectation | on 4 (57cdb168) | in review | [#137](https://github.com/mrflip/safebyok/pull/137) |
+| 13 | epoch_expectation | on 4 (57cdb168) | filed | [#137](https://github.com/mrflip/safebyok/pull/137) |
 | 14 | uncontrolled_fields | on 7 (3d62fc04) | filed | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 (adc94772) | underway | |
 

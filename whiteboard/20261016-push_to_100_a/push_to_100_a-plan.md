@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: 15 underway; 13 (#137) filing; 3 (#127) restacking onto 2, then 4 (#132) onto 3, then 5b is cut; 1 (#128), 2 (#133), 6 (#126), 7 (#129), 8 (#130), 10 (#136), 11 (#131), 14 (#134) filed; then 9, and 12 after 23:01Z
+* **Status**: 15 underway; 3 (#127) restacking onto 2, then 4 (#132) onto 3, then 5b is cut; 1 (#128), 2 (#133), 6 (#126), 7 (#129), 8 (#130), 10 (#136), 11 (#131), 13 (#137), 14 (#134) filed; then 9, and 12 after 23:01Z
 
 ## Read first
 
@@ -289,6 +289,15 @@ handoff carries it whole. Below, the orchestrator's gloss.
     assign contextual groupings if needed"): the kind stays, as the grouping; each message says
     exactly which read or write of the device store failed. A case that wants a kind of its own
     comes back as an open matter.
+
+* *Review* (`fixed`, #137): one fix (`990da2c5`, an `eraseUnlock` failure says "try again");
+  line 3.8 confirmed atomic in every adapter, the advisory-lock recipe free of cycles, `oneAtATime`
+  unchanged in behaviour (its synchronous-throw wedge was real), the hard locks and per-verb
+  messages sound. At filing, a `docs:` commit corrected the Postgres wording (writes never wait
+  for each other *on the bundle*). Rows: a stale remembered unlock never retried, the duplicated
+  `begin`/`soon`, the epoch race on real Postgres, a store that never opens, the advisory key.
+  Filed at `95e6e223`. At the restack: delete `comparesVaultKeyEpoch: false` from thread 11's
+  battery; 5b carries the IndexedDB expectation rows into the core's tests.
 
 ### 15. `deriver_shim` -- one KeyDeriver facade, the Coach's ruling
 
