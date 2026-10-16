@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { AnyTextValidators, VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, openVault, type KeyDeriver, type Vault, type VaultValidators } from 'safebyok'
+import { AnyTextValidators, Ckeys, VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, openVault, type KeyDeriver, type Vault, type VaultValidators } from 'safebyok'
 import * as TH from 'safebyok/testing'
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
@@ -78,6 +78,22 @@ const makeWorld = () => {
   )
   const mount = (userId: string | null, caught: unknown[] = []) => render(tree(userId, caught))
   return { vaultDB, deviceDB, props, tree, mount }
+}
+
+/** A world whose `u1` vault was made, with a lockbox, and then had its stored bundle spoiled. */
+const damagedWorld = async () => {
+  const store = memoryStore()
+  const vaultDB = localVaultDB(store)
+  const deviceDB = memoryDeviceDB()
+  const props = { applabel: 'acme', vaultlabel: 'main', vaultDB, deviceDB, keyDeriver: TH.testDeriver }
+  const made = await openVault({ ...props, userId: 'u1' })
+  await made.unlock('correct horse')
+  await made.store('anthropic_api_key', 'sk-fake')
+  made.close()
+  const bundleCkey = Ckeys.bundle(TH.scopeOf('u1'))
+  const bundle = JSON.parse(store.read(bundleCkey) ?? 'null') as object
+  store.write(bundleCkey, JSON.stringify({ ...bundle, unlock_epoch: 'one' }))
+  return { store, vaultDB, deviceDB, props }
 }
 
 /** The state the Probe, or the boundary in its place, shows. */
@@ -647,6 +663,58 @@ describe("VaultProvider", () => {
       })
       expect(reads.mock.calls.length).to.eq(readsBefore)
       expect(shownState()).to.eq('absent')
+    })
+
+    describe("eraseDamagedVault", () => {
+      it("erases the vault openError says is damaged, with the unlock this device remembers, and opens a fresh one", async () => {
+        const { store, deviceDB, props } = await damagedWorld()
+        const { Grab, latest } = grabber()
+        render(<VaultProvider {...props} userId="u1"><Grab /><Probe /></VaultProvider>)
+        await expectShown('open error: damaged_bundle')
+        expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.not.be.null
+        await act(async () => { await latest().eraseDamagedVault() })
+        await expectShown('absent')
+        expect(store.ckeys()).to.deep.equal([])
+        expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+        expect(latest().openError).to.be.null
+      })
+
+      it("does nothing for an openError that is not a damaged bundle", async () => {
+        const world = makeWorld()
+        const erasing = vi.spyOn(world.vaultDB, 'eraseDamagedVault')
+        vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(unreachable())
+        const { Grab, latest } = grabber()
+        render(<VaultProvider {...world.props} userId="u1"><Grab /><Probe /></VaultProvider>)
+        await expectShown('open error: storage_unavailable')
+        await act(async () => { await latest().eraseDamagedVault() })
+        expect(erasing).not.toHaveBeenCalled()
+        expect(shownState()).to.eq('open error: storage_unavailable')
+      })
+
+      it("does nothing while the vault is open, however sound", async () => {
+        const world = makeWorld()
+        const erasing = vi.spyOn(world.vaultDB, 'eraseDamagedVault')
+        const { Grab, latest } = grabber()
+        render(<VaultProvider {...world.props} userId="u1"><Grab /><Probe /></VaultProvider>)
+        await expectShown('absent')
+        await act(async () => { await latest().eraseDamagedVault() })
+        expect(erasing).not.toHaveBeenCalled()
+        expect(shownState()).to.eq('absent')
+      })
+
+      it("rejects with storage's refusal, leaving the damaged openError in place", async () => {
+        const { vaultDB, props } = await damagedWorld()
+        vi.spyOn(vaultDB, 'eraseDamagedVault').mockRejectedValueOnce(unreachable())
+        const { Grab, latest } = grabber()
+        render(<VaultProvider {...props} userId="u1"><Grab /><Probe /></VaultProvider>)
+        await expectShown('open error: damaged_bundle')
+        await act(async () => {
+          await expect(latest().eraseDamagedVault()).rejects.toMatchObject({ kind: 'storage_unavailable' })
+        })
+        expect(shownState()).to.eq('open error: damaged_bundle')
+        await act(async () => { await latest().eraseDamagedVault() })
+        await expectShown('absent')
+      })
     })
 
     it("clears openError when the user signs out", async () => {

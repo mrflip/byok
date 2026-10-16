@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { isVaultCondition, isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultError, type VaultSnapshot, type VaultValidators } from 'safebyok'
+import { eraseDamagedVault as eraseStoredDamagedVault, isVaultCondition, isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultError, type VaultSnapshot, type VaultValidators } from 'safebyok'
 import { PassphraseModal } from './passphrase-modal'
 
 /**
@@ -26,6 +26,20 @@ export type VaultContextShape = {
    * nothing while there is no openError to retry.
    */
   retryOpen: () => void
+  /**
+   * Erase the stored vault that `openError` reports as `damaged_bundle`, with the unlock this
+   * device remembers for it, and open again: a fresh, absent vault, for the user to make anew.
+   * The user's lockboxes in it are gone for good, so ask first. Resolves when the reopen is under
+   * way, and does nothing while `openError` is any other, or none. Rejects with storage's
+   * refusal if the erase fails, such as `storage_unavailable`, leaving `openError` as it was; the
+   * `safebyok` package's `eraseDamagedVault` says which refusals to expect.
+   *
+   * @example
+   *   if (openError?.kind === 'damaged_bundle') {
+   *     return <button onClick={() => { if (confirm('Erase your vault and start over?')) { void eraseDamagedVault() } }}>Start over</button>
+   *   }
+   */
+  eraseDamagedVault: () => Promise<void>
   /**
    * Run an action that may need the vault unlocked. If it refuses with kind 'vault_locked', the
    * passphrase dialog opens; after a successful unlock the action runs again. Resolves null when
@@ -161,6 +175,13 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     if (openError !== null) { setOpenAttempt((prev) => prev + 1) }
   }, [openError])
 
+  const eraseDamagedVault = useCallback(async () => {
+    if (userId === null || ! isVaultError(openError, 'damaged_bundle')) { return }
+    const validators = { applabel: applabelCheck, vaultlabel: vaultlabelCheck, boxlabel: boxlabelCheck, userId: userIdCheck, note: noteCheck } satisfies Record<keyof VaultValidators, unknown>
+    await eraseStoredDamagedVault({ applabel, vaultlabel, userId, vaultDB, deviceDB, validators })
+    setOpenAttempt((prev) => prev + 1)
+  }, [openError, userId, applabel, vaultlabel, vaultDB, deviceDB, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck])
+
   /** Closes `ending` if it is still the dialog showing, and settles every action waiting on it. */
   const endAsking = useCallback((ending: Asking | null, unlocked: boolean) => {
     if (ending === null) { return }
@@ -215,7 +236,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   if (openFailure !== null) { throw openFailure.err }
 
   return (
-    <VaultContext.Provider value={{ vault, openError, retryOpen, withUnlockedVault }}>
+    <VaultContext.Provider value={{ vault, openError, retryOpen, eraseDamagedVault, withUnlockedVault }}>
       {children}
       {asking !== null && vault !== null && (
         <PassphraseModal
