@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: threads 1, 3 and 7 underway, 6 in review; 5a's design written, waiting on the Coach. Newer than the plan wherever they disagree.
+**Status**: threads 1, 3 and 7 underway, 6 filing; 5a's design written, waiting on the Coach. Newer than the plan wherever they disagree.
 
 ## Status
 
@@ -12,7 +12,7 @@
 | 4 | refusals_and_catchup | on 3 | pending | |
 | 5a | store_base design | -- | written: `store-base-design.md`; the Coach's row in *Open Matters* | |
 | 5b | store_base build | on 4 (restacked) | pending: the Coach's word on 5a | |
-| 6 | crypto_small | main | in review | [#126](https://github.com/mrflip/safebyok/pull/126) |
+| 6 | crypto_small | main | filing | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | main | underway | |
 | 8 | ci_release | main | pending | |
 | 9 | sweep_small | top of the line | pending | |
@@ -37,6 +37,13 @@
   `implements CustomKeyDeriver`. `changePassphrase(proof, new, { unlockId? })` takes any proof;
   thread 3's renewal meets it at the restack in `changePassphrase`'s body. `ensureSaltFits` is
   exported. openVault measured 22.75 kB against main's 23 kB: thread 1's raise to 30 kB covers it.
+  *Review:* `fixed`. Kept: a passkey-proved `changePassphrase` stamps the bundle's
+  `vault_key_epoch` (it copied the replaced envelope's); a length-refused deriver result is zeroed
+  too; the changeset's two overclaims corrected. Left: `KeyDeriver` is not discriminated (the
+  recorded G031 shape); a caching deriver sees zeros (an all-zero refusal is an Open Matters row);
+  `fill(0)` can throw on an immutable buffer; `absentUnlock()`'s message is wrong when the id names
+  a passkey (thread 9 may restore a passphrase-specific one); `ensureSuppliedSpecKept` runs twice;
+  the `test_` warning is case-sensitive.
 
 * *Orchestrator:* **5a's design** (`store-base-design.md`) adds to the preplan: `Refusals` and
   `Expectations` exported from core (the key-value adapters share core's expectation predicates,

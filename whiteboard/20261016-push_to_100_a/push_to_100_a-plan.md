@@ -233,6 +233,9 @@ From the sprint doc's *Open Matters*, as rows are swept:
 * **The adapters' logger option** (thread 5): `logger`, in every adapter.
 * **A hint on the whisper field** (thread 7): yes, a host `placeholder`, none by default. And a
   new NOTYET: "Option to let the user add a hint on their passphrase".
+* **Password-manager attributes** (thread 7): yes, exported from `safebyok/utils` beside `mask`.
+* **`PostgresVaultDB`** (thread 5): drop the type ("we found out we don't need to export it":
+  yes, drop it).
 * **Password strength** (thread 10), the Coach's words: "The 'don't let customers shoot
   themselves in the foot' rule says we should not offer a bullshit password meter. Add a
   pluggable callback `passphraseStrengthTest()` to the entry point. Have `safebyok/browser`
