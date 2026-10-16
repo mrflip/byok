@@ -3145,6 +3145,21 @@ describe("close", () => {
     expect(await world.rememberedUnlock()).to.be.null
   })
 
+  it("a second close does nothing: the storage watch is ended once", async () => {
+    const world = makeWorld()
+    const unsubscribes = vi.fn()
+    const subscribe = world.vaultDB.subscribe.bind(world.vaultDB)
+    vi.spyOn(world.vaultDB, 'subscribe').mockImplementation((...args) => {
+      const unsubscribe = subscribe(...args)
+      return () => { unsubscribes(); unsubscribe() }
+    })
+    const vault = await world.openUnlocked('pw')
+    vault.close()
+    vault.close()
+    expect(unsubscribes.mock.calls).to.have.lengthOf(1)
+    await TH.expectRefusal(vault.read('anything'), 'vault_closed')
+  })
+
   it("closing forgets nothing stored: the next open still finds the vault", async () => {
     const world = makeWorld()
     const vault = await world.openUnlocked('pw')

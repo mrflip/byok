@@ -403,6 +403,7 @@ export type Vault = {
    * Release subscriptions and refuse further calls, dropping the vaultKey from memory. Forgets
    * nothing stored: this device's remembered unlock stays, and the next open picks it up. An
    * `unlock()` still under way takes nothing up, remembers nothing, and throws kind 'vault_closed'.
+   * A second `close()` does nothing.
    */
   close(): void
 }
@@ -1173,6 +1174,8 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     },
 
     close: () => {
+      // A second close does nothing: an adapter's unsubscribe may count down a watch it shares.
+      if (closed) { return }
       closed = true
       // A shut in memory only: an unlock under way takes nothing up, and the remembered unlock stays.
       shutsSoFar += 1
