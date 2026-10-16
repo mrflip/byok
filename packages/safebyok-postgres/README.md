@@ -232,11 +232,14 @@ const isKind = (kind: unknown): kind is VaultErrorKind => (VaultErrorKindVals as
   ask of you -- a trigger of your own, and a row lock that makes lockbox inserts into one vault
   take turns, so that racing writers can no longer overshoot under READ COMMITTED. (Under
   REPEATABLE READ the trigger counts from its transaction's snapshot, which misses a racer's
-  lockbox committed meanwhile, and racers may still overshoot.) Its refusal is a database error, so
-  the adapter reports it as `storage_unavailable` rather than `vault_full`, and a first write
-  under a boxlabel already taken refuses the same way in a full vault. Put your number where
-  `1000` is, and `maxLockboxes` beside it; the package's tests run this on PGlite, one statement at a
-  time, and cannot race it.
+  lockbox committed meanwhile, and racers may still overshoot.) Put your number where `1000` is,
+  and pass the same as `maxLockboxes`: the adapter's own count still refuses a write to a full
+  vault first, as `vault_full`, and a first write under a boxlabel already taken as `stale_write`,
+  so the trigger meets only the racers that count let through. Its refusal is a database error,
+  so the adapter reports it as `storage_unavailable` rather than `vault_full`; with the trigger's
+  number below `maxLockboxes`, every first write it meets in a vault at that number refuses that
+  way, one under a boxlabel already taken included, since a `BEFORE` trigger fires ahead of
+  `ON CONFLICT`. The package's tests run this on PGlite, one statement at a time, and cannot race it.
 
   ```sql
   CREATE OR REPLACE FUNCTION safebyok_lockboxes_capped() RETURNS trigger LANGUAGE plpgsql AS $$
