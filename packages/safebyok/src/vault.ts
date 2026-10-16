@@ -732,8 +732,10 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       const deviceId = randomId()
       const { draft, transientKey, sessionKey } = await draftBundle(proof, deviceId)
       drafted = { vault_id: draft.vault_id, device_id: deviceId }
+      // Another device's vault, if one was made meanwhile, is held to the mark as it was before it.
+      const seenBefore = checkedMark(await deviceDB.readMark(scope))
       const settled = await damagedAs(vaultDB.createBundle(draft, rules), damagedBundle)
-      const mark = await heedMark(settled)
+      const mark = await heedMark(settled, { seenBefore })
       bundle = settled
       deviceMark = mark
       if (settled.vault_id === draft.vault_id) { return { standing: settled, transientKey, sessionKey } }
