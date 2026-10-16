@@ -6,7 +6,7 @@
 | - | ----------------- | -------------------------- |
 | 1 | hkdf_info         | filed #97                  |
 | 2 | release_age       | filed #96                  |
-| 3 | passkey_button_ux | filing (second review clean) |
+| 3 | passkey_button_ux | filed #98                  |
 | 4 | small_sweep       | filed #99                  |
 | 5 | vaultdb_battery   | waiting on the gripes line |
 | 6 | race_helper       | waiting on thread 5        |
@@ -16,7 +16,7 @@
 | 10 | identity_revoked | underway                   |
 | 11 | vaultdb_contract | underway                   |
 | 12 | postgres_soft_cap | waiting on 11             |
-| 13 | rotation_design  | pending                    |
+| 13 | rotation_design  | underway                   |
 | 14 | rotation_build   | waiting on 13 and the gripes line |
 
 ## What the threads have taught
@@ -27,7 +27,8 @@
   orchestrator guesses a sprint's target up front and a late thread lowers the budgets. *Review:*
   none, budgets and docs only. Left: three small budgets fell (stableJsonify 6 to 3.5 kB); a later
   thread that outgrows one widens it by the rule. The 5 kB line is a cliff (argon2idWebV1Deriver).
-* **Thread 3 (#98), second review.** Clean over the review round. *Review:* left, minor: a late
+* **Thread 3 (#98), filed.** The Coach's rulings (swap kept; hand-written boundary kept) are in its
+  body and thread file. Second review clean over the review round. *Review:* left, minor: a late
   unlock leaves a newer dialog asking over an unlocked vault (a design call, for the Coach); narrow
   races (a lock between unlock and retries; `vault_locked` while `vault` is null); `role="alert"`
   mounted with its text (with #90's markup); Escape not stopping propagation; shadow-root focus.
