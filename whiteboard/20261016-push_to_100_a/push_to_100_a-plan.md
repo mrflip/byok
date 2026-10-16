@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: threads 2 and 14 underway; 4 in review (#132); 1 (#128), 3 (#127), 6 (#126), 7 (#129), 8 (#130), 11 (#131) filed; 5b cleared by the Coach, cut once 4 files
+* **Status**: threads 2 and 14 underway; 4 filing (#132); 1 (#128), 3 (#127), 6 (#126), 7 (#129), 8 (#130), 11 (#131) filed; 5b cleared by the Coach, cut once 4 files
 
 ## Read first
 
@@ -357,6 +357,9 @@ From the sprint doc's *Open Matters*, as rows are swept:
    in `refusal-policy.ts` and the lock code that thread 4 already holds.
 10. **Thread 4 may raise the `openVault` budget**, that line only, to the rule's round number:
     CI found it 1.7 kB over on thread 4's draft. Thread 9 lowers every budget at the end.
+    *Corrected:* the overrun was only because thread 4 stands on 3, from main, and not yet on 1,
+    whose `f227fd1c` already set `openVault` to 30 kB for the whole sprint. So at the restack,
+    thread 4's `tools:` commit (`312bcd50`, 23 to 28 kB) is dropped, and thread 1's 30 kB stands.
 11. **The CI flakes go to thread 14**, first, as their own commits: it is cut from 7, which holds
     the failing demo test, and works in the same package as the `vault-provider` flake on main.
     No new thread, so the sprint stays at three agents building at once.
