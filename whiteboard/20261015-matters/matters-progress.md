@@ -21,7 +21,7 @@
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 (ways in: keep the proven ones, ruled) |
 | 20 | rotation_docs    | waits on 19                |
-| 15 | e2e_home         | finishing (b), confirmed by the Coach |
+| 15 | e2e_home         | in review #111 (b), on main |
 | 16 | late_unlock      | merged #110                |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | merged #115                |
