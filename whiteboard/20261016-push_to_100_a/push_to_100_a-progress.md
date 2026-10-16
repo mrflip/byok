@@ -30,7 +30,10 @@
   G444, G465, T01, G064). Thread 6 (#126): its 14 rows; NOTYET rows G531 (passphrase hint) and
   G532 (a -utils or -bestpractices package) added. Thread 3 (#127): 12 rows swept, G324
   annotated (its wording half is thread 7's); G129's row carried the Coach's answer, which
-  `matters/` keeps. The Gripefest doc stands at 220 matters.
+  `matters/` keeps. Thread 7 (#129): 15 rows swept (G322, G324-G334 but G323, G358-G360);
+  G357 annotated (the blank-note point waits on thread 2); G323 annotated, not swept: its real-
+  locales half stays NOT YET and is recorded nowhere else. The answers that went with swept rows
+  are in `matters/`. The Gripefest doc stands at 205 matters.
 * *Orchestrator:* **Coach rulings, mid-sprint** (the plan's *Coach rulings* has their words):
   the key delimiter is fixed at `^`, with no option (thread 1 rebuilds); `lockSoon()` is soft,
   `whenIdentityRevoked` goes, a `read()` refuses when a hard lock landed during its awaits, and
