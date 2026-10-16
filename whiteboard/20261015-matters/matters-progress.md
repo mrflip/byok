@@ -12,18 +12,28 @@
 | 6 | race_helper       | waiting on thread 5        |
 | 7 | indexeddb_fixes   | next                       |
 | 8 | size_rule         | filed #99 (commits on it)  |
-| 9 | damaged_bundle    | interrupted; waits on #97's restack |
+| 9 | damaged_bundle    | resumed on #97's restacked tip |
 | 10 | identity_revoked | resumed, rebasing onto b60e516 |
 | 11 | vaultdb_contract | resumed on b60e516         |
 | 12 | postgres_soft_cap | waiting on 11             |
 | 13 | rotation_design  | resumed on b60e516         |
 | 14 | rotation_build   | waits on 13                |
 | 15 | e2e_home         | queued                     |
-| 16 | late_unlock      | waits on #98's restack     |
+| 16 | late_unlock      | queued (cut from the line's top) |
 | 17 | validation_note  | waits on #101 merging      |
-| -- | restack #96-#99  | underway                   |
+| -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
+
+* **The restack (#96 to #99 onto `b60e516`).** One line, bottom to top: #96 `34171fd`, #99
+  `88b7b05`, #98 `4eb2d74`, #97 `8d665aa` (#97 on top: it rewrote `vault.ts` logic main also
+  rewrote). Justify green at the top (core 1144 tests). Repairs: tests moved to main's tuple ckeys
+  (`isU1Box`, `u1BundleCkey`); #98's dialog kept around main's version, which dropped the
+  `reentryHours` prop for `vault.reentryWindowMs`, so #98's three bad-`reentryHours` tests went with
+  the prop. `.size-limit.json`: main's two new entries (validators 8.5 kB, DefaultValidators 4 kB)
+  predate the rule; validators measures 8.15 kB, so a thread that grows it widens it by the rule
+  (about 12 kB). **New threads stack on the line's top (#97's branch, or whatever has filed above
+  it).** Local tags `<branch>-prerestack3` hold the old tips.
 
 *Orchestrator (2026-10-16 ~01:35Z):* the previous orchestrator session ended mid-sprint; threads
 9, 10, 11 and 13 stopped with nothing committed (9 and 10 left work in progress in their
