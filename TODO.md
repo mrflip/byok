@@ -449,12 +449,25 @@ fields; decide them together.
   Coach: "no changes", so it stays as it is; a host renders a damaged label as text, never as
   markup. The alternatives, if the table says otherwise: cap or hide such labels, or give the
   listing an opaque erase handle in place of the name.
-* **Control characters in notes.** The default note check refuses them now (the
-  validators_tightening thread). Is that the right guarantee, and where else must it hold: the
-  server, the listing, a host's own validator?
-* **Lone surrogates.** The default checks refuse them now (the validators_tightening thread),
-  because Convex refuses them in a stored string. The Coach: "Sounds like we may need to group
-  error message[s]" -- see *Group error messages?* below.
+* **Control characters in notes.** The default note check refuses them now
+  ([#104](https://github.com/mrflip/safebyok/pull/104)): the C0 characters (carriage return
+  included), DEL and the C1 characters, except tab and newline. Is that the right guarantee, and
+  where else must it hold: the server, the listing, a host's own validator?
+* **Lone surrogates.** `UserId`, `LockboxNote` and every `AnyTextValidators` field refuse them now
+  ([#104](https://github.com/mrflip/safebyok/pull/104)): a label as `bad_label`, a note as
+  `bad_option`. The reason is that Convex refuses them in a stored string, though its own refusal
+  text could not be verified (convex-test admits them). The Coach: "Sounds like we may need to
+  group error message[s]" -- see *Group error messages?* below.
+* **Well-formedness under a host's own schema**
+  ([#104](https://github.com/mrflip/safebyok/pull/104)). Should well-formed text be a floor under
+  a host's own validator too? A host's `z.string()` still admits a lone surrogate, which Convex
+  then refuses.
+* **`AnyTextValidators` admits control characters in labels**
+  ([#104](https://github.com/mrflip/safebyok/pull/104)), and they reach `snapshot.boxes`.
+* **A bare `VaultDB` verb** ([#104](https://github.com/mrflip/safebyok/pull/104)). A verb called
+  without a validators bag now admits any well-formed text instead of the defaults, so a wrapper
+  that forgets the bag cannot refuse what the vault passed; a bare caller loses the label grammar
+  and the note length cap. Is "any well-formed text" the right guarantee there?
 * **Server-side names.** The Postgres route recipe, `listBoxRecords` and the GraphQL resolvers take
   names as any text (`AnyTextValidators`); the browser's validators decide
   ([#95](https://github.com/mrflip/safebyok/pull/95)). Is that the guarantee we mean to give a host
