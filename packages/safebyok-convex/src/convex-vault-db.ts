@@ -1,7 +1,7 @@
 import { getFunctionName } from 'convex/server'
 import type { FunctionArgs, FunctionReference, FunctionReturnType } from 'convex/server'
 import { ConvexError } from 'convex/values'
-import { VaultDB, VaultError } from 'safebyok'
+import { Sanitizer, VaultDB, VaultError } from 'safebyok'
 import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, StoredLockbox, VaultBundle, VaultScope } from 'safebyok'
 import type { Infer } from 'convex/values'
 import { MaxVaultLockboxes } from './component/tallies'
@@ -56,7 +56,8 @@ export type ConvexVaultClient = ConvexWatchingClient | ConvexReactWatchingClient
  *   `maxLockboxes` stays well inside them.
  * * **Offline**, a call waits for the connection, as every Convex call does, rather than failing.
  *   A failure Convex reports (a deployment missing the safebyok functions, say) refuses with kind
- *   `storage_unavailable`, Convex's own error as its `cause`.
+ *   `storage_unavailable`, carrying nothing of Convex's own error, which on a dev deployment may
+ *   quote the call's arguments: your deployment's logs have it.
  *
  * @param client - Your app's Convex client: a `ConvexClient`, or your `ConvexReactClient`.
  * @param api - The safebyok functions as your clients reference them: `api.safebyok`, from your
@@ -178,10 +179,12 @@ const ConvexTransactionReadBytes = 16_777_216
 
 const ignoreTrouble = (): void => undefined
 
+const ConvexTroubleMessage = "The vault's storage could not be reached, or failed partway: try again shortly. Convex's own error is not carried here, as it may quote the call; your Convex deployment's logs have it."
+
 /**
  * `call`, with a refusal from safebyok's functions -- a `ConvexError` carrying one of its kinds --
- * turned into the VaultError of that kind. Anything else rejects as it came, and the base class
- * makes it `storage_unavailable`. A thunk, since a client may throw before it hands back a promise:
+ * turned into the VaultError of that kind, and anything else into `storage_unavailable`, carrying
+ * nothing of Convex's error. A thunk, since a client may throw before it hands back a promise:
  * `ConvexReactClient.query` throws at once a refusal it already holds for that query.
  */
 const refusing = async <ValT>(call: () => Promise<ValT>): Promise<ValT> => {
@@ -191,7 +194,9 @@ const refusing = async <ValT>(call: () => Promise<ValT>): Promise<ValT> => {
     if (err instanceof ConvexError && isSafebyokErrorData(err.data)) {
       throw new VaultError(err.data.kind, err.data.message, { cause: err })
     }
-    throw err
+    // On a dev deployment, Convex's own error -- its validator refusing the arguments, say --
+    // quotes the call's arguments: scope, names, notes and ciphertext. The sanitizer drops it.
+    throw Sanitizer.refusalFor(err, 'storage_unavailable', ConvexTroubleMessage)
   }
 }
 

@@ -415,7 +415,7 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `corrupt_record`      | a stored record failed validation or decryption verification     | Nothing was changed. Do not retry; tell the user, and see a developer: the record is damaged, was moved, or came from a newer safebyok. A damaged lockbox can be removed with `erase()` or written afresh with `store()` (see *Damaged lockboxes*); a damaged vault bundle stops `openVault` |
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
 | `not_permitted`       | the storage backend refused this user: signed out, or not theirs to reach | Have the user sign in again                             |
-| `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause` |
+| `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause`, unless it may quote the call (Convex's) |
 
 `openVault` itself can refuse with `bad_option`, `bad_label`, and, as it reads the vault from
 storage, `storage_unavailable`, `not_permitted` or `corrupt_record` (for the vault's bundle: a
