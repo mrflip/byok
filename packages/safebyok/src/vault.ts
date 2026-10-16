@@ -841,24 +841,19 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   }
 
   /**
-   * `boxlabel` as text, for erase(), which reaches a lockbox by the name it was stored under: one
-   * the vault's boxlabel check refuses -- stored under other checks -- still stands, listed as
-   * damaged. A refused boxlabel with no lockbox under it is kind 'bad_label'.
+   * `boxlabel` as text, once a lockbox stands under it, for erase(), which reaches a lockbox by the
+   * name it was stored under: one the vault's boxlabel check refuses -- stored under other checks
+   * -- still stands, listed as damaged, and so does a record that fails verification. With no
+   * lockbox under it, a refused boxlabel is kind 'bad_label' and a passing one 'absent_box'.
+   * Storage is read once.
    */
   const checkStandingBoxlabel = async (boxlabel: string): Promise<string> => {
     const label = Names.check(standingRules, 'boxlabel', boxlabel)
-    if (! Names.admits(rules, 'boxlabel', label) && await readBoxOrDamaged(label) === null) {
+    if (await readBoxOrDamaged(label) === null) {
       Names.check(rules, 'boxlabel', label)
+      throw absentBox()
     }
     return label
-  }
-
-  /**
-   * Refuse, as 'absent_box', a boxlabel with no lockbox under it. A record there that fails
-   * verification still stands: what is stored under the boxlabel is there, whatever it holds.
-   */
-  const ensureBoxStands = async (boxlabel: string) => {
-    if (await readBoxOrDamaged(boxlabel) === null) { throw absentBox() }
   }
 
   /**
@@ -1147,7 +1142,6 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
     erase: async (boxlabel) => {
       ensureUnlocked()
       const label = await checkStandingBoxlabel(boxlabel)
-      await ensureBoxStands(label)
       keyInHand()
       // Lands only in the vault this device holds keys for, whatever revision of the box stands:
       // a vault destroyed and made anew elsewhere refuses it. That is its only expectation, and
