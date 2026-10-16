@@ -366,12 +366,37 @@ describe("the abstract VaultDB, erasing a vault whose bundle is damaged", () => 
   })
 
   it("refuses a record too damaged to name its vault as damaged_bundle, erasing nothing", async () => {
-    for (const record of [{ format: 'not-a-vault' }, { vault_id: '' }, { vault_id: 7 }, 'not even a bag']) {
+    for (const record of [{ format: 'safebyok-vault-v1' }, { vault_id: '' }, { vault_id: 7 }, {}, 'not even a bag']) {
       const vaultDB = withDamagedBundle(() => record)
       const refusal = await TH.expectRefusal(vaultDB.eraseDamagedVault(TH.scopeOf('u1')), 'damaged_bundle')
       expect(refusal.message).to.include('nothing was erased')
       expect(vaultDB.rows.size).to.eq(4)
     }
+  })
+
+  const Envelope = TH.bundleOf('u1').unlocks[0]
+  const NewerRecords = [
+    [{ format: 'safebyok-vault-v2' },                                                      'a format this version does not know, whatever else it holds'],
+    [(bundle: VaultBundle) => ({ ...bundle, format: 'safebyok-vault-v2' }),                'a bundle that is otherwise sound but for its format'],
+    [(bundle: VaultBundle) => ({ ...bundle, format: 2 }),                                  'a format of another type'],
+    [(bundle: VaultBundle) => ({ ...bundle, unlocks: [...bundle.unlocks, { method: 'smartcard', unlock_id: 'x' }] }), 'an unlock method this version does not know'],
+    [(bundle: VaultBundle) => ({ ...bundle, unlocks: Array.from({ length: 9 }, () => Envelope) }), 'more unlocks than this version holds'],
+  ] as const
+
+  for (const [record, blurb] of NewerRecords) {
+    it(`refuses ${blurb} as possibly newer than this version, erasing nothing`, async () => {
+      const vaultDB = withDamagedBundle((bundle) => (typeof record === 'function' ? record(bundle) : { ...bundle, ...record }))
+      const refusal = await TH.expectRefusal(vaultDB.eraseDamagedVault(TH.scopeOf('u1')), 'damaged_bundle')
+      expect(refusal.message).to.include('newer version')
+      expect(refusal.message).to.include('nothing was erased')
+      expect(vaultDB.rows.size).to.eq(4)
+    })
+  }
+
+  it("still erases a bundle that fails for anything it can only take for damage: a known format and methods, in number", async () => {
+    const vaultDB = withDamagedBundle((bundle) => ({ ...bundle, unlocks: [{ ...Envelope, salt_b64: 7 }], registered_at: 'later' }))
+    await vaultDB.eraseDamagedVault(TH.scopeOf('u1'))
+    expect(vaultDB.rows.size).to.eq(2)
   })
 
   it("aims the erase at the vault_id it read, so a vault made anew meanwhile survives as stale_write", async () => {

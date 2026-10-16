@@ -1632,10 +1632,22 @@ describe("eraseDamagedVault", () => {
 
   it("refuses a bundle too damaged to name its vault, erasing nothing, the remembered unlock included", async () => {
     const world = await damagedVaultWorld()
-    world.dbStore.write(u1BundleCkey, '{"format":"not-a-vault"}')
+    world.dbStore.write(u1BundleCkey, '{"format":"safebyok-vault-v1"}')
     const err = await TH.expectRefusal(eraseDamagedVault(world.optsWith()), 'damaged_bundle')
     expect(err.message).to.include('nothing was erased')
-    expect(world.dbStore.read(u1BundleCkey)).to.eq('{"format":"not-a-vault"}')
+    expect(world.dbStore.read(u1BundleCkey)).to.eq('{"format":"safebyok-vault-v1"}')
+    expect(world.dbStore.ckeys().some((ckey) => isU1Box(ckey))).to.eq(true)
+    expect(await world.rememberedUnlock()).to.not.be.null
+  })
+
+  it("refuses a vault a newer safebyok may have written, as openVault sees it damaged: nothing erased, the remembered unlock kept", async () => {
+    const world = await damagedVaultWorld()
+    const newer = JSON.stringify({ ...storedBundleOf(world), format: 'safebyok-vault-v2' })
+    world.dbStore.write(u1BundleCkey, newer)
+    await TH.expectRefusal(world.open(), 'damaged_bundle')
+    const err = await TH.expectRefusal(eraseDamagedVault(world.optsWith()), 'damaged_bundle')
+    expect(err.message).to.include('newer version')
+    expect(world.dbStore.read(u1BundleCkey)).to.eq(newer)
     expect(world.dbStore.ckeys().some((ckey) => isU1Box(ckey))).to.eq(true)
     expect(await world.rememberedUnlock()).to.not.be.null
   })
