@@ -7,7 +7,7 @@
 * **Issued by**: flip (the Coach), through the Open Matters tab of the gripe_rulings sprint doc
   (`/turbochat`): each thread below gathers rows they set to `proceed`, quoted with their answer
   verbatim. The Coach: "sprint gripes_sprint part 2, normal mode".
-* **Status**: done -- all four filed and restacked: main → #104 → #103 → #102 → #101 → #100
+* **Status**: round 2 -- thread 5 underway; 1 to 4 filed and restacked onto main at `5090c1a` (#99 merged under them): main → #104 → #103 → #102 → #101
 
 ## Read first
 
@@ -233,3 +233,91 @@ hunk additive: the matters sprint adds a NOTYET there too.
   check size after serialization?"): explained in new matter rows.
 * `withUnlockedVault`: #98 resolves null on a misuse rather than rejecting -- a matter row.
 * `unlocklabel` has no validator slot -- a matter row.
+
+## Round 2: the Coach's answers to the round's matters (2026-10-16)
+
+From the Open Matters tab, each row the Coach set to `proceed`, with their answer verbatim. One
+thread, stacked on #101 (the line's top before the sprint PR), since it builds on #104's
+validators and edits the same files. Rows needing no build: **`withUnlockedVault` against #98**
+-- "yes as you recommended" (#98 stands; nothing to do). **Leftover directories** -- "I will run
+this when things settle down" (noted).
+
+### 5. matters_followups
+
+> **Convex's error as a refusal's cause** (#75). On a dev deployment Convex's validator error
+> repeats the refused arguments; that was harmless when labels were narrow, but now a label may
+> hold a pasted key. *Rec:* drop the cause, as #95 did for a host schema's error. The Coach: "offer
+> a pluggable sanitizer. Add a todo to offer a pluggable sanitizer. Make a sanitizer module and put
+> the function that drops it in there. Don't try to make it serve multiple purposes; but that's
+> where that decision should be made"
+>
+> **Size checks: why not once, after serialization?** (#95) ... *Rec:* keep both, and say in the
+> docs that the vault-total estimate is conservative. The Coach: "yes. Make a note of this in the
+> "What are these validators actually for" TODO section"
+>
+> **Erasing a box under a refused name reads it twice.** (#93) ... *Rec:* have the first lookup
+> hand its result to the second. The Coach: "yes"
+>
+> **`read()` and `use()` don't document `bad_label`.** (#93) ... *Rec:* a sentence in each doc
+> block, pointing at `erase()` as the way to clear such a box; no code change. The Coach: "yes"
+>
+> **`unlocklabel` has no validator slot.** (#95) ... *Rec:* add an `unlocklabel` slot to
+> `validators`, as a small follow-up thread. The Coach: "yes"
+>
+> **Closing a vault twice unsubscribes twice.** (#103's review) ... *Rec:* a one-line fix,
+> `close()` returns early when already closed. The Coach: "yes"
+>
+> **KDF follow-ups** (#68). Reserve a label prefix for derivers we ship; check a host-built
+> Argon2id deriver at open, not first unlock; split the deriver type by algorithm; zero the
+> derived key's bytes after use. *Rec:* fold all four into the recommended-KDFs TODO thread. The
+> Coach: "yes"
+>
+> **The forgotten validators bag: harmless or loud?** (#104) A storage verb called without your
+> validators now admits any well-formed text instead of the defaults ... Loud would mean a
+> required argument on nine public verbs. *Rec:* keep it harmless, as built. The Coach: "yikes
+> parts of this sound hinky. Defaults are supposed to come in from eg importing safebyok/browser
+> (I forget how it's requested) and otherwise we ask you to, yes, spell everything out. My bigger
+> issue is "A storage verb called without your validators"; they should be deposited onto a
+> dispatch object not passed as arguments -- might have misunderstood but I still need to take a
+> closer look / would you add a section under the "What do the Validators actually guarantee"
+> called "Re-examine the pluggable validators interface" -- include my response and your question"
+
+*Gloss.* One commit per item, in this order (code first, then `TODO.md`):
+
+* **The sanitizer** (`api:` or `storage:`). A small core module (e.g.
+  `packages/safebyok/src/sanitizer.ts`) holding the one function that decides a foreign error
+  does not ride along as a refusal's `cause` -- the drop #95 made for a throwing host schema
+  (find it in `names.ts`), moved there, and now used by `safebyok-convex` for Convex's validator
+  error too (`convex-vault-db.ts` / `refusals.ts`). One purpose only, as the Coach said: no
+  redaction, no options. Export it only if the Convex package needs it from the core's public
+  surface; if so, name it in the PR's open questions. Tests: a refusal from a Convex validator
+  error carries no cause and no text of the refused argument.
+* **erase's single lookup** (`vault:`): `checkStandingBoxlabel`'s lookup handed to
+  `ensureBoxStands`, so erasing a box under a refused name reads storage once. A test counting
+  the reads.
+* **`read()` and `use()` docs** (`vault:`): their doc blocks say they refuse `bad_label` for a
+  malformed name and for a box stored under a name today's validators refuse (it lists as
+  damaged), and point at `erase()` to clear it.
+* **The vault-total estimate** (`docs:`): where `maxVaultBytes` is documented (the core README
+  and its doc block), say the estimate is conservative and can refuse slightly early at an
+  exactly tight limit; the record cap is checked on the real serialized bytes.
+* **`unlocklabel` slot** (`api:`): `validators.unlocklabel` beside the other five, checked
+  through `names.ts` like them, defaulting to today's `Label` grammar where a way in is added,
+  and used where the stored envelope's `unlocklabel` is read. Public surface: changeset and the
+  PR's open questions.
+* **`close()` idempotent** (`vault:`): a second `close()` returns early, never unsubscribing
+  twice; a test with `TH.tallyWatches` or a spy on the unsubscribe.
+* **`TODO.md`** (`docs:`, one commit), in the validator-guarantees section (#101's heading,
+  "What exactly are we guaranteeing with these validators..."):
+  - the two size checks and why both stay (record bytes at the write; a conservative vault
+    estimate before sealing);
+  - a sub-section headed "Re-examine the pluggable validators interface", with the Coach's answer
+    above verbatim, and our question: should a `VaultDB` carry its validators from construction
+    (a dispatch object built once) rather than take them per verb, and should a bare verb then
+    refuse or admit -- today (#104) it admits any well-formed text;
+  - "Offer a pluggable sanitizer", pointing at the new module as where that decision is made;
+  - the four KDF follow-ups (#68) folded into the recommended-KDFs entry (find it; keep its
+    text, add them as lines).
+
+`TODO.md` is this thread's in this round (thread 4 has filed). Depends on #101. Look-ahead: none;
+this is the round's last thread before the sprint PR.
