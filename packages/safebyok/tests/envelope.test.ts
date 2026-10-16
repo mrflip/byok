@@ -143,6 +143,15 @@ describe("Envelope.openWithPassphrase", () => {
       expect(derivations).not.toHaveBeenCalled()
     })
 
+    it("refuses as damaged_unlock, not saying every passphrase is damaged, when another deriver made the rest", async () => {
+      const vaultKey = await makeVaultKey()
+      const alienDeriver = { ...TH.testDeriver, key_deriver_label: 'someone_elses_deriver_v9' }
+      const bundle = bundleWith([await sealed('first', 'one', vaultKey, alienDeriver), { ...await sealed('second', 'two', vaultKey), salt_b64: 'c2FsdA' }])
+      const err = await expectRefusal(Envelope.openWithPassphrase(TH.testDeriver, 'first', scope, bundle), 'damaged_unlock')
+      expect(err.message).to.include('a key deriver this package does not carry')
+      expect(err.message).to.not.include('Every passphrase of this vault is stored damaged')
+    })
+
     it("refuses as damaged_unlock an aim at a damaged one, though a sound one stands beside it", async () => {
       const vaultKey = await makeVaultKey()
       const bundle = bundleWith([await sealed('first', 'one', vaultKey), { ...await sealed('second', 'two', vaultKey), salt_b64: 'c2FsdA' }])
