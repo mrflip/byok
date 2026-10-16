@@ -404,6 +404,17 @@ the same care `destroy()` takes (it erases the stored vault and the device's rem
 nothing else), refusing if the bundle is in fact sound. New public surface: name it in the PR's
 open questions. `vault:`.
 
+#### 22. flake_fixes (sonnet) -- on the line's top
+
+*Orchestrator's thread*, from what CI and the workers met: tests that fail at random under load.
+Convex's "lists, signs and erases the 1365 lockboxes..." (`packages/safebyok-convex/tests/component/
+vaults.test.ts`, on main) takes 31-34 s under coverage against vitest's 30 s default; a React
+`vault-provider` dialog test ("wrong passphrase...", "an action through withUnlockedVault summons
+the dialog..."); the demo's `answerPassphraseDialog` and `VaultDashboard` delete. Find why each is
+timing-dependent and make it deterministic (await the condition, not a delay); for the Convex test,
+a per-test timeout sized to its work (YOLO decision 12: not a smaller fill, which would change what
+it proves). `tests:`.
+
 ### Wave 2, freed
 
 The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes** at once;
@@ -430,6 +441,9 @@ The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes
     one-stack preference); a thread cut from main earlier is restacked onto the top when it files.
 11. Postgres's NOTIFY trigger becomes opt-in (thread 12), by the Coach's baseline: no operational
     work beyond tables and indexes unless the host opts in.
+12. Convex's 1365-lockbox test gets a per-test timeout, not a smaller fill (thread 22).
+13. Thread 12 also corrects the older pending `20261015-store_vault_cap` changeset, which announced
+    the column it removes.
 
 ## Not in this sprint
 

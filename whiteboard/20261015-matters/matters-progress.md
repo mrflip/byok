@@ -15,7 +15,7 @@
 | 9 | damaged_bundle    | filed #108 (on #107)       |
 | 10 | identity_revoked | filed #106 (on #105)        |
 | 11 | vaultdb_contract | filed #107 (on #106)       |
-| 12 | postgres_soft_cap | review fixed; files after the restack |
+| 12 | postgres_soft_cap | filing onto #110          |
 | 13 | rotation_design  | filed #105 (on #97)        |
 | 14 | rotation_shape   | waits on 11, #97 landing   |
 | 18 | rotation_adapters | waits on 14               |
@@ -25,9 +25,17 @@
 | 16 | late_unlock      | filed #110 (on #109)       |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | in review (#115)           |
+| 22 | flake_fixes      | underway (on #110)         |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
+
+* **The line, restacked onto main `5090c1a`** (after #99's merge): #98 f383865, #97 5ff4dc0, #105
+  b16d15b, #106 9aef481, #107 3f1449b, #108 85cb18d, #109 06f4f37, #110 d0d6fb5 (top). Trees
+  byte-identical. The "mainly main" ruleset requires test-build, lint-typecheck and both CodeQL
+  checks, with **strict up-to-date**: every PR goes BEHIND whenever main moves, and merging the top
+  takes all. #107's test-build hit the Convex timeout flake twice; rerun requested. **Line's top
+  now: #110.**
 
 * **Thread 21 (#115), damaged_erase.** `eraseDamagedVault(opts)` erases a vault `openVault` refuses
   as `damaged_bundle`, and the device's remembered unlock; a sound vault is refused (`bad_option`),
