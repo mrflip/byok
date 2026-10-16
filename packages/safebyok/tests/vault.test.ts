@@ -1382,6 +1382,16 @@ describe("the host's validators", () => {
     expect(boxlabelsOf(narrow)).to.deep.equal(['anthropic'])
   })
 
+  it("erase() reaches a lockbox the host's own check let stand under a name holding a lone surrogate", async () => {
+    const world = makeWorld({ validators: { boxlabel: ZClassic.string() } })
+    const vault = await world.openUnlocked('pw')
+    await vault.store('key \u{D83D}', 'sk-fake')
+    expect(boxlabelsOf(vault)).to.deep.equal(['key \u{D83D}'])
+    await vault.erase('key \u{D83D}')
+    expect(world.dbStore.read(u1BoxCkey('key \u{D83D}'))).to.be.null
+    expect(boxlabelsOf(vault)).to.deep.equal([])
+  })
+
   it("refuses a store under a refused boxlabel as 'bad_label', over a lockbox stored there or not, writing nothing", async () => {
     const world = makeWorld()
     const roomy = await world.openUnlocked('pw', { validators: AnyScript })
