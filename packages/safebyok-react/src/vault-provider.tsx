@@ -32,7 +32,9 @@ export type VaultContextShape = {
    * The user's lockboxes in it are gone for good, so ask first. Resolves when the reopen is under
    * way, and does nothing while `openError` is any other, or none. Rejects with storage's
    * refusal if the erase fails, such as `storage_unavailable`, leaving `openError` as it was; the
-   * `safebyok` package's `eraseDamagedVault` says which refusals to expect.
+   * `safebyok` package's `eraseDamagedVault` says which refusals to expect. Two of them mean
+   * storage no longer holds the damaged vault -- `bad_option`, it reads sound now, and `stale_write`,
+   * it was made anew -- so those open again as well, and still reject.
    *
    * @example
    *   if (openError?.kind === 'damaged_bundle') {
@@ -176,7 +178,14 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   const eraseDamagedVault = useCallback(async () => {
     if (userId === null || ! isVaultError(openError, 'damaged_bundle')) { return }
     const validators = { applabel: applabelCheck, vaultlabel: vaultlabelCheck, boxlabel: boxlabelCheck, userId: userIdCheck, note: noteCheck } satisfies Record<keyof VaultValidators, unknown>
-    await eraseStoredDamagedVault({ applabel, vaultlabel, userId, vaultDB, deviceDB, validators })
+    try {
+      await eraseStoredDamagedVault({ applabel, vaultlabel, userId, vaultDB, deviceDB, validators })
+    } catch (err) {
+      // Storage no longer holds the damaged vault -- it reads sound now, or was made anew -- so what
+      // openError says is out of date: open again, and still tell the caller why nothing was erased.
+      if (isVaultError(err, 'bad_option') || isVaultError(err, 'stale_write')) { setOpenAttempt((prev) => prev + 1) }
+      throw err
+    }
     setOpenAttempt((prev) => prev + 1)
   }, [openError, userId, applabel, vaultlabel, vaultDB, deviceDB, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck])
 
