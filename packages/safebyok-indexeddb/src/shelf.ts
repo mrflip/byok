@@ -26,17 +26,23 @@ export const shelfOf = (dbName: string): UseStore => {
 
 /**
  * The result of an IndexedDB request, or the outcome of a transaction, as a promise: `idb-keyval`'s
- * `promisifyRequest`, except that a failure the browser gives no error for (`request.error` is
- * null, as it can be when a transaction is aborted or the storage is gone) rejects with an Error
- * saying so, never with null, which would reach a caller as an error with a null cause.
+ * `promisifyRequest`, except that it never rejects with null, which would reach a caller as an
+ * error with a null cause. A transaction one of whose requests failed rejects with that request's
+ * error (the transaction's own is still null when the failure reaches it); a failure the browser
+ * gives no error for at all (a transaction aborted from outside) rejects with an Error saying so.
  *
  * @example const standing = await settle<unknown>(store.get(ckey))
  */
 export const settle = async <ValT = undefined>(request: IDBRequest<ValT> | IDBTransaction): Promise<ValT> => {
+  const target: EventTarget = request
+  let failedRequestError: unknown = null
+  target.addEventListener('error', (event) => {
+    if (failedRequestError === null && event.target instanceof IDBRequest) { failedRequestError = event.target.error }
+  })
   try {
     return await promisifyRequest<ValT>(request)
   } catch (err) {
-    throw err instanceof Error ? err : new Error(UnknownFailure)
+    throw [err, failedRequestError].find((candidate) => candidate instanceof Error) ?? new Error(UnknownFailure)
   }
 }
 
