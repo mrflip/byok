@@ -1444,6 +1444,15 @@ describe("the host's validators", () => {
     expect(unlocklabelsOf(vault)).to.have.lengthOf(3)
   })
 
+  it("refuse an empty unlocklabel as bad_label, though the host's unlocklabel check admits it", async () => {
+    const vault = await makeWorld({ validators: AnyTextValidators }).openUnlocked('pw')
+    await TH.expectRefusal(vault.addPassphrase('pw', 'pw two', { unlocklabel: '' }), 'bad_label')
+    const makePasskey = vi.fn(() => TH.passkeyOf('phone'))
+    await TH.expectRefusal(vault.addPasskey('pw', makePasskey, { unlocklabel: '' }), 'bad_label')
+    expect(makePasskey).not.toHaveBeenCalled()
+    expect(unlocklabelsOf(vault)).to.deep.equal(['passphrase'])
+  })
+
   it("check an unlocklabel with Label when the host gives no unlocklabel check, saying what was wrong", async () => {
     const vault = await makeWorld({ validators: AnyScript }).openUnlocked('pw')
     const err = await TH.expectRefusal(vault.addPassphrase('pw', 'pw two', { unlocklabel: 'Written down' }), 'bad_label')
