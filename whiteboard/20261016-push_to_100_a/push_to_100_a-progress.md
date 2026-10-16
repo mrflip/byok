@@ -8,8 +8,8 @@
 |---|---|---|---|---|
 | 1 | names_and_keys | main | filed #128 | [#128](https://github.com/mrflip/safebyok/pull/128) |
 | 2 | public_bag | on 1 (ce653fbb) | filed | [#133](https://github.com/mrflip/safebyok/pull/133) |
-| 3 | locks_and_expiry | main → restacking onto 2 (c397b745) | filed, restacking | [#127](https://github.com/mrflip/safebyok/pull/127) |
-| 4 | refusals_and_catchup | on 3 (98b70b80) | filed #132 | [#132](https://github.com/mrflip/safebyok/pull/132) |
+| 3 | locks_and_expiry | on 2 (c397b745), restacked | filed (tip 65642238) | [#127](https://github.com/mrflip/safebyok/pull/127) |
+| 4 | refusals_and_catchup | restacking onto 3 (65642238) | filed, restacking | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
 | 5b | store_base build | on 4 (restacked) | pending: 4 | |
 | 6 | crypto_small | main | filed #126 | [#126](https://github.com/mrflip/safebyok/pull/126) |
