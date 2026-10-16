@@ -173,7 +173,7 @@ describe("PassphraseModal", () => {
     })
 
     it("meets a rejection that is no Error at all the same way", async () => {
-      const { reported } = TH.renderReporting(<Catcher><PassphraseModal vault={{ getSnapshot: () => ({ state: 'locked' }), unlock: vi.fn().mockRejectedValue(null) } as unknown as Vault} onDone={noop} /></Catcher>)
+      const { reported } = TH.renderReporting(<Catcher><PassphraseModal vault={{ getSnapshot: () => ({ state: 'locked' }), reentryWindowMs: DefaultWindowMs, unlock: vi.fn().mockRejectedValue(null) } as unknown as Vault} onDone={noop} /></Catcher>)
       submitPassphrase('pw one')
       expect(await screen.findByText('Something went wrong')).to.not.be.null
       expect(reported).to.deep.equal([null])
