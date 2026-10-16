@@ -1,0 +1,26 @@
+import { ConvexError } from 'convex/values'
+import { describe, expect, it } from 'vitest'
+import * as TH from './test-helpers'
+
+describe("convexRefusalOf", () => {
+  it("hands back the data of the ConvexError the operation refused with", async () => {
+    const data = { kind: 'vault_full', message: 'This vault is full: erase a lockbox to make room, then try again.' }
+    const refusal = await TH.convexRefusalOf(Promise.reject(new ConvexError(data)))
+    expect(refusal).to.deep.equal(data)
+  })
+
+  it("reads a refusal from the host's functions, as its @example has it", async () => {
+    const { api, createTest } = TH.hostWith(TH.bySubject)
+    const refusal = await TH.convexRefusalOf(createTest().query(api.safebyok.getBundle, { scope: TH.scopeOf('u1') }))
+    expect(refusal.kind).to.eq('not_permitted')
+  })
+
+  it("fails the test when the operation resolves", async () => {
+    await expect(TH.convexRefusalOf(Promise.resolve('fine'))).rejects.toThrow('the call was not refused')
+  })
+
+  it("throws on any other error, which is not a refusal", async () => {
+    const trouble = new Error('plain trouble')
+    await expect(TH.convexRefusalOf(Promise.reject(trouble))).rejects.toThrow(trouble)
+  })
+})
