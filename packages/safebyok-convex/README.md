@@ -203,11 +203,9 @@ through its built `dist/`, as a consumer's would, and make real vaults with the 
 they build the core first by themselves (`pnpm build:deps`), so a fresh clone needs no prebuild
 step.
 
-The client's tests run the real `ConvexClient` and `ConvexReactClient` against
-`tests/fake-deployment.ts`: a fake WebSocket that answers the sync protocol's query and mutation
-messages from `convex-test`. It runs one call at a time, reruns every watched query after each
-mutation, and signs each socket in as one user from the start; its doc block says what that
-cannot prove.
+The adapter's tests against real Convex clients -- `ConvexClient` and `ConvexReactClient`, over a
+fake WebSocket that answers the sync protocol from `convex-test` -- live in the workspace's
+[`e2e/`](https://github.com/mrflip/safebyok/tree/main/e2e), so this package lists no framework among its dev dependencies.
 
 The build follows Convex's component template: ESM only, unbundled, so each of the component's
 modules keeps its own file under `dist/component/`, beside its `convex.config.js` and

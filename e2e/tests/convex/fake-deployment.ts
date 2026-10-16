@@ -3,7 +3,7 @@ import { ConvexReactClient } from 'convex/react'
 import { makeFunctionReference } from 'convex/server'
 import { Base64, ConvexError, convexToJson, jsonToConvex } from 'convex/values'
 import type { JSONValue, Value } from 'convex/values'
-import type { GetUserId } from '../src/server'
+import type { GetUserId } from 'safebyok-convex/server'
 import * as TH from './test-helpers'
 
 /**

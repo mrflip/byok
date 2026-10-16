@@ -1,0 +1,40 @@
+{
+  "name": "safebyok-e2e",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Tests that pair a storage adapter with a framework's client, end to end: the home for the adapter-by-framework matrix, so no adapter's package carries a framework as a dev dependency. Never published.",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint --cache --cache-strategy content --cache-location .eslintcache .",
+    "typecheck": "tsc --noEmit",
+    "build:deps": "[ \"$SAFEBYOK_SKIP_BUILD_DEPS\" = 1 ] || SAFEBYOK_SKIP_BUILD_DEPS=1 pnpm --filter 'safebyok-e2e^...' build",
+    "test": "vitest run",
+    "pretest": "pnpm build:deps",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "pretest:coverage": "pnpm build:deps",
+    "justify": "pnpm install && pnpm lint && pnpm typecheck && pnpm test"
+  },
+  "devDependencies": {
+    "@edge-runtime/vm": "^5.0.0",
+    "@eslint/js": "^10.0.1",
+    "@stylistic/eslint-plugin": "^5.10.0",
+    "@vitest/coverage-v8": "^5.0.3",
+    "@vitest/eslint-plugin": "^1.6.27",
+    "convex": "^1.46.0",
+    "convex-test": "0.0.61",
+    "eslint": "^10.12.0",
+    "eslint-import-resolver-typescript": "^4.4.5",
+    "eslint-plugin-chai-expect": "^4.1.0",
+    "eslint-plugin-chai-friendly": "^1.2.1",
+    "eslint-plugin-import-x": "^4.17.1",
+    "eslint-plugin-sonarjs": "^4.2.2",
+    "eslint-plugin-unicorn": "^77.0.0",
+    "react": "^19.3.0",
+    "safebyok": "workspace:*",
+    "safebyok-convex": "workspace:*",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vitest": "^5.0.3"
+  }
+}

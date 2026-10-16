@@ -63,6 +63,7 @@ export default defineConfig([
     // Workspace packages: each lints itself, with its own config.
     'packages/**',
     'demos/**',
+    'e2e/**',
     '**/*.generated.*',
   ]),
 

@@ -62,7 +62,6 @@
     "eslint-plugin-sonarjs": "^4.2.2",
     "eslint-plugin-unicorn": "^77.0.0",
     "publint": "^0.3.25",
-    "react": "^19.3.0",
     "safebyok": "workspace:*",
     "tsdown": "^0.23.0",
     "typescript": "6.0.3",
