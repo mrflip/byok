@@ -38,8 +38,11 @@ describe("VaultDBInspectionPanel", () => {
     expect(outage.isDown()).to.be.false
   })
 
-  it("starts from empty shelves, whatever the tests before it wrote", () => {
+  it("starts from empty shelves, whatever the tests before it wrote", async () => {
     render(<VaultDBInspectionPanel />)
+    // The IndexedDB shelf's rows load after the first render: a read of our own, queued behind
+    // the panel's, lets them land first.
+    await act(() => vaultDbInspector.rows())
     expect(screen.queryByText(/margo/)).to.be.null
     expect(screen.queryByText('🔐 ciphertext')).to.be.null
   })
