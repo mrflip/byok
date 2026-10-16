@@ -144,6 +144,7 @@ pnpm changeset                     # a PR's release note; `--empty` when it need
   at: **add one whenever you make such a decision.** It is long and you need none of it to
   build: hand your caution to a `sonnet` subagent, which merges it into the entry that already
   says it or inserts it (the file's header says how), and commit what it wrote.
+  `notes/wontfix.md` lists behaviour left undefined on purpose.
 
 ## Reading
 

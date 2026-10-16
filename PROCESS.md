@@ -231,4 +231,6 @@ says in the PR why the bundle grew.
 * **`notes/security.md`** -- a decision a security reviewer should look at, in a sentence or two,
   dated. Add one when you make such a decision, in the same PR, through a subagent (the file's
   header says how): the file is long, and building needs none of it.
+* **`notes/wontfix.md`** -- behaviour the package leaves undefined on purpose, dated, with the
+  ruling that put it there.
 * **Doc blocks** -- what a caller needs, and nothing about how the code came to be.
