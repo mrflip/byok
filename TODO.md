@@ -635,7 +635,9 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
     `peerDependenciesMeta` and `bundledDependencies`;
   - `justify:root` is defined and never used;
   - in `justify`, a build failure skips every package's tests, not only its own;
-  - `safebyok-convex`'s `./test` entry imports a devDependency.
+  - `safebyok-convex`'s `./test` entry imports a devDependency (`convex-test`, for types only).
+    Its new `./testing` entry does not repeat it: it imports `convex`, already a peer, and takes
+    the `convex-test` host as an argument.
 * Style guide audit
   - A few comment lines exceed 100 columns.
 

@@ -1,16 +1,17 @@
 import { ConvexClient } from 'convex/browser'
-import { ConvexReactClient } from 'convex/react'
 import { makeFunctionReference } from 'convex/server'
+import type { FunctionReference } from 'convex/server'
 import { Base64, ConvexError, convexToJson, jsonToConvex } from 'convex/values'
 import type { JSONValue, Value } from 'convex/values'
-import type { GetUserId } from '../src/server'
-import * as TH from './test-helpers'
 
 /**
- * A Convex deployment in memory that the real Convex clients talk to: `ConvexClient` and
- * `ConvexReactClient`, unmodified, over a fake WebSocket. `convex-test` runs the host's safebyok
- * functions (as the README has a host serve them) and the component beneath; this file answers
- * the handful of sync-protocol messages a client sends for queries and mutations.
+ * A Convex deployment in memory that the real Convex clients talk to: `ConvexClient` and, through
+ * {@link FakeDeployment.connectWith}, any other client, such as `ConvexReactClient`, unmodified,
+ * over a fake WebSocket. `convex-test` runs the host's safebyok functions (as the README has a
+ * host serve them) and the component beneath; this answers the handful of sync-protocol messages
+ * a client sends for queries and mutations. For the tests of an adapter, a binding, or an app
+ * that holds a Convex client: it imports `convex` and nothing else, and `convex-test` stays with
+ * you, whose `defineTestApp(...).defineModules(...)` is the `host`.
  *
  * What it stands in for, and so cannot prove: the network and a real server. Every call runs one
  * at a time, in arrival order, so no two transactions ever race (Convex's own serializability is
@@ -21,13 +22,40 @@ import * as TH from './test-helpers'
  * one out, rerunning every watched query, as Convex does on a new identity. There is no reconnecting,
  * no ping, no chunked transition, and no action.
  *
+ * @param host - A host app as the README has it, from `defineTestApp(...).defineModules(...)`:
+ *   its `api`, and `createTest()` for the in-memory backend that runs its functions.
+ * @returns The deployment: connect clients to it, and `close()` it after the test.
+ *
  * @example
- *   const deployment = fakeDeployment()
+ *   const app = defineTestApp({ schema: defineSchema({}), components: { safebyok: { register } } })
+ *   const host = app.defineModules({ safebyok: new SafebyokComponent(app.components.safebyok).api({ getUserId }) })
+ *   const deployment = fakeDeployment(host)
  *   const client = deployment.client('u1')
  *   await client.query(deployment.api.safebyok.getBundle, { scope })
  *   await deployment.close()
+ *
+ * @example
+ *   const deployment = fakeDeployment(host)
+ *   const reactClient = deployment.connectWith('u1', (address, opts) => new ConvexReactClient(address, opts))
+ *   await reactClient.mutation(deployment.api.safebyok.createBundle, { bundle })
  */
-export const fakeDeployment = (getUserId: GetUserId = TH.bySubject) => new FakeDeployment(getUserId)
+export const fakeDeployment = <Host extends FakeHost>(host: Host): FakeDeployment<Host> => new FakeDeployment(host)
+
+/** What {@link fakeDeployment} needs of a host: its `api`, and a backend that runs its functions. */
+export type FakeHost = {
+  api:        unknown
+  createTest: () => FakeBackend
+}
+
+/** The in-memory backend `convex-test` makes: it runs a function as a signed-in identity, or as no one. */
+export type FakeBackend = {
+  query:        (ref: FunctionReference<'query'>, args: Record<string, Value>) => Promise<unknown>
+  mutation:     (ref: FunctionReference<'mutation'>, args: Record<string, Value>) => Promise<unknown>
+  withIdentity: (identity: { subject: string }) => FakeBackend
+}
+
+/** What a Convex client's constructor is given: the address, and the options that plug it into the fake. */
+export type FakeClientOpts = { webSocketConstructor: typeof WebSocket, unsavedChangesWarning: false }
 
 /** The fake deployment's handle on one connected socket: the user it is signed in as, its watches. */
 type Session = {
@@ -51,37 +79,40 @@ type QueryModification =
 // Any address will do: no socket ever reaches it.
 const FakeAddress = 'https://fake-deployment-123.convex.cloud'
 
-class FakeDeployment {
-  readonly api: ReturnType<typeof TH.hostWith>['api']
-  private readonly backend: ReturnType<ReturnType<typeof TH.hostWith>['createTest']>
+/** The deployment {@link fakeDeployment} makes. */
+export class FakeDeployment<Host extends FakeHost> {
+  /** The host's api, to call and to watch through a client. */
+  readonly api: Host['api']
+  private readonly backend: FakeBackend
   private readonly sessions = new Map<FakeSocket, Session>()
   private readonly clients: { close(): Promise<void> }[] = []
   private ts = 1
   private work: Promise<void> = Promise.resolve()
 
-  constructor(getUserId: GetUserId) {
-    const host = TH.hostWith(getUserId)
+  constructor(host: Host) {
     this.api = host.api
     this.backend = host.createTest()
   }
 
   /** A real `ConvexClient` on this deployment, signed in as `subject`, or as no one. */
   client(subject: string | null): ConvexClient {
-    const client = new ConvexClient(FakeAddress, { webSocketConstructor: this.socketsFor(subject), unsavedChangesWarning: false })
-    this.clients.push(client)
-    return client
+    return this.connectWith(subject, (address, opts) => new ConvexClient(address, opts))
   }
 
-  /** A real `ConvexReactClient` on this deployment, signed in as `subject`, or as no one. */
-  reactClient(subject: string | null): ConvexReactClient {
-    const client = new ConvexReactClient(FakeAddress, { webSocketConstructor: this.socketsFor(subject), unsavedChangesWarning: false })
+  /**
+   * A client of any other kind on this deployment, signed in as `subject`, or as no one: `make`
+   * constructs it from the address and options it is to be given, and it is closed with the rest.
+   * This is how `ConvexReactClient` connects, without this module importing React.
+   */
+  connectWith<Client extends { close: () => Promise<void> }>(subject: string | null, make: (address: string, opts: FakeClientOpts) => Client): Client {
+    const client = make(FakeAddress, { webSocketConstructor: this.socketsFor(subject), unsavedChangesWarning: false })
     this.clients.push(client)
     return client
   }
 
   /** The backend itself, called directly as `subject`: to arrange or inspect what is stored. */
-  as(subject: string | null) {
-    return subject === null ? this.backend : this.backend.withIdentity({ subject })
+  as(subject: string | null): ReturnType<Host['createTest']> {
+    return this.backendAs(subject) as ReturnType<Host['createTest']>
   }
 
   /** The functions every connected socket watches right now, by path: the live queries a client holds open here. */
@@ -103,6 +134,10 @@ class FakeDeployment {
   /** Closes every client made here, so none keeps a timer running past its test. */
   async close(): Promise<void> {
     await Promise.all(this.clients.map((client) => client.close()))
+  }
+
+  private backendAs(subject: string | null): FakeBackend {
+    return subject === null ? this.backend : this.backend.withIdentity({ subject })
   }
 
   // Each socket the client constructs plugs into this deployment, signed in as `subject`.
@@ -161,7 +196,7 @@ class FakeDeployment {
   private async mutate(session: Session, message: Extract<ClientMessage, { type: 'Mutation' }>): Promise<void> {
     const args = jsonToConvex(message.args[0] ?? {}) as Record<string, Value>
     try {
-      const result: unknown = await this.as(session.subject).mutation(makeFunctionReference<'mutation'>(message.udfPath), args)
+      const result: unknown = await this.backendAs(session.subject).mutation(makeFunctionReference<'mutation'>(message.udfPath), args)
       this.ts += 1
       session.socket.deliver({ type: 'MutationResponse', requestId: message.requestId, success: true, result: convexToJson(result as Value), ts: encodeTs(this.ts), logLines: [] })
     } catch (err) {
@@ -192,7 +227,7 @@ class FakeDeployment {
 
   private async run(session: Session, udfPath: string, args: Record<string, Value>, queryId: number): Promise<QueryModification> {
     try {
-      const result: unknown = await this.as(session.subject).query(makeFunctionReference<'query'>(udfPath), args)
+      const result: unknown = await this.backendAs(session.subject).query(makeFunctionReference<'query'>(udfPath), args)
       return { type: 'QueryUpdated', queryId, value: convexToJson(result as Value), logLines: [], journal: null }
     } catch (err) {
       const { result: errorMessage, errorData } = failureOf(err)

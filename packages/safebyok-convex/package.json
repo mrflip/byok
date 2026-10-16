@@ -62,7 +62,6 @@
     "eslint-plugin-sonarjs": "^4.2.2",
     "eslint-plugin-unicorn": "^77.0.0",
     "publint": "^0.3.25",
-    "react": "^19.3.0",
     "safebyok": "workspace:*",
     "tsdown": "^0.23.0",
     "typescript": "6.0.3",
@@ -101,6 +100,11 @@
       "types": "./dist/component-api.d.ts"
     },
     "./test": "./src/test.ts",
+    "./testing": {
+      "@safebyok/source": "./src/testing.ts",
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -125,6 +129,10 @@
         "types": "./dist/component-api.d.ts"
       },
       "./test": "./src/test.ts",
+      "./testing": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
       "./package.json": "./package.json"
     }
   }

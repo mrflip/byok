@@ -206,6 +206,26 @@ const t = convexTest(schema, modules)
 register(t)
 ```
 
+## Testing your own client code
+
+`safebyok-convex/testing` is a Convex deployment in memory that the real Convex clients talk to,
+for the tests of anything that holds one: this adapter, a binding, your app. `fakeDeployment(host)`
+takes the host app you built with `convex-test` (`defineTestApp(...).defineModules(...)`, as above)
+and answers a client's queries and mutations over a fake WebSocket, running your functions and the
+component under them. `deployment.client(subject)` is a signed-in `ConvexClient`;
+`deployment.connectWith(subject, make)` connects any other, such as a `ConvexReactClient`. It
+imports `convex` and nothing else. Its doc block says what it cannot prove: the network and a real
+server, among them.
+
+```ts
+import { fakeDeployment } from 'safebyok-convex/testing'
+
+const deployment = fakeDeployment(host)
+const vaultDB = convexVaultDB(deployment.client('u1'), deployment.api.safebyok)
+// ... and after the test:
+await deployment.close()
+```
+
 ## Developing this package
 
 `pnpm justify` here runs its lint, typecheck, tests -- `convex-test` under the edge runtime,
@@ -215,11 +235,10 @@ through its built `dist/`, as a consumer's would, and make real vaults with the 
 they build the core first by themselves (`pnpm build:deps`), so a fresh clone needs no prebuild
 step.
 
-The client's tests run the real `ConvexClient` and `ConvexReactClient` against
-`tests/fake-deployment.ts`: a fake WebSocket that answers the sync protocol's query and mutation
-messages from `convex-test`. It runs one call at a time, reruns every watched query after each
-mutation, and signs each socket in as one user from the start; its doc block says what that
-cannot prove.
+The client's tests run the real `ConvexClient` against `src/testing.ts`, the fake deployment
+`safebyok-convex/testing` ships (below). `ConvexReactClient`'s run in the workspace's
+[`e2e/`](https://github.com/mrflip/safebyok/tree/main/e2e), over the same fake, so this package
+lists no framework among its dev dependencies.
 
 The build follows Convex's component template: ESM only, unbundled, so each of the component's
 modules keeps its own file under `dist/component/`, beside its `convex.config.js` and
