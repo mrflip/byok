@@ -13,7 +13,7 @@ export type VaultContextShape = {
    * Why the vault could not be opened, when it is a condition the app can show in place:
    * storage that cannot be reached (`storage_unavailable`), a user storage no longer serves
    * (`identity_revoked`, as when signed out of the backend, or not yet signed in to it), a stored
-   * record that fails verification (`corrupt_record`). Null while
+   * vault that fails its checks (`damaged_bundle`). Null while
    * opening, once open, and while signed out. Misuse -- a bad label or option -- never lands
    * here: the provider throws it to the nearest error boundary.
    *
