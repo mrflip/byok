@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { localVaultDB, memoryStore, openVault, type StringStore } from '../src/index'
 import { Ciphered, fromB64, toB64 } from '../src/crypto'
@@ -400,10 +401,10 @@ TH.describeDeviceDB('describeDeviceDB, over the smallest honest DeviceDB', () =>
  * any scope naming someone else, as a server's must, so the VaultDB suite reaches it only through
  * `perUser`.
  */
-const servingOnly = (userId: string, store: StringStore): TH.VaultDBVerbs => {
+const servingOnly = (userId: string | null, store: StringStore): TH.VaultDBVerbs => {
   const shared = localVaultDB(store)
   const permitted = ({ user_id }: { user_id: string }): void => {
-    if (user_id !== userId) { throw new VaultError('not_permitted', "That vault belongs to someone else.") }
+    if (user_id !== userId) { throw new VaultError('identity_revoked', "That vault belongs to someone other than the user signed in.") }
   }
   return {
     maxRecordBytes: shared.maxRecordBytes,
@@ -417,6 +418,7 @@ const servingOnly = (userId: string, store: StringStore): TH.VaultDBVerbs => {
     updateBox:      async (scope, lockbox, expected, validators) => { permitted(scope); await shared.updateBox(scope, lockbox, expected, validators) },
     eraseBox:       async (scope, boxlabel, expected, validators) => { permitted(scope); await shared.eraseBox(scope, boxlabel, expected, validators) },
     eraseVault:     async (scope, expected, validators) => { permitted(scope); await shared.eraseVault(scope, expected, validators) },
+    eraseDamagedVault: async (scope, validators) => { permitted(scope); await shared.eraseDamagedVault(scope, validators) },
     subscribe:      (scope, onChange, validators) => { permitted(scope); return shared.subscribe(scope, onChange, validators) },
   }
 }
@@ -424,6 +426,11 @@ const servingOnly = (userId: string, store: StringStore): TH.VaultDBVerbs => {
 TH.describeVaultDB('perUser, over a VaultDB serving one user', () => {
   const store = memoryStore()
   return TH.perUser((userId) => servingOnly(userId, store))
+}, {
+  makeVaultDBFor: () => {
+    const store = memoryStore()
+    return (userId) => servingOnly(userId, store)
+  },
 })
 
 /** perUser over servingOnly, with the user ids it asked a VaultDB for, in order. */
@@ -481,6 +488,25 @@ describe("perUser", () => {
   it("passes on a refusal from the user's VaultDB", async () => {
     const store = memoryStore()
     const onlyU1 = TH.perUser(() => servingOnly('u1', store))
-    await TH.expectRefusal(onlyU1.readBundle(TH.scopeOf('u2')), 'not_permitted')
+    await TH.expectRefusal(onlyU1.readBundle(TH.scopeOf('u2')), 'identity_revoked')
+  })
+})
+
+/** Each numbered line of the VaultDB contract as `VAULTDB.md` writes it, in bold: its number, then its title. */
+const BoldLines = /\*\*(\d+\.\d+)\. ([^*]+?)\.\*\*/gu
+
+/** Each numbered line of the VaultDB contract in `markdown`, its title by its number. */
+const contractLinesIn = (markdown: string): Record<string, string> => Object.fromEntries(
+  Array.from(markdown.matchAll(BoldLines), ([, line = '', title = '']): [string, string] => [line, title.replaceAll(/\s+/gu, ' ')]),
+)
+
+describe("VaultDBContract", () => {
+  it("names every numbered line of VAULTDB.md, by the title it has there, and nothing else", () => {
+    const written = contractLinesIn(readFileSync(new URL('../VAULTDB.md', import.meta.url), 'utf8'))
+    expect(TH.VaultDBContract).to.deep.equal(written)
+  })
+
+  it("titles a line as an adapter's own test of it cites it", () => {
+    expect(`postgresVaultDB, 5.5: ${TH.VaultDBContract['5.5']}`).to.eq('postgresVaultDB, 5.5: identity_revoked means the user is gone')
   })
 })

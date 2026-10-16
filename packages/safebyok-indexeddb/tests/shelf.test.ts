@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
 import { get, promisifyRequest, set } from 'idb-keyval'
-import { inOneTransaction, shelfOf } from '../src/shelf'
+import { inOneTransaction, settle, shelfOf } from '../src/shelf'
 import * as TH from './test-helpers'
 
 describe("shelfOf", () => {
@@ -11,6 +11,46 @@ describe("shelfOf", () => {
     await set('ckey', 'row', shelfOf(dbName))
     const databases = await indexedDB.databases()
     expect(databases.map((database) => database.name)).to.include(`${dbName}:vault_db`)
+  })
+})
+
+describe("settle", () => {
+  it("resolves with a request's result", async () => {
+    const shelf = shelfOf(TH.freshDbName())
+    await set('ckey', 'row', shelf)
+    expect(await shelf('readonly', (store) => settle<unknown>(store.get('ckey')))).to.eq('row')
+  })
+
+  it("rejects with the browser's own error when it gave one", async () => {
+    const shelf = shelfOf(TH.freshDbName())
+    await set('ckey', 'row', shelf)
+    const refused = shelf('readwrite', (store) => settle(store.add('again', 'ckey')))
+    await expect(refused).rejects.toMatchObject({ name: 'ConstraintError' })
+  })
+
+  it("rejects a transaction with the error of its request that failed, not the transaction's null", async () => {
+    const shelf = shelfOf(TH.freshDbName())
+    await set('ckey', 'row', shelf)
+    const refused = inOneTransaction(shelf, (store) => {
+      store.add('again', 'ckey')
+      return Promise.resolve(true)
+    })
+    await expect(refused).rejects.toMatchObject({ name: 'ConstraintError' })
+    expect(await get('ckey', shelf)).to.eq('row')
+  })
+
+  it("rejects with an Error that says why not, never null, when the browser gave no error", async () => {
+    const request = Object.assign(new EventTarget(), { error: null }) as unknown as IDBRequest
+    const settled = settle(request)
+    request.onerror?.(new Event('error'))
+    let rejection: unknown = null
+    try {
+      await settled
+    } catch (err) {
+      rejection = err
+    }
+    expect(rejection).to.be.instanceOf(Error)
+    expect((rejection as Error).message).to.match(/failed for an unknown reason/)
   })
 })
 

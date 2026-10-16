@@ -43,7 +43,8 @@ const vault = await openVault({
   expects still stands, and refuses with kind `stale_write` otherwise. Two tabs creating a vault
   at once settle on one; erasing a vault takes its every lockbox with it, or none of them.
 * **Other tabs' writes** ring `subscribe`, over a BroadcastChannel, so a vault open in two tabs
-  stays current in both. The bell says only that something changed; the vault reads again.
+  stays current in both. The bell says only that something changed; the vault reads again. Its
+  channel is closed when the last vault listening to it closes.
 * **No limits of its own.** IndexedDB sets none per record or per vault, so `maxRecordBytes`,
   `maxVaultBytes` and `maxLockboxes` are `Infinity`: a vault holds what `openVault`'s
   `maxLockboxes` allows (100 by default), the origin's storage quota bounds the whole database,
@@ -64,7 +65,9 @@ its own failures.
 
 One IndexedDB database per `dbName`, `<dbName>:vault_db`, holding one object store, `records`:
 **a row per record, each the record itself**, as safebyok wrote it, kept by structured clone
-field by field. Nothing is serialized, normalized or repaired.
+field by field. Nothing is serialized, normalized or repaired: every field a record holds is
+bound into its encryption, but for the bundle's `unlock_epoch` and which envelopes its `unlocks`
+list holds, so one changed in storage makes the record refuse to open.
 
 | ckey                                               | Row                       |
 | -------------------------------------------------- | ------------------------- |
@@ -98,9 +101,9 @@ browser store, a native one in an app shell, a key-value service -- copy it, and
 places:
 
 1. **`src/ckeys.ts`: where each record lives.** A ckey per record, built from its scope, so a
-   read is one lookup and a vault's lockboxes are the rows under its prefix. A `user_id` may hold
-   the separator, so a listing takes only the rows whose remainder is a bare boxlabel
-   (`isBoxCkeyOf`). If your store has columns or namespaces, use them instead.
+   read is one lookup and a vault's lockboxes are the rows under its prefix, read as a key range
+   (`boxRange`) rather than by scanning the shelf. The core's `Ckeys.boxPrefix` is exact whatever
+   characters a `user_id` holds. If your store has columns or namespaces, use them instead.
 2. **`src/idb-vault-db.ts`: each verb, in one transaction of your store.** Extend `VaultDB` and
    write its `do*` methods, never its public verbs: the base class checks labels, scope, records
    and expectations on the way in, validates every record on the way out, and turns a `false`
@@ -112,7 +115,8 @@ places:
    a BroadcastChannel to the others. A store with push of its own -- a live query, a socket --
    rings from that, and one with none leaves `doSubscribe` out: the vault refreshes after its own
    writes regardless. Whatever rings, call each listener so that one that throws stops neither
-   the others nor the write, and let no handle (a channel, a socket) hold a Node process open.
+   the others nor the write, let no handle (a channel, a socket) hold a Node process open, and
+   close it when its last listener leaves.
 
 And keep, as they are:
 
@@ -124,8 +128,12 @@ And keep, as they are:
   damaged row: safebyok validates everything it reads back.
 * **Prove it with the shared suite**: `describeVaultDB` from `safebyok/testing` runs every verb,
   expectation and refusal against a fresh adapter, in one line
-  (`tests/idb-vault-db.test.ts`). The tests beside it race two writes against each other, which
-  is what one transaction per verb is for.
+  (`tests/idb-vault-db.test.ts`), each group of tests named for the line of the
+  [VaultDB contract](https://github.com/mrflip/safebyok/blob/main/packages/safebyok/VAULTDB.md)
+  it checks. It makes two writes at once, which is what one transaction per verb is for, and,
+  told your adapter pushes (`{ pushes: true }`), checks that `subscribe` hears each write. Your
+  own tests are for what is yours alone: the rows as stored, a damaged row, a failure partway,
+  another tab's ring.
 
 The packaging is the template too: `package.json` (`safebyok` and `zod` as peers, ESM and
 CommonJS through `exports`), `tsdown.config.ts`, `vitest.config.ts`, `tsconfig.json`, and an

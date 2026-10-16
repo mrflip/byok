@@ -17,7 +17,8 @@ import * as TH from './test-helpers'
  * the component's tests' to rely on, not this file's). After every mutation it reruns every
  * watched query and pushes those whose results changed, where Convex reruns only those whose
  * reads the write touched: the same results, sooner or later. Each socket is signed in as one
- * user from the start, in place of the client's `setAuth` and a JWT. There is no reconnecting,
+ * user from the start, in place of the client's `setAuth` and a JWT, until `signOut()` signs every
+ * one out, rerunning every watched query, as Convex does on a new identity. There is no reconnecting,
  * no ping, no chunked transition, and no action.
  *
  * @example
@@ -88,6 +89,17 @@ class FakeDeployment {
     return Array.from(this.sessions.values(), (session) => Array.from(session.watched.values(), (watch) => watch.udfPath)).flat()
   }
 
+  /**
+   * Signs every connected socket out, as a client's `clearAuth` would, and pushes each watched
+   * query that now answers differently: a safebyok function's, refused.
+   */
+  signOut(): void {
+    this.enqueue(async () => {
+      for (const session of this.sessions.values()) { session.subject = null }
+      await this.pushChanges()
+    })
+  }
+
   /** Closes every client made here, so none keeps a timer running past its test. */
   async close(): Promise<void> {
     await Promise.all(this.clients.map((client) => client.close()))
@@ -156,8 +168,12 @@ class FakeDeployment {
       session.socket.deliver({ type: 'MutationResponse', requestId: message.requestId, success: false, logLines: [], ...failureOf(err) })
       return
     }
-    // Every session hears of the new timestamp -- the mutating one needs it to resolve its call --
-    // with each watched query that now answers differently.
+    await this.pushChanges()
+  }
+
+  // Every session hears of the latest timestamp -- after a mutation, the mutating one needs it to
+  // resolve its call -- with each watched query that now answers differently.
+  private async pushChanges(): Promise<void> {
     for (const other of this.sessions.values()) {
       const changes: QueryModification[] = []
       for (const [queryId, watch] of other.watched) {

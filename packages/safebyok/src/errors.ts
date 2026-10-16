@@ -9,8 +9,9 @@
  * - **Condition**: something the app handles at run time, which may reach the user: ask again,
  *   show a message, retry, or tell them to free room. `vault_locked`, `wrong_passphrase`,
  *   `wrong_passkey`, `passkey_unavailable`, `absent_box`, `absent_vault`, `absent_unlock`,
- *   `whisper_too_large`, `lockbox_too_large`, `vault_full`, `too_many_unlocks`, `last_unlock`, `corrupt_record`,
- *   `stale_write`, `not_permitted`, `storage_unavailable`.
+ *   `whisper_too_large`, `lockbox_too_large`, `vault_full`, `too_many_unlocks`, `last_unlock`,
+ *   `corrupt_record`, `damaged_bundle`, `damaged_unlock`, `damaged_lockbox`, `stale_write`,
+ *   `not_permitted`, `identity_revoked`, `storage_unavailable`.
  *
  * `vault_full` means a new lockbox in a vault already holding its `maxLockboxes` (a limit the
  * client keeps), and also that storage has no room for the write (a limit of the backend's own,
@@ -20,6 +21,18 @@
  * over what storage holds in one record. `bad_label` is a label the app passed that fails the
  * vault's check, a misuse -- a label the user types is checked first, with `Label` or with the
  * host's own `validators.boxlabel`.
+ *
+ * `identity_revoked` is storage saying that the user this vault was opened for is no longer the
+ * one signed in -- signed out, or another user signed in -- and the vault locks itself as it
+ * throws it (openVault's `whenIdentityRevoked`): the user signs in again, and the host opens the
+ * vault for whoever that is. `not_permitted` is the signed-in user, still the vault's own, refused
+ * one call: signing in again will not help.
+ *
+ * `corrupt_record` is storage's word, for a record that failed its checks as it read back; the
+ * vault says what that means for the user, as one of the `damaged_` kinds. Those are only what the
+ * vault can know: a passphrase or passkey whose answer fails to open its way in is
+ * `wrong_passphrase` or `wrong_passkey` even when the stored vault was altered, because the
+ * decryption fails alike either way. Their messages say so.
  *
  * The package README's *Errors* section lists what each kind means and what to do about it.
  */
@@ -40,10 +53,14 @@ export const VaultErrorKindVals = [
   'last_unlock',         // removing the vault's last passphrase, which would leave no sure way in
   'bad_option',          // an option or argument out of its range: openVault's, mask's, argon2idDeriver's, a store()'s note, a VaultDB write's record
   'vault_closed',        // the vault handle was closed and cannot be used again
-  'corrupt_record',      // a stored record failed validation or decryption verification
+  'corrupt_record',      // a stored record failed validation as storage read it back
+  'damaged_bundle',      // the vault's stored bundle failed its checks, so no way in can be tried
+  'damaged_unlock',      // a way in is stored in a form this package never writes, so it cannot be tried
+  'damaged_lockbox',     // a lockbox failed its checks, or would not open under the vault's own vaultKey
   'unknown_key_deriver', // the vault names a key deriver this handle was not built with
   'stale_write',         // storage changed since this device read it, so the write was refused
-  'not_permitted',       // the storage backend refused this user: signed out, or not theirs to reach
+  'not_permitted',       // the storage backend refused the signed-in user this call: not theirs to make
+  'identity_revoked',    // the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in
   'storage_unavailable', // the storage backend could not be reached, or failed
 ] as const
 export type VaultErrorKind = typeof VaultErrorKindVals[number]
@@ -112,9 +129,13 @@ export const VaultErrorFamilyForKind = {
   bad_option:          'misuse',
   vault_closed:        'misuse',
   corrupt_record:      'condition',
+  damaged_bundle:      'condition',
+  damaged_unlock:      'condition',
+  damaged_lockbox:     'condition',
   unknown_key_deriver: 'misuse',
   stale_write:         'condition',
   not_permitted:       'condition',
+  identity_revoked:    'condition',
   storage_unavailable: 'condition',
 } as const satisfies Readonly<Record<VaultErrorKind, VaultErrorFamily>>
 

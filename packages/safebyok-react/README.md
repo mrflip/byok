@@ -8,7 +8,11 @@ otherwise write itself.
   `withUnlockedVault` finds the vault locked.
 * `useVault()` -- the vault handle and `withUnlockedVault()`, which wraps any action that touches
   a whisper: on `vault_locked` it asks for the passphrase and retries, and resolves `null` if
-  dismissed (unambiguous for reads: a whisper is never null). Beside them, `openError` and
+  dismissed (unambiguous for reads: a whisper is never null). Every call settles: calls that
+  overlap wait on one dialog, and each resolves `null` if the vault goes while it is open (a
+  sign-out, another user, the provider unmounting). A dialog still asking when the vault unlocks
+  by any other route -- an earlier, cancelled dialog's unlock finishing late -- closes, and its
+  calls run again. Beside them, `openError` and
   `retryOpen()` for an open that failed (below).
 * `useVaultSnapshot()` -- the live snapshot via `useSyncExternalStore`.
 * `PassphraseModal` -- the default dialog: unstyled markup under `modal-scrim` / `modal` class
@@ -17,8 +21,9 @@ otherwise write itself.
   ("Locks on this device ..." while it creates the vault) -- read from the vault itself (its
   `reentryWindowMs`, the `forcePassphraseReentryHours` it was opened with). A wrong
   passphrase, or any other condition the unlock meets (storage out of reach), shows in the dialog
-  in place; misuse is thrown while rendering, to your error boundary. For a vault with a passkey,
-  it offers "Use a passkey" beside the passphrase field.
+  in place; anything else (misuse, a bug) shows a calm "Something went wrong" with a Close
+  button, and goes to React's error reporting, never to your page (*When an unlock fails*,
+  below). For a vault with a passkey, it offers "Use a passkey" beside the passphrase field.
 * `createPasskey()`, `askPasskey()`, `passkeysAvailable()` and `PasskeyUnlockButton` -- the
   WebAuthn half of a fingerprint (passkey, security key) unlock, below. The three functions import
   no React.
@@ -60,8 +65,9 @@ What happens when `openVault` rejects depends on the error's family (safebyok's
 kind, its family, and what it means.
 
 **A condition stays in place.** Storage that cannot be reached (`storage_unavailable`), a user
-storage will not serve (`not_permitted`, as when signed out of the backend) or a stored vault
-bundle that fails verification (`corrupt_record`) arrives as `openError`, a `VaultError`, with
+storage no longer serves (`identity_revoked`, as when signed out of the backend, or not yet
+signed in to it) or a stored vault
+bundle that fails its checks (`damaged_bundle`) arrives as `openError`, a `VaultError`, with
 `vault` still null. (A damaged lockbox never stops the open: the snapshot lists it with
 `damaged: true`, for your UI to offer `erase()` or a fresh `store()`; see the `safebyok`
 README's *Damaged lockboxes*.) Show it where the vault's UI would be, and offer `retryOpen()`, which clears it and
@@ -76,8 +82,30 @@ const VaultPanel = () => {
 }
 ```
 
-Branch on `openError.kind` for a better message: a `not_permitted` user should sign in again,
-and a `corrupt_record` will not mend on retry. Its `message` is calm and safe to show.
+Branch on `openError.kind` for a better message: an `identity_revoked` user should sign in
+again, and a `damaged_bundle` will not mend on retry. Its `message` is calm and safe to show.
+
+For a `damaged_bundle`, the one way forward is to erase the vault and start over:
+`eraseDamagedVault()` from `useVault()` does that (the `safebyok` README's *A vault that cannot be
+opened*) and opens again, with the provider's own options. The user's lockboxes in it are lost for
+good, so ask first:
+
+```tsx
+const { openError, eraseDamagedVault } = useVault()
+if (openError?.kind === 'damaged_bundle') {
+  return <button onClick={() => { if (confirm('Erase your vault and start over?')) { void eraseDamagedVault() } }}>Start over</button>
+}
+```
+
+It does nothing for any other `openError`, or none, and rejects with storage's refusal (say,
+`storage_unavailable`) if the erase fails, leaving `openError` as it was.
+
+**A sign-out the app did not hear of** -- in another tab, or a session that expired -- reaches
+the vault as storage refusing it, kind `identity_revoked`, and an open vault locks itself
+(`whenIdentityRevoked`, passed through like any other option; the `safebyok` README's *When the
+user signs out*). The snapshot reads `locked`; the next `withUnlockedVault` opens the passphrase
+dialog, whose unlock meets the same refusal and shows its message there. Once your auth says the
+user signed out, pass `userId={null}`, which closes the handle.
 
 **Misuse goes to your error boundary.** A bad label or option -- a bug in the app's code -- is
 thrown while rendering, as is anything rejected that is not a `VaultError`. Wrap the provider in
@@ -91,6 +119,35 @@ shows it and a different user (or a sign-out and back in) gets a fresh attempt:
   </VaultProvider>
 </ErrorBoundary>
 ```
+
+## When an unlock fails
+
+**The user sees what they can mend.** A wrong passphrase, storage out of reach, a passkey that
+does not answer: each condition shows in the dialog in the vault's own calm words, to try again
+or cancel.
+
+**Anything else never takes your page down.** Misuse -- a closed vault handle, an `rpId` that
+does not fit the page, a vault made with a key deriver this build lacks (as in a tab left open
+across a deployment) -- or a failure that is no `VaultError` is not the user's to mend, and its
+message is written for you, not them. The dialog shows "Something went wrong", that their secrets
+are safe, and to reload and try again, with a Close button that resolves `withUnlockedVault` to
+null, as Cancel does (Escape too); the typed passphrase goes with the form. A
+`PasskeyUnlockButton` that meets one takes itself away and tells `onGripe` to use the passphrase
+instead; `PassphraseModal` announces that, keeps it on screen until the next submit, and moves
+focus to the passphrase field. Your error boundary never sees it.
+
+**React reports it to you.** Each component catches such a failure in an error boundary of its
+own, so React hands the very error to the root's `onCaughtError`: by default the console, with the
+component stack, in development and production alike. Hook your error tracker there:
+
+```tsx
+createRoot(rootElement, {
+  onCaughtError: (err, info) => { tracker.capture(err, { componentStack: info.componentStack }) },
+}).render(<App />)
+```
+
+An open's misuse is the exception: `VaultProvider` throws it to your boundary at mount (*When
+opening fails*, above), where it fires on every load, before any user has typed anything.
 
 ## Fingerprint unlock (passkeys)
 
@@ -136,7 +193,8 @@ if (passkey !== null) { await vault.unlock(passkey) }
   `PasskeyUnlockButton`): a passkey answers only under the relying party it was made for.
 * **The dialog.** `PassphraseModal` shows `PasskeyUnlockButton` when the vault lists a passkey and
   the browser offers WebAuthn, under the page's own relying party. A dialog of your own can place
-  `<PasskeyUnlockButton vault={vault} onDone={close} onGripe={setGripe} />` beside its field.
+  `<PasskeyUnlockButton vault={vault} onDone={close} onGripe={setGripe} />` beside its field;
+  `onGripe` hears each condition's message, and the button's word when it takes itself away.
 * **A passkey can stand in for a forgotten passphrase**: `vault.addPassphrase(passkey, fresh, {
   unlocklabel })`, then `vault.removeUnlock(passkey, oldId)`. A vault always keeps one passphrase:
   removing the last refuses with kind `last_unlock`.

@@ -97,10 +97,49 @@ describe("the change bell", () => {
     for (const stop of stops) { stop() }
   })
 
+  it("closes its channel when its database's last listener leaves, and opens it afresh for the next", async () => {
+    const dbName = TH.freshDbName()
+    const closing = vi.spyOn(BroadcastChannel.prototype, 'close')
+    try {
+      const stopOne = onBell(dbName, () => undefined)
+      const stopTwo = onBell(dbName, () => undefined)
+      stopOne()
+      expect(closing).not.toHaveBeenCalled()
+      stopTwo()
+      expect(closing).toHaveBeenCalledTimes(1)
+      const otherTab = new BroadcastChannel(`safebyok-idb:${dbName}:vault_db`)
+      let heardCount = 0
+      const stopThree = onBell(dbName, () => { heardCount += 1 })
+      otherTab.postMessage('changed')
+      await vi.waitFor(() => { expect(heardCount).to.eq(1) })
+      stopThree()
+      otherTab.close()
+    } finally {
+      closing.mockRestore()
+    }
+  })
+
+  it("rings other tabs for a write nothing here listens to, then closes the channel it opened", async () => {
+    const dbName = TH.freshDbName()
+    const otherTab = new BroadcastChannel(`safebyok-idb:${dbName}:vault_db`)
+    const otherHeard: unknown[] = []
+    otherTab.addEventListener('message', (event) => { otherHeard.push(event.data) })
+    const closing = vi.spyOn(BroadcastChannel.prototype, 'close')
+    try {
+      ringBell(dbName)
+      expect(closing).toHaveBeenCalledTimes(1)
+      await vi.waitFor(() => { expect(otherHeard).to.deep.equal(['changed']) })
+    } finally {
+      closing.mockRestore()
+      otherTab.close()
+    }
+  })
+
   it("unrefs its channel where the platform's has unref, so it never holds a process open", () => {
     const unrefs = vi.fn()
     class NodeLikeChannel extends EventTarget {
       postMessage = vi.fn()
+      close = vi.fn()
       unref = unrefs
     }
     vi.stubGlobal('BroadcastChannel', NodeLikeChannel)

@@ -1,29 +1,24 @@
 /**
  * The SQL that makes safebyok's tables in your Postgres (14 or later, in a UTF8 database): one
  * bundle per vault in `safebyok_bundles`, one row per lockbox in `safebyok_lockboxes`, each record
- * a column to a field and its ciphered values opaque jsonb; row-level security on, with no policy,
- * so only the tables' owner reaches them; the trigger that notifies {@link VaultChangeChannel}
- * after every write; and the trigger that keeps each bundle's count of its vault's lockboxes,
- * which a new lockbox is checked against. Run it once, as a migration or at your server's start:
- * it is safe to run again. The package also ships it as `vault-tables.sql`, for a migration tool
- * to copy.
+ * a column to a field and its ciphered values opaque jsonb; and row-level security on, with no
+ * policy, so only the tables' owner reaches them. Tables, columns and keys, and nothing more: no
+ * trigger, no function, no extra table. Run it once, as a migration or at your server's start: it
+ * is safe to run again. The package also ships it as `vault-tables.sql`, for a migration tool to
+ * copy. Push between devices is {@link VaultNotifySql}'s, which you opt in to.
  *
  * @example await pool.query(VaultTablesSql)  // pg runs several statements in one query without parameters
  * @example await pglite.exec(VaultTablesSql)
  */
-export const VaultTablesSql = `-- safebyok-postgres: the tables a safebyok vault is stored in, the trigger that tells
--- listeners when a vault changes, and the one that counts each vault's lockboxes. For Postgres 14
--- or later, in a UTF8 database. Safe to run again: it creates only the tables that are missing,
--- and replaces its functions and triggers.
+export const VaultTablesSql = `-- safebyok-postgres: the tables a safebyok vault is stored in. For Postgres 14 or later, in a
+-- UTF8 database. Safe to run again: it creates only the tables that are missing.
 --
 -- Each record is stored field by field, a column to a field, exactly as safebyok wrote it:
 -- text as text, a time or a count as a bigint, and each structured value -- an encrypted value
 -- (a cipherIv and its ciphertext), or a bundle's list of unlock envelopes -- as one opaque jsonb.
 -- A record's secret fields are ciphertext, every one.
 
--- One bundle per vault, and beside it how many lockboxes the vault holds: not a field of the
--- bundle, but the adapter's own count, kept by the trigger below, which a new lockbox is checked
--- against.
+-- One bundle per vault.
 CREATE TABLE IF NOT EXISTS safebyok_bundles (
   applabel         text   NOT NULL,
   user_id          text   NOT NULL,
@@ -33,7 +28,6 @@ CREATE TABLE IF NOT EXISTS safebyok_bundles (
   unlock_epoch     bigint NOT NULL,
   unlocks          jsonb  NOT NULL,
   registered_at    bigint NOT NULL,
-  lockbox_count    bigint NOT NULL DEFAULT 0,
   PRIMARY KEY (applabel, user_id, vaultlabel),
   -- What a lockbox's foreign key names: its vault, down to the vault_id.
   UNIQUE (applabel, user_id, vaultlabel, vault_id)
@@ -65,7 +59,22 @@ CREATE TABLE IF NOT EXISTS safebyok_lockboxes (
 -- them out of the Data API's reach.
 ALTER TABLE safebyok_bundles   ENABLE ROW LEVEL SECURITY;
 ALTER TABLE safebyok_lockboxes ENABLE ROW LEVEL SECURITY;
+`
 
+/**
+ * The SQL that lets a vault hear other devices' writes, which you opt in to: after every write
+ * that changes a vault, a trigger notifies {@link VaultChangeChannel}, and a `listen` you hand
+ * `postgresVaultDB` calls its subscribers. Run it after {@link VaultTablesSql}, once; it is safe
+ * to run again. Without it nothing is pushed: a vault refreshes after its own writes, and learns
+ * of another device's when it next reads. The package also ships it as `vault-notify.sql`.
+ *
+ * @example await pool.query(VaultNotifySql)  // after VaultTablesSql
+ * @example await pglite.exec(VaultNotifySql)
+ */
+export const VaultNotifySql = `-- safebyok-postgres: the triggers that tell listeners when a vault changes. Optional: run them
+-- after vault-tables.sql only if your server hears other devices' writes through a \`listen\`.
+-- Safe to run again: it replaces its function and triggers.
+--
 -- After any write that changes a vault, a notification on the channel safebyok_vault_changes,
 -- whose payload is the vault's scope as JSON: {"applabel" : ..., "user_id" : ..., "vaultlabel" : ...}.
 -- A scope too long for a payload (8000 bytes) sends an empty one, which every listener hears as
@@ -97,35 +106,10 @@ CREATE OR REPLACE TRIGGER safebyok_bundles_changed
 CREATE OR REPLACE TRIGGER safebyok_lockboxes_changed
   AFTER INSERT OR UPDATE OR DELETE ON safebyok_lockboxes
   FOR EACH ROW EXECUTE FUNCTION safebyok_vault_changed();
-
--- Keeps each bundle's lockbox_count equal to its vault's lockboxes, whatever statement adds or
--- removes one, in that statement's transaction. A lockbox never moves to another vault, so an
--- update leaves the count as it is. Your own SQL that deletes lockboxes locks their bundle's row
--- first (SELECT ... FROM safebyok_bundles ... FOR UPDATE, in the same transaction), as the adapter
--- does, or it may deadlock with an erase of the whole vault. TRUNCATE fires no row trigger: empty
--- both tables together. A count gone astray (lockboxes truncated alone, or restored with triggers
--- off) is set right, while nothing writes to these tables, by:
---   UPDATE safebyok_bundles AS bundle SET lockbox_count = (SELECT count(*) FROM safebyok_lockboxes AS box WHERE (box.applabel, box.user_id, box.vaultlabel, box.vault_id) = (bundle.applabel, bundle.user_id, bundle.vaultlabel, bundle.vault_id));
-CREATE OR REPLACE FUNCTION safebyok_lockboxes_counted() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    UPDATE safebyok_bundles SET lockbox_count = lockbox_count + 1
-      WHERE applabel = NEW.applabel AND user_id = NEW.user_id AND vaultlabel = NEW.vaultlabel AND vault_id = NEW.vault_id;
-  ELSE
-    UPDATE safebyok_bundles SET lockbox_count = lockbox_count - 1
-      WHERE applabel = OLD.applabel AND user_id = OLD.user_id AND vaultlabel = OLD.vaultlabel AND vault_id = OLD.vault_id;
-  END IF;
-  RETURN NULL;
-END
-$$;
-
-CREATE OR REPLACE TRIGGER safebyok_lockboxes_counted
-  AFTER INSERT OR DELETE ON safebyok_lockboxes
-  FOR EACH ROW EXECUTE FUNCTION safebyok_lockboxes_counted();
 `
 
 /**
- * The channel {@link VaultTablesSql}'s trigger notifies after every write that changes a vault.
+ * The channel {@link VaultNotifySql}'s trigger notifies after every write that changes a vault.
  * Its payload is the vault's scope as JSON -- applabel, user_id and vaultlabel, no record and
  * nothing ciphered -- or empty, for a scope too long for one, which every listener hears as its own.
  */

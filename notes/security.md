@@ -7,6 +7,13 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-16: the VaultDB contract (`packages/safebyok/VAULTDB.md`, line 4.2) makes a storage
+  adapter's lockbox limit a best effort: writes made one after another never pass it, but writers
+  racing for the last places may take a vault a few past it, and a client that bypasses the
+  library (a modified browser) is the host's to meter, as an abuse quota, not the adapter's to
+  stop. An adapter may offer a hard limit only as an opt-in. The vault's own `maxLockboxes` is
+  enforced in the client alone. Postgres today holds a hard limit on the server (#89); the next
+  thread replaces it with this best effort.
 * 2026-10-15: a lockbox row that fails the listing's check (not JSON, a malformed note or time, a
   record naming another boxlabel than the ckey it sits under, an unknown `format`) is listed as
   `{ boxlabel, damaged: true }` instead of making `listBoxes` -- so every `refresh()` and
@@ -114,7 +121,8 @@ security expert who knows what questions to ask.
   (`cipherAdditionalData`): format, applabel, user_id, vaultlabel, vaultId, plus unlockEpoch
   for key wraps (since 2026-10-15, the device record's only: an unlock envelope binds its own
   header instead, below) and boxlabel + revisionId for lockboxes, encoded as a JSON array. Ciphertext
-  moved between users, vaults, boxes or revisions refuses to open.
+  moved between users, vaults, boxes or revisions refuses to open. (Widened 2026-10-15 to every
+  field each record writes: the sweep entry below.)
 * 2026-10-14: a wrong passphrase is learned from the vaultKey envelope's AEAD failure, never a
   comparison; there is no separate passphrase verifier field.
 * 2026-10-14: the localUnlockKey is a non-extractable WebCrypto key persisted only by structured
@@ -241,6 +249,7 @@ security expert who knows what questions to ask.
   keeps `registered_at`; `created_at` and `updated_at` are gone from both records. None of the
   times is in the cipherAdditionalData (the binding is still the positional list), so a backend
   can alter them undetected; binding the whole header is TODO.md's roadmap 3, not yet built.
+  (Built since: the sweep entry below binds both times and the note.)
 * 2026-10-15: until 1.0.0 a stored-shape change carries no migration (the Coach's ruling). A
   lockbox or bundle written with `created_at`/`updated_at`, or a device record with
   `expires_at`, fails its schema: the vault refuses it as `corrupt_record` and leaves it as it
@@ -328,7 +337,8 @@ security expert who knows what questions to ask.
 * 2026-10-15: signing out of Convex does not lock a vault opened over `convexVaultDB`: its calls
   are refused `not_permitted` from then on, and its failing `watchVault` subscription is ignored,
   but the unlocked vaultKey stays in memory until the vault locks, expires or is closed. The
-  README tells apps to close the vault on sign-out; nothing enforces it.
+  README tells apps to close the vault on sign-out; nothing enforces it. *Superseded 2026-10-16*: a sign-out now locks the vault
+  (`identity_revoked`, below).
 * 2026-10-15: a vault's lockbox count is capped on the client (`maxLockboxes`, `store()`
   refusing `vault_full`), counted from the handle's last look at storage, so stores of new
   lockboxes running at once -- on several devices, or on one handle, since nothing serializes
@@ -357,6 +367,7 @@ security expert who knows what questions to ask.
   remembered unlock. `VaultDB`'s write verbs check labels and scope only, not the records the
   vault builds. A remembered unlock's `ask_passphrase_at` is not bound into its encryption, so
   whoever can write this device's IndexedDB can extend it (to any finite number of milliseconds).
+  (Bound since: the sweep entry below.)
 * 2026-10-14: releases run from `.github/workflows/release.yml` on every push to main, in jobs
   that each hold only what they need. Only `publish` (in the `npm` environment) may mint an npm
   OIDC token, and it runs no package's scripts (`pnpm install --ignore-scripts`): it stages the
@@ -434,7 +445,7 @@ security expert who knows what questions to ask.
   handle writes no record (erasing one it already wrote) and throws `vault_closed`. The timer is
   per handle and per tab, like the counter.
 * 2026-10-15: `VaultProvider` hands a stored record that fails verification at open
-  (`corrupt_record`) to the app in place, as `openError`, rather than throwing it to the error
+  (`corrupt_record`; since 2026-10-16, `damaged_bundle`) to the app in place, as `openError`, rather than throwing it to the error
   boundary: it is a condition, as are `storage_unavailable` and `not_permitted`. A tampered or
   damaged bundle therefore reaches the app's own UI, beside a `retryOpen` that cannot mend it; the
   React README tells hosts to branch on `openError.kind`, and the error's message carries no
@@ -488,7 +499,8 @@ security expert who knows what questions to ask.
   random `salt_b64` (never shared between envelopes) and its own `unlock_id`, and its wrap's
   additional data is the format, scope, `vault_id`, a purpose per method
   (`vault_key_passphrase_wrapped`), and the envelope's whole public header (`method`,
-  `unlock_id`, `unlocklabel`, `key_deriver_label`, `salt_b64`) as key-sorted JSON. The
+  `unlock_id`, `unlocklabel`, `key_deriver_label`, `salt_b64`) as key-sorted JSON (and, since
+  the sweep entry below, the bundle's `registered_at`). The
   `unlock_epoch` is no longer in it, since a change to one envelope bumps the epoch and the
   others, whose passphrases the device does not hold, must still open: a backend can therefore
   splice an envelope from an older bundle of the same vault (a removed passphrase's, or one from
@@ -513,10 +525,11 @@ security expert who knows what questions to ask.
   Its envelope holds `credential_id` and `prf_salt_b64` (32 random bytes, minted by the React
   binding's `createPasskey` with `crypto.getRandomValues`, checked for length by the core). The
   passkeyKey is HKDF-SHA256 over the 32-byte PRF answer, with an empty salt and `info` =
-  `["safebyok-vault-v1", "vault_key_passkey_wrapped", credential_id]` as JSON; the wrap's additional
+  `["safebyok-vault-v1", "vault_key_passkey_wrapped", credential_id]` as JSON (since the sweep
+  entry below, the wrap's whole additional data); the wrap's additional
   data is the format, scope, `vault_id`, purpose `vault_key_passkey_wrapped` and the envelope's
   public header, as for a passphrase envelope. A stored salt that is not base64url of 32 bytes
-  refuses as `corrupt_record`, checked at unlock rather than in the schema (the size budget, as for
+  refuses as `corrupt_record` (since 2026-10-16, `damaged_unlock`: see that entry), checked at unlock rather than in the schema (the size budget, as for
   passphrase salts). The core never calls WebAuthn and never stores the answer; the answer passes
   through host JavaScript as a `Uint8Array` the vault does not wipe.
 * 2026-10-15: what a passkey way in rests on. The PRF answer is a long-term secret as strong as a
@@ -529,6 +542,34 @@ security expert who knows what questions to ask.
   ID can ask the authenticator for the answer (with the user's touch), as it could read a typed
   passphrase. The credential's challenge is random and never verified, and no attestation is
   checked: the authenticator is the user's to trust.
+* 2026-10-15: **every field a record writes is bound, unless a reason below says not** (the
+  Coach: "make everything verifiable unless there's a good reason not to"). A passkey envelope's
+  HKDF `info` is now its wrap's whole additional data -- format, scope, `vault_id`, the bundle's
+  `registered_at`, purpose, and the envelope's public header (`method`, `unlock_id`,
+  `unlocklabel`, `credential_id`, `prf_salt_b64`) -- so the passkeyKey itself, not only the wrap, belongs to one vault
+  and one envelope; HKDF info and AES-GCM additional data are the same bytes, fed to different
+  primitives. Every unlock envelope's wrap binds the bundle's `registered_at`. A lockbox's two
+  encryptions bind its whole public header (`format`, `boxlabel`, `revision_id`, `note`,
+  `registered_at`, `changed_at`: every field but the two ciphered ones, as Zod's parse leaves the
+  record; an absent or undefined note is left out alike), so a backend that alters a note or a time
+  makes `read()` refuse `corrupt_record`; a future field is bound the day it is added to the
+  schema. While the vault is locked, the listing still shows these fields unverified: nothing
+  checks them before a box is opened. The device record binds `ask_passphrase_at`, under its own
+  format tag (`safebyok-unlock-v1`, formerly the bundle's); a deadline moved on the device now
+  fails to open and is erased, so the forgetting is logged. No compatibility: every passkey
+  envelope, lockbox and remembered unlock written before refuses to open (`wrong_passkey`,
+  `corrupt_record`, a fresh passphrase prompt), and a passphrase envelope refuses its passphrase.
+  **Left unbound, and why**: the bundle's `unlock_epoch` and the list of `unlocks` (order, length,
+  membership), because each envelope's key is held only by its own way in, and a change to one
+  must not rewrap the others (the 2026-10-15 envelope entry above: an old envelope can be spliced
+  back); the passphraseKey's derivation, which takes no context: its salt is fresh for every
+  envelope and bound in the wrap, so the key wraps exactly one thing, and binding it further would
+  put Argon2's associated data into the host-pluggable `KeyDeriver` seam and every stand-in
+  behind a label, for no added check; the PRF salt, which is random and already bound; and the
+  stored ciphertexts and IVs, which the AEAD tag covers. An adapter's own columns are never in a
+  record, so never bound. Were an Argon2 setting ever to go in, it would be as a difficulty
+  measure -- a floor on the cost a vault accepts from its stored deriver label -- not as a binding
+  (the Coach, 2026-10-16).
 * 2026-10-15: any way in proves any change. A passkey's answer is accepted as proof by
   `addPassphrase`, `addPasskey` and `removeUnlock`, so whoever holds one passkey can set a new
   passphrase and remove the user's others: the vault is as strong as its weakest way in. A vault
@@ -619,28 +660,9 @@ security expert who knows what questions to ask.
   `convexVaultDB` declares the component's 8,000; `graphqlVaultDB` declares what its host says the
   server enforces (default 1000), which only moves `openVault`'s check: the server's own refusal
   is the limit. `postgresVaultDB` enforces its `maxLockboxes` (default 1000; a host wanting none
-  passes a large safe integer) inside the one statement that inserts a new lockbox, against a
-  `lockbox_count` column on the bundle row that an `AFTER INSERT OR DELETE` row trigger on
-  `safebyok_lockboxes` keeps, so writes by any statement, the host's own SQL included, keep it
-  true (a `TRUNCATE` of the lockboxes alone does not). The insert locks the bundle row
-  (`FOR UPDATE`) and compares the count it locked: under READ COMMITTED, a statement that waited
-  for the lock is handed the row as its forerunner left it (Postgres re-reads a row it waited to
-  lock), so two inserts racing for the last place cannot both land; under REPEATABLE READ or
-  SERIALIZABLE, the waiter fails with a serialization error, refused as `storage_unavailable`. A
-  bare `count(*)` in the insert would not hold under READ COMMITTED, each statement counting from
-  its own snapshot. This is reasoned from Postgres's documented semantics; the tests run on PGlite,
-  one connection, and cannot race. `eraseBox` locks the bundle row before deleting, so an erase's
-  count update and a waiting insert cannot deadlock. Holding the lock also keeps the bundle, so the
-  insert no longer meets a foreign-key failure from a vault erased meanwhile. A replacement is never
-  refused for the count, nor is a first write whose boxlabel is already taken (it refuses as
-  `stale_write`): the insert re-reads only the locked bundle row, its view of the lockboxes being
-  the statement's snapshot, so a full vault is told from a stale writer by one fresh read of the
-  vault and that boxlabel before refusing. Under REPEATABLE READ or SERIALIZABLE, any two concurrent writes that
-  add or remove a lockbox in one vault can fail with a serialization error (`storage_unavailable`),
-  each moving the bundle row's count. A host's own SQL deleting lockboxes must lock the bundle row
-  first, or it may deadlock with `eraseVault`; the DDL's comments and the README say so, and give
-  the recount statement for a count gone astray. The refusal's message names the limit, never a
-  boxlabel or a record.
+  passes a large safe integer) as a best effort, inside the one statement that inserts a new
+  lockbox (see the 2026-10-16 entry below, which replaced a counter column and a row lock). The
+  refusal's message names the limit, never a boxlabel or a record.
 * 2026-10-15: a host's own checks replace ours for every name and the note
   (`openVault({ validators })`, any Zod 4 schema), with no floor beneath them, since the ckeys
   (JSON tuples) and the cipher binding (a JSON array) take any text. What holds: **a check only
@@ -667,3 +689,91 @@ security expert who knows what questions to ask.
   `maxWhisperBytes`, 512 bytes for its fixed-size fields and its measured names and note, would
   pass `maxVaultBytes` (`vault_full`). The vault's total is reckoned from the snapshot's listing,
   so a vault another device filled meanwhile is caught by the backend's own limit, as before.
+* 2026-10-15: `PassphraseModal` and `PasskeyUnlockButton` (`safebyok-react`) catch, in an error
+  boundary of their own, every failure that is not a condition (misuse, or anything that is no
+  `VaultError`, whatever its value), and show the user fixed copy, never the error's message. React
+  hands the very thrown value to the host root's `onCaughtError` (the console by default), as it
+  would any error a boundary catches; before, it went to the host's boundary instead. The dialog's
+  form, and the passphrase typed into its state, unmount with the failure.
+* 2026-10-16: **a sign-out locks the vault.** An adapter whose backend knows who is signed in
+  refuses a vault whose `user_id` is not that user -- signed out, or another user signed in --
+  with kind `identity_revoked`, distinct from `not_permitted` (the vault's own user refused one
+  call). Convex, Postgres (and so GraphQL over it) refuse both of their old `not_permitted` cases
+  this way now; IndexedDB and `localVaultDB` never do. Every storage verb's refusal passes through
+  one policy (`src/refusal-policy.ts`) on its way out of the vault, whichever call made it,
+  a background refresh's included; for `identity_revoked` it locks at once, as `lock()` does:
+  the vaultKey dropped, the remembered unlock erased, a `lockSoon()` grace cut short, an unlock
+  under way defeated. It never erases the vault or a lockbox. `convexVaultDB`'s `ConvexClient`
+  watch now calls `onChange` on a failed `watchVault` (as a `ConvexReactClient`'s watch already
+  did), so an idle vault locks on a sign-out in another tab. **For review**: (1) the default is
+  `'lock'`, but `openVault`'s `whenIdentityRevoked: 'stay'` lets a host keep the vault unlocked
+  after a sign-out, as before; (2) the mismatched-user case is also `identity_revoked`, since a
+  server cannot tell "the user changed" from "a host opened the wrong user's vault", and locking
+  is the safe answer to both; (3) a vault opened before its backend's auth is ready meets
+  `identity_revoked` and erases its remembered unlock -- safe, but a host that races its auth
+  makes its users retype the passphrase (the READMEs say to open only once signed in);
+  (4) an adapter that says `identity_revoked` for a passing fault locks the vault needlessly --
+  the `VaultDB` contract says to use `storage_unavailable` for those.
+* 2026-10-16: **a damaged vault is said only as far as the vault can know it** (the Coach:
+  "fine-grained error messages"). AES-GCM fails alike for a wrong key and for altered
+  additional data or ciphertext, so a passphrase that opens no envelope is still
+  `wrong_passphrase`, and a passkey's answer for its envelope's own salt that does not open it is
+  still `wrong_passkey`, even when the bundle was altered in storage: each message now says the
+  stored vault may be damaged, and claims no tampering. Told apart, each its own kind: a bundle
+  that fails its schema or names another scope (`damaged_bundle`, mapped by the vault from
+  storage's `corrupt_record`, which stays `VaultDB`'s word, the original as `cause`); an envelope
+  whose salt its deriver could not have made (`damaged_unlock`); and a lockbox that fails its
+  schema, or will not open under the vault's vaultKey, or opens to no whisper (`damaged_lockbox`)
+  -- knowable because that vaultKey was proven by the way in that gave it. **A damaged envelope
+  is passed over, no longer refused for the whole vault**: the others are tried as ever (no
+  derivation is spent on it, and the outcome still does not hang on order), and
+  `safebyok-react`'s `askPasskey` likewise offers only the passkeys it can ask. Considered and
+  refused: telling a wrong passphrase from an altered envelope by re-encrypting a held vaultKey
+  under the derived key with the stored IV and comparing ciphertexts -- it works only against
+  GCM's structure, needs the vaultKey's bytes, and is a construction of our own. A bundle that
+  fails its checks cannot be destroyed through a vault handle (`openVault` refuses it, and `destroy()`
+  needs a handle); it is left in place, as every damaged remote record is, until the host calls
+  `eraseDamagedVault` (the entry below).
+* 2026-10-16: `postgresVaultDB`'s lockbox limit is a best effort (VaultDB contract, lines 4.2 to
+  4.5), not a guarantee: the insert counts the vault's lockboxes in a `count(*)` over its own
+  statement's snapshot, with no lock and no counter, so writers racing for the last places under
+  READ COMMITTED may each find room and all land, by at most one less than the number of racers.
+  A client that bypasses the library can add lockboxes without bound, which makes the limit an
+  alarm bell and a guard against a runaway loop, not an abuse quota: the host meters that, like
+  its request rates, and the README offers a trigger for a host that wants a hard cap. This
+  replaced the `lockbox_count` column, its trigger and a `FOR UPDATE` row lock, reasoned about
+  in `whiteboard/20261015-matters/thread-11-postgres_verdict.md`; what to check: that a refused
+  write inserted nothing (the `WHERE` of one atomic statement), that no lockbox lands in a vault
+  but its own (the foreign key, re-read against the bundle that stands now, whose violation
+  `23503` is mapped to `stale_write`), and that every lockbox that landed stays readable and
+  erasable. Above READ COMMITTED some races fail with `40001`, refused as `storage_unavailable`.
+  The notify trigger is no longer installed by `VaultTablesSql`: a host opts in with
+  `VaultNotifySql`, and without it nothing is pushed (the vault refreshes after its own writes).
+  Not run against concurrent connections: the tests are on PGlite, one statement at a time.
+* 2026-10-16: **`eraseDamagedVault`, the one way to erase a vault without a handle** (the Coach:
+  "yes"). `destroy()` deliberately needs no unlock ("owning the account is enough"), but needs a
+  handle the vault's own reading made; a bundle that fails its checks gave none. The new call
+  erases a vault `openVault` refuses as `damaged_bundle` and no other: it refuses (`bad_option`,
+  nothing erased) a bundle that reads back sound, so it cannot become a way round `destroy()`'s
+  care, and it erases through `VaultDB.eraseDamagedVault`, which reads the record as stored,
+  takes its `vault_id`, and aims the adapter's `doEraseVault` at that one vault, so a vault made
+  anew meanwhile survives as `stale_write`. Like `destroy()` it needs no passphrase, and it is as
+  strong as the backend's own authorization of who may erase that user's rows (the contract's
+  5.4): a user can already erase their own vault by `destroy()`, so it widens nothing for them,
+  and widens nothing for anyone else. It also erases the remembered unlock, on this device only.
+  **For review**: (1) the erase's expectation is the `vault_id` read from a record that is, by
+  definition, untrusted; it can only aim the erase at the row it read, in the caller's own
+  scope, so a forged `vault_id` in a damaged row erases that row and nothing else; (2) `localVaultDB`
+  and `idbVaultDB` now erase a whole vault on the `vault_id` alone (the contract's line 3.5 always
+  said so), where they had also required a readable `unlock_epoch`, which kept exactly the
+  damaged vaults from being erased; lockbox writes and `eraseBox` still need the epoch.
+  **Newer is not damaged** (review of the above): a bundle that fails this build's checks may be
+  one a *later* build writes and opens, and offering "erase" for it would erase, from a device
+  on an old build, a vault every up-to-date device opens. So the hatch refuses (kind
+  `damaged_bundle`, a message to update the app, nothing erased) a record with a `format` this
+  build does not know (of any type), an unlock `method` it does not know, or more unlocks than
+  `MaxUnlocks`, and erases only what fails otherwise. **The rule this rests on, for the Coach to
+  confirm: any change to what a stored record may hold -- a field, a shape, or a range a check
+  accepts -- bumps `format`**, so that an older build can tell newer from damaged. Where it cannot tell, it refuses: the hatch fails safe. Not routed through
+  `RefusalPolicy.heed`: there is no handle to lock and no key in memory, so `whenIdentityRevoked`
+  has nothing to act on, and the hatch's own last step is erasing the remembered unlock.

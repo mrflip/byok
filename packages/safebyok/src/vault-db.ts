@@ -1,6 +1,6 @@
 import * as Z from 'zod/mini'
-import { Lockbox, LockboxSummary, VaultBundle, VaultScope, type DamagedLockbox } from './types'
-import { VaultError } from './errors'
+import { Lockbox, LockboxSummary, MaxUnlocks, UnlockMethodVals, VaultBundle, VaultScope, type DamagedLockbox } from './types'
+import { VaultError, isVaultError } from './errors'
 import * as Names from './names'
 import type { VaultValidators } from './validators'
 import type { StringStore } from './string-store'
@@ -73,7 +73,11 @@ export type StoredLockbox = { boxlabel: string, lockbox: unknown }
  *    erase's names only the vault, never a revision: within the right vault, an erase wins.
  *  * **Enforce who may reach which rows.** Your backend should let a signed-in user reach only
  *    their own records: safebyok's encryption protects the contents, your authorization decides
- *    who may fetch or overwrite them at all. Refuse with a VaultError of kind `not_permitted`.
+ *    who may fetch or overwrite them at all. When no one is signed in, or someone other than the
+ *    scope's `user_id` is, refuse with a VaultError of kind `identity_revoked`: the vault locks
+ *    itself on it, so say it only when the user really is gone -- never for a passing fault, which
+ *    is `storage_unavailable`. When the signed-in user is the scope's own but may not make this
+ *    call, refuse with kind `not_permitted`, which locks nothing.
  *  * **Don't repair.** Return a record exactly as stored, or null when there is none. safebyok
  *    validates everything it reads back; a damaged record is safebyok's to refuse, never yours to
  *    fix or quietly drop.
@@ -82,7 +86,8 @@ export type StoredLockbox = { boxlabel: string, lockbox: unknown }
  * checks every adapter owes: names, scope, records and expectations on the way in, the shape of
  * every record on the way out, `stale_write` for a failed expectation, and `storage_unavailable`
  * (your own error as its `cause`) for anything you throw that is not already a VaultError.
- * Implement the `do*` methods; never override the public verbs.
+ * Implement the `do*` methods; never override the public verbs. The package's `VAULTDB.md` is the
+ * whole contract, line by line, and `describeVaultDB` (from `safebyok/testing`) tests it so.
  *
  * Each public verb takes the vault's `validators` last, as openVault was given them, and checks
  * every name and note with them, going in and coming back; left out, it checks with ours
@@ -124,9 +129,11 @@ export abstract class VaultDB {
    * no such limit: each backend sets its own, and one whose limit crosses a wire or is stored,
    * where `Infinity` cannot go, sets a large whole number instead. A vault refuses to open with a
    * `maxLockboxes` above it, with kind `bad_option`, and given none opens with the smaller of this
-   * and `MaxLockboxes`. A backend that enforces its limit refuses a new lockbox past it with
-   * a VaultError of kind `vault_full`, checked in the same atomic step as the write, and never
-   * refuses for the count a lockbox that replaces one already there.
+   * and `MaxLockboxes`. A backend with a finite limit refuses a new lockbox in a vault already
+   * holding that many with a VaultError of kind `vault_full`, writing nothing, on a best effort:
+   * writes made one after another never pass it, while writers racing for the last places may
+   * take a vault a few past (`VAULTDB.md`, lines 4.1 to 4.6). It never refuses for the count a
+   * lockbox that replaces one already there.
    */
   abstract readonly maxLockboxes: number
 
@@ -251,6 +258,41 @@ export abstract class VaultDB {
     const asked = Names.checkScope(Names.rulesOf(validators), scope)
     const expectation = checkOutgoing(EraseExpectation, expected, 'erase expectation')
     const landed = await fromStorage(() => this.doEraseVault(asked, expectation))
+    if (! landed) { throw staleErase() }
+  }
+
+  /**
+   * Remove a vault whose stored bundle fails its checks -- the one vault `readBundle` refuses as
+   * `corrupt_record`, which `openVault` says as `damaged_bundle` -- and no other: the escape
+   * hatch behind `eraseDamagedVault`, for a vault that no handle can be opened on to `destroy()`.
+   * It reads the bundle as stored, takes the `vault_id` out of it, and erases the bundle and
+   * every lockbox only while the standing bundle still has that `vault_id` (`eraseVault`'s own
+   * expectation). Resolves quietly when the scope holds no bundle. Refuses with kind `bad_option`
+   * when the bundle stands sound, and erases nothing, since a sound vault is deleted through its
+   * handle's `destroy()`; with kind `damaged_bundle`, erasing nothing, when the record is too
+   * damaged to name the vault it belongs to (which only the backend's own tools can clear), or
+   * when it may have been written by a newer safebyok, in a `format`, unlock method or number of
+   * unlocks this one does not know, and which a device on the newer version opens: it is told
+   * from damage by those three, and where it cannot be told, it is refused; and with kind
+   * `stale_write` when the vault was replaced meanwhile.
+   *
+   * An adapter that hands each call on to another VaultDB's public verbs hands this one on too:
+   * its `doReadBundle` would meet the inner adapter's refusal of the damaged record, never the
+   * record, and so could not name the vault. So does a backend whose server validates what it
+   * reads, as `safebyok-graphql`'s: there a damaged record is the backend's own to clear.
+   */
+  async eraseDamagedVault(scope: VaultScope, validators?: VaultValidators): Promise<void> {
+    const asked = Names.checkScope(Names.rulesOf(validators), scope)
+    const raw = await readStoredBundle(() => this.doReadBundle(asked))
+    if (raw === null || raw === undefined) { return }
+    if (isSoundBundle(raw, asked)) {
+      throw new VaultError('bad_option', "That vault's stored bundle is sound, so it is not erased here: a vault that opens is deleted through its handle's destroy(). Only a vault that openVault refuses as damaged_bundle is erased this way.")
+    }
+    // A later safebyok may write what this one cannot read, which is no damage: it is refused, not erased.
+    if (mayBeNewer(raw)) { throw newerBundle() }
+    const named = StoredVaultId.safeParse(raw)
+    if (! named.success) { throw unnamedBundle() }
+    const landed = await fromStorage(() => this.doEraseVault(asked, { vault_id: named.data.vault_id }))
     if (! landed) { throw staleErase() }
   }
 
@@ -414,6 +456,58 @@ const checkBundle = (raw: unknown, scope: VaultScope): VaultBundle => {
   return bundle
 }
 
+const unnamedBundle = (opts?: ErrorOptions) => new VaultError('damaged_bundle', "This vault's stored record is too damaged to say which vault it is, so storage can't be told which one to erase, and nothing was erased. Its backend's own tools can clear it.", opts)
+
+const newerBundle = () => new VaultError('damaged_bundle', "This vault's stored record is in a form this version of the app does not know. It may have been written by a newer version, which opens it, so nothing was erased: update the app and try again.")
+
+/**
+ * True when a record that fails this version's checks may be one a later version writes, which
+ * is not damage: it names a `format` this version does not know (of any type), holds an unlock
+ * `method` it does not know, or holds more unlocks than {@link MaxUnlocks}. These are all this
+ * version can tell from damage; anything else that fails is taken for damage. Any change to what
+ * a stored record may hold -- a field, a shape, or a range a check accepts -- therefore bumps
+ * `format`.
+ */
+const mayBeNewer = (raw: unknown): boolean => {
+  if (typeof raw !== 'object' || raw === null) { return false }
+  const { format, unlocks } = raw as { format?: unknown, unlocks?: unknown }
+  if (format !== undefined && ! VaultBundle.shape.format.safeParse(format).success) { return true }
+  if (! Array.isArray(unlocks)) { return false }
+  if (unlocks.length > MaxUnlocks) { return true }
+  return unlocks.some((envelope: unknown) => {
+    const { method } = (typeof envelope === 'object' && envelope !== null ? envelope : {}) as { method?: unknown }
+    return typeof method === 'string' && ! (UnlockMethodVals as readonly string[]).includes(method)
+  })
+}
+
+/**
+ * The bundle as the adapter stores it. An adapter that validates on the way up, as a wrapper over
+ * another VaultDB's public verbs or a server's checked reads do, refuses the damaged record
+ * instead of handing it up: that refusal is the vault's id being out of reach, said as such.
+ */
+const readStoredBundle = async (reading: () => Promise<unknown>): Promise<unknown> => {
+  try {
+    return await fromStorage(reading)
+  } catch (err) {
+    if (isVaultError(err, 'corrupt_record')) { throw unnamedBundle({ cause: err }) }
+    throw err
+  }
+}
+
+/** True when `raw` reads back as the scope's bundle: what `readBundle` would hand up rather than refuse. */
+const isSoundBundle = (raw: unknown, scope: VaultScope): boolean => {
+  try {
+    checkBundle(raw, scope)
+    return true
+  } catch (err) {
+    if (isVaultError(err, 'corrupt_record')) { return false }
+    throw err
+  }
+}
+
+/** The one field of a stored bundle an erase needs, as the vault's own check has it. */
+const StoredVaultId = Z.object({ vault_id: VaultBundle.shape.vault_id })
+
 /**
  * A stored record through its validator, with failure as a calm VaultError: storage is someone
  * else's database, and a record may be damaged or written by another version of this package.
@@ -431,6 +525,7 @@ const checkRecord = <RecordT>(recordSchema: Z.ZodMiniType<RecordT>, raw: unknown
 
 // Just the fields an expectation compares; a standing row too damaged to show them fails it.
 const StandingBundle = Z.object({ vault_id: Z.string(), unlock_epoch: Z.number() })
+const StandingVault = Z.object({ vault_id: Z.string() })
 const StandingBox = Z.object({ revision_id: Z.string() })
 
 /** True when the bundle row standing in storage is the one `expected` names. */
@@ -444,6 +539,16 @@ const bundleMeetsExpectation = (standingBundle: unknown, expected: BundleExpecta
 /** True when the bundle row standing in storage belongs to the vault `expected` names. */
 const vaultMeetsExpectation = (standingBundle: unknown, expected: { vault_id: string }): boolean => {
   const standing = StandingBundle.safeParse(standingBundle)
+  return standing.success && standing.data.vault_id === expected.vault_id
+}
+
+/**
+ * True when the bundle row standing in storage names the vault `expected` names, whatever else of
+ * it is damaged: what erasing a whole vault compares, so that a vault whose bundle fails its
+ * checks can still be erased.
+ */
+const vaultIdMeetsExpectation = (standingBundle: unknown, expected: { vault_id: string }): boolean => {
+  const standing = StandingVault.safeParse(standingBundle)
   return standing.success && standing.data.vault_id === expected.vault_id
 }
 
@@ -551,7 +656,7 @@ class StringStoreVaultDB extends VaultDB {
 
   protected doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
     return soon(() => {
-      if (! vaultMeetsExpectation(readJson(this.store, Ckeys.bundle(scope)), expected)) { return false }
+      if (! vaultIdMeetsExpectation(readJson(this.store, Ckeys.bundle(scope)), expected)) { return false }
       const doomed = this.store.ckeys().filter(Ckeys.isBoxIn(scope))
       for (const ckey of [...doomed, Ckeys.bundle(scope)]) { this.store.erase(ckey) }
       return true

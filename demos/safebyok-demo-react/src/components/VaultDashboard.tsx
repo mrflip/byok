@@ -15,7 +15,7 @@ type FormState = { editing: string | null, boxlabelText: string, whisperText: st
 const blankForm: FormState = { editing: null, boxlabelText: '', whisperText: '', noteText: '' }
 
 export const VaultDashboard = () => {
-  const { vault, openError, retryOpen, withUnlockedVault } = useVault()
+  const { vault, openError, retryOpen, eraseDamagedVault, withUnlockedVault } = useVault()
   const snapshot = useVaultSnapshot()
   const [form, setForm] = useState<FormState | null>(null)
   const [shown, setShown] = useState<Record<string, Whisper>>({})
@@ -25,9 +25,24 @@ export const VaultDashboard = () => {
   // A condition that stopped the vault opening -- storage unreachable, signed out of the
   // backend -- is shown here, in place, with a way to try again. (Misuse would have gone to an
   // error boundary instead.)
-  // A damaged record will not mend on retry, so it gets no Retry button.
-  if (openError?.kind === 'corrupt_record') {
-    return <p className="gripe">{"Your vault's stored record is damaged, so it can't be opened. "}{openError.message}</p>
+  // A damaged record will not mend on retry, so it gets no Retry button: only a way to erase it
+  // and start over, which asks first, as it takes every lockbox in the vault with it.
+  if (openError?.kind === 'damaged_bundle') {
+    const startOver = async () => {
+      if (! globalThis.confirm("Erase this vault and start over? Every lockbox in it is lost for good.")) { return }
+      setGripe(null)
+      try {
+        await eraseDamagedVault()
+      } catch (err) {
+        setGripe(err instanceof Error ? err.message : 'Could not erase the vault.')
+      }
+    }
+    return (
+      <>
+        <p className="gripe">{"Your vault's stored record is damaged, so it can't be opened. "}{openError.message} <button onClick={() => { void startOver() }}>Erase and start over</button></p>
+        {gripe !== null && <p className="gripe">{gripe}</p>}
+      </>
+    )
   }
   if (openError !== null) {
     return (

@@ -49,8 +49,11 @@ const browserVaultDB = (fetcher: typeof fetch) => graphqlVaultDB(new Client({
 
 // ------------------------------------------------------------------------------------- tests
 
-/** The test's stand-in for a session: the request's `x-test-user` header. */
-const byHeader = (request: Request) => Promise.resolve(request.headers.get('x-test-user'))
+/** The test's stand-in for a session: the request's `x-test-user` header, URI-encoded, as a header holds only Latin-1. */
+const byHeader = (request: Request) => {
+  const userHeader = request.headers.get('x-test-user')
+  return Promise.resolve(userHeader === null ? null : decodeURIComponent(userHeader))
+}
 
 /** The route over this file's database, signing each request in as its `x-test-user` header. */
 const routeOver = async () => {
@@ -62,7 +65,7 @@ const routeOver = async () => {
 const browserFor = (route: (request: Request) => Promise<Response>, userId: string | null) => (
   browserVaultDB((url, init) => {
     const request = new Request(url, init)
-    if (userId !== null) { request.headers.set('x-test-user', userId) }
+    if (userId !== null) { request.headers.set('x-test-user', encodeURIComponent(userId)) }
     return route(request)
   })
 )
@@ -70,6 +73,11 @@ const browserFor = (route: (request: Request) => Promise<Response>, userId: stri
 TH.describeVaultDB('the README Yoga recipe, over postgresVaultDB', async () => {
   const route = await routeOver()
   return TH.perUser((userId) => browserFor(route, userId))
+}, {
+  makeVaultDBFor: async () => {
+    const route = await routeOver()
+    return (userId) => browserFor(route, userId)
+  },
 })
 
 describe("the README Yoga recipe", () => {
@@ -82,20 +90,6 @@ describe("the README Yoga recipe", () => {
     await vault.store('anthropic_api_key', 'sk-ant-test-not-a-real-key')
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
     vault.close()
-  })
-
-  it("carries a refusal's kind across Yoga's error masking: another user's vault is not_permitted, a stale write stale_write", async () => {
-    const browser = browserFor(await routeOver(), 'u1')
-    const notMine = await TH.refusalOf(browser.readBundle(TH.scopeOf('u2')))
-    expect(notMine.kind).to.eq('not_permitted')
-    await browser.createBundle(TH.bundleOf('u1'))
-    const stale = await TH.refusalOf(browser.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 7 }))
-    expect(stale.kind).to.eq('stale_write')
-  })
-
-  it("refuses a signed-out browser with not_permitted", async () => {
-    const refusal = await TH.refusalOf(browserFor(await routeOver(), null).readBundle(TH.scopeOf('u1')))
-    expect(refusal.kind).to.eq('not_permitted')
   })
 
   it("never sends the driver's own error to the browser, not even in Yoga's development mode", async () => {

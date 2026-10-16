@@ -66,7 +66,8 @@ export type VaultResolvers<ContextT> = {
  * `vaultDBFor` makes for the request, so they drop into any GraphQL server beside your own.
  *
  * * **Who may reach a vault** is the VaultDB's to say: `postgresVaultDB`, made for the signed-in
- *   user, refuses every other user's vault with `not_permitted`.
+ *   user, refuses every other user's vault, and every vault while signed out, with
+ *   `identity_revoked`.
  * * **A refusal crosses as a GraphQL error** whose message is the VaultError's calm one and whose
  *   `extensions.kind` is its kind, which the browser's `graphqlVaultDB` throws as the same
  *   VaultError. Never a record, and never the VaultError's `cause` -- your driver's own error,

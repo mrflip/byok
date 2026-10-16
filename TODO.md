@@ -108,9 +108,8 @@ package names in CLAUDE.md ([#86](https://github.com/mrflip/safebyok/pull/86)).
   the sprint doc's Open Matters tab:
   <https://claude.ai/code/artifact/5a4d1c6c-b0ef-4483-becd-1a4dde21fc94>.
 * **Revocation and server signing.** Removing an unlock envelope is not revocation today (the vaultKey
-  never rotates; `notes/security.md`); what revocation should mean, and whether the server signs,
-  are open. This matter is under discussion in the sprint doc's Open Matters tab:
-  <https://claude.ai/code/artifact/5a4d1c6c-b0ef-4483-becd-1a4dde21fc94>.
+  never rotates; `notes/security.md`). Ruled: rotate the vaultKey, no server signing; designed in
+  `whiteboard/20261016-rotation/rotation-design.md`, built as sprint matters' threads 14 and 18-20.
 * **`listBoxRecords`** ([#73](https://github.com/mrflip/safebyok/pull/73), used by
   [#78](https://github.com/mrflip/safebyok/pull/78)): the recommendation is to move it into the
   `VaultDB` base class, so no store writes it (`human/20261015-sprint_big_feats_rulings.md`). It
@@ -181,7 +180,8 @@ stored and how big a vault can be. CI covers the package (`pnpm -r`). What is le
   vault locks itself on `not_permitted` (sign-out); `destroy()` on a handle that never saw a
   bundle resolving without erasing, and a retry after a refused `destroy()` taking the reborn
   vault; whether the label grammar is enforced server-side; the tests' `react` dev dependency
-  (keep, recommended); the first-emit deviation of `watchVault` (accept; design.md records it).
+  (keep, recommended); ~~the first-emit deviation of `watchVault`~~ (ruled 2026-10-16: accepted as
+  built; `whiteboard/20261014-convex/design.md` records why).
 
 ### 3. Reservations before the first release: the stored format and the public surface
 
@@ -497,6 +497,14 @@ thread 7, [#44](https://github.com/mrflip/safebyok/pull/44)) has been used in an
 Reasonable tasks that we do not plan to do in the near term. Do not anticipate them in your
 implementation.
 
+* **Lock out a device: every way in it added.** From another device, the user locks out a lost or
+  compromised one: its passkeys removed, its remembered unlock void, and nothing it holds reading
+  what is written next. Vault-key rotation does the cryptography (designed in
+  `whiteboard/20261016-rotation/rotation-design.md`, built as sprint matters' threads 14 and
+  18-20); what waits is the UX, a device list, and, if the Coach wants rotation not to sign every
+  other device out, a key pair per way in (that design's open question 1). The data it needs goes
+  in with rotation: a random `device_id` per vault per device (never derived from the device,
+  as Apple's and Google's rules require), recorded on every envelope it adds.
 * **A pluggable conflict handler for the weird cases**, beyond *A conflict-handler hook* above:
   for instance, "this lockbox is too damaged to know what epoch it is from, and I have a store
   request with a healthy lockbox: what do I do?" Today the vault decides (a damaged box is

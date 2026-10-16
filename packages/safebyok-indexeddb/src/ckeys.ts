@@ -23,10 +23,16 @@ export const bundleCkey = (scope: VaultScope): string => Ckeys.bundle(scope)
 export const boxCkey = (scope: VaultScope, boxlabel: string): string => Ckeys.box(scope, boxlabel)
 
 /**
- * True for the ckey of a lockbox in `scope`: the vault's own prefix is not shared by any other
- * vault's rows, whatever characters its names hold.
+ * The key range of every lockbox in `scope`, for a store that reads by range instead of reading
+ * the whole shelf: from the vault's lockbox prefix (`Ckeys.boxPrefix`) up to that prefix and the
+ * highest character there is. The prefix is not shared by any other vault's rows, whatever
+ * characters its names hold, and every ckey under it goes on with a quote, which sorts below that
+ * highest character.
  *
- * @example isBoxCkeyOf(scope, '["box","acme","u1","main","anthropic"]')    // true
- * @example isBoxCkeyOf(scope, '["box","acme","u1","main","x","anthropic"]') // false: a user named `u1","main`
+ * @example
+ *   store.getAll(boxRange(scope))  // just this vault's lockboxes
  */
-export const isBoxCkeyOf = (scope: VaultScope, ckey: unknown): ckey is string => Ckeys.isBoxIn(scope)(ckey)
+export const boxRange = (scope: VaultScope): IDBKeyRange => {
+  const prefix = Ckeys.boxPrefix(scope)
+  return IDBKeyRange.bound(prefix, `${prefix}\u{FFFF}`)
+}

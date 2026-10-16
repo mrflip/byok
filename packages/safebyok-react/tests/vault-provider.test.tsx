@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, expectTypeOf, it, vi } from 'vitest'
-import { AnyTextValidators, VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, type KeyDeriver, type Vault, type VaultValidators } from 'safebyok'
+import { AnyTextValidators, Ckeys, VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, openVault, type KeyDeriver, type Vault, type VaultValidators } from 'safebyok'
 import * as TH from 'safebyok/testing'
 import { Component, useEffect, useState, type ErrorInfo, type ReactNode } from 'react'
 import { VaultProvider, useVault, useVaultSnapshot, type VaultProviderProps } from '../src/vault-provider'
@@ -80,6 +80,22 @@ const makeWorld = () => {
   return { vaultDB, deviceDB, props, tree, mount }
 }
 
+/** A world whose `u1` vault was made, with a lockbox, and then had its stored bundle spoiled. */
+const damagedWorld = async () => {
+  const store = memoryStore()
+  const vaultDB = localVaultDB(store)
+  const deviceDB = memoryDeviceDB()
+  const props = { applabel: 'acme', vaultlabel: 'main', vaultDB, deviceDB, keyDeriver: TH.testDeriver }
+  const made = await openVault({ ...props, userId: 'u1' })
+  await made.unlock('correct horse')
+  await made.store('anthropic_api_key', 'sk-fake')
+  made.close()
+  const bundleCkey = Ckeys.bundle(TH.scopeOf('u1'))
+  const bundle = JSON.parse(store.read(bundleCkey) ?? 'null') as object
+  store.write(bundleCkey, JSON.stringify({ ...bundle, unlock_epoch: 'one' }))
+  return { store, vaultDB, deviceDB, props }
+}
+
 /** The state the Probe, or the boundary in its place, shows. */
 const shownState = () => screen.getByTestId('state').textContent
 
@@ -116,6 +132,31 @@ const OpenErrorExample = () => {
 
 /** React reports a boundary-caught render error on the console; the suite stays quiet about it. */
 const hushConsole = () => vi.spyOn(console, 'error').mockImplementation(() => { /* expected */ })
+
+/**
+ * A world whose vault already holds `anthropic_api_key`, made on another device under the
+ * passphrase 'pw', so the provider finds it locked; and a way to mount the provider over it
+ * with a grabber, whose `withUnlockedVault` the test calls itself.
+ */
+const lockedWorld = async () => {
+  const world = makeWorld()
+  const maker = await openVault({ ...world.props, deviceDB: memoryDeviceDB(), userId: 'u1' })
+  await maker.unlock('pw')
+  await maker.store('anthropic_api_key', 'sk-fake')
+  maker.close()
+  const grab = grabber()
+  const tree = (userId: string | null, keyDeriver: KeyDeriver = TH.testDeriver) => (
+    <VaultProvider {...world.props} keyDeriver={keyDeriver} userId={userId}><grab.Grab /></VaultProvider>
+  )
+  return { ...world, ...grab, tree }
+}
+
+/** A promise's outcome so far, read without waiting on it: 'pending' until it settles. */
+const watched = <ResultT,>(promise: Promise<ResultT>) => {
+  const seen: { outcome: ResultT | 'pending' } = { outcome: 'pending' }
+  void promise.then((outcome) => { seen.outcome = outcome })
+  return seen
+}
 
 /** Stands in for a function a test replaces before it is called. */
 const noop = () => { /* replaced before use */ }
@@ -199,7 +240,7 @@ describe("VaultProvider", () => {
     fireEvent.click(screen.getByText('grab'))
     fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'the wrong one' } })
     fireEvent.click(screen.getByText('Unlock'))
-    await screen.findByText("That passphrase didn't unlock the vault. Check for typos and try again.")
+    await screen.findByText(/^That passphrase didn't unlock the vault. Check for typos and try again./)
 
     fireEvent.change(screen.getByPlaceholderText('vault passphrase'), { target: { value: 'the right one' } })
     fireEvent.click(screen.getByText('Unlock'))
@@ -216,6 +257,185 @@ describe("VaultProvider", () => {
     await expectOutcome('dismissed')
     expect(shownState()).to.eq('absent')
     expect(screen.getByTestId('boxcount').textContent).to.eq('0')
+  })
+
+  it("a dialog that meets misuse keeps the app in place, and closing it resolves the action to null", async () => {
+    const world = makeWorld()
+    const first = world.mount('u1')
+    await expectShown('absent')
+    await putThroughNewVault('the right one')
+    first.unmount()
+
+    // A tab whose build carries another key deriver than the one the vault was made with, as a
+    // stale tab beside a newer deployment would: its unlock refuses with kind 'unknown_key_deriver'.
+    const otherDeriver = { ...TH.testDeriver, key_deriver_label: 'other_deriver' }
+    const caught: unknown[] = []
+    const reported: unknown[] = []
+    render(
+      <CatchingBoundary caught={caught}>
+        <VaultProvider {...world.props} deviceDB={memoryDeviceDB()} keyDeriver={otherDeriver} userId="u1">
+          <Probe />
+        </VaultProvider>
+      </CatchingBoundary>,
+      { onCaughtError: (err) => { reported.push(err) } },
+    )
+    await expectShown('locked')
+    fireEvent.click(screen.getByText('grab'))
+    fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'the right one' } })
+    fireEvent.click(screen.getByText('Unlock'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    await expectOutcome('dismissed')
+    expect(shownState()).to.eq('locked')
+    expect(caught).to.deep.equal([])
+    expect(reported).to.have.lengthOf(1)
+    expect(isVaultError(reported[0], 'unknown_key_deriver')).to.be.true
+  })
+
+  describe("withUnlockedVault settles every call", () => {
+    it("resolves null when the provider unmounts with the dialog open", async () => {
+      const world = await lockedWorld()
+      const { unmount } = render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      unmount()
+      expect(await reading).to.be.null
+    })
+
+    it("resolves null when another user signs in, and shows that user no dialog", async () => {
+      const world = await lockedWorld()
+      const { rerender } = render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      rerender(world.tree('u2'))
+      expect(await reading).to.be.null
+      await waitFor(() => { expect(world.latest().vault).to.not.be.null })
+      expect(world.latest().vault).to.not.equal(vault)
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    })
+
+    it("resolves null when the user signs out", async () => {
+      const world = await lockedWorld()
+      const { rerender } = render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      rerender(world.tree(null))
+      expect(await reading).to.be.null
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    })
+
+    it("has overlapping calls wait on one dialog: one unlock runs them all", async () => {
+      const world = await lockedWorld()
+      render(world.tree('u1'))
+      const vault = await world.opened()
+      const first = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      const second = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await TH.wakeupAtNextTick()
+      expect(screen.getAllByPlaceholderText('vault passphrase')).to.have.lengthOf(1)
+      fireEvent.change(screen.getByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+      fireEvent.click(screen.getByText('Unlock'))
+      expect(await first).to.eq('sk-fake')
+      expect(await second).to.eq('sk-fake')
+    })
+
+    it("has overlapping calls each resolve null when the one dialog is cancelled", async () => {
+      const world = await lockedWorld()
+      render(world.tree('u1'))
+      const vault = await world.opened()
+      const first = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      const second = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await TH.wakeupAtNextTick()
+      fireEvent.click(screen.getByText('Cancel'))
+      expect(await first).to.be.null
+      expect(await second).to.be.null
+    })
+
+    it("an unlock finishing after Cancel closes a newer dialog too, and runs the actions waiting on it", async () => {
+      const world = await lockedWorld()
+      const gate = TH.makeGate()
+      const slowDeriver = { ...TH.testDeriver, deriveKeyBytes: async (passphrase: string, saltBytes: Uint8Array) => { await gate.pass(); return await TH.testDeriver.deriveKeyBytes(passphrase, saltBytes) } }
+      render(world.tree('u1', slowDeriver))
+      const vault = await world.opened()
+      const first = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+      fireEvent.click(screen.getByText('Unlock'))
+      await gate.reached
+      fireEvent.click(screen.getByText('Cancel'))
+      expect(await first).to.be.null
+
+      const second = watched(world.latest().withUnlockedVault(() => vault.read('anthropic_api_key')))
+      await screen.findByPlaceholderText('vault passphrase')
+      expect(second.outcome).to.eq('pending')
+      gate.release()
+      await waitFor(() => { expect(second.outcome).to.eq('sk-fake') })
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null
+    })
+
+    it("closes a dialog the vault unlocks under without it, and runs the actions waiting on it", async () => {
+      const world = await lockedWorld()
+      render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      await screen.findByPlaceholderText('vault passphrase')
+      await vault.unlock('pw')
+      expect(await reading).to.eq('sk-fake')
+      await waitFor(() => { expect(screen.queryByPlaceholderText('vault passphrase')).to.be.null })
+    })
+
+    it("keeps a dialog asking through a change that is no unlock: a lockbox arriving, a lock", async () => {
+      const world = await lockedWorld()
+      render(world.tree('u1'))
+      const vault = await world.opened()
+      const reading = watched(world.latest().withUnlockedVault(() => vault.read('anthropic_api_key')))
+      await screen.findByPlaceholderText('vault passphrase')
+      const elsewhere = await openVault({ ...world.props, deviceDB: memoryDeviceDB(), userId: 'u1' })
+      await elsewhere.unlock('pw')
+      await elsewhere.store('openai_api_key', 'sk-also-fake')
+      elsewhere.close()
+      await waitFor(() => { expect(vault.getSnapshot().boxes).to.have.lengthOf(2) })
+      await vault.lock()
+      await TH.wakeupAtNextTick()
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.not.be.null
+      expect(reading.outcome).to.eq('pending')
+      fireEvent.click(screen.getByText('Cancel'))
+      await waitFor(() => { expect(reading.outcome).to.be.null })
+    })
+
+    it("leaves another user's dialog asking when the last user's cancelled unlock finishes late", async () => {
+      const world = await lockedWorld()
+      const other = await openVault({ ...world.props, deviceDB: memoryDeviceDB(), userId: 'u2' })
+      await other.unlock('pw2')
+      await other.store('anthropic_api_key', 'sk-other-fake')
+      other.close()
+      const gate = TH.makeGate()
+      const slowDeriver = { ...TH.testDeriver, deriveKeyBytes: async (passphrase: string, saltBytes: Uint8Array) => { await gate.pass(); return await TH.testDeriver.deriveKeyBytes(passphrase, saltBytes) } }
+      const { rerender } = render(world.tree('u1', slowDeriver))
+      const vault = await world.opened()
+      const first = world.latest().withUnlockedVault(() => vault.read('anthropic_api_key'))
+      fireEvent.change(await screen.findByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+      fireEvent.click(screen.getByText('Unlock'))
+      await gate.reached
+      fireEvent.click(screen.getByText('Cancel'))
+      expect(await first).to.be.null
+
+      rerender(world.tree('u2', slowDeriver))
+      await waitFor(() => { expect(world.latest().vault).to.not.be.null })
+      const vault2 = world.latest().vault
+      if (vault2 === null || vault2 === vault) { throw new Error('the provider opened no vault for u2') }
+      const second = watched(world.latest().withUnlockedVault(() => vault2.read('anthropic_api_key')))
+      await screen.findByPlaceholderText('vault passphrase')
+      gate.release()
+      await TH.wakeupAtNextTick()
+      expect(vault2.getSnapshot().state).to.eq('locked')
+      expect(screen.queryByPlaceholderText('vault passphrase')).to.not.be.null
+      expect(second.outcome).to.eq('pending')
+      fireEvent.click(screen.getByText('Cancel'))
+      await waitFor(() => { expect(second.outcome).to.be.null })
+    })
   })
 
   it("asks for a keyDeriver outright, as openVault does", () => {
@@ -263,6 +483,38 @@ describe("VaultProvider", () => {
     rerender(tree(AnyTextValidators.note))
     await waitFor(() => { expect(latest().vault).to.not.be.null.and.not.eq(first) })
     expect(latest().vault?.getSnapshot().boxes.map((summary) => summary.boxlabel)).to.deep.equal(['Anthropic API key'])
+  })
+
+  it("shows the vault locked when storage says its user signed out, as the vault locks itself", async () => {
+    const { Grab, opened } = grabber()
+    const { props, vaultDB } = makeWorld()
+    render(
+      <VaultProvider {...props} userId="u1">
+        <Probe />
+        <Grab />
+      </VaultProvider>,
+    )
+    const vault = await opened()
+    await vault.unlock('correct horse battery staple')
+    await expectShown('unlocked')
+    vi.spyOn(vaultDB, 'readBox').mockRejectedValueOnce(new VaultError('identity_revoked', 'No one is signed in: sign in, then try again.'))
+    await TH.expectRefusal(vault.read('anthropic_api_key'), 'identity_revoked')
+    await expectShown('locked')
+  })
+
+  it("passes whenIdentityRevoked through: under 'stay', the vault stays unlocked", async () => {
+    const { Grab, opened } = grabber()
+    const { props, vaultDB } = makeWorld()
+    render(
+      <VaultProvider {...props} userId="u1" whenIdentityRevoked="stay">
+        <Grab />
+      </VaultProvider>,
+    )
+    const vault = await opened()
+    await vault.unlock('correct horse battery staple')
+    vi.spyOn(vaultDB, 'readBox').mockRejectedValueOnce(new VaultError('identity_revoked', 'No one is signed in: sign in, then try again.'))
+    await TH.expectRefusal(vault.read('anthropic_api_key'), 'identity_revoked')
+    expect(vault.getSnapshot().state).to.eq('unlocked')
   })
 
   it("passes the logger through: what the vault has nobody to throw to reaches it", async () => {
@@ -327,8 +579,9 @@ describe("VaultProvider", () => {
 
     const ConditionCases = [
       ["storage_unavailable", 'storage that cannot be reached'],
-      ["not_permitted",       'a user storage will not serve, as when signed out of the backend'],
-      ["corrupt_record",      'a stored record that fails verification'],
+      ["identity_revoked",    'a user storage no longer serves, as when signed out of the backend'],
+      ["not_permitted",       'a call storage refuses the signed-in user'],
+      ["damaged_bundle",      'a stored vault that fails its checks'],
     ] as const
 
     for (const [kind, blurb] of ConditionCases) {
@@ -410,6 +663,75 @@ describe("VaultProvider", () => {
       })
       expect(reads.mock.calls.length).to.eq(readsBefore)
       expect(shownState()).to.eq('absent')
+    })
+
+    describe("eraseDamagedVault", () => {
+      it("erases the vault openError says is damaged, with the unlock this device remembers, and opens a fresh one", async () => {
+        const { store, deviceDB, props } = await damagedWorld()
+        const { Grab, latest } = grabber()
+        render(<VaultProvider {...props} userId="u1"><Grab /><Probe /></VaultProvider>)
+        await expectShown('open error: damaged_bundle')
+        expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.not.be.null
+        await act(async () => { await latest().eraseDamagedVault() })
+        await expectShown('absent')
+        expect(store.ckeys()).to.deep.equal([])
+        expect(await deviceDB.readUnlock(TH.scopeOf('u1'))).to.be.null
+        expect(latest().openError).to.be.null
+      })
+
+      it("does nothing for an openError that is not a damaged bundle", async () => {
+        const world = makeWorld()
+        const erasing = vi.spyOn(world.vaultDB, 'eraseDamagedVault')
+        vi.spyOn(world.vaultDB, 'readBundle').mockRejectedValueOnce(unreachable())
+        const { Grab, latest } = grabber()
+        render(<VaultProvider {...world.props} userId="u1"><Grab /><Probe /></VaultProvider>)
+        await expectShown('open error: storage_unavailable')
+        await act(async () => { await latest().eraseDamagedVault() })
+        expect(erasing).not.toHaveBeenCalled()
+        expect(shownState()).to.eq('open error: storage_unavailable')
+      })
+
+      it("does nothing while the vault is open, however sound", async () => {
+        const world = makeWorld()
+        const erasing = vi.spyOn(world.vaultDB, 'eraseDamagedVault')
+        const { Grab, latest } = grabber()
+        render(<VaultProvider {...world.props} userId="u1"><Grab /><Probe /></VaultProvider>)
+        await expectShown('absent')
+        await act(async () => { await latest().eraseDamagedVault() })
+        expect(erasing).not.toHaveBeenCalled()
+        expect(shownState()).to.eq('absent')
+      })
+
+      for (const [kind, blurb] of [['bad_option', 'it reads sound now'], ['stale_write', 'it was made anew']] as const) {
+        it(`opens again, and still rejects, when the erase finds storage changed: ${blurb}`, async () => {
+          const { vaultDB, props } = await damagedWorld()
+          vi.spyOn(vaultDB, 'eraseDamagedVault').mockRejectedValueOnce(new VaultError(kind, 'Storage changed.'))
+          // The vault is mended behind the provider's back: the reopen finds it sound.
+          const reads = vi.spyOn(vaultDB, 'readBundle')
+          const { Grab, latest } = grabber()
+          render(<VaultProvider {...props} userId="u1"><Grab /><Probe /></VaultProvider>)
+          await expectShown('open error: damaged_bundle')
+          reads.mockResolvedValueOnce(null)
+          await act(async () => {
+            await expect(latest().eraseDamagedVault()).rejects.toMatchObject({ kind })
+          })
+          await expectShown('absent')
+        })
+      }
+
+      it("rejects with storage's refusal, leaving the damaged openError in place", async () => {
+        const { vaultDB, props } = await damagedWorld()
+        vi.spyOn(vaultDB, 'eraseDamagedVault').mockRejectedValueOnce(unreachable())
+        const { Grab, latest } = grabber()
+        render(<VaultProvider {...props} userId="u1"><Grab /><Probe /></VaultProvider>)
+        await expectShown('open error: damaged_bundle')
+        await act(async () => {
+          await expect(latest().eraseDamagedVault()).rejects.toMatchObject({ kind: 'storage_unavailable' })
+        })
+        expect(shownState()).to.eq('open error: damaged_bundle')
+        await act(async () => { await latest().eraseDamagedVault() })
+        await expectShown('absent')
+      })
     })
 
     it("clears openError when the user signs out", async () => {

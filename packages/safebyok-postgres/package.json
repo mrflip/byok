@@ -25,6 +25,7 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "vault-notify.sql",
     "vault-tables.sql"
   ],
   "engines": {

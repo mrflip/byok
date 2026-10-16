@@ -25,13 +25,37 @@ export const shelfOf = (dbName: string): UseStore => {
 }
 
 /**
+ * The result of an IndexedDB request, or the outcome of a transaction, as a promise: `idb-keyval`'s
+ * `promisifyRequest`, except that it never rejects with null, which would reach a caller as an
+ * error with a null cause. A transaction one of whose requests failed rejects with that request's
+ * error (the transaction's own is still null when the failure reaches it); a failure the browser
+ * gives no error for at all (a transaction aborted from outside) rejects with an Error saying so.
+ *
+ * @example const standing = await settle<unknown>(store.get(ckey))
+ */
+export const settle = async <ValT = undefined>(request: IDBRequest<ValT> | IDBTransaction): Promise<ValT> => {
+  const target: EventTarget = request
+  let failedRequestError: unknown = null
+  target.addEventListener('error', (event) => {
+    if (failedRequestError === null && event.target instanceof IDBRequest) { failedRequestError = event.target.error }
+  })
+  try {
+    return await promisifyRequest<ValT>(request)
+  } catch (err) {
+    throw [err, failedRequestError].find((candidate) => candidate instanceof Error) ?? new Error(UnknownFailure)
+  }
+}
+
+const UnknownFailure = 'The IndexedDB request failed for an unknown reason: the browser gave no error. Try again shortly.'
+
+/**
  * `work`, run in one readwrite IndexedDB transaction over the shelf: what it reads and what it
  * writes go together, and no other tab's write lands in between, since IndexedDB runs readwrite
  * transactions over one store one after another. Resolves with what `work` resolves with, once
  * the transaction has committed; rejects, writing nothing, when `work` or any request in it
  * fails.
  *
- * `work` must wait only on the store's own requests (through `promisifyRequest`): IndexedDB
+ * `work` must wait only on the store's own requests (through {@link settle}): IndexedDB
  * commits a transaction as soon as it has no request pending, so awaiting anything else -- a
  * timer, a fetch, WebCrypto -- would end it midway, and its next request would throw.
  *
@@ -40,7 +64,7 @@ export const shelfOf = (dbName: string): UseStore => {
  *
  * @example
  *   const landed = await inOneTransaction(shelfOf('acme'), async (store) => {
- *     const standing = await promisifyRequest(store.get(ckey))
+ *     const standing = await settle(store.get(ckey))
  *     if (! meetsExpectation(standing)) { return false }
  *     store.put(record, ckey)
  *     return true
@@ -55,7 +79,7 @@ export const inOneTransaction = <ValT>(shelf: UseStore, work: (store: IDBObjectS
       abandon(store.transaction)
       throw err
     }
-    await promisifyRequest(store.transaction)
+    await settle(store.transaction)
     return outcome
   })
 )

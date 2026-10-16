@@ -1,11 +1,29 @@
 /**
- * safebyok-react's test helpers: everything `safebyok/testing` has, and a fake WebAuthn
- * authenticator. Star-import it as `TH` (`import * as TH from './test-helpers'`).
+ * safebyok-react's test helpers: everything `safebyok/testing` has, a fake WebAuthn
+ * authenticator, and a render that hears what React reports. Star-import it as `TH`
+ * (`import * as TH from './test-helpers'`).
  */
+import { render } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import { vi } from 'vitest'
 import { fromB64, toB64 } from 'safebyok/utils'
 
 export * from 'safebyok/testing'
+
+/**
+ * `ui` rendered as Testing Library's `render` does, and `reported`: each error a boundary caught,
+ * the very value thrown, as React hands it to the root's `onCaughtError` -- where a host's error
+ * tracker hears it, and which otherwise writes it to the console.
+ *
+ * @example
+ *   const { reported } = TH.renderReporting(<PassphraseModal vault={vault} onDone={noop} />)
+ *   await waitFor(() => { expect(reported).to.have.lengthOf(1) })
+ */
+export const renderReporting = (ui: ReactElement) => {
+  const reported: unknown[] = []
+  const rendered = render(ui, { onCaughtError: (err) => { reported.push(err) } })
+  return { ...rendered, reported }
+}
 
 /** How the fake authenticator behaves: whether it offers PRF at all, and whether it answers as it makes a passkey. */
 export type FakeAuthenticatorOpts = { prf?: boolean, prfAtCreate?: boolean }

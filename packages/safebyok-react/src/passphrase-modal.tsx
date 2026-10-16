@@ -1,5 +1,6 @@
-import { useState, type SubmitEvent } from 'react'
+import { useId, useRef, useState, type SubmitEvent } from 'react'
 import { ForeverMs, isVaultCondition, isVaultError, type Vault } from 'safebyok'
+import { Boundary } from './boundary'
 import { PasskeyUnlockButton } from './passkey-unlock-button'
 
 const MinutesPerHour = 60
@@ -46,8 +47,12 @@ const unlockedFor = (reentryWindowMs: number, creating: boolean): string => {
  *
  * A condition the unlock meets (storage that cannot be reached, a record that fails
  * verification) shows in the dialog in place, in the vault's own calm words, and the user may
- * try again or cancel. Misuse, or anything that is no VaultError, is thrown while rendering, for
- * the nearest error boundary above the dialog to catch.
+ * try again or cancel. Anything else -- misuse, such as a closed vault handle, or a failure that
+ * is no VaultError -- never reaches the host's page: the dialog shows a calm notice in its place,
+ * "Something went wrong", whose Close (or Escape) calls `onDone(false)`,
+ * and React reports the error through the root's `onCaughtError` (the console, by default, with
+ * the component stack), where the developer and an error tracker meet it. A passkey that fails
+ * that way takes its button away and leaves the passphrase.
  *
  * How long an unlock lasts it reads from the vault itself (its `reentryWindowMs`, the
  * `forcePassphraseReentryHours` it was opened with): 'Locks again on this device in 7 days', 'in 15
@@ -58,12 +63,61 @@ const unlockedFor = (reentryWindowMs: number, creating: boolean): string => {
  * @example
  *   <PassphraseModal vault={vault} onDone={(unlocked) => { setAsking(false) }} />
  */
-export const PassphraseModal = ({ vault, onDone }: {
+export const PassphraseModal = (props: PassphraseModalProps) => (
+  <Boundary fallback={<DialogTrouble onDone={props.onDone} />}>
+    <UnlockForm {...props} />
+  </Boundary>
+)
+
+/** What PassphraseModal is handed. */
+type PassphraseModalProps = {
   vault:  Vault
   onDone: (unlocked: boolean) => void
-}) => {
+}
+
+/**
+ * What the dialog shows once something has gone wrong inside it that is not the user's to mend:
+ * a calm word, and the way out.
+ */
+const DialogTrouble = ({ onDone }: { onDone: (unlocked: boolean) => void }) => {
+  const titleId = useId()
+  const wordId = useId()
+  return (
+    <div className="modal-scrim">
+      {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- Escape closes a dialog from anywhere inside it, as the WAI-ARIA dialog pattern has it */}
+      <div
+        className="modal"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={wordId}
+        onKeyDown={(evt) => { if (evt.key === 'Escape') { onDone(false) } }}
+      >
+        <h3 id={titleId}>Something went wrong</h3>
+        <p className="gripe" id={wordId}>
+          This app ran into a problem of its own, not one you caused, and could not unlock your vault. Your secrets are safe. Close this, reload the page, and try again.
+        </p>
+        <div className="row">
+          {/* eslint-disable-next-line jsx-a11y/no-autofocus -- the field that held focus is gone; the WAI-ARIA dialog pattern moves focus to the dialog's one control */}
+          <button type="button" autoFocus onClick={() => { onDone(false) }}>Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * What the dialog says to the user, and whether it is about the passkey: a word about the typed
+ * passphrase goes once the user types again; one about the passkey stays until the next submit.
+ */
+type Gripe = { text: string, fromPasskey: boolean }
+
+/** The dialog itself, inside PassphraseModal's boundary. */
+const UnlockForm = ({ vault, onDone }: PassphraseModalProps) => {
   const [passphrase, setPassphrase] = useState('')
-  const [gripe, setGripe] = useState<string | null>(null)
+  const [gripe, setGripe] = useState<Gripe | null>(null)
+  const formRef = useRef<HTMLFormElement>(null)
+  const fieldRef = useRef<HTMLInputElement>(null)
   // Wrapped, so that a failure carrying any value at all still reads as "failed".
   const [failure, setFailure] = useState<{ err: unknown } | null>(null)
   if (failure !== null) { throw failure.err }
@@ -71,6 +125,7 @@ export const PassphraseModal = ({ vault, onDone }: {
 
   const submit = async (evt: SubmitEvent) => {
     evt.preventDefault()
+    setGripe(null)
     try {
       await vault.unlock(passphrase)
       onDone(true)
@@ -78,16 +133,22 @@ export const PassphraseModal = ({ vault, onDone }: {
       // The vault was locked while this unlock was under way, and the lock wins: as if dismissed.
       if (isVaultError(err, 'vault_locked')) { onDone(false); return }
       // A condition (a wrong passphrase, storage out of reach): shown calmly, to try again.
-      if (isVaultCondition(err)) { setGripe(err.message); return }
-      // Misuse, or no VaultError at all: not for the user. Rethrown in render, where a boundary
-      // catches it; thrown from here it would vanish into the voided promise.
+      if (isVaultCondition(err)) { setGripe({ text: err.message, fromPasskey: false }); return }
+      // Misuse, or no VaultError at all: not for the user. Rethrown in render, where
+      // PassphraseModal's boundary catches it; thrown from here it would miss every boundary.
       setFailure({ err })
     }
   }
 
+  const passkeyGripe = (text: string) => {
+    setGripe({ text, fromPasskey: true })
+    // A passkey button that took itself away took the focus with it: back to the passphrase.
+    if (! (formRef.current?.contains(document.activeElement) ?? false)) { fieldRef.current?.focus() }
+  }
+
   return (
     <div className="modal-scrim">
-      <form className="modal" onSubmit={(evt) => { void submit(evt) }}>
+      <form ref={formRef} className="modal" onSubmit={(evt) => { void submit(evt) }}>
         <h3>{creating ? 'Choose a vault passphrase' : 'Unlock your vault'}</h3>
         <p className="quiet">
           {creating
@@ -98,15 +159,16 @@ export const PassphraseModal = ({ vault, onDone }: {
           type="password"
           // eslint-disable-next-line jsx-a11y/no-autofocus -- moving focus to the dialog's first field on open is the WAI-ARIA dialog pattern; the rule aims at page-load autofocus
           autoFocus
+          ref={fieldRef}
           placeholder="vault passphrase"
           value={passphrase}
-          onChange={(evt) => { setPassphrase(evt.target.value); setGripe(null) }}
+          onChange={(evt) => { setPassphrase(evt.target.value); setGripe((prev) => (prev?.fromPasskey === true ? prev : null)) }}
         />
-        {gripe !== null && <p className="gripe">{gripe}</p>}
+        {gripe !== null && <p className="gripe" role="alert">{gripe.text}</p>}
         <p className="quiet">{unlockedFor(vault.reentryWindowMs, creating)}</p>
         <div className="row">
           <button type="submit">{creating ? 'Create vault' : 'Unlock'}</button>
-          {! creating && <PasskeyUnlockButton vault={vault} onDone={onDone} onGripe={setGripe} />}
+          {! creating && <PasskeyUnlockButton vault={vault} onDone={onDone} onGripe={passkeyGripe} />}
           <button type="button" onClick={() => { onDone(false) }}>Cancel</button>
         </div>
       </form>

@@ -2,7 +2,7 @@ import { beforeAll } from 'vitest'
 import { PGlite } from '@electric-sql/pglite'
 import { postgresVaultDB } from '../src/index'
 import type { PostgresClient, PostgresListen } from '../src/index'
-import { VaultTablesSql } from '../src/vault-tables'
+import { VaultNotifySql, VaultTablesSql } from '../src/vault-tables'
 
 // Everything the core's tests use too, so a test here star-imports this one module as TH.
 export * from 'safebyok/testing'
@@ -10,8 +10,9 @@ export * from 'safebyok/testing'
 const made: { db?: Promise<PGlite> } = {}
 
 /**
- * This test file's database: one PGlite, made once with {@link VaultTablesSql} run in it. A
- * PGlite takes seconds to start, so a file's tests share one and {@link emptyDatabase} it.
+ * This test file's database: one PGlite, made once with {@link VaultTablesSql} and the optional
+ * {@link VaultNotifySql} run in it. A PGlite takes seconds to start, so a file's tests share one
+ * and {@link emptyDatabase} it.
  */
 export const database = (): Promise<PGlite> => {
   made.db ??= madeDatabase()
@@ -21,6 +22,7 @@ export const database = (): Promise<PGlite> => {
 const madeDatabase = async (): Promise<PGlite> => {
   const db = new PGlite()
   await db.exec(VaultTablesSql)
+  await db.exec(VaultNotifySql)
   return db
 }
 

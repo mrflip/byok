@@ -41,7 +41,7 @@ export const hostWith = (getUserId: GetUserId) => {
  *
  * @example
  *   const refusal = await TH.convexRefusalOf(t.query(api.safebyok.getBundle, { scope }))
- *   expect(refusal.kind).to.eq('not_permitted')
+ *   expect(refusal.kind).to.eq('identity_revoked')
  */
 export const convexRefusalOf = async (operation: Promise<unknown>): Promise<SafebyokErrorData> => {
   try {

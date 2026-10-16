@@ -47,8 +47,9 @@ Run your usual Convex codegen, and your clients reach these as `api.safebyok.*`.
 
 * **Who may reach a vault.** Each function refuses a caller who is signed out (`getUserId`
   answers null, undefined or empty), or whose id is not the vault's `user_id`, with a
-  `ConvexError` whose `data` is `{ kind: 'not_permitted', message }`. The kind is the safebyok
-  `VaultError` kind of the same name. The message names no user and quotes no record.
+  `ConvexError` whose `data` is `{ kind: 'identity_revoked', message }`: the user the vault was
+  opened for is not the one signed in. The kind is the safebyok `VaultError` kind of the same
+  name, on which a vault locks itself. The message names no user and quotes no record.
 * **Writes that come too late.** An update (`updateBundle`, `updateBox`) or an erase
   (`eraseBox`, `eraseVault`) carries what its writer expects to stand -- the vault's `vault_id`,
   and the bundle's `unlock_epoch` or the lockbox's `revision_id` -- and checks it in the same
@@ -88,16 +89,19 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
 
 * **Sign in first.** `userId` is the id your `getUserId` answers for the signed-in user. Open
   the vault once the Convex client is authenticated (in React, once `useConvexAuth()` says so):
-  a call made before then is refused with kind `not_permitted`. An `openVault` refused that way
-  leaves no watch behind: open it again once signed in.
-* **Close the vault when the user signs out.** Signing out of Convex does not lock it: every
-  call it makes is refused from then on, but the unlocked vaultKey stays in memory until the
-  vault locks, expires or closes.
+  a call made before then is refused with kind `identity_revoked`, which also makes this device
+  forget its remembered unlock, so the user types their passphrase again. An `openVault` refused
+  that way leaves no watch behind: open it again once signed in.
+* **Signing out locks the vault.** Once the Convex client signs out (or signs in as someone
+  else), the vault's live `watchVault` query is refused, the vault looks again, meets
+  `identity_revoked`, and locks itself, as `lock()` does: an idle vault in another tab included.
+  (`openVault`'s `whenIdentityRevoked: 'stay'` turns this off.) Close the vault when your user
+  signs out all the same: in React, pass `userId={null}` to the provider.
 * **Other devices' writes arrive live.** The vault watches `watchVault` and refreshes whenever
   it changes, so its snapshot (and a React render) follows writes from anywhere.
 * **Refusals** are `VaultError`s, of the kinds in the *Errors* tables of the
   [`safebyok` README](../safebyok/README.md), which say what each means and what a host does.
-  The Convex functions throw two, `not_permitted` and `vault_full`; a write that came too late is
+  The Convex functions throw two, `identity_revoked` and `vault_full`; a write that came too late is
   a `stale_write`; and `storage_unavailable` is anything else Convex reported, with Convex's own
   error as its `cause`.
 * **Offline, a call waits** for the connection, as every Convex call does, rather than failing.

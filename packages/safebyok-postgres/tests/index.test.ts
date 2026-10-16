@@ -3,6 +3,6 @@ import * as safebyokPostgres from '../src/index'
 
 describe("the package's entry point", () => {
   it("exports exactly the public surface", () => {
-    expect(Object.keys(safebyokPostgres)).to.have.members(['postgresVaultDB', 'VaultChangeChannel', 'VaultTablesSql'])
+    expect(Object.keys(safebyokPostgres)).to.have.members(['postgresVaultDB', 'VaultChangeChannel', 'VaultNotifySql', 'VaultTablesSql'])
   })
 })

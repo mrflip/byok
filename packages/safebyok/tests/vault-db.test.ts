@@ -10,13 +10,21 @@ import * as TH from './test-helpers'
 
 /**
  * The smallest honest adapter: a Map of records, each check-and-write in one synchronous step.
- * What an adapter author writes; the validation around it comes from the base class.
+ * What an adapter author writes; the validation around it comes from the base class. Given a
+ * `maxLockboxes`, it refuses a new lockbox in a vault already holding that many, after the
+ * expectation is checked, so a first write under a boxlabel already taken is stale, never full.
  */
 class MapVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
   readonly maxVaultBytes = Infinity
-  readonly maxLockboxes = Infinity
+  readonly maxLockboxes: number
   readonly rows = new Map<string, unknown>()
+
+  constructor(maxLockboxes = Infinity) {
+    super()
+    this.maxLockboxes = maxLockboxes
+  }
+
   private standingBundle(scope: VaultScope) { return this.rows.get(Ckeys.bundle(scope)) as VaultBundle | undefined }
 
   protected doReadBundle(scope: VaultScope): Promise<unknown> { return Promise.resolve(this.rows.get(Ckeys.bundle(scope)) ?? null) }
@@ -45,6 +53,11 @@ class MapVaultDB extends VaultDB {
     const standingBox = this.rows.get(Ckeys.box(scope, lockbox.boxlabel)) as Lockbox | undefined
     if (this.standingBundle(scope)?.vault_id !== expected.vault_id || (standingBox?.revision_id ?? null) !== expected.revision_id) {
       return Promise.resolve(false)
+    }
+    const isBox = Ckeys.isBoxIn(scope)
+    const held = [...this.rows].filter(([ckey]) => isBox(ckey)).length
+    if (standingBox === undefined && held >= this.maxLockboxes) {
+      return Promise.reject(new VaultError('vault_full', 'This vault is full: erase a lockbox to make room, then try again.'))
     }
     this.rows.set(Ckeys.box(scope, lockbox.boxlabel), lockbox)
     return Promise.resolve(true)
@@ -83,8 +96,10 @@ class TroubledVaultDB extends MapVaultDB {
 
 const unheard = (): void => undefined
 
-TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
-TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB())
+TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()), { pushes: true })
+TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB(), {
+  makeCappedVaultDB: (maxLockboxes) => new MapVaultDB(maxLockboxes),
+})
 
 // The ckeys u1's main vault is filed under, spelled out rather than computed: they are stored.
 const u1BundleCkey = '["vault","acme","u1","main"]'
@@ -175,19 +190,6 @@ describe("localVaultDB", () => {
     await expect(vaultDB.readBundle(TH.scopeOf('u1'))).rejects.toThrow(/different app, user, or vault/)
     store.write(u1BoxCkey('other_box'), JSON.stringify(TH.boxOf('anthropic', 'one')))
     await expect(vaultDB.readBox(TH.scopeOf('u1'), 'other_box')).rejects.toThrow(/different boxlabel/)
-  })
-
-  it("keeps a user whose user_id holds a colon out of another user's listing and erasure", async () => {
-    const vaultDB = localVaultDB(memoryStore())
-    // User 'u1:main' with vault 'other' stores its rows under the prefix of user 'u1', vault 'main'.
-    const colonScope = { applabel: 'acme', user_id: 'u1:main', vaultlabel: 'other' }
-    await vaultDB.createBundle({ ...TH.bundleOf('u1'), ...colonScope, vault_id: 'vault-id-colon' })
-    await vaultDB.updateBox(colonScope, TH.boxOf('anthropic', 'colon'), { vault_id: 'vault-id-colon', revision_id: null })
-    await vaultDB.createBundle(TH.bundleOf('u1'))
-    expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
-    await vaultDB.eraseVault(TH.scopeOf('u1'), TH.thisVault)
-    const theirs = await vaultDB.readBox(colonScope, 'anthropic')
-    expect(theirs?.revision_id).to.eq('rev-colon')
   })
 })
 
@@ -318,6 +320,129 @@ const RefusedWrites = [
   // the two together:
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBundle(TH.bundleOf('u1', { vault_id: 'vault-id-new', unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'a bundle update that would change the vault_id'],
 ] as const
+
+/** A vault in `u1`'s slot with a lockbox, its bundle spoiled by `spoil`, and a sound neighbour beside it. */
+const withDamagedBundle = (spoil: (bundle: VaultBundle) => unknown = (bundle) => ({ ...bundle, unlock_epoch: 'one' })) => {
+  const vaultDB = new MapVaultDB()
+  vaultDB.rows.set(Ckeys.bundle(TH.scopeOf('u1')), spoil(TH.bundleOf('u1')))
+  vaultDB.rows.set(Ckeys.box(TH.scopeOf('u1'), 'anthropic'), TH.boxOf('anthropic', 'one'))
+  vaultDB.rows.set(Ckeys.bundle(TH.scopeOf('u2')), TH.bundleOf('u2'))
+  vaultDB.rows.set(Ckeys.box(TH.scopeOf('u2'), 'anthropic'), TH.boxOf('anthropic', 'one'))
+  return vaultDB
+}
+
+describe("the abstract VaultDB, erasing a vault whose bundle is damaged", () => {
+  it("erases the bundle and every lockbox of a vault whose bundle fails its checks, and nothing of any other", async () => {
+    const vaultDB = withDamagedBundle()
+    await TH.expectRefusal(vaultDB.readBundle(TH.scopeOf('u1')), 'corrupt_record')
+    await vaultDB.eraseDamagedVault(TH.scopeOf('u1'))
+    expect(vaultDB.rows.size).to.eq(2)
+    const theirBundle = Ckeys.bundle(TH.scopeOf('u2'))
+    const theirBox = Ckeys.box(TH.scopeOf('u2'), 'anthropic')
+    expect(vaultDB.rows.has(theirBundle)).to.eq(true)
+    expect(vaultDB.rows.has(theirBox)).to.eq(true)
+    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
+  })
+
+  it("counts a bundle naming another vault than the one asked for as damaged", async () => {
+    const vaultDB = new MapVaultDB()
+    vaultDB.rows.set(Ckeys.bundle(TH.scopeOf('u1')), TH.bundleOf('u2'))
+    await vaultDB.eraseDamagedVault(TH.scopeOf('u1'))
+    expect(vaultDB.rows.size).to.eq(0)
+  })
+
+  it("refuses a bundle that stands sound as bad_option, erasing nothing", async () => {
+    const vaultDB = withDamagedBundle((bundle) => bundle)
+    const before = new Map(vaultDB.rows)
+    const refusal = await TH.expectRefusal(vaultDB.eraseDamagedVault(TH.scopeOf('u1')), 'bad_option')
+    expect(refusal.message).to.include('destroy()')
+    expect(vaultDB.rows).to.deep.equal(before)
+  })
+
+  it("is quiet where the scope holds no bundle", async () => {
+    const vaultDB = new MapVaultDB()
+    await vaultDB.eraseDamagedVault(TH.scopeOf('u1'))
+    expect(vaultDB.rows.size).to.eq(0)
+  })
+
+  it("refuses a record too damaged to name its vault as damaged_bundle, erasing nothing", async () => {
+    for (const record of [{ format: 'safebyok-vault-v1' }, { vault_id: '' }, { vault_id: 7 }, {}, 'not even a bag']) {
+      const vaultDB = withDamagedBundle(() => record)
+      const refusal = await TH.expectRefusal(vaultDB.eraseDamagedVault(TH.scopeOf('u1')), 'damaged_bundle')
+      expect(refusal.message).to.include('nothing was erased')
+      expect(vaultDB.rows.size).to.eq(4)
+    }
+  })
+
+  const Envelope = TH.bundleOf('u1').unlocks[0]
+  const NewerRecords = [
+    [{ format: 'safebyok-vault-v2' },                                                      'a format this version does not know, whatever else it holds'],
+    [(bundle: VaultBundle) => ({ ...bundle, format: 'safebyok-vault-v2' }),                'a bundle that is otherwise sound but for its format'],
+    [(bundle: VaultBundle) => ({ ...bundle, format: 2 }),                                  'a format of another type'],
+    [(bundle: VaultBundle) => ({ ...bundle, unlocks: [...bundle.unlocks, { method: 'smartcard', unlock_id: 'x' }] }), 'an unlock method this version does not know'],
+    [(bundle: VaultBundle) => ({ ...bundle, unlocks: Array.from({ length: 9 }, () => Envelope) }), 'more unlocks than this version holds'],
+  ] as const
+
+  for (const [record, blurb] of NewerRecords) {
+    it(`refuses ${blurb} as possibly newer than this version, erasing nothing`, async () => {
+      const vaultDB = withDamagedBundle((bundle) => (typeof record === 'function' ? record(bundle) : { ...bundle, ...record }))
+      const refusal = await TH.expectRefusal(vaultDB.eraseDamagedVault(TH.scopeOf('u1')), 'damaged_bundle')
+      expect(refusal.message).to.include('newer version')
+      expect(refusal.message).to.include('nothing was erased')
+      expect(vaultDB.rows.size).to.eq(4)
+    })
+  }
+
+  it("still erases a bundle that fails for anything it can only take for damage: a known format and methods, in number", async () => {
+    const vaultDB = withDamagedBundle((bundle) => ({ ...bundle, unlocks: [{ ...Envelope, salt_b64: 7 }], registered_at: 'later' }))
+    await vaultDB.eraseDamagedVault(TH.scopeOf('u1'))
+    expect(vaultDB.rows.size).to.eq(2)
+  })
+
+  it("aims the erase at the vault_id it read, so a vault made anew meanwhile survives as stale_write", async () => {
+    class ReplacedVaultDB extends MapVaultDB {
+      protected override doEraseVault(): Promise<boolean> { return Promise.resolve(false) }
+    }
+    const vaultDB = new ReplacedVaultDB()
+    vaultDB.rows.set(Ckeys.bundle(TH.scopeOf('u1')), { ...TH.bundleOf('u1'), unlock_epoch: 'one' })
+    await TH.expectRefusal(vaultDB.eraseDamagedVault(TH.scopeOf('u1')), 'stale_write')
+  })
+
+  it("hands the erase the vault_id the damaged record carries", async () => {
+    const asked: EraseExpectation[] = []
+    class SpyingVaultDB extends MapVaultDB {
+      protected override doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
+        asked.push(expected)
+        return super.doEraseVault(scope, expected)
+      }
+    }
+    const vaultDB = new SpyingVaultDB()
+    vaultDB.rows.set(Ckeys.bundle(TH.scopeOf('u1')), { ...TH.bundleOf('u1'), unlock_epoch: 'one' })
+    await vaultDB.eraseDamagedVault(TH.scopeOf('u1'))
+    expect(asked).to.deep.equal([{ vault_id: TH.bundleOf('u1').vault_id }])
+  })
+
+  it("refuses as damaged_bundle, erasing nothing, an adapter that validates on the way up and so never hands the record over", async () => {
+    class CheckedVaultDB extends MapVaultDB {
+      protected override doReadBundle(): Promise<unknown> {
+        return Promise.reject(new VaultError('corrupt_record', 'did not read back'))
+      }
+    }
+    const vaultDB = new CheckedVaultDB()
+    vaultDB.rows.set(Ckeys.bundle(TH.scopeOf('u1')), { ...TH.bundleOf('u1'), unlock_epoch: 'one' })
+    const refusal = await TH.expectRefusal(vaultDB.eraseDamagedVault(TH.scopeOf('u1')), 'damaged_bundle')
+    expect((refusal.cause as VaultError).kind).to.eq('corrupt_record')
+    expect(vaultDB.rows.size).to.eq(1)
+  })
+
+  it("wraps what the adapter throws as storage_unavailable, and checks the scope first", async () => {
+    class DownVaultDB extends MapVaultDB {
+      protected override doReadBundle(): Promise<unknown> { return Promise.reject(new Error('connection reset')) }
+    }
+    await TH.expectRefusal(new DownVaultDB().eraseDamagedVault(TH.scopeOf('u1')), 'storage_unavailable')
+    await TH.expectRefusal(new MapVaultDB().eraseDamagedVault({ ...TH.scopeOf('u1'), applabel: 'not-a-label' }), 'bad_label')
+  })
+})
 
 describe("the abstract VaultDB, on the way in", () => {
   for (const [kind, write, blurb] of RefusedWrites) {

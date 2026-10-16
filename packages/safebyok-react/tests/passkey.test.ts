@@ -119,11 +119,23 @@ describe("askPasskey", () => {
     expect(Object.keys(request?.extensions?.prf?.evalByCredential ?? {})).to.have.members([laptop.credentialId, phone.credentialId])
   })
 
-  it("refuses as absent_unlock a vault with no passkey, and as corrupt_record one stored damaged", async () => {
+  it("refuses as absent_unlock a vault with no passkey, and as damaged_unlock one whose every passkey is stored damaged", async () => {
     install()
     await expectRefusal(askPasskey([passphraseSummary]), 'absent_unlock')
     const damaged = { ...summaryOf(await TH.passkeyOf('laptop'), 'laptop'), credential_id: 'not base64url!' }
-    await expectRefusal(askPasskey([damaged]), 'corrupt_record')
+    const saltless = { ...summaryOf(await TH.passkeyOf('phone'), 'phone'), prf_salt_b64: 'not base64url!' }
+    const shortSalted = { ...summaryOf(await TH.passkeyOf('tablet'), 'tablet'), prf_salt_b64: 'c2FsdA' }
+    await expectRefusal(askPasskey([passphraseSummary, damaged, saltless, shortSalted]), 'damaged_unlock')
+  })
+
+  it("leaves out a passkey stored damaged, and asks the others", async () => {
+    const fake = install()
+    const phone = await createPasskey(passkeyOpts)
+    if (phone === null) { throw new Error('the fake authenticator made no passkey') }
+    fake.touch(phone.credentialId)
+    const damaged = { ...summaryOf(await TH.passkeyOf('laptop'), 'laptop'), credential_id: 'not base64url!' }
+    expect(await askPasskey([damaged, summaryOf(phone, 'phone')])).to.deep.equal(phone)
+    expect(Object.keys(fake.calls.get[0]?.publicKey?.extensions?.prf?.evalByCredential ?? {})).to.deep.equal([phone.credentialId])
   })
 
   it("resolves null when the user dismisses the prompt, or has none of the passkeys at hand", async () => {

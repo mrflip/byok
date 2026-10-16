@@ -12,6 +12,16 @@ TH.bootDatabaseFirst()
 TH.describeVaultDB('postgresVaultDB over PGlite', async () => {
   const db = await TH.emptyDatabase()
   return TH.perUser((userId) => TH.requestFor(db, userId))
+}, {
+  makeCappedVaultDB: async (maxLockboxes) => {
+    const db = await TH.emptyDatabase()
+    return TH.perUser((userId) => postgresVaultDB({ client: db, userId, maxLockboxes }))
+  },
+  makeVaultDBFor: async () => {
+    const db = await TH.emptyDatabase()
+    return (userId) => TH.requestFor(db, userId)
+  },
+  pushes: true,
 })
 
 const u1 = TH.scopeOf('u1')
@@ -105,13 +115,13 @@ describe("postgresVaultDB, who may reach a vault", () => {
   ] as const
 
   for (const [verb, call] of EveryVerb) {
-    it(`${verb} on another user's vault refuses with not_permitted, and asks the database nothing`, async () => {
+    it(`${verb} on another user's vault refuses with identity_revoked, and asks the database nothing`, async () => {
       const db = await TH.emptyDatabase()
       const spy = TH.spyClient(db)
       const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', listen: TH.listenOn(db) })
       const refusal = await TH.refusalOf(call(vaultDB))
       expect(refusal).to.be.instanceOf(VaultError)
-      expect(refusal.kind).to.eq('not_permitted')
+      expect(refusal.kind).to.eq('identity_revoked')
       expect(refusal.message).to.include('another user')
       expect(spy.sent).to.have.lengthOf(0)
     })
@@ -124,14 +134,14 @@ describe("postgresVaultDB, who may reach a vault", () => {
   ] as const
 
   for (const [userId, blurb] of SignedOut) {
-    it(`refuses every vault while no one is signed in (a userId ${blurb}), with not_permitted`, async () => {
+    it(`refuses every vault while no one is signed in (a userId ${blurb}), with identity_revoked`, async () => {
       const db = await TH.emptyDatabase()
       const spy = TH.spyClient(db)
       const vaultDB = postgresVaultDB({ client: spy.client, userId })
       const refusal = await TH.refusalOf(vaultDB.readBundle(u1))
-      expect(refusal.kind).to.eq('not_permitted')
+      expect(refusal.kind).to.eq('identity_revoked')
       expect(refusal.message).to.include('No one is signed in')
-      expect(() => vaultDB.subscribe(u1, TH.changeCounter().onChange)).to.throw(VaultError).with.property('kind', 'not_permitted')
+      expect(() => vaultDB.subscribe(u1, TH.changeCounter().onChange)).to.throw(VaultError).with.property('kind', 'identity_revoked')
       expect(spy.sent).to.have.lengthOf(0)
     })
   }
@@ -159,7 +169,6 @@ describe("postgresVaultDB, what it stores", () => {
       unlock_epoch:     1,
       unlocks:          TH.bundleOf('u1').unlocks,
       registered_at:    Date.UTC(2026, 9, 14),
-      lockbox_count:    0,
     }])
   })
 
@@ -198,19 +207,6 @@ describe("postgresVaultDB, what it stores", () => {
     }])
   })
 
-  it("keeps text exactly as written: no unicode normalization, in a note or a user_id", async () => {
-    const db = await TH.emptyDatabase()
-    // 'é' as e and a combining accent (NFD), beside the precomposed form (NFC), and an emoji.
-    const userId = 'café-café'
-    const vaultDB = TH.requestFor(db, userId)
-    await vaultDB.createBundle(TH.bundleOf(userId))
-    const note = 'café \u{1F511} café'
-    await vaultDB.updateBox(TH.scopeOf(userId), TH.boxOf('anthropic', 'one', { note }), { vault_id: `vault-id-${userId}`, revision_id: null })
-    const lockbox = await vaultDB.readBox(TH.scopeOf(userId), 'anthropic')
-    expect(lockbox?.note).to.eq(note)
-    expect(await vaultDB.readBundle(TH.scopeOf(userId))).to.deep.equal(TH.bundleOf(userId))
-  })
-
   it("lists lockboxes without asking for their ciphered fields", async () => {
     const db = await TH.emptyDatabase()
     const spy = TH.spyClient(db)
@@ -236,17 +232,6 @@ describe("postgresVaultDB, what it stores", () => {
     expect(spy.sent).to.have.lengthOf(7)
   })
 
-  it("refuses a bundle naming another vault_id than the one it replaces, writing nothing", async () => {
-    const db = await TH.emptyDatabase()
-    const vaultDB = TH.requestFor(db, 'u1')
-    await vaultDB.createBundle(TH.bundleOf('u1'))
-    const impostor = { ...TH.bundleOf('u1'), vault_id: 'vault-id-impostor', unlock_epoch: 2 }
-    // The core's VaultDB refuses it before the adapter's half sees it: no vault ever writes one.
-    const refusal = await TH.refusalOf(vaultDB.updateBundle(impostor, { vault_id: 'vault-id-u1', unlock_epoch: 1 }))
-    expect(refusal.kind).to.eq('bad_option')
-    expect(await vaultDB.readBundle(u1)).to.deep.equal(TH.bundleOf('u1'))
-  })
-
   it("leaves no lockbox standing when its bundle goes: erasing the vault takes them in the same statement", async () => {
     const db = await TH.emptyDatabase()
     const vaultDB = TH.requestFor(db, 'u1')
@@ -257,12 +242,6 @@ describe("postgresVaultDB, what it stores", () => {
     expect(rows).to.have.lengthOf(0)
   })
 })
-
-/** The lockbox_count of u1's vault, as the tables' trigger keeps it; null with no bundle. */
-const countedForU1 = async (db: PGlite): Promise<number | null> => {
-  const { rows } = await db.query<{ lockbox_count: number }>("SELECT lockbox_count FROM safebyok_bundles WHERE user_id = 'u1'")
-  return rows[0]?.lockbox_count ?? null
-}
 
 /** The boxlabels in u1's vault, as `vaultDB` lists them. */
 const boxlabelsIn = async (vaultDB: VaultDB): Promise<string[]> => {
@@ -278,6 +257,14 @@ const filledTo = async (db: PGlite, maxLockboxes: number, boxlabels: readonly st
   return vaultDB
 }
 
+/** What InsertBoxSql answers, for a spy to say in place of the database: why a first write did not land. */
+const missedBecause = (why: { vault_stands: boolean, box_stood: boolean, was_full: boolean }) => (
+  (text: string) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, ...why }] }) : undefined)
+)
+
+/** The foreign key violation Postgres raises for a lockbox whose vault is gone, as a driver hands it up. */
+const foreignKeyViolation = Object.assign(new Error('insert or update on table "safebyok_lockboxes" violates foreign key constraint'), { code: '23503' })
+
 describe("postgresVaultDB, its lockbox limit", () => {
   it("refuses a new lockbox past maxLockboxes as vault_full, writing nothing and naming no boxlabel", async () => {
     const db = await TH.emptyDatabase()
@@ -286,7 +273,6 @@ describe("postgresVaultDB, its lockbox limit", () => {
     expect(refusal.message).to.include('2 lockboxes')
     expect(refusal.message).to.not.include('secret_project_x')
     expect(await boxlabelsIn(vaultDB)).to.have.members(['openai', 'anthropic'])
-    expect(await countedForU1(db)).to.eq(2)
   })
 
   it("never refuses a replacement for the count", async () => {
@@ -296,7 +282,7 @@ describe("postgresVaultDB, its lockbox limit", () => {
     await vaultDB.updateBox(u1, { ...TH.boxOf('openai', 'sk-fake-new'), revision_id: 'rev-new' }, { vault_id: 'vault-id-u1', revision_id: standing?.revision_id ?? null })
     const replaced = await vaultDB.readBox(u1, 'openai')
     expect(replaced?.revision_id).to.eq('rev-new')
-    expect(await countedForU1(db)).to.eq(1)
+    expect(await boxlabelsIn(vaultDB)).to.deep.equal(['openai'])
   })
 
   it("refuses a first write under a boxlabel already taken in a full vault as stale_write, not vault_full: the writer missed a lockbox it would replace", async () => {
@@ -307,65 +293,75 @@ describe("postgresVaultDB, its lockbox limit", () => {
     expect(await vaultDB.readBox(u1, 'openai')).to.deep.equal(standing)
   })
 
-  it("looks afresh before refusing a full vault: a boxlabel the write it waited on stored makes it stale_write, not vault_full", async () => {
-    // As a race leaves it: the insert found the vault full by the count it re-read under the lock,
-    // while its snapshot of the lockboxes predates the one stored under this boxlabel meanwhile.
-    const db = await TH.emptyDatabase()
-    await filledTo(db, 2, ['openai'])
-    const raced = postgresVaultDB({ client: db, userId: 'u1', maxLockboxes: 2 })
-    await raced.updateBox(u1, TH.boxOf('anthropic', 'sk-fake-theirs'), noBoxYet)
-    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, full: true }] }) : undefined))
-    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 2 })
-    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake-mine'), noBoxYet), 'stale_write')
-    expect(spy.sent).to.have.lengthOf(2)
-    expect(spy.sent[1]?.params).to.deep.equal(['acme', 'u1', 'main', 'anthropic', 'vault-id-u1', 2])
-  })
-
-  it("refuses as stale_write, not vault_full, a full vault given room again before the fresh look: the retry stale_write earns will land", async () => {
-    // As a race leaves it: the insert found the vault full, then another device erased a lockbox.
-    const db = await TH.emptyDatabase()
-    const other = await filledTo(db, 1, ['openai'])
-    await other.eraseBox(u1, 'openai', { vault_id: 'vault-id-u1' })
-    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, full: true }] }) : undefined))
-    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 1 })
-    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'stale_write')
-    expect(spy.sent).to.have.lengthOf(2)
-  })
-
-  it("refuses as stale_write, not vault_full, a full vault erased before the fresh look", async () => {
-    const db = await TH.emptyDatabase()
-    const other = await filledTo(db, 1, ['openai'])
-    await other.eraseVault(u1, { vault_id: 'vault-id-u1' })
-    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, full: true }] }) : undefined))
-    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 1 })
-    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'stale_write')
-    expect(spy.sent).to.have.lengthOf(2)
-  })
-
-  it("refuses vault_full when the fresh look finds the vault still full, with no lockbox under that boxlabel", async () => {
-    const db = await TH.emptyDatabase()
-    await filledTo(db, 1, ['openai'])
-    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.resolve({ rows: [{ landed: false, full: true }] }) : undefined))
-    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 1 })
-    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'vault_full')
-    expect(spy.sent).to.have.lengthOf(2)
-  })
-
-  it("asks nothing more of a first write that lands, or of one that is only stale", async () => {
-    const db = await TH.emptyDatabase()
-    await filledTo(db, 2, ['openai'])
-    const spy = TH.spyClient(db)
-    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 2 })
-    await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet)
-    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('mistral', 'sk-fake'), { vault_id: 'vault-id-gone', revision_id: null }), 'stale_write')
-    expect(spy.sent).to.have.lengthOf(2)
-  })
-
   it("refuses a first write in a full vault of another vault_id as stale_write: the count is the standing vault's", async () => {
     const db = await TH.emptyDatabase()
     const vaultDB = await filledTo(db, 1, ['openai'])
     await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-gone', revision_id: null }), 'stale_write')
     expect(await boxlabelsIn(vaultDB)).to.deep.equal(['openai'])
+  })
+
+  it("refuses a first write into a vault that is not there as stale_write, not vault_full", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = postgresVaultDB({ client: db, userId: 'u1', maxLockboxes: 1 })
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'stale_write')
+    expect(await vaultDB.readBundle(u1)).to.be.null
+  })
+
+  // The insert says why it missed, from one snapshot, so no second read is asked. What a miss means
+  // is the adapter's to read; these answer the insert with each reason a race can leave.
+  const misses: [string, { vault_stands: boolean, box_stood: boolean, was_full: boolean }, string][] = [
+    ['the vault at its limit when the statement began', { vault_stands: true, box_stood: false, was_full: true }, 'vault_full'],
+    ['the vault gone or made anew', { vault_stands: false, box_stood: false, was_full: false }, 'stale_write'],
+    ['a vault gone, though it was counted full', { vault_stands: false, box_stood: false, was_full: true }, 'stale_write'],
+    ['the boxlabel already taken, in a vault at its limit: a replacement is never full', { vault_stands: true, box_stood: true, was_full: true }, 'stale_write'],
+    ['the boxlabel taken by a writer that committed after the statement began, with room in the vault', { vault_stands: true, box_stood: false, was_full: false }, 'stale_write'],
+  ]
+  for (const [blurb, why, kind] of misses) {
+    it(`refuses ${kind} for ${blurb}, in the one statement`, async () => {
+      const db = await TH.emptyDatabase()
+      await filledTo(db, 1, [])
+      const spy = TH.spyClient(db, missedBecause(why))
+      const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 1 })
+      await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), kind as 'vault_full')
+      expect(spy.sent).to.have.lengthOf(1)
+    })
+  }
+
+  it("refuses as stale_write a foreign key violation on the insert: its vault was erased after the statement began", async () => {
+    const db = await TH.emptyDatabase()
+    await filledTo(db, 5, [])
+    const spy = TH.spyClient(db, (text) => (text.includes('INSERT INTO safebyok_lockboxes') ? Promise.reject(foreignKeyViolation) : undefined))
+    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 5 })
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'stale_write')
+    expect(spy.sent).to.have.lengthOf(1)
+  })
+
+  it("maps the code Postgres gives a lockbox whose vault is not there, and only that one", async () => {
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 5, [])
+    const orphan = TH.boxOf('anthropic', 'sk-fake')
+    const insertOrphan = db.query(
+      `INSERT INTO safebyok_lockboxes (applabel, user_id, vaultlabel, vault_id, format, boxlabel, revision_id, lockbox_key_wrapped, whisper_ciphered, registered_at, changed_at)
+       VALUES ('acme', 'u1', 'main', 'vault-id-gone', $1, $2, $3, '{}', '{}', 0, 0)`,
+      [orphan.format, orphan.boxlabel, orphan.revision_id],
+    )
+    expect(await TH.refusalOf(insertOrphan)).to.have.property('code', '23503')
+    expect(await boxlabelsIn(vaultDB)).to.deep.equal([])
+  })
+
+  it("asks one statement of every first write, and holds no lock and keeps no count to do it", async () => {
+    const db = await TH.emptyDatabase()
+    await filledTo(db, 2, ['openai'])
+    const spy = TH.spyClient(db)
+    const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 2 })
+    await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet)
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('mistral', 'sk-fake'), noBoxYet), 'vault_full')
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('mistral', 'sk-fake'), { vault_id: 'vault-id-gone', revision_id: null }), 'stale_write')
+    await vaultDB.eraseBox(u1, 'anthropic', thisVault)
+    expect(spy.sent).to.have.lengthOf(4)
+    for (const { text } of spy.sent) {
+      expect(text).to.not.match(/FOR (UPDATE|SHARE)|lockbox_count/)
+    }
   })
 
   it("makes room with an erase", async () => {
@@ -377,9 +373,10 @@ describe("postgresVaultDB, its lockbox limit", () => {
     expect(await boxlabelsIn(vaultDB)).to.deep.equal(['anthropic'])
   })
 
-  it("lets exactly one of two first writes sent at once take the last place", async () => {
-    // PGlite runs one statement at a time, so this holds the outcome, not the race: the race is
-    // the row lock's, as InsertBoxSql's comment says.
+  it("lets exactly one of two first writes sent at once take the last place, when one statement is run after the other", async () => {
+    // PGlite runs one statement at a time, so the second counts the first's lockbox: this holds
+    // writes made one after another, as they arrive here. Writers racing on a real server may
+    // each find room, and the README says so; no test here can race.
     const db = await TH.emptyDatabase()
     const vaultDB = await filledTo(db, 2, ['openai'])
     const outcomes = await Promise.allSettled([
@@ -387,7 +384,25 @@ describe("postgresVaultDB, its lockbox limit", () => {
       postgresVaultDB({ client: db, userId: 'u1', maxLockboxes: 2 }).updateBox(u1, TH.boxOf('mistral', 'sk-fake-two'), noBoxYet),
     ])
     expect(outcomes.map((outcome) => outcome.status)).to.have.members(['fulfilled', 'rejected'])
-    expect(await countedForU1(db)).to.eq(2)
+    expect(await boxlabelsIn(vaultDB)).to.have.lengthOf(2)
+  })
+
+  it("keeps every lockbox of a vault racing writers took past its limit, readable by its boxlabel, and lands a new one once erases make room", async () => {
+    // As racing writers may leave a vault, by the README: past its limit, here by a writer holding
+    // a higher one.
+    const db = await TH.emptyDatabase()
+    const vaultDB = await filledTo(db, 2, ['openai', 'anthropic'])
+    const higher = await filledTo(db, 1000, [])
+    await higher.updateBox(u1, TH.boxOf('mistral', 'sk-fake-three'), noBoxYet)
+    expect(await boxlabelsIn(vaultDB)).to.have.members(['openai', 'anthropic', 'mistral'])
+    const racer = await vaultDB.readBox(u1, 'mistral')
+    expect(racer?.boxlabel).to.eq('mistral')
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('gemini', 'sk-fake'), noBoxYet), 'vault_full')
+    await vaultDB.eraseBox(u1, 'openai', thisVault)
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('gemini', 'sk-fake'), noBoxYet), 'vault_full')
+    await vaultDB.eraseBox(u1, 'anthropic', thisVault)
+    await vaultDB.updateBox(u1, TH.boxOf('gemini', 'sk-fake'), noBoxYet)
+    expect(await boxlabelsIn(vaultDB)).to.have.members(['mistral', 'gemini'])
   })
 
   it("holds a vault filled under a higher limit to a lowered one, stranding none of its lockboxes", async () => {
@@ -398,30 +413,14 @@ describe("postgresVaultDB, its lockbox limit", () => {
     expect(await boxlabelsIn(lowered)).to.have.members(['openai', 'anthropic', 'mistral'])
   })
 
-  it("keeps each vault's count in step with its lockboxes, through every verb and the host's own SQL", async () => {
-    const db = await TH.emptyDatabase()
-    const vaultDB = await filledTo(db, 10, ['openai', 'anthropic'])
-    await filledTo(db, 10, [])  // a second createBundle of the same vault changes nothing
-    expect(await countedForU1(db)).to.eq(2)
-    await vaultDB.eraseBox(u1, 'openai', thisVault)
-    await vaultDB.eraseBox(u1, 'never_stored', thisVault)
-    expect(await countedForU1(db)).to.eq(1)
-    await db.query("DELETE FROM safebyok_lockboxes WHERE boxlabel = 'anthropic'")
-    expect(await countedForU1(db)).to.eq(0)
-    await vaultDB.updateBundle({ ...TH.bundleOf('u1'), unlock_epoch: 2 }, { vault_id: 'vault-id-u1', unlock_epoch: 1 })
-    expect(await countedForU1(db)).to.eq(0)
-    await vaultDB.eraseVault(u1, thisVault)
-    expect(await countedForU1(db)).to.be.null
-  })
-
   it("counts each vault apart, even one user's two", async () => {
     const db = await TH.emptyDatabase()
     const vaultDB = await filledTo(db, 1, ['openai'])
     const other = { ...u1, vaultlabel: 'other' }
     await vaultDB.createBundle({ ...TH.bundleOf('u1'), vaultlabel: 'other' })
     await vaultDB.updateBox(other, TH.boxOf('openai', 'sk-fake'), noBoxYet)
-    const { rows } = await db.query('SELECT vaultlabel, lockbox_count FROM safebyok_bundles ORDER BY vaultlabel')
-    expect(rows).to.deep.equal([{ vaultlabel: 'main', lockbox_count: 1 }, { vaultlabel: 'other', lockbox_count: 1 }])
+    await TH.expectRefusal(vaultDB.updateBox(other, TH.boxOf('anthropic', 'sk-fake'), noBoxYet), 'vault_full')
+    expect(await boxlabelsIn(vaultDB)).to.deep.equal(['openai'])
   })
 
   it("refuses as vault_full a store() its vault's own count let through, when another device filled the vault unheard", async () => {

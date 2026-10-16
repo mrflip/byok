@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Component, type ReactNode } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { VaultError, localVaultDB, memoryDeviceDB, memoryStore, openVault, type Vault } from 'safebyok'
+import { VaultError, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, openVault, type Vault } from 'safebyok'
 import { createPasskey } from '../src/passkey'
 import { PasskeyUnlockButton } from '../src/passkey-unlock-button'
 import { PassphraseModal } from '../src/passphrase-modal'
@@ -29,14 +29,17 @@ const vaultRefusing = (err: Error, credentialId: string) => ({
   unlock:          () => Promise.reject(err),
 }) as unknown as Vault
 
-/** Catches what its children throw while rendering, and shows the message. */
-class Boundary extends Component<{ children: ReactNode }, { caught: string | null }> {
+/** Catches what its children throw while rendering, and shows the message: the host's own boundary. */
+class HostBoundary extends Component<{ children: ReactNode }, { caught: string | null }> {
   override state = { caught: null as string | null }
   static getDerivedStateFromError(err: unknown) { return { caught: err instanceof Error ? err.message : 'something' } }
   override render() { return this.state.caught === null ? this.props.children : <p>caught: {this.state.caught}</p> }
 }
 
 const noop = () => undefined
+
+/** What the button tells the user when it takes itself away. */
+const PasskeyTrouble = "Your passkey can't be used here just now. Unlock with your passphrase instead."
 
 afterEach(() => {
   cleanup()
@@ -91,13 +94,43 @@ describe("PasskeyUnlockButton", () => {
     expect(vault.getSnapshot().state).to.eq('locked')
   })
 
-  it("throws misuse to the nearest error boundary", async () => {
+  it("meets misuse by taking itself away and pointing to the passphrase, reporting the very error to React", async () => {
     const { authenticator } = await lockedVaultWithPasskey()
     const [credentialId = ''] = authenticator.credentialIds()
-    const misused = vaultRefusing(new VaultError('vault_closed', 'This vault handle was closed.'), credentialId)
-    render(<Boundary><PasskeyUnlockButton vault={misused} onDone={noop} onGripe={noop} /></Boundary>)
+    const closed = new VaultError('vault_closed', 'This vault handle was closed.')
+    const gripes: string[] = []
+    const heard: boolean[] = []
+    const { reported } = TH.renderReporting(<HostBoundary><PasskeyUnlockButton vault={vaultRefusing(closed, credentialId)} onDone={(unlocked) => { heard.push(unlocked) }} onGripe={(gripe) => { gripes.push(gripe) }} /></HostBoundary>)
     fireEvent.click(screen.getByText('Use a passkey'))
-    await waitFor(() => { expect(screen.getByText('caught: This vault handle was closed.')).to.not.be.null })
+    await waitFor(() => { expect(gripes).to.deep.equal([PasskeyTrouble]) })
+    expect(screen.queryByRole('button')).to.be.null
+    expect(reported).to.deep.equal([closed])
+    expect(reported[0]).to.equal(closed)
+    expect(screen.queryByText(/caught:/)).to.be.null
+    expect(heard).to.deep.equal([])
+  })
+
+  it("meets an rpId that does not fit the page the same way: a mistake the developer meets in development", async () => {
+    const { authenticator, vault } = await lockedVaultWithPasskey()
+    authenticator.refuseNext('SecurityError')
+    const gripes: string[] = []
+    const { reported } = TH.renderReporting(<PasskeyUnlockButton vault={vault} rpId="elsewhere.example" onDone={noop} onGripe={(gripe) => { gripes.push(gripe) }} />)
+    fireEvent.click(screen.getByText('Use a passkey'))
+    await waitFor(() => { expect(gripes).to.deep.equal([PasskeyTrouble]) })
+    expect(reported).to.have.lengthOf(1)
+    expect(isVaultError(reported[0], 'bad_option')).to.be.true
+    expect(vault.getSnapshot().state).to.eq('locked')
+  })
+
+  it("meets a failure that is no VaultError the same way", async () => {
+    const { authenticator } = await lockedVaultWithPasskey()
+    const [credentialId = ''] = authenticator.credentialIds()
+    const fell = new TypeError('fell over')
+    const gripes: string[] = []
+    const { reported } = TH.renderReporting(<PasskeyUnlockButton vault={vaultRefusing(fell, credentialId)} onDone={noop} onGripe={(gripe) => { gripes.push(gripe) }} />)
+    fireEvent.click(screen.getByText('Use a passkey'))
+    await waitFor(() => { expect(gripes).to.deep.equal([PasskeyTrouble]) })
+    expect(reported).to.deep.equal([fell])
   })
 })
 
@@ -108,6 +141,39 @@ describe("PassphraseModal, for a vault with a passkey", () => {
     render(<PassphraseModal vault={vault} onDone={(unlocked) => { heard.push(unlocked) }} />)
     fireEvent.click(screen.getByText('Use a passkey'))
     await waitFor(() => { expect(heard).to.deep.equal([true]) })
+  })
+
+  it("keeps the passphrase when the passkey meets misuse: the button goes, and the dialog says why", async () => {
+    const { authenticator } = await lockedVaultWithPasskey()
+    const [credentialId = ''] = authenticator.credentialIds()
+    const closed = new VaultError('vault_closed', 'This vault handle was closed.')
+    const { reported } = TH.renderReporting(<PassphraseModal vault={vaultRefusing(closed, credentialId)} onDone={noop} />)
+    screen.getByText('Use a passkey').focus()
+    fireEvent.click(screen.getByText('Use a passkey'))
+    const said = await screen.findByRole('alert')
+    expect(said.textContent).to.eq(PasskeyTrouble)
+    expect(screen.queryByText('Use a passkey')).to.be.null
+    expect(document.activeElement).to.equal(screen.getByPlaceholderText('vault passphrase'))
+    expect(screen.queryByText('Something went wrong')).to.be.null
+    expect(reported).to.deep.equal([closed])
+  })
+
+  it("keeps the passkey's word while the user types the passphrase, until they submit", async () => {
+    const { authenticator } = await lockedVaultWithPasskey()
+    const [credentialId = ''] = authenticator.credentialIds()
+    const unlocked: string[] = []
+    const misused = { ...vaultRefusing(new VaultError('vault_closed', 'This vault handle was closed.'), credentialId), unlock: (proof: unknown) => {
+      if (typeof proof === 'string') { unlocked.push(proof); return Promise.resolve() }
+      return Promise.reject(new VaultError('vault_closed', 'This vault handle was closed.'))
+    } } as unknown as Vault
+    TH.renderReporting(<PassphraseModal vault={misused} onDone={noop} />)
+    fireEvent.click(screen.getByText('Use a passkey'))
+    await screen.findByText(PasskeyTrouble)
+    fireEvent.change(screen.getByPlaceholderText('vault passphrase'), { target: { value: 'pw' } })
+    expect(screen.queryByText(PasskeyTrouble)).to.not.be.null
+    fireEvent.click(screen.getByText('Unlock'))
+    expect(screen.queryByText(PasskeyTrouble)).to.be.null
+    await waitFor(() => { expect(unlocked).to.deep.equal(['pw']) })
   })
 
   it("offers no passkey to a user choosing the vault's first passphrase", () => {

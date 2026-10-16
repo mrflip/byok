@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { isVaultCondition, isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultError, type VaultSnapshot, type VaultValidators } from 'safebyok'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
+import { eraseDamagedVault as eraseStoredDamagedVault, isVaultCondition, isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultError, type VaultSnapshot, type VaultValidators } from 'safebyok'
 import { PassphraseModal } from './passphrase-modal'
 
 /**
@@ -11,8 +11,9 @@ export type VaultContextShape = {
   vault: Vault | null
   /**
    * Why the vault could not be opened, when it is a condition the app can show in place:
-   * storage that cannot be reached (`storage_unavailable`), a user storage will not serve
-   * (`not_permitted`), a stored record that fails verification (`corrupt_record`). Null while
+   * storage that cannot be reached (`storage_unavailable`), a user storage no longer serves
+   * (`identity_revoked`, as when signed out of the backend, or not yet signed in to it), a stored
+   * vault that fails its checks (`damaged_bundle`). Null while
    * opening, once open, and while signed out. Misuse -- a bad label or option -- never lands
    * here: the provider throws it to the nearest error boundary.
    *
@@ -26,10 +27,31 @@ export type VaultContextShape = {
    */
   retryOpen: () => void
   /**
+   * Erase the stored vault that `openError` reports as `damaged_bundle`, with the unlock this
+   * device remembers for it, and open again: a fresh, absent vault, for the user to make anew.
+   * The user's lockboxes in it are gone for good, so ask first. Resolves when the reopen is under
+   * way, and does nothing while `openError` is any other, or none. Rejects with storage's
+   * refusal if the erase fails, such as `storage_unavailable`, leaving `openError` as it was; the
+   * `safebyok` package's `eraseDamagedVault` says which refusals to expect. Two of them mean
+   * storage no longer holds the damaged vault -- `bad_option`, it reads sound now, and `stale_write`,
+   * it was made anew -- so those open again as well, and still reject.
+   *
+   * @example
+   *   if (openError?.kind === 'damaged_bundle') {
+   *     return <button onClick={() => { if (confirm('Erase your vault and start over?')) { void eraseDamagedVault() } }}>Start over</button>
+   *   }
+   */
+  eraseDamagedVault: () => Promise<void>
+  /**
    * Run an action that may need the vault unlocked. If it refuses with kind 'vault_locked', the
    * passphrase dialog opens; after a successful unlock the action runs again. Resolves null when
    * the user dismisses the dialog instead -- unambiguously for whisper reads, since a whisper is
    * never null. Only an action whose own result could be null needs to wrap it in an object.
+   * Every call settles: actions that find the vault locked while the dialog is already open wait
+   * on that same dialog, and each resolves null when the dialog goes without an unlock -- the
+   * user signs out or switches, the vault reopens, or the provider unmounts.
+   * A dialog the vault unlocks under, however that came about (an earlier, cancelled dialog's
+   * unlock finishing late, say), closes as unlocked, and the actions waiting on it run again.
    *
    * @example const whisper = await withUnlockedVault(() => vault.read('anthropic_api_key'))
    *          // whisper === null: the user dismissed the dialog
@@ -38,6 +60,9 @@ export type VaultContextShape = {
 }
 
 const VaultContext = createContext<VaultContextShape | null>(null)
+
+/** One showing of the passphrase dialog: which one, and the actions waiting on its outcome. */
+type Asking = { round: number, waiters: ((unlocked: boolean) => void)[] }
 
 /** The vault handle and withUnlockedVault, from the nearest VaultProvider. */
 export const useVault = (): VaultContextShape => {
@@ -98,7 +123,7 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
  *   </VaultProvider>
  */
 export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps) => {
-  const { applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators } = opts
+  const { applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators, whenIdentityRevoked } = opts
   // The vault reopens when a check changes, never for a bag rebuilt in render around the same ones.
   const applabelCheck = validators?.applabel
   const vaultlabelCheck = validators?.vaultlabel
@@ -106,7 +131,13 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   const userIdCheck = validators?.userId
   const noteCheck = validators?.note
   const [vault, setVault] = useState<Vault | null>(null)
-  const [asking, setAsking] = useState<{ settle: (unlocked: boolean) => void } | null>(null)
+  // The dialog showing now, if any, and the actions waiting on it. The ref is what the callbacks
+  // read, so that a dialog's outcome reaches its own waiters and no newer dialog's; the state
+  // renders it.
+  const [asking, setAsking] = useState<Asking | null>(null)
+  const askingRef = useRef<Asking | null>(null)
+  // Counts the dialog's showings, so that each is a fresh dialog with nothing kept from the last.
+  const askingRounds = useRef(0)
   // Wrapped, so that a rejection carrying any value at all (null, say) still reads as "failed".
   const [openFailure, setOpenFailure] = useState<{ err: unknown } | null>(null)
   const [openError, setOpenError] = useState<VaultError | null>(null)
@@ -120,7 +151,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     // Listed one by one so the effect re-runs on each; `satisfies` fails the build if an openVault
     // option is ever added and not passed through.
     const checks = { applabel: applabelCheck, vaultlabel: vaultlabelCheck, boxlabel: boxlabelCheck, userId: userIdCheck, note: noteCheck } satisfies Record<keyof VaultValidators, unknown>
-    const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators: checks } satisfies Record<keyof OpenVaultOpts, unknown>
+    const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators: checks, whenIdentityRevoked } satisfies Record<keyof OpenVaultOpts, unknown>
     void openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
       handle = opened
@@ -140,22 +171,73 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
       setOpenFailure(null)
       setOpenError(null)
     }
-  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt])
+  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, whenIdentityRevoked, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt])
 
   const retryOpen = useCallback(() => {
     if (openError !== null) { setOpenAttempt((prev) => prev + 1) }
   }, [openError])
+
+  const eraseDamagedVault = useCallback(async () => {
+    if (userId === null || ! isVaultError(openError, 'damaged_bundle')) { return }
+    const validators = { applabel: applabelCheck, vaultlabel: vaultlabelCheck, boxlabel: boxlabelCheck, userId: userIdCheck, note: noteCheck } satisfies Record<keyof VaultValidators, unknown>
+    try {
+      await eraseStoredDamagedVault({ applabel, vaultlabel, userId, vaultDB, deviceDB, validators })
+    } catch (err) {
+      // Storage no longer holds the damaged vault -- it reads sound now, or was made anew -- so what
+      // openError says is out of date: open again, and still tell the caller why nothing was erased.
+      if (isVaultError(err, 'bad_option') || isVaultError(err, 'stale_write')) { setOpenAttempt((prev) => prev + 1) }
+      throw err
+    }
+    setOpenAttempt((prev) => prev + 1)
+  }, [openError, userId, applabel, vaultlabel, vaultDB, deviceDB, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck])
+
+  /** Closes `ending` if it is still the dialog showing, and settles every action waiting on it. */
+  const endAsking = useCallback((ending: Asking | null, unlocked: boolean) => {
+    if (ending === null) { return }
+    if (askingRef.current === ending) {
+      askingRef.current = null
+      setAsking(null)
+    }
+    for (const settle of ending.waiters) { settle(unlocked) }
+  }, [])
+
+  /** Waits on the dialog showing now, opening one if none is. */
+  const awaitUnlock = useCallback(() => new Promise<boolean>((settle) => {
+    const { current } = askingRef
+    if (current !== null) {
+      current.waiters.push(settle)
+      return
+    }
+    askingRounds.current += 1
+    const opening = { round: askingRounds.current, waiters: [settle] }
+    askingRef.current = opening
+    setAsking(opening)
+  }), [])
+
+  // A dialog belongs to the vault it was opened over: when that handle goes -- a sign-out, another
+  // user, a reopen, the provider unmounting -- its actions resolve null, and it closes.
+  useEffect(() => () => { endAsking(askingRef.current, false) }, [vault, endAsking])
+
+  // An unlock that lands while a dialog is asking -- the first dialog's, finishing after its Cancel,
+  // or one the app made itself through the handle -- answers it: the dialog closes, and the actions
+  // waiting on it run again. Only a change is heard, never the state at the dialog's opening.
+  useEffect(() => {
+    if (vault === null) { return }
+    return vault.subscribe(() => {
+      if (vault.getSnapshot().state === 'unlocked') { endAsking(askingRef.current, true) }
+    })
+  }, [vault, endAsking])
 
   const withUnlockedVault = useCallback(async <ResultT,>(action: () => Promise<ResultT>): Promise<ResultT | null> => {
     try {
       return await action()
     } catch (err) {
       if (! isVaultError(err, 'vault_locked')) { throw err }
-      const unlocked = await new Promise<boolean>((settle) => { setAsking({ settle }) })
+      const unlocked = await awaitUnlock()
       if (! unlocked) { return null }
       return await action()
     }
-  }, [])
+  }, [awaitUnlock])
 
   // Thrown here, in render, so the nearest error boundary (or the dev overlay) shows it: misuse,
   // the developer's to fix, which no retry would mend. Every hook has run by now, so the throw
@@ -163,12 +245,13 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   if (openFailure !== null) { throw openFailure.err }
 
   return (
-    <VaultContext.Provider value={{ vault, openError, retryOpen, withUnlockedVault }}>
+    <VaultContext.Provider value={{ vault, openError, retryOpen, eraseDamagedVault, withUnlockedVault }}>
       {children}
       {asking !== null && vault !== null && (
         <PassphraseModal
+          key={asking.round}
           vault={vault}
-          onDone={(unlocked) => { setAsking(null); asking.settle(unlocked) }}
+          onDone={(unlocked) => { endAsking(asking, unlocked) }}
         />
       )}
     </VaultContext.Provider>
