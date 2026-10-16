@@ -86,7 +86,8 @@ export type StoredLockbox = { boxlabel: string, lockbox: unknown }
  * checks every adapter owes: names, scope, records and expectations on the way in, the shape of
  * every record on the way out, `stale_write` for a failed expectation, and `storage_unavailable`
  * (your own error as its `cause`) for anything you throw that is not already a VaultError.
- * Implement the `do*` methods; never override the public verbs.
+ * Implement the `do*` methods; never override the public verbs. The package's `VAULTDB.md` is the
+ * whole contract, line by line, and `describeVaultDB` (from `safebyok/testing`) tests it so.
  *
  * Each public verb takes the vault's `validators` last, as openVault was given them, and checks
  * every name and note with them, going in and coming back; left out, it checks with ours
@@ -128,9 +129,11 @@ export abstract class VaultDB {
    * no such limit: each backend sets its own, and one whose limit crosses a wire or is stored,
    * where `Infinity` cannot go, sets a large whole number instead. A vault refuses to open with a
    * `maxLockboxes` above it, with kind `bad_option`, and given none opens with the smaller of this
-   * and `MaxLockboxes`. A backend that enforces its limit refuses a new lockbox past it with
-   * a VaultError of kind `vault_full`, checked in the same atomic step as the write, and never
-   * refuses for the count a lockbox that replaces one already there.
+   * and `MaxLockboxes`. A backend with a finite limit refuses a new lockbox in a vault already
+   * holding that many with a VaultError of kind `vault_full`, writing nothing, on a best effort:
+   * writes made one after another never pass it, while writers racing for the last places may
+   * take a vault a few past (`VAULTDB.md`, lines 4.1 to 4.6). It never refuses for the count a
+   * lockbox that replaces one already there.
    */
   abstract readonly maxLockboxes: number
 
