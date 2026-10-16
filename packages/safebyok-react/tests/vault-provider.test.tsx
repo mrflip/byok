@@ -595,6 +595,22 @@ describe("VaultProvider", () => {
       expect(isVaultError(caught[0], 'bad_label')).to.be.true
     })
 
+    it("throws a validators bag with a misspelt field to the error boundary, rather than keep the default check unseen", async () => {
+      hushConsole()
+      const caught: unknown[] = []
+      const misspelt = { boxLabel: AnyTextValidators.boxlabel } as unknown as VaultValidators
+      render(
+        <CatchingBoundary caught={caught}>
+          <VaultProvider {...makeWorld().props} userId={null} validators={misspelt}>
+            <Probe />
+          </VaultProvider>
+        </CatchingBoundary>,
+      )
+      await expectShown('boundary')
+      expect(isVaultError(caught[0], 'bad_option')).to.be.true
+      expect((caught[0] as Error).message).to.include('spelling')
+    })
+
     it("throws a bad option to the error boundary, as the very VaultError", async () => {
       hushConsole()
       const caught: unknown[] = []

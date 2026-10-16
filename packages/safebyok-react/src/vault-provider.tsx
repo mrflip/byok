@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react'
-import { eraseDamagedVault as eraseStoredDamagedVault, isVaultCondition, isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultError, type VaultSnapshot, type VaultValidators } from 'safebyok'
+import { checkValidators, eraseDamagedVault as eraseStoredDamagedVault, isVaultCondition, isVaultError, openVault, type OpenVaultOpts, type Vault, type VaultError, type VaultSnapshot, type VaultValidators } from 'safebyok'
 import { PassphraseModal } from './passphrase-modal'
 
 /**
@@ -124,6 +124,8 @@ export type VaultProviderProps = Omit<OpenVaultOpts, 'userId'> & {
  */
 export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps) => {
   const { applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators, whenIdentityRevoked } = opts
+  // The bag is taken apart below, so a misspelt field would be dropped unseen: refused here, as openVault refuses it.
+  checkValidators(validators)
   // The vault reopens when a check changes, never for a bag rebuilt in render around the same ones.
   const applabelCheck = validators?.applabel
   const vaultlabelCheck = validators?.vaultlabel

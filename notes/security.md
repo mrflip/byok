@@ -777,3 +777,14 @@ security expert who knows what questions to ask.
   accepts -- bumps `format`**, so that an older build can tell newer from damaged. Where it cannot tell, it refuses: the hatch fails safe. Not routed through
   `RefusalPolicy.heed`: there is no handle to lock and no key in memory, so `whenIdentityRevoked`
   has nothing to act on, and the hatch's own last step is erasing the remembered unlock.
+* 2026-10-16: **the checks tightened, and a forgotten bag made harmless.** Every default check,
+  `AnyTextValidators` included, refuses text that is not well-formed Unicode (a lone surrogate),
+  and the default note check refuses control characters but tab and newline; a host's own schema
+  is untouched. A refusal by one of our checks now passes on that check's message, which quotes
+  nothing; a host schema's issues are still never passed on. **A `VaultDB` verb handed no
+  validators now admits any well-formed text** (`AnyTextValidators`), where it used to apply the
+  defaults: a wrapper that forgets to forward the vault's bag can no longer refuse a name the
+  vault's own checks passed. The vault passes its bag to every verb (a test spies each one); it
+  had left it off `updateBundle`, so a host with a wider `userId` check could not change a
+  passphrase. Before the change, a server calling the verbs bare got the default checks; it now
+  gets text-only checks, which is what the shipped server recipes already passed.
