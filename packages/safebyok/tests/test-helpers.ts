@@ -930,8 +930,9 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
   describe.runIf(capped)(lineTitle('4.2'), () => {
     it("refuses a new lockbox in a full vault as vault_full, writing nothing", async () => {
       const vaultDB = await cappedHolding(['anthropic', 'openai', 'mistral'])
+      const before = await standingVault(vaultDB, ['anthropic', 'openai', 'mistral', 'gemini'])
       await expectRefusal(vaultDB.updateBox(scopeOf('u1'), boxOf('gemini', 'gemini'), noBoxYet), 'vault_full')
-      expect(await vaultDB.readBox(scopeOf('u1'), 'gemini')).to.be.null
+      expect(await standingVault(vaultDB, ['anthropic', 'openai', 'mistral', 'gemini'])).to.deep.equal(before)
       const listed = await vaultDB.listBoxes(scopeOf('u1'))
       expect(listed.map((box) => box.boxlabel)).to.deep.equal(['anthropic', 'mistral', 'openai'])
     })
