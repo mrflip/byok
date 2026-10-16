@@ -30,7 +30,7 @@ const tablesOnlyDatabase = async (): Promise<PGlite> => {
     return db
   })()
   const db = await tablesOnly.db
-  await db.exec('TRUNCATE safebyok_lockboxes, safebyok_bundles; DROP TRIGGER IF EXISTS safebyok_lockboxes_capped ON safebyok_lockboxes')
+  await db.exec('TRUNCATE safebyok_lockboxes, safebyok_bundles; DROP TRIGGER IF EXISTS safebyok_lockboxes_capped ON safebyok_lockboxes; DROP FUNCTION IF EXISTS safebyok_lockboxes_capped()')
   return db
 }
 beforeAll(async () => { await tablesOnlyDatabase() }, TH.BootMs)
