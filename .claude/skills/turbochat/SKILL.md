@@ -24,17 +24,17 @@ tab that opens. With no doc in the session, birth one named for the work. Load t
 moves.
 
 * **A lead**, a few lines long, saying what each state does.
-* **The matters table**: `Your answer | State | Matter`. *Your answer* is the Coach's and starts
+* **The matters table**: `Coach answer | State | Matter`. *Coach Answer* is the Coach's and starts
   empty. *State* is a dropdown chip over one enum per doc, `State`, whose options are `drafting`,
-  `proceed`, `explain` and `elevate`, in that order; every row is born `drafting`. *Matter* is the
+  `proceed`, `explain`, `elevate`, and `noted`, in that order; every row is born `drafting`. *Matter* is the
   agents'.
 * **Elevated matters**, a table near the bottom: `Matter | Tab`, one row per elevated matter, with
   a mention chip linking its tab.
-* **Your notes**, the last table: `Note | State`, one empty row born `drafting`. It is for
+* **Coach notes**, the last table: `Note | State`, one empty row born `drafting`. It is for
   whatever the Coach wants agents to know outside any matter. The states work the same.
 
 A doc's dropdown options are append-only: an option can be neither renamed nor removed. So create
-the enum with exactly these four options, once. Changing them later means a new enum, and swapping
+the enum with exactly these five options, once. Changing them later means a new enum, and swapping
 every chip over to it.
 
 ## Writing a matter
@@ -43,10 +43,10 @@ One decision per row. Lead with a bold handle of a few words, then **one to thre
 the matter is, why it matters, and what we recommend (**Rec:**). Write in language a little less
 technical than the whiteboard's, so the Coach can answer without hunting through the files behind
 it. A row that waits on the Coach's own action rather than their word (try it on a real device,
-delete a file on their machine) starts **For you:**. Inside a cell a PR is `#N`; in chat, link it
+delete a file on their machine) starts **For coach:**. Inside a cell a PR is `#N`; in chat, link it
 in full.
 
-Agents may rewrite any *Matter* cell whenever they like. *Your answer* is the Coach's only place
+Agents may rewrite any *Matter* cell whenever they like. *Coach answer* is the Coach's only place
 to speak, and agents never edit it.
 
 When setting up, gather widely: TODO's open sections, the done and rulings notes in `human/`, the
@@ -57,18 +57,19 @@ questions, and say so in the lead.
 
 * **drafting**: the Coach's, possibly half written. Pass over it. Don't act on it or quote it; and
   if one is read by accident, that is no cause for alarm or a halt: it is simply not yet a request.
-* **proceed**: sweep the row, and act as if the Coach had said in chat what *Your answer* says
+* **proceed**: sweep the row, and act as if the Coach had said in chat what *Coach answer* says
   (when it is empty, they took the Rec). The work goes where work goes: a thread in a sprint plan,
   a TODO entry, a worker you start, a commit on an open PR. The row then leaves the table.
 * **explain**: bring in more of the explanation that already exists. Hand the matter to a cheap,
   fast subagent (`haiku`, or `sonnet` for a knotty one) with the whiteboard and `human/` files
   behind it, and more if they would help, and have it write the fuller *Matter* cell: still plain,
-  a few sentences more. Put that in, reset the chip to `drafting`, and leave *Your answer* as it
-  was. When the Coach wants it grounded further, they say so in *Your answer* ("resummarize from
+  a few sentences more. Put that in, reset the chip to `drafting`, and leave *Coach answer* as it
+  was. When the Coach wants it grounded further, they say so in *Coach answer* ("resummarize from
   the code and more of the whiteboard") and flip it to `proceed`; then that is the work.
 * **elevate**: sweep the row into a tab of its own, nested under Open Matters, and add a row to
   *Elevated matters* pointing to it. The tab is for the Coach to hand to an agent in another
   session, to discuss (below).
+* **noted**: treat this as you would **drafting**
 
 The chip is the only signal. An answer whose chip still says `drafting` is still drafting.
 
@@ -91,7 +92,7 @@ agent already working in the doc may act on flipped rows whenever it is there.
 5. **Report in chat** in a few lines: what proceeded and where it went, what was explained, what
    was elevated. Don't repeat the answers: the Coach reads them in the doc.
 
-Rows of *Your notes* flipped to `proceed` are folded in where they belong (a plan's ground rules, a
+Rows of *Coach notes* flipped to `proceed` are folded in where they belong (a plan's ground rules, a
 memory, a TODO) and swept the same way.
 
 Never ask the Coach to leave a doc comment for Claude: each one wakes the session as a full turn,
@@ -107,7 +108,7 @@ tables, so the Coach can write between the lines:
   ranges, and PRs linked in full.
 * **What's built**, **its weight** (what it costs), **what it's for**, **the options** lettered,
   **what each gives up**, and **the recommendation**.
-* **Your thoughts**: a last heading with one empty bullet, for the Coach.
+* **Coach thoughts**: a last heading with one empty bullet, for the Coach.
 
 Keep the tab true when what it describes changes (a merge, a rename): the session it is handed to
 has no other memory of it.

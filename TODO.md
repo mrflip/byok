@@ -321,7 +321,7 @@ public: `shutVaultAt` in the snapshot.
 ### 6. hash-wasm as a pluggable KDF -- built, [#74](https://github.com/mrflip/safebyok/pull/74)
 
 Depends on low-hanging-fruit thread 2 (`keyDeriver` required, so noble tree-shakes out when
-another deriver is passed). A package (`safebyok-argon2-wasm` or so) exporting one KeyDeriver
+another deriver is passed). A package (`safebyok-fastkey` or so) exporting one KeyDeriver
 over hash-wasm's Argon2id, with hash-wasm as its dependency and safebyok as a peer; the core
 keeps noble as the default in `safebyok/browser`, since it runs everywhere with no setup.
 Caveats:

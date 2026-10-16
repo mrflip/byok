@@ -65,7 +65,7 @@ describe("the main entry's tree-shaking", () => {
     expect(await bundleOf('argon2idWebV1Deriver')).to.match(Argon2Implementation)
   }, 30_000)
 
-  // A deriver over another Argon2id implementation (safebyok-argon2-wasm) checks its spec this way.
+  // A deriver over another Argon2id implementation (safebyok-fastkey) checks its spec this way.
   it("leaves Argon2id out of an app that imports only the spec check", async () => {
     const shipped = await bundleOf('parseKeyDeriverSpec')
     expect(shipped).to.include('keyDeriverSpec')
