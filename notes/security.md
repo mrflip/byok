@@ -32,9 +32,10 @@ security expert who knows what questions to ask.
   epoch 1 today: nothing replaces a vaultKey yet. Erases name no epoch. A lockbox whose epoch is
   not the bundle's reads as `damaged_lockbox`, its key never tried.
 * 2026-10-16: **the rollback check.** Each device keeps a device mark per scope in its deviceDB:
-  the vault's `vault_id` and the highest `unlock_epoch` it has seen the bundle at, raised on every
-  read of a newer bundle and after its own writes. A bundle of the same `vault_id` at a lower
-  `unlock_epoch` is refused as `rolled_back` at open, unlock, every change to the ways in, and
+  the vault's `vault_id` and the highest `unlock_epoch` and `vault_key_epoch` it has seen the
+  bundle at, raised on every read of a newer bundle and after its own writes. A bundle of the same
+  `vault_id` at a lower `unlock_epoch`, or a lower `vault_key_epoch`, is refused as `rolled_back`
+  at open, unlock, every change to the ways in, and
   every refresh, before anything is taken from it; a vault unlocked when it meets one stays as it
   stood. Its reach: only a device that saw the newer bundle, and only while its local storage
   lasts (clearing site data, a damaged mark, or another `vault_id` -- a vault made anew -- starts
@@ -42,11 +43,16 @@ security expert who knows what questions to ask.
   old, destroyed vault in place of the current one is not caught, nor is anything on a device
   that never saw the newer bundle. A mark holds one vault per scope, so storage that hands back
   another vault's bundle even once moves the mark to that vault, and an older copy of the first is
-  then taken as it stands. And `unlock_epoch` is bound into no encryption, so storage that alters
-  it -- an older bundle served under a higher epoch -- passes the check: it catches a backup
-  restored as it was, not storage set on deceiving the device. (`vault_key_epoch`, bound into
-  every envelope, is what such storage cannot raise and still have the envelopes open; the mark
-  does not hold it.) `destroy()` and `eraseDamagedVault` erase the mark. Two tabs of one device
+  then taken as it stands. `unlock_epoch` is bound into no encryption, so storage can serve an
+  older bundle under a raised `unlock_epoch`; but `vault_key_epoch` is bound into every envelope
+  and held equal to the bundle's, so storage cannot raise it on an older bundle and still have a
+  way in open, and the mark refuses one at a lower `vault_key_epoch` whatever its `unlock_epoch`:
+  a bundle from before a rotation, and with it the vaultKey the rotation replaced, is caught even
+  so. What still passes is an older bundle at the same `vault_key_epoch` under a forged higher
+  `unlock_epoch`: it can bring back only a way in `removeUnlock` dropped, which still opens only
+  the vaultKey the vault stands under, never a replaced one. The way out of a refusal is the
+  host's: it erases the device's mark (`deviceDB.eraseMark(scope)`) and opens again, taking the
+  older copy as it stands, the core README's recipe, which asks the user first. `destroy()` and `eraseDamagedVault` erase the mark. Two tabs of one device
   each read and write the mark without a lock, so a tab that read an older bundle before the
   other tab's newer one can write the mark back down: the check weakens to the older epoch. A
   bundle is held to the mark as read before the bundle itself, so a newer bundle that another tab,
