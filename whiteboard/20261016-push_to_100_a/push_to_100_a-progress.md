@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: thread 10 underway; 2 and 14 in review; 1, 3, 4, 6, 7, 8 and 11 filed; 5b cleared, cut once 4 files.
+**Status**: thread 13 underway; 2, 10 and 14 in review; 1, 3, 4, 6, 7, 8 and 11 filed; 5b cleared, cut once 4 files.
 
 ## Status
 
@@ -16,10 +16,10 @@
 | 7 | react_tidy | main | filed #129 | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | main | filed #130 | [#130](https://github.com/mrflip/safebyok/pull/130) |
 | 9 | sweep_small | top of the line | pending | |
-| 10 | secure_floor | on 4 (57cdb168) | underway | |
+| 10 | secure_floor | on 4 (57cdb168) | in review [#136](https://github.com/mrflip/safebyok/pull/136) | |
 | 11 | pg_container | main | filed #131 | [#131](https://github.com/mrflip/safebyok/pull/131) |
 | 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
-| 13 | epoch_expectation | on 4 | pending | |
+| 13 | epoch_expectation | on 4 (57cdb168) | underway | |
 | 14 | uncontrolled_fields | on 7 (3d62fc04) | in review | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 | pending: a slot | |
 
