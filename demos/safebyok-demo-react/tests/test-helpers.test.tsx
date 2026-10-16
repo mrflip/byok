@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { localVaultDB, memoryStore } from 'safebyok'
+import { localVaultDB, memoryStore, type Vault } from 'safebyok'
 import { tellKnockKnockJoke } from '../src/lib/anthropic'
 import * as TH from './test-helpers'
 
@@ -47,6 +47,21 @@ describe("makeWorld", () => {
     const vault = await world.openUnlocked()
     expect(vault.getSnapshot().state).to.eq('unlocked')
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
+  })
+})
+
+describe("makeWorld's vaults opened from outside the page", () => {
+  // These two run in order: the second looks at what the first one's test-end cleanup did.
+  let opened: Vault | null = null
+
+  it("are handed out open, to a test that opens them", async () => {
+    opened = await TH.makeWorld().open()
+    expect(opened.getSnapshot().state).to.eq('absent')
+  })
+
+  it("are closed once that test has ended", async () => {
+    if (opened === null) { throw new Error('the test before this one opens a vault') }
+    await TH.expectRefusal(opened.unlock(TH.Passphrase), 'vault_closed')
   })
 })
 

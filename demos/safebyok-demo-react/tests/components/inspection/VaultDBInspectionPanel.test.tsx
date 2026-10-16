@@ -4,10 +4,15 @@ import 'fake-indexeddb/auto'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { VaultDBInspectionPanel } from '../../../src/components/inspection/VaultDBInspectionPanel'
-import { dbStore, outage, vaultDB } from '../../../src/lib/stores'
+import { dbStore, outage, vaultDB, vaultDbInspector } from '../../../src/lib/stores'
 import * as TH from '../../test-helpers'
 
-afterEach(() => { outage.setDown(false) })
+// The panel reads module-level stores, so each test leaves them as it found them: empty.
+afterEach(async () => {
+  outage.setDown(false)
+  for (const ckey of dbStore.ckeys()) { dbStore.erase(ckey) }
+  await vaultDbInspector.wipe()
+})
 
 describe("VaultDBInspectionPanel", () => {
   it("shows the backend's vault rows as they land, ciphertext marked as such", async () => {
@@ -31,5 +36,11 @@ describe("VaultDBInspectionPanel", () => {
     expect((outageSwitch as HTMLInputElement).checked).to.be.true
     fireEvent.click(outageSwitch)
     expect(outage.isDown()).to.be.false
+  })
+
+  it("starts from empty shelves, whatever the tests before it wrote", () => {
+    render(<VaultDBInspectionPanel />)
+    expect(screen.queryByText(/margo/)).to.be.null
+    expect(screen.queryByText('🔐 ciphertext')).to.be.null
   })
 })

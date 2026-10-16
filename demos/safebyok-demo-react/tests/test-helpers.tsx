@@ -11,6 +11,7 @@ import { localVaultDB, memoryDeviceDB, memoryStore, openVault, type VaultDB, typ
 import { VaultProvider, useVault, useVaultSnapshot } from 'safebyok-react'
 import { memoryVaultOpts } from 'safebyok/testing'
 import { JokeModel } from '../src/lib/anthropic'
+import { keepToClose } from './opened-vaults'
 
 export * from 'safebyok/testing'
 
@@ -28,7 +29,8 @@ export const Passphrase = 'correct horse battery staple'
  *   fresh `localVaultDB` in memory.
  * @returns `vaultDB` and `deviceDB`, `renderInVault(ui, userId?)`, `open(userId?)`,
  *   `openUnlocked(userId?)`, unlocked with {@link Passphrase}, and `seed(whispers, userId?)`. The
- *   user is `u1` unless named.
+ *   user is `u1` unless named. Each vault `open` and `openUnlocked` hand out is closed when the
+ *   test ends, by tests/setup.ts.
  *
  * @example
  *   const world = TH.makeWorld()
@@ -43,7 +45,7 @@ export const makeWorld = ({ vaultDB = localVaultDB(memoryStore()) }: { vaultDB?:
     render(<VaultProvider {...opts} userId={userId}>{ui}</VaultProvider>)
   )
 
-  const open = (userId = 'u1') => openVault({ ...opts, userId })
+  const open = async (userId = 'u1') => keepToClose(await openVault({ ...opts, userId }))
 
   const openUnlocked = async (userId = 'u1') => {
     const vault = await open(userId)

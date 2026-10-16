@@ -2,11 +2,17 @@
 // fake-indexeddb installs an indexedDB global before the demo's stores open their shelves.
 import 'fake-indexeddb/auto'
 import { act, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { idbDeviceDB } from 'safebyok/idb'
 import { DeviceDBInspectionPanel } from '../../../src/components/inspection/DeviceDBInspectionPanel'
-import { Applabel, deviceStore } from '../../../src/lib/stores'
+import { Applabel, deviceDbInspector, deviceStore } from '../../../src/lib/stores'
 import * as TH from '../../test-helpers'
+
+// The panel reads module-level stores, so each test leaves them as it found them: empty.
+afterEach(async () => {
+  for (const ckey of deviceStore.ckeys()) { deviceStore.erase(ckey) }
+  await deviceDbInspector.wipe()
+})
 
 describe("DeviceDBInspectionPanel", () => {
   it("shows this device's remembered unlock as it lands, its localUnlockKey a handle", async () => {
@@ -21,5 +27,11 @@ describe("DeviceDBInspectionPanel", () => {
     deviceStore.write('session:safebyok_demo', '{"userId":"user_0123456789abcdef","userlabel":"margo"}')
     render(<DeviceDBInspectionPanel />)
     expect(screen.getByText(/"userlabel":"margo"/)).to.not.be.null
+  })
+
+  it("starts from empty shelves, whatever the tests before it wrote", () => {
+    render(<DeviceDBInspectionPanel />)
+    expect(screen.queryByText(/margo/)).to.be.null
+    expect(screen.queryByText('🔑 non-extractable key')).to.be.null
   })
 })
