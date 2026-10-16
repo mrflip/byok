@@ -1,6 +1,6 @@
 # Thread 14: rotation_shape (2026-10-16)
 
-Branch `20261016-rotation_shape`, PR #120, on main `cc32761`. Justify green: root 154, core 1422
+Branch `20261016-rotation_shape`, PR #120, on main `cc32761`. Justify green: root 154, core 1430
 (+22 skipped), IndexedDB 140 (+12 skipped, 1 todo), Postgres 219 (+15, 2 todo), React 111, argon2
 44, Convex 345 (+24, 2 todo), GraphQL 207 (+15, 2 todo), demo 162 (+11). `pnpm size` green with
 `everything` raised 30 to 34 kB (measured 30.5 kB; +3 kB, rounded up).
@@ -24,7 +24,7 @@ Branch `20261016-rotation_shape`, PR #120, on main `cc32761`. Justify green: roo
     shelf, `Ckeys.mark`/`isMark`; the stray sweep keeps marks). `describeDeviceDB` tests marks.
   - The rollback check in `vault.ts`: `heedMark` on every bundle read (`refresh`, create),
     `raiseMark` after the vault's own `updateBundle` (raise only: a newer mark seen meanwhile
-    stands, never a false `rolled_back`). New kind `rolled_back` (condition). `destroy()` and
+    stands, never a false `rolled_back`). The mark holds both epochs (see *Review follow-up*). New kind `rolled_back` (condition). `destroy()` and
     `eraseDamagedVault` erase the mark; `lock()` keeps it.
   - TH: `rotatedBundleOf`, `markOf`; every fixture at the new formats.
   - VOCABULARY (vaultKeyEpoch, prior vaultKey, deviceId, device mark, rolled back, rotation),
@@ -71,3 +71,23 @@ Branch `20261016-rotation_shape`, PR #120, on main `cc32761`. Justify green: roo
     `LockboxSummary.vault_key_epoch`; `VaultBundle.vault_key_epoch`/`prior_vault_key`; envelope
     fields; `describeVaultDB`'s `comparesVaultKeyEpoch`; `TH.rotatedBundleOf`, `TH.markOf`.
   - Design open question 6 (list a lockbox at an unknown epoch as damaged?) is untouched.
+
+## Review follow-up (first review: flagged)
+
+The reviewer committed four fixes, kept: the first way in's `device_id` always matches the mark
+(`64dddd7e`); a bundle is held to the mark read *before* it, so a change landing between the two
+reads is no false `rolled_back` (`e7eb447b`); the epoch `damaged_lockbox` quotes no boxlabel
+(`f9c7c850`); security.md's limits and the changeset's adapter claim (`3e7ca026`). Then, by the
+orchestrator's calls:
+
+* **S1, taken.** `DeviceMark` gains `vault_key_epoch` (still `safebyok-mark-v1`: no build has
+  written one). A bundle below either epoch the mark holds is `rolled_back`; `raiseMark` keeps the
+  higher of each. Since `vault_key_epoch` is bound into every envelope and held to the bundle's, a
+  pre-rotation bundle under a forged higher `unlock_epoch` is now caught. Still accepted, and
+  tested as such: an older bundle at the same `vault_key_epoch` under a forged `unlock_epoch`
+  (it restores only a way in `removeUnlock` dropped). Design section 3 and 8, security.md updated.
+* **S2, taken without new surface.** The refusal's message says what happened and what to do, no
+  "try again later". The way out is `deviceDB.eraseMark(scope)`, then open again: the core
+  README's *A vault rolled back*, tested as a recipe (accepting, and declining).
+* **For the Coach:** should `eraseDamagedVault`, or a sibling, accept `rolled_back` (new surface)?
+
