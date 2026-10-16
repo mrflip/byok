@@ -1,7 +1,7 @@
 # Thread 6: race_helper (2026-10-16)
 
-Branch `20261016-race_helper`, PR [#119](https://github.com/mrflip/safebyok/pull/119), stacked on
-[#114](https://github.com/mrflip/safebyok/pull/114). Justify: green -- safebyok 1435 passed, 33 skipped;
+Branch `20261016-race_helper`, PR [#119](https://github.com/mrflip/safebyok/pull/119), filed stacked on
+[#111](https://github.com/mrflip/safebyok/pull/111) (cut from #114, now on main). Justify: green -- safebyok 1435 passed, 33 skipped;
 indexeddb 139/10; postgres 221/13; graphql 208/13; convex 337/16; react 101; argon2-wasm 44; demo
 148/15; root 123. `pnpm size` green.
 
@@ -82,7 +82,29 @@ indexeddb 139/10; postgres 221/13; graphql 208/13; convex 337/16; react 101; arg
   rest on thread 11's verdict, not a test.
 * **For the Coach**:
   - **A real-Postgres CI job** -- a service container, a `pg` Pool per device -- is the only way to
-    test lines 3.x under concurrent statements. Rec: yes, as its own thread (no new dependency;
-    `pg` is already a dev dependency).
+    test lines 3.x under concurrent statements. The Coach has since put a test container for every
+    backend on TODO; this is that item's case for Postgres.
   - The 6.1 change: `postgresVaultDB` (and so GraphQL) calls once at the start of a watch. A host
     counting calls sees one more.
+  - **`vaultDBTimingChecks`'s handles are snake_case** (`rival_first_writes`), named like labels,
+    though code reads them as properties, which STYLE spells camelCase. Rec: camelCase before a
+    release; one commit.
+
+## Review follow-up
+
+* **Review** (`thread-reviewer`, verdict `fixed`), two commits on the branch:
+  - `b7b57bc7`: `makeDevices`'s and `expectRoundTripsThroughTurnstile`'s docs claimed every round
+    trip is shown to pass the turnstile; the check counts at least one pass per write, so a second
+    round trip that skips the turnstile would go unheld. Both now say so.
+  - `6859dba3`: an honesty proof that 4.5's crowd race fails an adapter whose refused racers leave
+    their lockboxes behind (no proof had shown that race failing anything).
+  - Its other findings were minor and left; none was relayed with a change asked of the code.
+* **The 6.1 behaviour change kept**, by the orchestrator's YOLO ruling.
+* **Filing** onto #111 (`606270ea`), with `--onto` from `6c8aa59`. Git's rerere replayed a stale
+  resolution into the 3.5 group of `test-helpers.ts`, reviving the one-adapter race test this
+  thread replaced; removed, the rest checked line for line against the original commit. #111
+  split Convex's suite: the `ConvexClient` half took the wiring as it stood, and the
+  `ConvexReactClient` copy in `e2e/tests/convex/` gained the same (`makeDevices`, `pushes`, the
+  wiring test). Justify at the top: safebyok 1465 passed, 33 skipped; indexeddb 143/10; postgres
+  223/13; graphql 210/13; convex 261/8; e2e 84/8; react 109; argon2-wasm 44; demo 153/15; root
+  155. `pnpm size` green. No flakes seen.
