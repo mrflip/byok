@@ -1,4 +1,4 @@
-# safebyok-argon2-wasm
+# safebyok-fastkey
 
 Argon2id through WebAssembly, as a [safebyok](../safebyok) key deriver: the same keyDeriverSpecs
 and labels as the core's pure-JavaScript deriver, the same bytes out, about four times faster.
@@ -11,7 +11,7 @@ and labels as the core's pure-JavaScript deriver, the same bytes out, about four
 ## Install
 
 ```sh
-pnpm add safebyok safebyok-argon2-wasm
+pnpm add safebyok safebyok-fastkey
 ```
 
 `safebyok` is a peer dependency, so the deriver and your app share one copy (and one `VaultError`).
@@ -24,7 +24,7 @@ Pass the deriver as `keyDeriver`, after any `browserOpts()` spread, so it wins:
 ```ts
 import { openVault } from 'safebyok'
 import { browserOpts } from 'safebyok/browser'
-import { argon2idWasmWebV1Deriver } from 'safebyok-argon2-wasm'
+import { argon2idWasmWebV1Deriver } from 'safebyok-fastkey'
 
 const vault = await openVault({ ...browserOpts(), keyDeriver: argon2idWasmWebV1Deriver, applabel: 'acme', userId, vaultlabel: 'main', vaultDB })
 ```
@@ -38,7 +38,7 @@ A spec of your own works the same way, through either implementation:
 
 ```ts
 import { Argon2idWebV1 } from 'safebyok'
-import { argon2idWasmDeriver } from 'safebyok-argon2-wasm'
+import { argon2idWasmDeriver } from 'safebyok-fastkey'
 
 const spec = { ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', memory_kib: 131_072 }
 const keyDeriver = argon2idWasmDeriver(spec)  // derives what argon2idDeriver(spec) does

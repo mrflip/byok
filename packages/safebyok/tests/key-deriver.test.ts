@@ -135,7 +135,7 @@ describe("argon2idDeriver's bounds", () => {
   })
 })
 
-// A deriver over another Argon2id implementation (safebyok-argon2-wasm) checks its spec with this,
+// A deriver over another Argon2id implementation (safebyok-fastkey) checks its spec with this,
 // so its bounds and refusals are argon2idDeriver's by construction.
 describe("parseKeyDeriverSpec", () => {
   it("hands back a host's own spec, checked", () => {

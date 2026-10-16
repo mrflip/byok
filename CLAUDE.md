@@ -116,7 +116,7 @@ pnpm changeset                     # a PR's release note; `--empty` when it need
 ## Layout
 
 * `packages/` -- the workspace packages: `safebyok` (the core), `safebyok-react` (the React
-  binding), `safebyok-argon2-wasm` (a WebAssembly key deriver), and the storage adapters
+  binding), `safebyok-fastkey` (a WebAssembly key deriver), and the storage adapters
   `safebyok-convex`, `safebyok-indexeddb`, `safebyok-postgres` and `safebyok-graphql`. A new one
   is named for what it plugs in: `safebyok-<store>` for a storage adapter, `safebyok-<framework>`
   for a binding. Each has its own `package.json`, configs, `src/` and `tests/`, and runs its own
