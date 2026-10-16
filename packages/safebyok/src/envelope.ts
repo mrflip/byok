@@ -161,9 +161,12 @@ export const openWithPassphrase = async (
   // rather than in the record's schema, which every entry point's bundle carries whole.)
   const sound = derivable.filter((envelope) => saltBytesOf(envelope.salt_b64)?.length === keyDeriver.salt_bytes)
   if (sound.length === 0) {
-    const told = unlockId === undefined
-      ? "Every passphrase of this vault is stored damaged, so none could be tried. Unlock with a passkey, if the vault has one, then add a new passphrase. The vault was left as it is."
-      : "That passphrase's way into the vault is stored damaged, so it could not be tried. Unlock another way, then remove it and add the passphrase again. The vault was left as it is."
+    if (unlockId !== undefined) {
+      throw new VaultError('damaged_unlock', "That passphrase's way into the vault is stored damaged, so it could not be tried. Unlock another way, then remove it and add the passphrase again. The vault was left as it is.")
+    }
+    const told = derivable.length < aimed.length
+      ? "Every passphrase of this vault that this package can try is stored damaged, and the others were made with a key deriver this package does not carry. Update safebyok, or open the vault where it was made. The vault was left as it is."
+      : "Every passphrase of this vault is stored damaged, so none could be tried. Unlock with a passkey, if the vault has one, then add a new passphrase. The vault was left as it is."
     throw new VaultError('damaged_unlock', told)
   }
   for (const envelope of sound) {
