@@ -37,6 +37,16 @@ const ClientCases: [string, (deployment: Deployment, subject: string | null) => 
   ['ConvexReactClient', connectReact],
 ]
 
+/**
+ * Devices over a fresh deployment, each with clients of its own whose queries and mutations pass
+ * the race's turnstile. The fake deployment runs one call at a time, as Convex's serializable
+ * transactions let a mutation behave; its limit is its own, so `maxLockboxes` asks nothing of it.
+ */
+const devicesOver = (connect: (deployment: Deployment, subject: string | null) => ConvexVaultClient): TH.MakeVaultDBDevices => (turnstile) => {
+  const deployment = deploy()
+  return () => TH.perUser((userId) => convexVaultDB(TH.throughTurnstile(turnstile, connect(deployment, userId), ['query', 'mutation']), deployment.api.safebyok))
+}
+
 for (const [clientTitle, connect] of ClientCases) {
   TH.describeVaultDB(`convexVaultDB over a ${clientTitle}`, () => {
     const deployment = deploy()
@@ -46,6 +56,14 @@ for (const [clientTitle, connect] of ClientCases) {
       const deployment = deploy()
       return (userId) => convexVaultDB(connect(deployment, userId), deployment.api.safebyok)
     },
+    makeDevices: devicesOver(connect),
+    pushes:      true,
+  })
+
+  describe(`convexVaultDB's devices over a ${clientTitle}, for the battery's races`, () => {
+    it("send every write's mutation through the race's turnstile", async () => {
+      await TH.expectRoundTripsThroughTurnstile(devicesOver(connect))
+    })
   })
 }
 
