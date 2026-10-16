@@ -5,9 +5,9 @@
  * pushes the git tags and writes the GitHub releases. What it cannot do is stage: it publishes
  * with `pnpm publish`, and our npm trusted publisher allows only `npm stage publish`.
  *
- * `check` refuses a workspace whose release would go wrong: a demo that is not private, a public
- * package missing from the lockstep `fixed` group in .changeset/config.json (or a name there that
- * is not a public package), or public packages whose versions disagree.
+ * `check` refuses a workspace whose release would go wrong: a package under demos/ or e2e/ that is
+ * not private, a public package missing from the lockstep `fixed` group in .changeset/config.json
+ * (or a name there that is not a public package), or public packages whose versions disagree.
  *
  * `stage` stages each tarball that `changeset pack` wrote into `<pack-dir>`, in dependency order,
  * and reports a git tag for each package now staged (to the file named by `CHANGESETS_OUTPUT`,
@@ -102,7 +102,7 @@ export async function listWorkspace(run: Runner): Promise<WorkspacePackage[]> {
 }
 
 /**
- * The packages a release publishes: not private, and not under demos/.
+ * The packages a release publishes: not private, and not under demos/ or e2e/.
  *
  * @param packages - The workspace's packages.
  * @param rootDir  - The workspace root.
@@ -111,11 +111,19 @@ export async function listWorkspace(run: Runner): Promise<WorkspacePackage[]> {
  * @example publicPackages(packages, '/repo').map((pkg) => pkg.name)  // => ['safebyok', 'safebyok-react']
  */
 export function publicPackages(packages: readonly WorkspacePackage[], rootDir: string): WorkspacePackage[] {
-  return packages.filter((pkg) => ! pkg.private && ! isDemo(pkg, rootDir))
+  return packages.filter((pkg) => ! pkg.private && ! isNeverReleased(pkg, rootDir))
 }
 
-function isDemo(pkg: WorkspacePackage, rootDir: string): boolean {
-  return path.relative(rootDir, pkg.path).split(path.sep)[0] === 'demos'
+/** The top-level directories whose packages are never released: the demos, and the cross-harness tests. */
+const NeverReleasedDirs = new Set(['demos', 'e2e'])
+
+/** The top-level directory of the workspace that holds `pkg`. */
+function homeDir(pkg: WorkspacePackage, rootDir: string): string {
+  return path.relative(rootDir, pkg.path).split(path.sep)[0] ?? ''
+}
+
+function isNeverReleased(pkg: WorkspacePackage, rootDir: string): boolean {
+  return NeverReleasedDirs.has(homeDir(pkg, rootDir))
 }
 
 /**
@@ -145,9 +153,9 @@ export function readFixedGroups(configPath: string): string[][] {
 export function releaseProblems(packages: readonly WorkspacePackage[], rootDir: string, fixed: readonly (readonly string[])[]): string[] {
   const publicNames = publicPackages(packages, rootDir).map((pkg) => pkg.name)
   const group = fixed.flat()
-  const demoProblems = packages
-    .filter((pkg) => isDemo(pkg, rootDir) && ! pkg.private)
-    .map((pkg) => `${pkg.name} is under demos/ but not private: a demo is never released, so give it "private": true.`)
+  const neverReleasedProblems = packages
+    .filter((pkg) => isNeverReleased(pkg, rootDir) && ! pkg.private)
+    .map((pkg) => `${pkg.name} is under ${homeDir(pkg, rootDir)}/ but not private: nothing there is ever released, so give it "private": true.`)
   const groupProblems = fixed.length > 1
     ? [`.changeset/config.json has ${String(fixed.length)} fixed groups: the public packages release in lockstep, as one group.`]
     : []
@@ -157,7 +165,7 @@ export function releaseProblems(packages: readonly WorkspacePackage[], rootDir: 
   const extra = group
     .filter((pkgname) => ! publicNames.includes(pkgname))
     .map((pkgname) => `${pkgname} is in .changeset/config.json's fixed group but is not a public workspace package: remove it, or make it public.`)
-  return [...demoProblems, ...groupProblems, ...missing, ...extra, ...versionProblems(publicPackages(packages, rootDir))]
+  return [...neverReleasedProblems, ...groupProblems, ...missing, ...extra, ...versionProblems(publicPackages(packages, rootDir))]
 }
 
 function versionProblems(pkgs: readonly WorkspacePackage[]): string[] {
