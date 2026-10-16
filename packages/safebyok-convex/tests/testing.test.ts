@@ -36,6 +36,15 @@ describe("fakeDeployment", () => {
     expect(closed).toHaveBeenCalledOnce()
   })
 
+  it("closes its clients once, however often it is closed", async () => {
+    const deployment = deploy()
+    const closed = vi.fn()
+    deployment.connectWith('u1', () => ({ close: () => { closed(); return Promise.resolve() } }))
+    await deployment.close()
+    await deployment.close()
+    expect(closed).toHaveBeenCalledOnce()
+  })
+
   it("runs the backend directly as a subject, or as no one, to arrange or inspect what is stored", async () => {
     const deployment = deploy()
     await deployment.as('u1').mutation(deployment.api.safebyok.createBundle, { bundle: TH.bundleOf('u1') })

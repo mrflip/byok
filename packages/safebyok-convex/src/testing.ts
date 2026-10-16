@@ -131,9 +131,9 @@ export class FakeDeployment<Host extends FakeHost> {
     })
   }
 
-  /** Closes every client made here, so none keeps a timer running past its test. */
+  /** Closes every client made here, so none keeps a timer running past its test; a second call closes nothing twice. */
   async close(): Promise<void> {
-    await Promise.all(this.clients.map((client) => client.close()))
+    await Promise.all(this.clients.splice(0).map((client) => client.close()))
   }
 
   private backendAs(subject: string | null): FakeBackend {
