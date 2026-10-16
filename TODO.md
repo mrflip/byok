@@ -187,9 +187,9 @@ stored and how big a vault can be. CI covers the package (`pnpm -r`). What is le
 * **Component packaging**: a publishable `dist/` with `convex.config` and the generated types
   (design.md's open question, still open), and `safebyok` as a peer (1).
 * **Rulings the sprint asked for** (`human/20261015-sprint_convex_vaultdb_done.md`): whether a
-  vault locks itself on `not_permitted` (sign-out); `destroy()` on a handle that never saw a
-  bundle resolving without erasing, and a retry after a refused `destroy()` taking the reborn
-  vault; whether the label grammar is enforced server-side; the tests' `react` dev dependency
+  vault locks itself on `not_permitted` (sign-out); ~~`destroy()`'s two edge cases~~ (moved to
+  Soonish, *`destroy()`'s edge cases*); whether the label grammar is enforced server-side; the
+  tests' `react` dev dependency
   (keep, recommended); ~~the first-emit deviation of `watchVault`~~ (ruled 2026-10-16: accepted as
   built; `whiteboard/20261014-convex/design.md` records why).
 
@@ -591,6 +591,36 @@ setup now checks at once that the host supplied one. The Coach, "soonish": "Is i
 demand there is a function of this name? do we want a generic interface to request an identity; it
 might not be through the database". Decide whether identity is a core seam (a function the host
 passes to every adapter), and what the other adapters, which take a `user_id` in the scope, do.
+
+### `destroy()`'s edge cases
+
+From the Convex sprint ([#18](https://github.com/mrflip/safebyok/pull/18)): a handle that never
+saw a bundle resolves `destroy()` without erasing, even if a vault has since appeared elsewhere, so
+"delete account" can report success while a vault stands. And after a refused `destroy()`, an
+app's automatic retry erases the vault that was made again in between. The Coach (2026-10-16):
+assess these once the contract is tight and the tests unified -- that is, against
+`packages/safebyok/VAULTDB.md` ([#107](https://github.com/mrflip/safebyok/pull/107)) and the
+shared battery ([#114](https://github.com/mrflip/safebyok/pull/114)), after the Convex tests settle
+in their home ([#111](https://github.com/mrflip/safebyok/pull/111)). First check whether big_feats
+changed either.
+
+### Lock NOW vs soft lock
+
+From [#106](https://github.com/mrflip/safebyok/pull/106): a `read()` or `use()` that started
+while the vault was unlocked still hands back its whisper if the vault locks (a sign-out, or
+`lock()`) while it waits on storage. It has always been so for `lock()`; a sign-out makes it
+likelier. The orchestrator proposed that reads check again after storage answers and refuse with
+`vault_locked`.
+
+The Coach (2026-10-16), holding it: there should be a distinction between *lock the phone, the
+goons are here* and *it's time for a password refresh*. The proposal sounds like its own race
+condition; decide what guarantee we offer, and why, before writing more code.
+
+Where it stands today: the expiry ruling (Roadmapped 5) says "in-flight work is never clawed back",
+and `lockSoon()` already gives a grace in which work started before it finishes -- the soft lock.
+`lock()` and a sign-out have no separate meaning yet. Decide: does `lock()` mean "now" (nothing
+started before it hands back a whisper after it), and if so, is a re-check after storage enough,
+or does the whisper's decryption also need to be refused once the key is gone?
 
 ### A conflict-handler hook
 

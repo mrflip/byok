@@ -451,10 +451,18 @@ The gripes line has landed, so wave 2 is cut from main now: **7, indexeddb_fixes
 
 * **Elevated**, for the Coach to take to another session: the Postgres vault cap, revocation and
   server signing, and the store base class (tabs under Open Matters).
-* **Still drafting** in Open Matters (part 2): `destroy()`'s edge cases, label grammar on the
+* **Still drafting** in Open Matters (part 2): label grammar on the
   server (the Coach: "leave alone"), the gripes session's open PRs, the two lines colliding; and,
   re-explained for the Coach, the first-emit deviation and the `openVault` subscription leak (the
   leak is already fixed on main, #61).
+* **Ruled 2026-10-16, to TODO.md** (Soonish): `destroy()`'s edge cases, assessed once the
+  contract and the unified tests settle; *Lock NOW vs soft lock*, the Coach holding #106's
+  read-after-lock re-check until the guarantee is decided.
+* **Ruled 2026-10-16, accepted**: a write returns no count (#107's departure from the manifesto;
+  the Coach: "yes, better all around").
+* **Ruled 2026-10-16**: Convex's own tests stay in `safebyok-convex`, the fake deployment shipped
+  as a test-only `safebyok-convex/testing` entry; `e2e/` keeps only the `ConvexReactClient` half
+  (#111, option b; thread 15 resumes).
 * `addPasskey`'s shape: kept as built (the Coach: "LGTM"); thread 4 records it.
 
 ## For the Coach
