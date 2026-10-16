@@ -38,38 +38,61 @@ export const Label = Z.string().check(
   Z.regex(LabelPattern, "A label is lowercase words of letters and digits joined by single underscores, starting with a letter"),
 )
 
+/**
+ * Well-formed Unicode: no surrogate standing alone, half of a character such as an emoji, as text
+ * cut off mid-character has. Such text has no UTF-8 form, and Convex requires valid Unicode. Under
+ * the `u` flag a surrogate pair reads as the one character it encodes, so `\p{Cs}` (the Unicode
+ * category of surrogates) matches only a lone one.
+ */
+const WellFormed = Z.regex(/^\P{Cs}*$/u, "Text must be well-formed Unicode, and this holds a lone surrogate: half of a character such as an emoji, as text cut off mid-character does")
+
 /** The most characters a default {@link UserId} holds (UTF-16 code units, as JavaScript counts them). */
 export const MaxUserIdChars = 100
 
 /**
  * The default check for a scope's `user_id`: the signed-in user's id from the host's own auth,
- * text of 1 to {@link MaxUserIdChars} (100) characters. Not a {@link Label}: it takes whatever
- * form the host's auth issues, colons and capitals and all, and is bounded only in length.
+ * well-formed text of 1 to {@link MaxUserIdChars} (100) characters. Not a {@link Label}: it takes
+ * whatever form the host's auth issues, colons and capitals and all, and is bounded only in length.
  * `openVault` refuses a `userId` that fails it with kind 'bad_label'; a host whose ids look
  * otherwise passes its own schema as `validators.userId`.
  *
  * @example UserId.parse('user|2fJ8:google')
  * @example UserId.safeParse('').success                // false: an empty id names no one
  * @example UserId.safeParse('u'.repeat(101)).success   // false: 100 characters at most
+ * @example UserId.safeParse('u\uD800').success          // false: half of a character
  */
 export const UserId = Z.string().check(
   Z.minLength(1, "A user_id names the signed-in user, so it can't be empty"),
   Z.maxLength(MaxUserIdChars, `A user_id is at most ${String(MaxUserIdChars)} characters`),
+  WellFormed,
 )
 
 /** The most characters a default {@link LockboxNote} holds (UTF-16 code units). */
 export const MaxNoteChars = 256
 
 /**
- * The default check for a lockbox's public note, shown beside it while the vault is locked: text
- * of at most {@link MaxNoteChars} (256) characters. Never put secret material in a note. `store()`
- * refuses a note that fails the vault's note check with kind 'bad_option'; a host that wants
- * longer notes passes its own schema as `validators.note`.
+ * A note's characters: any but the control characters (Unicode's `Cc`: C0, DEL and C1), save tab
+ * and newline. Carriage return is refused with the rest; a browser's textarea hands up newlines alone.
+ */
+const NoteChars = Z.regex(/^[\t\n\P{Cc}]*$/u, "A note holds no control characters but tab and newline")
+
+/**
+ * The default check for a lockbox's public note, shown beside it while the vault is locked:
+ * well-formed text of at most {@link MaxNoteChars} (256) characters, with no control characters
+ * but tab and newline. Never put secret material in a note. `store()` refuses a note that fails
+ * the vault's note check with kind 'bad_option'; a host that wants longer notes, or other
+ * characters, passes its own schema as `validators.note`.
  *
  * @example LockboxNote.parse('work account')
+ * @example LockboxNote.parse('work account\nrotated in March')
  * @example LockboxNote.safeParse('n'.repeat(257)).success  // false: 256 characters at most
+ * @example LockboxNote.safeParse('beep\u0007').success      // false: a control character
  */
-export const LockboxNote = Z.string().check(Z.maxLength(MaxNoteChars, `A note is at most ${String(MaxNoteChars)} characters`))
+export const LockboxNote = Z.string().check(
+  Z.maxLength(MaxNoteChars, `A note is at most ${String(MaxNoteChars)} characters`),
+  NoteChars,
+  WellFormed,
+)
 
 /**
  * A schema a host hands the vault in place of one of ours: any Zod 4 schema whose output is
@@ -129,22 +152,26 @@ export const DefaultValidators = Object.freeze({
   note:       LockboxNote,
 })
 
+/** A check for any well-formed text: each of {@link AnyTextValidators} is one of its own. */
+const anyText = () => Z.string().check(WellFormed)
+
 /**
- * Checks that admit any text at all in every field: what a host keeping labels and notes in any
- * script, of any length, may pass whole, or start from. Also what a VaultDB that hands each call
- * on to another VaultDB's public verbs passes them, its own verbs having checked every name
- * already. Frozen. Text of any kind reaches the host's UI as a name: one that shows labels from
- * others should mind what bidirectional and invisible characters can make a label look like.
+ * Checks that admit any well-formed text in every field: what a host keeping labels and notes in
+ * any script, of any length, may pass whole, or start from. Text holding a lone surrogate, half of
+ * a character, is refused, as storage such as Convex's refuses it too. A VaultDB's public verbs
+ * check with these when handed no validators. Frozen. Text of any kind reaches the host's UI as a
+ * name: one that shows labels from others should mind what bidirectional, invisible and control
+ * characters can make a label look like.
  *
  * @example openVault({ ...opts, validators: AnyTextValidators })
  * @example openVault({ ...opts, validators: { ...AnyTextValidators, userId: UserId } })
+ * @example AnyTextValidators.boxlabel.safeParse('Work: מפתח API').success  // true
+ * @example AnyTextValidators.boxlabel.safeParse('key \uD83D').success      // false: half of an emoji
  */
 export const AnyTextValidators = Object.freeze({
-  applabel:   Z.string(),
-  vaultlabel: Z.string(),
-  boxlabel:   Z.string(),
-  userId:     Z.string(),
-  note:       Z.string(),
+  applabel:   anyText(),
+  vaultlabel: anyText(),
+  boxlabel:   anyText(),
+  userId:     anyText(),
+  note:       anyText(),
 })
-
-export { EpochMillis, Whisper } from './types'

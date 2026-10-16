@@ -51,7 +51,9 @@ whenever a prop changes identity. So define a `logger` or a `clock` once, outsid
 memoize it): an object literal written in the props is a new one at every render, and reopens
 the vault each time. `validators` is the one exception: the provider watches each schema in the
 bag rather than the bag, so `validators={{ boxlabel: BoxlabelCheck }}` is fine in the props, so
-long as `BoxlabelCheck` itself is built once, at module level.
+long as `BoxlabelCheck` itself is built once, at module level. A bag with a field it does not know
+(`boxLabel`) is thrown, as `bad_option`, to the nearest error boundary, as `openVault` would refuse
+it.
 
 ## When opening fails
 

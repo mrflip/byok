@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'v
 import * as ZClassic from 'zod'
 import * as Z from 'zod/mini'
 import { ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, Lockbox, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, VaultScope, type DeviceUnlock, type PasskeyProof, type Whisper } from '../src/types'
-import { AnyTextValidators, LockboxNote, MaxUserIdChars } from '../src/validators'
+import { AnyTextValidators, LockboxNote, MaxUserIdChars, type VaultValidators } from '../src/validators'
 import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { jsonBytes, localVaultDB, type VaultDB } from '../src/vault-db'
@@ -107,7 +107,7 @@ describe("openVault", () => {
     expect(await world.stateOnOpen({ userId: 'u'.repeat(MaxUserIdChars) })).to.eq('absent')
     const overlong = `alice@example.com${'u'.repeat(MaxUserIdChars)}`
     const err = await TH.expectRefusal(world.open({ userId: overlong }), 'bad_label')
-    expect(err.message).to.include('1 to 100 characters')
+    expect(err.message).to.include('at most 100 characters')
     expect(TH.thrownText(err)).to.not.include('alice')
   })
 
@@ -1319,6 +1319,25 @@ describe("the host's validators", () => {
     const throwing = ZClassic.string().refine(() => { throw new Error('the host check fell over') })
     const vault = await world.openUnlocked('pw', { validators: { boxlabel: throwing } })
     await TH.expectRefusal(vault.store('anthropic', 'sk-fake'), 'bad_option')
+  })
+
+  it("reach every VaultDB verb the vault calls, so no write meets the defaults in their place", async () => {
+    const longUserId = ZClassic.string().min(1).max(300)
+    const world = makeWorld({ validators: { userId: longUserId }, userId: 'u'.repeat(200) })
+    const verbs = ['readBundle', 'createBundle', 'updateBundle', 'readBox', 'listBoxes', 'updateBox', 'eraseBox', 'eraseVault', 'subscribe'] as const
+    const spies = verbs.map((verb) => vi.spyOn(world.vaultDB, verb))
+    const vault = await world.openUnlocked('pw one')
+    await vault.store('anthropic', 'sk-fake')
+    expect(await vault.read('anthropic')).to.eq('sk-fake')
+    await vault.changePassphrase('pw one', 'pw two')
+    await vault.erase('anthropic')
+    await vault.destroy()
+    for (const [ii, spy] of spies.entries()) {
+      expect(spy.mock.calls.length, verbs[ii]).to.be.above(0)
+      for (const args of spy.mock.calls) {
+        expect((args.at(-1) as VaultValidators | undefined)?.userId, verbs[ii]).to.eq(longUserId)
+      }
+    }
   })
 
   it("refuse a bag holding anything but schemas, or a field the bag does not know, before storage is touched", async () => {
