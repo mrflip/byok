@@ -1,0 +1,139 @@
+# 20261015-big_feats: resolution
+
+The big_feats sprint built six items from the TODO and four amendments on top: several passphrases per vault ([#71](https://github.com/mrflip/safebyok/pull/71)), WebAssembly Argon2id ([#74](https://github.com/mrflip/safebyok/pull/74)), passkey unlock ([#76](https://github.com/mrflip/safebyok/pull/76)), the Postgres, IndexedDB and GraphQL storage packages ([#73](https://github.com/mrflip/safebyok/pull/73), [#77](https://github.com/mrflip/safebyok/pull/77), [#78](https://github.com/mrflip/safebyok/pull/78)), and the amendments ([#84](https://github.com/mrflip/safebyok/pull/84) the `unlock_epoch` rename, [#89](https://github.com/mrflip/safebyok/pull/89) the per-store lockbox limit, [#88](https://github.com/mrflip/safebyok/pull/88) unlock fixes, [#86](https://github.com/mrflip/safebyok/pull/86) docs housekeeping), with the sprint's own documents in [#79](https://github.com/mrflip/safebyok/pull/79). Gripes from its whiteboard files, its -human reports and its PRs, plus those from the sprint's Claude Doc (`raw_gripes-bigfeats_doc.md`, counted as associated too), as consolidated in `whiteboard/20261016-gripes_boogaloo/` (2026-10-16).
+
+128 gripes: 59 unresolved, 69 resolved.
+
+## Unresolved
+
+- G024 **Decide:** whether `deriveKeyBytes` refuses a salt whose length differs from the spec's (a corrupt stored salt reaches hash-wasm/noble as a plain Error) — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G176 **Decide:** whether server-side names as any text (Postgres route, `listBoxRecords`, GraphQL resolvers) is the guarantee for a host serving several clients — todo_gripes, bigfeats_doc, prs_60_80
+- G285 **Decide:** whether 1000 is the right default `maxLockboxes` for Postgres and GraphQL (big_feats recommended no practical limit) — bigfeats_doc, prs_80_main, whiteboard_gripes
+- G286 **Decide:** what the Postgres equivalent is of Convex's deployment test file (migration-like, with all its functions) — the Coach's question — bigfeats_doc
+- G300 **Decide:** keep opaque JSON for `unlocks` envelopes in the schema rather than a typed union (GraphQL has no input unions) — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G399 **Decide:** turn off `unicorn/prefer-iterator-to-array` while the lib target is ES2023 (it fights `prefer-spread`); rec off — todo_gripes, prs_60_80, humans_gripes, bigfeats_doc
+- G035 Stop the 1 GiB Argon2id refusal naming `@noble/hashes` when the wasm deriver shares the bound; let `parseKeyDeriverSpec` take `unknown` — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G036 `safebyok-argon2-wasm`: survive hash-wasm caching a failed compile (CSP refusal persists until reload); check older Safari's `'unsafe-eval'` need in real browsers — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G037 Have a security reviewer look at hash-wasm (no published audit; C compiled to wasm) — bigfeats_doc, whiteboard_gripes
+- G064 Build rotation_shape (thread 14): `vault_key_epoch`/`prior_vault_key` on bundle, epoch and random `device_id` on envelopes, epoch on lockbox, `DeviceMark` rollback check — bigfeats_doc, prs_80_main, whiteboard_gripes, humans_gripes
+- G065 Build rotation_adapters (thread 18): the `vault_key_epoch` comparison in IndexedDB, Convex, Postgres (bundle row FOR SHARE in the insert) and GraphQL — bigfeats_doc, prs_80_main, whiteboard_gripes
+- G066 Build rotation_verb (thread 19): `rotateVaultKey(keep)` with its resumable lockbox walk, reads through the prior key, fault-injecting tests — bigfeats_doc, whiteboard_gripes
+- G067 Build rotation_docs (thread 20): README "Rotating the vaultKey", adapter-author note, demo "remove and lock out" button, VOCABULARY rows, notes/security.md entries — bigfeats_doc, whiteboard_gripes
+- G068 Detect rollback: a device should refuse a bundle whose epoch went backwards (today `refresh()` takes up any changed epoch) — bigfeats_doc, prs_80_main, whiteboard_gripes
+- G069 Try passkeys on real authenticators (Chrome platform passkey, Safari, a security key), incl. addPasskey's prompt after Argon2 on slow devices/older Safari — todo_gripes, bigfeats_doc, prs_60_80, prs_80_main, humans_gripes, whiteboard_gripes
+- G070 `addPasskey`: a `lock()` during the WebAuthn prompt still lands the passkey, and a `stale_write` orphans it with no retry reusing the made passkey — prs_80_main, whiteboard_gripes
+- G071 Offer a relabel verb for `unlocklabel` (bound into the wrap, so it needs a proof) — bigfeats_doc
+- G072 Let `changePassphrase` take a passkey proof (today `bad_option`; recovery is addPassphrase then removeUnlock) if wanted — bigfeats_doc
+- G073 Plain `wrong_passphrase` beside envelopes another deriver made does not mention the deriver — prs_60_80, prs_80_main, whiteboard_gripes
+- G074 Move the envelope `salt_b64` decode check from unlock into the record schema at read (once schemas tree-shake) — prs_60_80
+- G075 Clean up envelope/vault helpers: unused `sessionKey` from seal helpers, duplicated `absent_unlock` message, an errors.ts comment promising an unthrown case (status unclear) — prs_60_80, whiteboard_gripes
+- G179 Record "label grammar on the server" in TODO's validator-guarantees section (thread 17), and move the label/user-id entries under it — bigfeats_doc, whiteboard_gripes
+- G207 Write the store base-class design in whiteboard/ and build it: a connector implements only list, replace and delete; fetch/update built on them (Coach: LGTM, design first) — todo_gripes, bigfeats_doc
+- G208 Move `listBoxRecords` into the VaultDB base, built from common verbs and overridden where one query does it (Coach yes; Postgres and GraphQL hand-write it today) — todo_gripes, bigfeats_doc, prs_60_80, humans_gripes, whiteboard_gripes
+- G209 Catch a throwing listener once in the shared `subscribe` (`reportError` where available); the core memory store lets it escape a landed write — todo_gripes, bigfeats_doc, prs_80_main, whiteboard_gripes
+- G210 Logger everywhere (Coach: ready to start): report swallowed failures to `VaultLogger` — Convex watch (`convexVaultDB` logger option), Postgres listen, GraphQL subscription, IndexedDB, React — todo_gripes, bigfeats_doc, prs_60_80, humans_gripes, whiteboard_gripes
+- G211 Decide who hands a store the logger (the vault owns it today) as part of the logger sweep — bigfeats_doc
+- G212 Offer `live: false` (or similar) in the snapshot for a "not syncing" UI when a store's watch fails — bigfeats_doc, humans_gripes
+- G213 Give the base shared refusal constructors (`storage_unavailable`, `stale_write`, `not_permitted`, `vault_full`) with a never-null cause, so adapters stop copying core messages — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G214 Make it simple to add and test a new adapter: no-op defaults only for truly optional verbs (a watch on a store that cannot push) — bigfeats_doc
+- G238 Rebuild #111 as the Coach's option (b): client-pairing tests back in `safebyok-convex` via a `/testing` entry; settle `fakeDeployment(host)` and convex-test as optional peer — bigfeats_doc, prs_80_main, whiteboard_gripes
+- G239 Write the Convex client-pairing loop bodies once (not per client), and make a coverage report measure `convex-vault-db.ts` again — bigfeats_doc, whiteboard_gripes
+- G269 Add a size-limit entry for `safebyok-indexeddb` (root `pnpm size` measures only the core and argon2-wasm) — bigfeats_doc, whiteboard_gripes
+- G270 Bring the core device-store bell up to date: post before anyone subscribes, call listeners on their own microtask — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G271 Test IndexedDB across two connections (two tabs) and transaction lifetime in a real browser; race tests share one connection — old_gripes, prs_60_80, whiteboard_gripes
+- G287 Test `safebyok-postgres` against Supabase (the section is written from docs) — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G288 Run Postgres races (overshoot, 23503, hard-cap trigger per isolation level) on a real multi-connection Postgres; PGlite runs one statement at a time — prs_60_80, prs_80_main, prs_open, whiteboard_gripes
+- G289 Route-borne bundles, lockboxes and expectations are validated server-side only as far as the core's VaultDB does (past scope and boxlabel) — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G290 `placeholderOf` throws a plain Error at module load for a column-list mistake — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G301 Export `VaultOperations` (the client's documents) from the package entry for hosts with persisted-operation allowlists — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G302 `unlock_epoch` is a GraphQL `Int` (32-bit), narrower than the core's safe integer; past 2^31 it reads as `storage_unavailable` — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G303 GraphQL validation/coercion errors carry no kind and reach the browser as retryable `storage_unavailable` — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G304 A misconfigured `vaultDBFor` crosses to the browser with its own kind, `bad_option` — bigfeats_doc, prs_60_80
+- G305 A listed record missing a non-null field crosses as `storage_unavailable` rather than `corrupt_record` — bigfeats_doc
+- G306 Mismatched client and server versions fail on an unknown field as retryable-sounding `storage_unavailable`; say they must move in step — prs_80_main, whiteboard_gripes
+- G307 Try `safebyok-graphql` with graphql 16, Apollo Server, Mercurius, graphql-ws and a real HTTP disconnect — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G332 `PasskeyUnlockButton` (like `PassphraseModal`) reads the snapshot without subscribing — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G335 Move the passkey helper out of safebyok-react into its own package if a Vue binding wants it — bigfeats_doc, whiteboard_gripes
+- G380 Helpers sweep: adapters' `refusalOf` to `TH.expectRefusal` (argon2-wasm duplicates it), plus `eventually`, `changeCounter`, `aWhile` into `safebyok/testing` — bigfeats_doc, prs_60_80, prs_80_main, whiteboard_gripes
+- G405 Size caveats: CI and `pnpm size` build the core twice; only ESM measured; size-limit's Node range vs engines `>=22` — old_gripes, bigfeats_doc, prs_60_80, whiteboard_gripes
+- G406 Fix the ci.yml comment that says the size budget covers "each way of importing the core" now that other packages are measured — bigfeats_doc
+- G411 Catch aligned-literal column drift (DDL, validators, SDL, types) that the linter misses, as after the `unlock_epoch` rename — prs_80_main
+- G465 Strike TODO.md's stale entries: "A lockbox row that breaks the listing" (#93, #115), Roadmapped 1-3 items since done (switches, Convex peer, size cap, envelopes) — todo_gripes, bigfeats_doc, whiteboard_gripes
+- G482 Add a snapshot test rendering each stored-record schema (toJSONSchema) keyed by its `format` literal, failing with "bump format" when one changes unbumped — bigfeats_doc, prs_80_main
+- G483 `perUser`'s `@example` is not a call core tests make and omits `listen`; the test `servingOnly` lets a blank `user_id` through where a server says `not_permitted` — prs_80_main, whiteboard_gripes
+- G489 The `vault_locked` message, the unlock doc and notes/security.md still say "a new passphrase" where any unlock change applies (status unclear: not re-checked) — prs_80_main
+- G494 A key pair per way in (HPKE) so rotation does not sign every other device out — NOT YET, Coach moved it to TODO — todo_gripes, bigfeats_doc, whiteboard_gripes *(deferred)*
+- G495 Lock out a lost device (every way in it added; device list, UX) and decide what may be retained to name a device under Apple/Google privacy rules — NOTYET, data stored meanwhile — todo_gripes, bigfeats_doc, prs_80_main, whiteboard_gripes *(deferred)*
+- G506 Delete the leftover worktree directories and `git worktree prune` (look first at byok-strict_configs and byok-passkey_unlock, which hold unpushed work) — Coach: the Coach will, when things settle down — gripes_1_doc, bigfeats_doc, humans_gripes, prs_80_main, old_gripes, whiteboard_gripes *(deferred)*
+
+## Resolved
+
+- G005 Correct notes/security.md's Argon2id claims (main entry imports Argon2id; noble's audit left argon2 out of scope) → corrected (PR#40, PR#86)
+- G009 Offer a faster WASM Argon2 deriver byte-identical under `argon2id_web_v1` → `safebyok-argon2-wasm` over hash-wasm, ~130 ms vs 580 ms (PR#74)
+- G010 Approve `parseKeyDeriverSpec` as a new core export → Coach: keep new public surface (Coach ruling, Sprint big_feats Rulings)
+- G011 Record hash-wasm's missing audit and unzeroed memory → noted in notes/security.md (Coach ruling; PR#86, PR#74)
+- G012 Document the wasm deriver's CSP need ('wasm-unsafe-eval'), its synchronous ~130 ms block, and that Hermes has no WebAssembly → in the package README (PR#74)
+- G013 Passkey HKDF `info` should add `vault_id` and scope → Coach "make everything verifiable"; info is the full binding (PR#97)
+- G017 Keep the epoch out of the envelope binding? → kept out by design; notes/security.md lists what stays unbound and why (PR#97)
+- G041 Make the bundle hold a list of unlock envelopes (several passphrases now, passkey and recovery later) → `unlocks`, 1..8 envelopes, with addPassphrase/removeUnlock/changePassphrase/unlock({ unlockId }) (PR#71)
+- G042 Rename `passphrase_epoch` to `unlock_epoch` across the core and every adapter (SDL included) → done, no alias or migration (PR#84)
+- G043 Should every envelope change take a proof, and may any way in prove any change? → Coach: yes, any way in proves any change (Coach ruling, Sprint big_feats Rulings)
+- G044 Should a vault always keep a passphrase (no passwordless vaults)? → Coach: yes, at least one passphrase (Coach ruling, Sprint big_feats Rulings)
+- G045 Is ~4.8 s for an un-aimed wrong passphrase at the 8-envelope cap acceptable? → Coach: leave it (Coach ruling, Sprint big_feats Rulings)
+- G046 Should a taken unlocklabel be a condition instead of `bad_label`? → Coach: leave `bad_label` (Coach ruling, Sprint big_feats Rulings)
+- G047 A bad envelope `salt_b64` and a blank proof passphrase must refuse cleanly → `corrupt_record` before any derivation; blank proof refused (PR#71)
+- G048 An aimed unlock on a vault destroyed elsewhere created a new vault → refuses `absent_unlock` (PR#71)
+- G049 Build passkey (fingerprint, security key) unlock via WebAuthn PRF → passkey envelope with HKDF-SHA256, `addPasskey`, React helpers (PR#76)
+- G050 Approve the new public surface: PasskeyEnvelope, PasskeyProof, toB64/fromB64, two error kinds, four React exports → Coach: keep (Coach ruling, Sprint big_feats Rulings)
+- G051 `addPasskey` checks its proof only after the authenticator made a passkey, orphaning it on a wrong passphrase → proof first via a maker function; Coach kept that shape (PR#88)
+- G052 `createPasskey` doc should say a dismissed fallback `get` leaves the credential → doc line added (PR#76)
+- G053 Prove a passkey envelope crosses safebyok-graphql unchanged → end-to-end test (PR#88)
+- G054 Any ways-in change should move the epoch so other devices lock → Coach ruling, built (PR#71, PR#76)
+- G055 One damaged passkey envelope made `askPasskey` fail for every passkey; a damaged envelope blocked the rest → damaged envelopes passed over, `damaged_unlock` when all are (PR#108)
+- G056 Note that removing a way in does not revoke it against an old copy of the bundle → recorded in notes/security.md (PR#71)
+- G057 What real revocation looks like; should the server sign the vaultKey? → Coach: "Yes, do (a)": rotate the vaultKey on way-in removal; no server signing (Coach ruling, PR#105)
+- G058 What rotation does with the other ways in: keep only those proven, or a key pair per way in (HPKE)? → Coach: TODO it and land best-for-now; design keeps only proven ways in (Coach ruling, Sprint big_feats Open Matters)
+- G059 Write the rotation design → whiteboard/20261016-rotation/rotation-design.md, threads 14 and 18-20 (PR#105)
+- G108 A vault that reads as corrupt (e.g. old field names) cannot be destroyed → `eraseDamagedVault` (Coach ruling, PR#115)
+- G109 Who bumps `format`? → Coach: whoever edits a stored record's schema bumps it (Coach ruling, Sprint big_feats Open Matters)
+- G189 Adapters store a record field by field, never one blob → Coach ruling, followed by Convex, Postgres, GraphQL (Coach ruling, big_feats plan)
+- G190 Each store sets its own vault limit; core offers no constant → every VaultDB declares `maxLockboxes`, openVault refuses a larger one (Coach ruling, PR#89)
+- G191 Is the app's `maxLockboxes` a guarantee? → Coach: an alarm bell; the guarantee is each store's choice, best effort (Coach ruling, PR#89, PR#107)
+- G192 Write the contract down: transactionless-friendly baseline, which layer owns versioned updates, stronger guarantees opt-in → VAULTDB.md, 26 numbered lines (PR#107)
+- G193 Listing guarantees (a LIMIT, which records, every record past the soft max) → VAULTDB.md: no limit to ask for; the listing holds every lockbox (PR#107)
+- G194 Can a backend with no atomic step keep the contract? → no; single-record CAS keeps 3.1/3.2 only, recorded (PR#107)
+- G196 Run cap tests only on stores declaring a finite limit → `makeCappedVaultDB` option (PR#107)
+- G197 Add `maxLockboxes` to `VaultDBVerbs` and `perUser` → done (PR#89)
+- G198 Give `safebyok/testing` a race helper: two writers interleaved under every schedule → `raceEveryWay`, `Turnstile`, wired for every adapter (PR#119, open)
+- G225 Keep the Convex tests' `react` dev dependency? → Coach NOTED; kept (Coach ruling, Sprint big_feats)
+- G228 A Convex deployment holding old bundles refuses the new schema until rows are deleted; say so → no back-compat before 1.0; the changeset says what a host sees (Coach ruling, PR#84)
+- G231 Where do Convex's client-pairing tests live? → Coach: (b) a `safebyok-convex/testing` entry (Coach ruling, Sprint big_feats Open Matters); also "yes" to a private e2e package (PR#111, open)
+- G260 Move `idbVaultDB` into its own package as the key-value adapter template; settle `safebyok/idb` → `safebyok-indexeddb`; `safebyok/idb` keeps `idbDeviceDB` (PR#77)
+- G261 Drop `idbVaultDB`, `inspectIdb`, `IdbShelf` from `safebyok/idb` with no shim → Coach: no back-compat, no re-export (Coach ruling, PR#77)
+- G262 Make IndexedDB `versionedUpdate`, `doEraseVault` and `doUpdateBox` single transactions (orphaned lockboxes) → every write verb one readwrite transaction, four race tests (PR#77)
+- G263 The bell's BroadcastChannel keeps a Node/Bun process alive; a throwing listener crashes Node → `unref`, listeners caught (PR#88)
+- G264 A failed write's cause can be null (`request.error` on abort) → the browser's own error kept; "failed for an unknown reason" otherwise (PR#109)
+- G265 `listBoxes` and `eraseVault` read every user's rows → key range over the vault's lockbox prefix (PR#109)
+- G267 Say that a no-backend IndexedDB vault is best-effort and lost when site data is cleared → safebyok-indexeddb README, with `navigator.storage.persist()` (PR#33, PR#77)
+- G275 Build a Postgres VaultDB over a host query function (column per field, jsonb for ciphered, RLS, one statement per verb) → `safebyok-postgres` (PR#73)
+- G276 Answer a malformed route body with 400; say a driver's `cause` can quote a failing row; PGlite `listen` docs → fixed at review (PR#73)
+- G277 A signed-in user can grow their own Postgres vault without bound → server-side `vault_full` (PR#89), then a one-statement soft cap (PR#113)
+- G278 Should Postgres guarantee `maxLockboxes` (counter, trigger, row lock, second read, serialization failures at REPEATABLE READ)? → Coach: declare and enforce best effort; lock-free counting insert, machinery removed (Coach ruling, PR#113)
+- G279 Does a one-statement counting insert meet the contract? → yes at READ COMMITTED, racers may overshoot; README names the isolation level (PR#107, PR#113)
+- G281 Offer a stronger guarantee as "vaya con dios" instructions → unsupported, tested hard-cap trigger in the README (Coach ruling, PR#113)
+- G282 The NOTIFY payload's scope is visible to any role that can LISTEN → recorded in notes/security.md (PR#73)
+- G283 The Supabase section is untested → README says so plainly (PR#99)
+- G284 Add an upgrade note for the `passphrase_epoch` to `unlock_epoch` column rename → no back-compat before 1.0; the changeset says what a host sees (Coach ruling, PR#84)
+- G294 Build a GraphQL VaultDB (server SDL + resolvers, urql client) with the kind in error extensions → `safebyok-graphql` (PR#78)
+- G295 A departed subscriber kept Postgres LISTEN alive → subscription read through a reader and cancelled (PR#78)
+- G296 Confirm `graphql` as an optional runtime peer of the server half → Coach: keep (Coach ruling, Sprint big_feats Rulings)
+- G297 If two copies of graphql load, Yoga masks every refusal → README says host and server share one copy (PR#78)
+- G298 Pin days-old dev deps `graphql-yoga`, `@graphql-tools/schema` to a release two weeks old → pinned (PR#86), then ranges under the seven-day `minimumReleaseAge` (PR#96)
+- G299 Publish `perUser` (copied between Postgres and GraphQL tests) via `safebyok/testing` → done (PR#86)
+- G318 A dialog an action opened in the commit that brought the vault was closed by the previous render's cleanup → ended in the open effect's cleanup instead (PR#118)
+- G352 "Add fingerprint" made a passkey before the passphrase was checked → asks for the passphrase first (PR#76)
+- G353 The demo's dialog tests flaked under load → `waitFor`, 5 s waits and 15 s per test; a provider race fixed (PR#99, PR#118)
+- G393 Size budgets need a rule rather than ad-hoc bumps → measured + 3 kB (≥5 kB) or +50% (min 1 kB), two significant figures, in PROCESS.md (PR#99)
+- G394 Enforce the "two weeks old" dependency rule with tooling → pnpm `minimumReleaseAge` seven days, Dependabot cooldown (Coach ruling, PR#96)
+- G450 Promote the proposed README to `packages/safebyok/README.md`, write the root README front page, and an adapter author's guide → core README, root README, VAULTDB.md and "Your own storage adapter" (PR#33, PR#77, PR#107)
+- G455 List every package and the `safebyok-<store>` naming rule in CLAUDE.md and PROCESS.md → done (Coach ruling, PR#86)

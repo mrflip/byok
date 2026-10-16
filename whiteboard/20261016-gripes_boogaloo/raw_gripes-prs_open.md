@@ -1,0 +1,49 @@
+# raw gripes: prs_open
+
+Read the body, conversation comments, reviews and inline review comments of open PRs #100, #101, #102, #103, #104, #111, #117, #119, #81 (draft), #56 (draft); reviews and inline comments were empty everywhere. Comments by mrflip on PRs are agent review reports posted under the Coach's login, so they carry no (Coach) prefix.
+
+- Merge #81 (comment width, 100 columns) last; its comment hunks conflict with every other open PR, so redo the reflow from the recipe rather than resolving conflicts — PR#81 body
+- STYLE.md says an `@example` continuation is "indented two spaces" but the rewraps use four columns from the tag; one of them should move — PR#81 body, comment by mrflip
+- Decide whether a long `// @ts-expect-error` line may stay flagged by `@stylistic/max-len` (only eslint directives are exempt; a recorded choice) — PR#81 body, comment by mrflip
+- (Coach) Decide whether to add a code-length rule, so comments trailing code past 100 columns are caught (max-len measures them as code) — PR#81 body
+- Reflow hunks of the configs ride in commit 323334a, which `verify.mjs` does not cover; they were checked by hand only — PR#81 comment by mrflip
+- Record the Coach's wider question (a generic interface to request an identity that might not go through the database) as a TODO line; it is in thread 4's PR, not #102 — PR#102 body
+- `new SafebyokComponent(component)` does not check `component`, so a forgotten `app.use(safebyok)` still fails with a bare TypeError; same pattern would suit it — PR#102 comment by mrflip
+- Convex `getUserId` is destructured off the bag, so a method relying on `this` passes the check and fails per request (predates the thread) — PR#102 comment by mrflip
+- Drop the last sentence of the Convex `bad_option` setup error, which explains the library rather than the fix — PR#102 comment by mrflip
+- Convex setup tests repeat `hostWith`'s app setup, and the build test pins exactly 9 functions so it breaks when a verb is added — PR#102 comment by mrflip
+- `checkedApiOpts`'s generic only restores the caller's type with a cast; a plain guard in `api` would do — PR#102 comment by mrflip
+- Thread file for #102 says 7 new tests while the diff adds 8 (the PR body says 11); the counts should agree — PR#102 comment by mrflip
+- Bundle-size effect of importing `VaultError` into Convex `server.ts` was measured only with esbuild, not a real `convex deploy` — PR#102 comment by mrflip
+- `stateOnOpen` in the core's `vault.test.ts` still leaves its vault open (one test counts on that watch) — PR#103 body
+- `expectRefusal` now turns away a lookalike `VaultError` from a second installed copy of the package; none in this repo, minor — PR#103 body
+- Amend the pending `20261015-thin_tests` changeset, which says `expectRefusal` checks "by name and kind rather than class", opposite of this PR — PR#103 comment by mrflip
+- `beforeNextCall`/`holdNextCall` armed twice before one call now run both errands on the first call, newest first; settle it with a queue or a doc line ("arm one call at a time") — PR#103 comment by mrflip
+- The mock branch's restore of `beforeNextCall` writes an own property that would shadow a prototype-level spy after restore (edge case) — PR#103 comment by mrflip
+- `Vault.close()` calls the adapter's unsubscribe on every close (`src/vault.ts:1169`); return early when already closed — PR#103 comment by mrflip
+- The demo's two ordered tests in `test-helpers.test.tsx` depend on running in order (`-t`, `.only` or shuffle would break them) — PR#103 comment by mrflip
+- Decide whether a forgotten `validators` bag on a `VaultDB` verb should be harmless (built) or loud (required argument, changing all nine verbs' signatures) — PR#104 body
+- Decide whether well-formedness should be a floor under a host's own schema too; a host `z.string()` still admits a lone surrogate, which Convex then refuses as `storage_unavailable` — PR#104 body
+- `AnyTextValidators` admits control characters in labels, and they reach `snapshot.boxes`; decide whether that is acceptable (for the validator-guarantees TODO) — PR#104 body
+- Stranded lockboxes: a lockbox stored with a control character in its note or a lone surrogate in its name now lists as damaged; `store()` over it writes afresh — PR#104 body
+- Test the `\p{...}` property escapes (ES2018) on Hermes; believed to work, untested — PR#104 body
+- The `validators` size budget (8.5 kB) now has 4.6 kB of slack; budgets are owned by #99 — PR#104 body
+- Map a Convex server refusal of a lone surrogate to something finer than `storage_unavailable` is not possible without matching unpublished message text; Convex's real server response was never checked — PR#104 comment by mrflip
+- `OurChecks` recognises our schemas by identity, so with two copies of the core our refusals fall back to the vaguer wording (fails safe) — PR#104 comment by mrflip
+- A `checkValidators` parse on every verb call and every `VaultProvider` render costs little; reviewer would keep both, but it is unmeasured — PR#104 comment by mrflip
+- Decide whether to keep the `ConvexClient` cases with the adapter by publishing the fake Convex deployment through a test-only entry of `safebyok-convex` (new public surface, needs a Coach's yes) — PR#111 body
+- #111 and #106 both add a Convex test over both clients; whichever lands second must add it to `e2e/tests/convex/convex-vault-db.test.ts` — PR#111 body
+- Decide whether `unlocklabel` is checked at entry only (built, deviating from the gloss's "used where the stored envelope's unlocklabel is read") — PR#117 body
+- Decide whether Convex should drop every non-safebyok error's cause (built, loses e.g. "Could not find public function" in the browser) or sniff for `ArgumentValidationError`/`ReturnsValidationError` and keep the rest — PR#117 body
+- Approve the new public surface: `Sanitizer.refusalFor` on the main entry, and the `unlocklabel` field of `VaultValidators`, `DefaultValidators`, `AnyTextValidators` — PR#117 body
+- The missing-unlocklabel refusal no longer recites the `Label` grammar since the check may be the host's, minor — PR#117 body
+- `asStorageTrouble` and the Postgres and GraphQL adapters still attach their client's error as `cause`; the sanitizer's reach there is undecided (TODO next to "Offer a pluggable sanitizer") — PR#117 body, comment by mrflip
+- A client-side Convex failure now points at deployment logs where it will not appear — PR#117 comment by mrflip
+- safebyok's own Convex refusals still carry the `ConvexError` as `cause` — PR#117 comment by mrflip
+- The two Convex storage-trouble messages are near-copies and could be unified — PR#117 comment by mrflip
+- A real Convex dev deployment's error text was never tried against the sanitizer — PR#117 comment by mrflip
+- (Coach) Decide whether to add a CI job against a real Postgres (service container, a `pg` Pool per device), the only way to test VaultDB 3.x under concurrent statements; rec yes, own thread, no new dependency — PR#119 body
+- (Coach) Decide whether to keep the 6.1 behaviour change (`postgresVaultDB` and graphql `safebyokVaultChanged` call once as a watch starts, one extra `onChange`); rec keep — PR#119 body
+- Postgres at READ COMMITTED is not covered by the race battery; its one-statement writes under concurrent connections rest on thread 11's verdict, not a test — PR#119 body
+- #111, which moves `convex-vault-db.test.ts`, will meet a small conflict with #119's two new options and test at its restack — PR#119 body
+- Core tests now take ~17 s (were ~2 s) and Convex's ~11 s (were ~5 s) because honesty proofs wait out 2 s deadlines on purpose — PR#119 body

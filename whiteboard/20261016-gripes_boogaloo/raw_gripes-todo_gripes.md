@@ -1,0 +1,123 @@
+# raw gripes: todo_gripes
+
+Read: TODO.md as on origin/main (with merged PR#115) and as on origin/20261016-docs_rulings (open PR#101), plus both PRs' TODO.md diffs. "both" means main and PR#101.
+
+- Decide whether #60's `lockSoon()` should flip the snapshot to locked at once, before the grace ends (recommend keep) — Open from second_harvest, both
+- Decide whether an unlock during the `lockSoon()` grace beats the pending timer (recommend keep) — Open from second_harvest, both
+- Decide whether the `lockSoon()` grace stays capped at 60 s (recommend keep) — Open from second_harvest, both
+- Decide whether `close()` keeps the device record and throws `vault_closed` (recommend keep) — Open from second_harvest, #60, both
+- Decide whether a lost `unlock()` (a lock won the race) rejects `vault_locked` or `stale_write` (recommend `vault_locked`) — Open from second_harvest, #55, both
+- Decide the release levels: several changesets bump minor where patch might do (recommend minor while pre-1.0) — Open from second_harvest, both
+- Decide whether lint rule `unicorn/prefer-iterator-to-array` is off while the lib target is ES2023 (recommend off) — Open from second_harvest, both
+- A clock that goes bad partway through `store`, `erase` or `changePassphrase` lets the write land, then throws from the closing refresh — Open from second_harvest, #64, both
+- A storage watch that stays broken warns on every change event, with no rate limit — Open from second_harvest, #65, both
+- A failed catch-up after a stale write is logged as "a background refresh"; fix the wording — Open from second_harvest, #65, both
+- `log` (VaultLogger) has no call site yet — Open from second_harvest, #65, both
+- A logger written inline in JSX reopens the vault on every render (the README warns about it); decide whether to guard it — Open from second_harvest, #65, both
+- `/* @__PURE__ */` on each schema would save `idbDeviceDB` about 0.5 kB — Open from second_harvest, #62, both
+- The build now lays modules out under `dist/src/`; decide whether that is wanted — Open from second_harvest, #52, both
+- The published helpers in `tests/` get the test lint rules, not `src/`'s — Open from second_harvest, #52, both
+- `makeGate`'s `prefer-promise-with-resolvers` lint disable now ships in the published code — Open from second_harvest, #52, both
+- A backward clock step erases a fresh remembered unlock — Open from second_harvest, #58, both
+- Tabs opening with different settings erase each other's remembered-unlock records — Open from second_harvest, #58, both
+- Wrap deviceDB failures at open as `storage_unavailable` — Open from second_harvest, Follow-ups, both
+- Move `tallyWatches` into `safebyok/testing`, if #52 did not already take it — Open from second_harvest, Follow-ups, both
+- (Coach) Add a `logger` option to `convexVaultDB` so the Convex adapter's failing watch (`ignoreTrouble`) reports to `VaultLogger` while `VaultDB.subscribe` keeps its shape — Open from second_harvest, "logger everywhere", both
+- (Coach) Sweep the other packages (IndexedDB device store, React binding) for swallowed failures and report each to the vault's logger; console stays the fallback — Open from second_harvest, both
+- Audit every adapter (Convex, IndexedDB, Postgres, GraphQL, core memory store) against the `VaultDB` contract — Open from big_feats, "Audit the VaultDB implementations", both
+- Move into the `TH.describeVaultDB` battery whatever each package proves by hand that is really the contract — Open from big_feats, both
+- Simplify each package's bespoke tests to what is truly its own; extra testing fine, vacuous testing not — Open from big_feats, both
+- Give `safebyok/testing` a race helper: two writers each through their own `createStore`, interleaved, asserting one lands and the other is `stale_write` — Open from big_feats, both
+- Decide how much more the abstract `VaultDB` base class carries (common error classes, no-op fallbacks, sugar methods) so each adapter writes less; under discussion in sprint Open Matters tab — Open from big_feats, both
+- A rejected Postgres `listen`, a failed GraphQL client subscription and the Convex watch go silent; they should reach the vault's logger — Open from big_feats, base-class thread, both
+- A throwing listener is dropped by IndexedDB's channel but escapes the write in the core memory store; one catch in the shared `subscribe` fixes every adapter, `reportError` where available — Open from big_feats, #88, both
+- Never use null as an error's `cause`: IndexedDB `request.error` can be null on abort; report a calm "write failed for an unknown reason" error instead — Open from big_feats, both
+- IndexedDB `listBoxes` and `eraseVault` read the whole store (every user's rows); use a key range over the scope's prefix — Open from big_feats, both
+- Revisit the IndexedDB bell's BroadcastChannel lifetime: `unref`'d since #88 but never closed — Open from big_feats, both
+- (Coach) Revisit whether Postgres should guarantee `maxLockboxes` (counter column, trigger, bundle-row lock, serialization failures in #89) or just declare a limit the vault enforces; no back-compat needed — Open from big_feats, both
+- Move `listBoxRecords` (#73, used by #78) into the `VaultDB` base class so no store writes it — Open from big_feats, both
+- Try passkeys on a real authenticator (Chrome platform passkey, Safari, a security key) once #76 merges; tested only against a fake `navigator.credentials` — Open from big_feats, both
+- Check that `addPasskey`'s proof-first order still gets the prompt on a slow device or older Safari where user activation may run out (#88) — Open from big_feats, both
+- Decide what level of e2e testing is appropriate and whether to automate the Coach's by-hand acceptance tests on real authenticators and backends — Open from big_feats, both
+- Click through the demo's passphrase dialog (`pnpm --filter safebyok-demo-react dev`: set, enter, mistype, dismiss); no agent has done it since `safebyok-react` became a built package — Sand in the sandals, both
+- Run the first real release (only the Coach can), which proves or disproves the version/bump/publish machinery — Roadmapped 1, both
+- Answer: does a staged npm version keep the `--tag` it was staged with when approved? — Roadmapped 1, npm staging questions, both
+- Answer: is the provenance statement still attached after approval of a staged publish? — Roadmapped 1, both
+- Answer: does a rejected npm stage use up its version number? — Roadmapped 1, both
+- Decide whether to use the trusted publisher's dist-tag permission, on but unused (workflow installs npm 12.2.0, which can) — Roadmapped 1, both
+- (Coach) Flip the switches before the first release: allow Actions to create PRs, the first changeset, the tag ruleset, a token for the Version PR's CI — Roadmapped 1, both
+- Deprecate `safebyok@0.0.0` once a real version is live — Roadmapped 1, both
+- Make `safebyok` a peer of `safebyok-convex` (today a dependency; two copies break `instanceof VaultError`) and give the package a publishable `dist/`, before it joins the lockstep group — Roadmapped 1, both
+- (Coach) Walk the Convex README cold in the other app as the acceptance test; what trips becomes a TODO — Roadmapped 2, both
+- Make the Convex README's "about 150" lockboxes a number the library enforces (the vault-size cap) before the Coach's walk — Roadmapped 2, both
+- Add a demo over Convex (React demo gains a Convex store beside IndexedDB) so a second device seeing a write can be clicked through — Roadmapped 2, both
+- Package the Convex component: publishable `dist/` with `convex.config` and generated types (design.md open question), `safebyok` as a peer — Roadmapped 2, both
+- Rule whether a vault locks itself on `not_permitted` (sign-out) — Roadmapped 2, Rulings the sprint asked for, both
+- Rule on `destroy()` on a handle that never saw a bundle resolving without erasing — Roadmapped 2, both
+- Rule on a retry after a refused `destroy()` taking the reborn vault — Roadmapped 2, both
+- Decide whether the label grammar is enforced server-side (Convex) — Roadmapped 2, both
+- Decide the Convex tests' `react` dev dependency (recommend keep) — Roadmapped 2, both
+- Decide the first-emit deviation of `watchVault` (recommend accept; design.md records it) — Roadmapped 2, PR#101 only (main has it ruled)
+- Reserve `whisper_codec` (default `json_v1`) in the lockbox cipher binding before release; adding it later re-encrypts every lockbox — Roadmapped 3, both
+- Reserve a bound `public` bag in the lockbox (any JSON, stable-serialized, default `{}`, no cap of its own) before release; later addition re-encrypts everything — Roadmapped 3, both
+- (Coach) Say yes or no to dropping `note` for a bound `public` bag (recommended, awaiting the Coach's word); alternative is label-only and hosts keep their own table — Roadmapped 3, both
+- Build the vault size cap: `maxVaultBytes` on the adapter (Convex 8 MiB), `openVault` refuses `bad_option` when `maxLockboxes` x `maxWhisperBytes` exceeds it, `vault_full` at the cap — Roadmapped 3, low-hanging-fruit thread 1, both
+- Make `keyDeriver` required in `openVault` before 0.1.0 (low-hanging-fruit thread 2) — Roadmapped 3, surface names, both
+- Rename `rememberForMs` to `forcePassphraseReentryHours` and the snapshot's `expiresAt` to `askPassphraseAt` before 0.1.0 — Roadmapped 3, both
+- Promote `whiteboard/20261013-relic/proposed-README.md` to `packages/safebyok/README.md`, corrected to the built surface (error table, `safebyok/browser`, screen-lock recipe, no-recovery warning) — Roadmapped 4, both
+- Write the root README as front page: what it is, package table (core, react, convex), where to start — Roadmapped 4, both
+- Write an adapter author's guide: `VaultDB` verbs, the two that vary by store family, the shared test suite, `maxRecordBytes`, what an adapter must never log — Roadmapped 4, both
+- Refresh `notes/security.md`: mid-rename entries (release trigger, `rememberForMs`), `versionedUpdate` atomicity per adapter, the Convex tables — Roadmapped 4, both
+- Check VOCABULARY.md line by line against the exports — Roadmapped 4, both
+- Build natural expiry's timer: `shutVaultAt` = `askPassphraseAt` + 60 s via `shutAfter()` in `vault.ts`, armed from `takeUpUnlock` and `rememberedUnlock` — Roadmapped 5, both
+- Settle that `setTimeout` holds at most 2^31-1 ms (24.8 days), so a longer unlock window must re-arm or arm only once within reach — Roadmapped 5, both
+- Settle that `ensureUnlocked()` drops an expired key itself today and the timer would take that over — Roadmapped 5, both
+- Add a `notes/security.md` entry for the expiry timer; `shutVaultAt` is not yet public in the snapshot — Roadmapped 5, both
+- Type a host's label policy as `Z.core.$ZodType` so classic and mini schemas both fit — Roadmapped 7 (zod/mini), tied to Pluggable label validator, both
+- Build the pluggable stringifier (`JSON.stringify`, stable, identity bytes-in-bytes-out, padded versions) with padding by PADME or power-of-two buckets, 64-byte minimum — Soonish, both
+- Decide whether `maxWhisperBytes` measures padded or unpadded size (recommend unpadded) — Soonish, Pluggable stringifier and padding, both
+- Survey where standard payloads land (API keys, OAuth tokens, service-account JSON, RSA PKCS#8 1704/3272/6392 bytes) so no kind sits alone in a padding bucket — Soonish, both
+- Keep the security note on ciphertext length until the stringifier and padding land — Soonish, both
+- Build a pluggable label validator, likely an `openVault` option with `parseLabel` as default, paired with a label-tuple stringifier that handles `:` in ckeys — Soonish, Pluggable label validator, #35, both
+- Give `VaultScope.user_id` a replaceable default validation (length cap, no control characters, whatever the ckey stringifier needs); decide together with the label validator — Soonish, Validating the user id, both
+- Decide whether the listing skips a bad lockbox row or lists it as damaged so `erase()` can remove it; a row failing the check makes `listBoxes`/`refresh()`/`openVault` throw `corrupt_record` — Soonish, #87, both
+- `erase()` should not report `corrupt_record` after its own delete landed because a different box broke the follow-up refresh — Soonish, both
+- Decide the API for a conflict-handler hook (an `openVault` option, a snapshot field, or a provider-surfaced error) for erase-versus-update collisions after the retry limit; wait for #44 retry in anger — Soonish, both
+- Add i18n string helpers: let a host supply its own strings and locale; decide one messages bag on `VaultProvider` or per-component props — Soonish, Others, both
+- Identify and pin minimum platform support (oldest browsers, Node 22 today, Bun, React Native/Hermes `Intl`); CI checks it and the README states it — Soonish, Others, both
+- Provide built-as-a-whole recommended KDFs and functions to roll your own, following #68's `argon2idDeriver(spec)`, replacing the question of RFC 9106's second option — Soonish, Others, both
+- Decide whether the Dependabot changeset gate (#72) should recognize a Dependabot PR other than by its author — Soonish, CI questions left by #72, both
+- Decide the release workflow skipping by the `changeset-release/` branch name (predates #72) — Soonish, CI questions, both
+- The runtime-dependency comparison skips removed or made-private packages, `peerDependenciesMeta` and `bundledDependencies` — Soonish, CI questions, both
+- `justify:root` is defined and never used — Soonish, CI questions, both
+- In `justify`, a build failure skips every package's tests, not only its own — Soonish, CI questions, both
+- `safebyok-convex`'s `./test` entry imports a devDependency — Soonish, CI questions, both
+- Style guide audit: a few comment lines exceed 100 columns — Soonish, Others, both
+- Write the table of what each validator guarantees: which job (database limits, canary, real constraint), where (client/server/both), when (read, send, write, entry); then check each check's placement — Soonish, validators question, PR#101 only
+- Decide the label and user-id validators together with that table (Pluggable label validator, Validating the user id are the same question) — Soonish, PR#101 only
+- Revisit refused text reaching `snapshot.boxes` (damaged labels shown with that name, #93): cap or hide such labels, or an opaque erase handle, if the table says otherwise; Coach said "no changes" for now — Soonish, PR#101 only
+- Decide whether the default note check's refusal of control characters (#104; tab and newline allowed) is the right guarantee, and where else it must hold: server, listing, host validator — Soonish, PR#101 only
+- Verify Convex's actual refusal text for lone surrogates in a stored string (convex-test admits them), the reason `UserId`, `LockboxNote` and `AnyTextValidators` refuse them (#104) — Soonish, PR#101 only
+- Decide whether well-formed text should be a floor under a host's own validator too; a host's `z.string()` still admits a lone surrogate which Convex refuses (#104) — Soonish, PR#101 only
+- `AnyTextValidators` admits control characters in labels and they reach `snapshot.boxes` (#104); decide whether to fix — Soonish, PR#101 only
+- Decide whether "any well-formed text" is the right guarantee for a bare `VaultDB` verb called without a validators bag, which loses the label grammar and note length cap (#104) — Soonish, PR#101 only
+- Decide whether server-side names as any text (Postgres route recipe, `listBoxRecords`, GraphQL resolvers via `AnyTextValidators`, browser decides, #95) is the guarantee for a host serving several clients — Soonish, PR#101 only
+- `unlocklabel` has no validator slot (#95): host validators cannot reach it and the `Label` grammar is enforced only when a way in is added; decide — Soonish, PR#101 only
+- (Coach) Decide whether to group error messages: one refusal can name several offending values (lone surrogates) and a host should hear them together; policy machine (`identity_revoked`) coming in another thread — Soonish, "Group error messages?", PR#101 only
+- (Coach) Close the `store()`-over-a-damaged-box race (#93) with a revision-checked erase in the `VaultDB` contract; Coach: "TODO it", at the contract tightening party once all adapters share a test suite — Soonish, PR#101 only
+- (Coach) Decide whether the Convex component should demand a host function named `getUserId`, or whether identity is a core seam passed to every adapter (others take `user_id` in the scope); "soonish" — Soonish, PR#101 only
+- Lock out a device: build the UX and a device list for locking out a lost or compromised device, passkeys removed, remembered unlock void — Not yet, main only (PR#115)
+- Decide whether a key pair per way in is wanted so rotation does not sign every other device out (rotation design's open question 1) — Not yet, Lock out a device, main only (PR#115)
+- Record a random `device_id` per vault per device (never derived from the device) on every envelope it adds, in with rotation — Not yet, Lock out a device, main only (PR#115)
+- Build a pluggable conflict handler for weird cases, e.g. a lockbox too damaged to know its epoch versus a healthy store request; today the vault decides — Not yet, both
+- Recovery keys: a second high-entropy envelope in the envelope list; waits on the host's UX (show the code once, warning, use flow) — Not yet, both
+- React Native: a WebCrypto shim for `crypto.subtle` AES-GCM, `getRandomValues`, `randomUUID` (react-native-quick-crypto or similar) — Not yet, RN refactor, both
+- React Native: a DeviceDB over secure store/keychain holding the localUnlockKey as bytes imported non-extractable, with a `notes/security.md` entry — Not yet, both
+- React Native: a native Argon2 binding behind the `argon2id_web_v1` label, since Hermes has no WebAssembly — Not yet, both
+- React Native: check that no core path needs IndexedDB, BroadcastChannel or TextDecoder where Hermes lacks them — Not yet, both
+- Add a sub-millisecond tiebreaker field beside each timestamp (monotonic or random), bound only where present — Not yet, both
+- Build `maskCarefully`: keep at most one or two combining marks per base character (Devanagari, Thai, Tamil, Bengali, Khmer), drop orphaned marks at a cut edge (#37) — Not yet, both
+- A PBKDF2 key deriver: native and fast but not memory-hard; if packaged, its own package with the iteration count in the label — Not yet, both
+- Build a finer unlock race analyser telling a lock the user meant from one that merely fell due (e.g. seven-day deadline) while typing the passphrase — Not yet, both
+- If the eslint configs cut from `packages/safebyok/eslint.config.mjs` drift enough to cause an uncaught bug, write a generator script to keep them in sync — RAGEBAIT, both
+- If `store()` retry/backoff (`retryStale`, `retryDelayMs` in `vault.ts`) grows, take `p-retry` or `exponential-backoff` rather than growing the hand-written one (#45) — RAGEBAIT, both

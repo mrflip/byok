@@ -1,0 +1,158 @@
+# 20261016-todo: resolution
+
+The old `TODO.md`, split on 2026-10-16 into `20261016-todo-open.md` (entries still open, to be triaged back into `TODO.md` and `NOTYET.md`) and `20261016-todo-resolved.md` (entries settled). Gripes from its whiteboard files, its -human reports and its PRs, as consolidated in `whiteboard/20261016-gripes_boogaloo/` (2026-10-16).
+
+147 gripes: 81 unresolved, 66 resolved.
+
+## Unresolved
+
+- G023 **Decide:** drop `note` for a reserved, bound `public` bag (any JSON, default `{}`), or keep label-plus-note and let hosts keep their own table — todo_gripes, old_gripes, whiteboard_gripes
+- G061 **Decide:** whether `unlocklabel` is checked only where a way in is added (built), not where a stored envelope's label is read; rec entry-only — gripes_1_doc, todo_gripes, prs_open, whiteboard_gripes
+- G115 **Decide:** #60's four `lockSoon()` calls (snapshot flips at once, unlock in grace wins, 60 s cap, `close()` throws `vault_closed`) and #55's `vault_locked` for a lost unlock; rec keep — todo_gripes, prs_60_80, humans_gripes, whiteboard_gripes
+- G116 **Decide:** `destroy()` on a handle that never saw a bundle resolving without erasing, a retry after a refused `destroy()` taking the reborn vault, and `destroy()` needing no unlock — todo_gripes, old_gripes, humans_gripes, whiteboard_gripes
+- G118 **Decide:** group several offending values into one refusal ("Group error messages?"); Coach said fine-grained until there are too many — todo_gripes, whiteboard_gripes
+- G172 **Decide:** write the table of what each validator guarantees (database limit, canary, constraint; client/server; read/send/write/entry) and place each check by it — todo_gripes, whiteboard_gripes
+- G173 **Decide:** re-examine the validators interface: deposit validators on a dispatch object built once instead of passing a bag per verb; should a bare verb refuse or admit — prs_open, humans_gripes, whiteboard_gripes
+- G174 **Decide:** whether well-formed text is a floor beneath a host's own schema too (a host `z.string()` admits a lone surrogate Convex then refuses) — todo_gripes, prs_open, whiteboard_gripes
+- G175 **Decide:** whether `AnyTextValidators` admitting control characters in labels (which reach `snapshot.boxes`) is acceptable — todo_gripes, prs_open
+- G176 **Decide:** whether server-side names as any text (Postgres route, `listBoxRecords`, GraphQL resolvers) is the guarantee for a host serving several clients — todo_gripes, bigfeats_doc, prs_60_80
+- G177 **Decide:** whether the note's control-character rule must also hold on the server, in the listing, and under a host validator — todo_gripes
+- G475 **Decide:** approve #117's new public surface: `Sanitizer.refusalFor` on the main entry and the `unlocklabel` field of the validator bags — prs_open
+- G232 **Decide:** keep dropping every foreign Convex error's cause (built), or sniff `ArgumentValidationError`/`ReturnsValidationError` and keep the rest; rec drop all — gripes_1_doc, prs_open, whiteboard_gripes
+- G233 **Decide:** demand a host function named `getUserId`, or make identity a core seam every adapter takes (it may not go through the database); "soonish" — todo_gripes, prs_open, whiteboard_gripes, old_gripes
+- G234 **Decide:** the demo over Convex needs a deployment and an auth story for `getUserId`, both the Coach's to choose — todo_gripes, old_gripes, humans_gripes, whiteboard_gripes
+- G322 **Decide:** guard a `logger` (or validators) written inline in JSX that reopens the vault every render, beyond the README warning — todo_gripes, prs_60_80, humans_gripes, whiteboard_gripes
+- G373 **Decide:** what level of e2e testing is appropriate, and whether to automate the Coach's by-hand acceptance tests on real authenticators and backends — todo_gripes
+- G399 **Decide:** turn off `unicorn/prefer-iterator-to-array` while the lib target is ES2023 (it fights `prefer-spread`); rec off — todo_gripes, prs_60_80, humans_gripes, bigfeats_doc
+- G435 **Decide:** release levels: several changesets bump minor where patch might do (adding `lockSoon`/`reentryWindowMs` breaks hosts' `Vault` fakes); rec minor pre-1.0 — todo_gripes, prs_60_80, humans_gripes
+- G025 Reserve `whisper_codec` (default `json_v1`) and `whisper_schema_version` (default 1) in the lockbox record and its binding; Convex schema widens with them — todo_gripes, old_gripes, whiteboard_gripes, humans_gripes
+- G026 Build padding: a pluggable stringifier padding serialized JSON inside the encryption (PADME or power-of-two buckets, 64-byte minimum) — todo_gripes, old_gripes
+- G027 Survey standard payload sizes (API keys, OAuth tokens, service-account JSON, PKCS#8 keys) so no kind sits alone in a padding bucket — todo_gripes
+- G028 Ship built-as-a-whole recommended KDF configurations plus functions to roll your own, following `argon2idDeriver(spec)` — todo_gripes, humans_gripes, prs_60_80, whiteboard_gripes
+- G029 Reserve a label namespace for supplied KDF specs (refuse host labels like `argon2id_web_*`) — humans_gripes, prs_60_80, whiteboard_gripes
+- G030 Run the Argon2id schema at `openVault` for any hand-built deriver declaring `algorithm: 'argon2id'`, so an unrunnable spec fails with a kind, not at unlock — humans_gripes, prs_60_80, whiteboard_gripes
+- G031 Split the `KeyDeriver` type by algorithm (today `Partial<KeyDeriverSpec>` gives every deriver Argon2id's fields) before 1.0 — humans_gripes, prs_60_80, whiteboard_gripes
+- G032 Zero the passphraseKey bytes after `importKey` in `unlock()` and `changePassphrase()` — prs_60_80, whiteboard_gripes
+- G064 Build rotation_shape (thread 14): `vault_key_epoch`/`prior_vault_key` on bundle, epoch and random `device_id` on envelopes, epoch on lockbox, `DeviceMark` rollback check — bigfeats_doc, prs_80_main, whiteboard_gripes, humans_gripes
+- G065 Build rotation_adapters (thread 18): the `vault_key_epoch` comparison in IndexedDB, Convex, Postgres (bundle row FOR SHARE in the insert) and GraphQL — bigfeats_doc, prs_80_main, whiteboard_gripes
+- G066 Build rotation_verb (thread 19): `rotateVaultKey(keep)` with its resumable lockbox walk, reads through the prior key, fault-injecting tests — bigfeats_doc, whiteboard_gripes
+- G067 Build rotation_docs (thread 20): README "Rotating the vaultKey", adapter-author note, demo "remove and lock out" button, VOCABULARY rows, notes/security.md entries — bigfeats_doc, whiteboard_gripes
+- G069 Try passkeys on real authenticators (Chrome platform passkey, Safari, a security key), incl. addPasskey's prompt after Argon2 on slow devices/older Safari — todo_gripes, bigfeats_doc, prs_60_80, prs_80_main, humans_gripes, whiteboard_gripes
+- G124 Build natural expiry's timer: shut at `askPassphraseAt` + 60 s, re-armed within setTimeout's 2^31-1 ms reach, taking over from `ensureUnlocked()`, with a security note — todo_gripes, prs_60_80, whiteboard_gripes
+- G127 A clock that goes bad mid `store()`/`erase()`/`changePassphrase()` lets the write land, then throws `bad_option` from the closing refresh — todo_gripes, prs_60_80, humans_gripes, whiteboard_gripes
+- G128 A backward clock step erases a fresh remembered unlock — todo_gripes, humans_gripes, whiteboard_gripes
+- G129 Tabs opening with different settings erase each other's remembered-unlock records — todo_gripes, humans_gripes, whiteboard_gripes
+- G130 Wrap a `deviceDB.readUnlock` failure at open as `storage_unavailable` so it reaches `openError`, not the error boundary — todo_gripes, prs_60_80, humans_gripes, whiteboard_gripes
+- G134 Logger leftovers: rate-limit warnings from a watch on broken storage; log a failed catch-up after `stale_write` as such, not "a background refresh" — todo_gripes, prs_60_80, humans_gripes, whiteboard_gripes
+- G135 Give `VaultLogger.log` a call site, or stop requiring it — todo_gripes, prs_60_80, humans_gripes, whiteboard_gripes
+- G141 Design the conflict-handler hook for erase-versus-update collisions after the retry limit (Coach: comes with the retry work, which exists) — todo_gripes, old_gripes, whiteboard_gripes
+- G179 Record "label grammar on the server" in TODO's validator-guarantees section (thread 17), and move the label/user-id entries under it — bigfeats_doc, whiteboard_gripes
+- G180 Verify Convex's real refusal text for a lone surrogate in a stored string (convex-test admits it) — todo_gripes, prs_open, whiteboard_gripes
+- G207 Write the store base-class design in whiteboard/ and build it: a connector implements only list, replace and delete; fetch/update built on them (Coach: LGTM, design first) — todo_gripes, bigfeats_doc
+- G208 Move `listBoxRecords` into the VaultDB base, built from common verbs and overridden where one query does it (Coach yes; Postgres and GraphQL hand-write it today) — todo_gripes, bigfeats_doc, prs_60_80, humans_gripes, whiteboard_gripes
+- G209 Catch a throwing listener once in the shared `subscribe` (`reportError` where available); the core memory store lets it escape a landed write — todo_gripes, bigfeats_doc, prs_80_main, whiteboard_gripes
+- G210 Logger everywhere (Coach: ready to start): report swallowed failures to `VaultLogger` — Convex watch (`convexVaultDB` logger option), Postgres listen, GraphQL subscription, IndexedDB, React — todo_gripes, bigfeats_doc, prs_60_80, humans_gripes, whiteboard_gripes
+- G213 Give the base shared refusal constructors (`storage_unavailable`, `stale_write`, `not_permitted`, `vault_full`) with a never-null cause, so adapters stop copying core messages — bigfeats_doc, prs_60_80, whiteboard_gripes
+- G214 Make it simple to add and test a new adapter: no-op defaults only for truly optional verbs (a watch on a store that cannot push) — bigfeats_doc
+- G242 The Coach walks the Convex README cold in another app as the acceptance test; what trips becomes a TODO — todo_gripes, old_gripes
+- G249 Make the `./test` entry stop assuming Vite/vitest (`import.meta.glob`) and importing devDependency `convex-test`; stop wrappers restating validators — old_gripes, todo_gripes, prs_60_80, whiteboard_gripes
+- G257 Sanitizer leftovers: safebyok's own Convex refusals still carry the `ConvexError` as cause; the two storage-trouble messages are near-copies; a client-side failure points at deployment logs — prs_open
+- G323 Add i18n string helpers: a host supplies its own strings and locale (one messages bag on VaultProvider or per-component props); sentence frames are English literals — todo_gripes, gripes_1_doc, prs_80_main, whiteboard_gripes
+- G356 Click through the demo's passphrase dialog in a real browser (set, enter, mistype, dismiss); no one has since safebyok-react became a built package — todo_gripes, old_gripes, humans_gripes, whiteboard_gripes
+- G408 Build layout: modules land under `dist/src/`; published helpers in `tests/` get test lint rules; `makeGate`'s lint disable ships; no source maps — todo_gripes, humans_gripes, whiteboard_gripes
+- G409 Add `/* @__PURE__ */` to each schema to save `idbDeviceDB` ~0.5 kB — todo_gripes, prs_60_80, humans_gripes, whiteboard_gripes
+- G413 In the root `test`, a build failure skips every package's tests, not only its own — todo_gripes, prs_60_80, whiteboard_gripes
+- G417 Identify and pin minimum platform support (oldest browsers, Node 22, Bun, Hermes `Intl` and `\p{}` escapes); CI checks it and the README states it — todo_gripes, prs_open, prs_80_main, whiteboard_gripes
+- G439 Deprecate `safebyok@0.0.0` (npm shows it not deprecated) — todo_gripes, old_gripes, whiteboard_gripes
+- G441 Find out whether a staged version keeps its `--tag` on approval (a non-`latest` tag never tried) — todo_gripes, old_gripes, humans_gripes
+- G445 Decide whether to use the trusted publisher's dist-tag permission (on, unused) — todo_gripes
+- G446 Tighten the Version PR changeset skip, which trusts the `changeset-release/` branch name (needs the App's bot login) — todo_gripes, prs_60_80, humans_gripes, whiteboard_gripes
+- G447 Make the Dependabot changeset gate check every commit is Dependabot's, not only the PR author — todo_gripes, prs_60_80, humans_gripes, whiteboard_gripes
+- G448 Give Dependabot runtime-dependency PRs their changeset without the Coach (today they fail CI until one is pushed, then stop rebasing) — prs_80_main, prs_60_80, humans_gripes, whiteboard_gripes
+- G449 `runtime-deps.ts` does not compare a removed/privatized package, `peerDependenciesMeta` or `bundledDependencies` — todo_gripes, prs_60_80, whiteboard_gripes
+- G465 Strike TODO.md's stale entries: "A lockbox row that breaks the listing" (#93, #115), Roadmapped 1-3 items since done (switches, Convex peer, size cap, envelopes) — todo_gripes, bigfeats_doc, whiteboard_gripes
+- G336 `safebyok-vue`: a `shallowRef` plus `onScopeDispose` binding, so Nuxt hosts get a store — side quest, "not needed yet" — old_gripes, todo_gripes *(deferred)*
+- G492 Recovery keys: a second high-entropy envelope, waiting on the host's UX (show once, warn, use flow) — NOT YET — todo_gripes, old_gripes *(deferred)*
+- G493 A PBKDF2 key deriver (native, fast, not memory-hard), its own package with the iteration count in the label — NOT YET — todo_gripes, old_gripes *(deferred)*
+- G494 A key pair per way in (HPKE) so rotation does not sign every other device out — NOT YET, Coach moved it to TODO — todo_gripes, bigfeats_doc, whiteboard_gripes *(deferred)*
+- G495 Lock out a lost device (every way in it added; device list, UX) and decide what may be retained to name a device under Apple/Google privacy rules — NOTYET, data stored meanwhile — todo_gripes, bigfeats_doc, prs_80_main, whiteboard_gripes *(deferred)*
+- G498 Close the `store()`-over-a-damaged-box race (and the store-then-erase gap) with a revision-checked erase in the VaultDB contract — Coach: "TODO it", at the contract tightening party once every adapter shares the battery — gripes_1_doc, todo_gripes, prs_80_main, humans_gripes, whiteboard_gripes *(deferred)*
+- G499 A pluggable conflict handler for the weird cases (a lockbox too damaged to know its epoch vs a healthy store) — NOT YET — todo_gripes *(deferred)*
+- G500 An opt-in `lockWhenHidden` prop on safebyok-react (and its naming clash with the README recipe) — ruled "not yet" (TODO side quest) — old_gripes, whiteboard_gripes *(deferred)*
+- G501 `maskCarefully`: keep one or two combining marks per base character and drop orphaned marks at a cut edge — NOT YET — todo_gripes, whiteboard_gripes *(deferred)*
+- G502 A generator to keep the eslint configs cut from the core's in step — RAGEBAIT, until drift causes an uncaught bug — old_gripes, todo_gripes, humans_gripes *(deferred)*
+- G503 Hold comments to 100 columns (#81): redo the reflow from its recipe, decide trailing comments, `@ts-expect-error` lines, Markdown tables, STYLE's "two more spaces" — Coach: leave until 1.0.0-pre — gripes_1_doc, old_gripes, prs_open, prs_60_80, humans_gripes, whiteboard_gripes *(deferred)*
+- G504 Take `p-retry` or `exponential-backoff` if `store()`'s retry ever grows — RAGEBAIT — todo_gripes *(deferred)*
+- G505 React Native: a WebCrypto shim, a keychain DeviceDB, a native Argon2 binding, no IndexedDB/BroadcastChannel/TextDecoder paths — NOT YET — todo_gripes, old_gripes *(deferred)*
+- G507 A REST vault store over `fetch` with a Next.js demo, and a blob helper for secrets too large to be a whisper — side quests, "not needed yet" — old_gripes, todo_gripes *(deferred)*
+- G508 A sub-millisecond tiebreaker beside each timestamp (monotonic or random), bound only where present — NOT YET — todo_gripes, old_gripes *(deferred)*
+- G509 A finer unlock race analyser telling a lock the user meant from one that fell due while typing — NOT YET — todo_gripes, whiteboard_gripes *(deferred)*
+
+## Resolved
+
+- G004 Confirm the KeyDeriver seam as the reading of "security first, pluggable second" → blessed in chat, made required in openVault (PR#40)
+- G008 Should RFC 9106's second option ship as a second supplied spec? → Coach: no; becomes the "recommended KDFs + roll your own" TODO entry (Coach ruling, human/20261015-sprint_gripe_fixes_done.md)
+- G009 Offer a faster WASM Argon2 deriver byte-identical under `argon2id_web_v1` → `safebyok-argon2-wasm` over hash-wasm, ~130 ms vs 580 ms (PR#74)
+- G012 Document the wasm deriver's CSP need ('wasm-unsafe-eval'), its synchronous ~130 ms block, and that Hermes has no WebAssembly → in the package README (PR#74)
+- G013 Passkey HKDF `info` should add `vault_id` and scope → Coach "make everything verifiable"; info is the full binding (PR#97)
+- G014 Bind the whole public header (note, times) instead of a positional array; stored times were unbound → every written field bound, lockbox header and envelope `registered_at` included (PR#97)
+- G020 Should `maxWhisperBytes` measure padded or unpadded size? → unpadded; the `public` bag has no cap of its own (Coach ruling, TODO.md Roadmapped 3)
+- G021 Type and visibility of `whisper_schema_version` → Coach: public metadata, an integer, defaults to 1 (Coach ruling, whiteboard/20261014-crypto/rulings.md)
+- G041 Make the bundle hold a list of unlock envelopes (several passphrases now, passkey and recovery later) → `unlocks`, 1..8 envelopes, with addPassphrase/removeUnlock/changePassphrase/unlock({ unlockId }) (PR#71)
+- G042 Rename `passphrase_epoch` to `unlock_epoch` across the core and every adapter (SDL included) → done, no alias or migration (PR#84)
+- G049 Build passkey (fingerprint, security key) unlock via WebAuthn PRF → passkey envelope with HKDF-SHA256, `addPasskey`, React helpers (PR#76)
+- G051 `addPasskey` checks its proof only after the authenticator made a passkey, orphaning it on a wrong passphrase → proof first via a maker function; Coach kept that shape (PR#88)
+- G057 What real revocation looks like; should the server sign the vaultKey? → Coach: "Yes, do (a)": rotate the vaultKey on way-in removal; no server signing (Coach ruling, PR#105)
+- G058 What rotation does with the other ways in: keep only those proven, or a key pair per way in (HPKE)? → Coach: TODO it and land best-for-now; design keeps only proven ways in (Coach ruling, Sprint big_feats Open Matters)
+- G059 Write the rotation design → whiteboard/20261016-rotation/rotation-design.md, threads 14 and 18-20 (PR#105)
+- G060 `unlocklabel` has no validator slot → `validators.unlocklabel`, default `Label`; empty label `bad_label`; taken label refused unquoted (PR#117, open)
+- G079 Use `p-retry`/`exponential-backoff` instead of the hand-written backoff? → Coach: keep our retry, note the library under RAGEBAIT (Coach ruling, PR#45)
+- G086 Build `lockSoon(grace)` and a screen-lock recipe; say that locking ends the remembered unlock → built, README recipe and sign-out recipe (PR#60)
+- G087 Should a vault lock itself when storage says the user signed out (`not_permitted`)? → `identity_revoked` kind and `whenIdentityRevoked` policy, default lock (Coach ruling, PR#106)
+- G091 Make every stored time UTC epoch ms; rename `expires_at` to `ask_passphrase_at`; times named for the event → `registered_at`/`changed_at`, bounded whole ms (PR#57, PR#64)
+- G092 Record that a `changed_at` standing still tells the backend two payloads were equal → in notes/security.md (PR#64)
+- G098 Cap vault size (Convex could not erase past ~150 big lockboxes) → `maxVaultBytes`, `maxLockboxes`, `vault_full` (PR#34)
+- G102 Size checks: once after serialization, or two? → Coach: keep both, note in TODO; estimate called conservative (Coach ruling; PR#117, open)
+- G104 A lockbox row that breaks the listing locks the whole vault out; `erase()` reports corrupt_record after its delete → damaged boxes list as `{ boxlabel, damaged: true }`, erase removes them (PR#87, PR#93)
+- G106 Should refused text reaching `snapshot.boxes` be capped or hidden? → Coach: no changes; render a damaged label as text (Coach ruling, PR#101 TODO)
+- G110 Should `lockbox_too_large` fold into `vault_full`? → Coach: keep its own kind (Coach ruling, PR#101)
+- G111 Should the old remembered-unlock sweep also run in `writeUnlock`, and stay as permanent code? → Coach: leave as is (Coach ruling, PR#101)
+- G152 Colon is the one character ckeys cannot take; replace ":"-joined ckeys with an unambiguous tuple → `JSON.stringify` tuples via public `Ckeys` (Coach ruling, PR#92)
+- G153 Should `Ckeys` stay public as an encoding contract? → Coach: keep public (Coach ruling, PR#101)
+- G154 Pluggable label grammar: floor plus policy, narrow only, or full replacement? Labels in any script, any size → Coach: full replacement, no floor; `openVault({ validators })` (Coach ruling, PR#95)
+- G157 Give `user_id` a length cap and a replaceable validation → `UserId` 1..100 (Coach ruling, PR#87); `validators.userId` (PR#95)
+- G160 Type a host's policy as `Z.core.$ZodType` so classic and mini both fit → host schemas are any Zod 4 schema (PR#95)
+- G166 Convex server-side label grammar? → Coach: do what comes naturally; the server accepts any string (Coach ruling; PR#95)
+- G167 Should AnyTextValidators and the defaults refuse lone surrogates (Convex refuses them)? → Coach yes; refused as `bad_label`/`bad_option` (PR#104, open)
+- G168 Refuse control characters in notes → Coach "do what's easy": C0, DEL, C1 refused, tab and newline kept (PR#104, open)
+- G171 A wrapper or bare VaultDB verb that forgets the validators bag falls back to defaults silently → admits any well-formed text (PR#104, open)
+- G195 Audit every adapter against the contract; move hand-proven contract tests into `TH.describeVaultDB`; trim bespoke tests → done (PR#107, PR#114)
+- G198 Give `safebyok/testing` a race helper: two writers interleaved under every schedule → `raceEveryWay`, `Turnstile`, wired for every adapter (PR#119, open)
+- G201 Should a JS adapter on the old `doListBoxes` contract get a runtime guard? → Coach: old-contract adapters fail as they do (Coach ruling, PR#101)
+- G217 Make `safebyok` a peer of `safebyok-convex` (two copies break `instanceof VaultError`) → done (PR#41)
+- G219 Give the component a publishable `dist/` per module with `convex.config` and `_generated/`, `.claude/` kept out of the tarball → `files: [dist, src]`, released as 0.1.0 (PR#41)
+- G222 Make the README's "about 150 lockboxes" a number the library enforces → enforced cap (PR#34, PR#46)
+- G224 Accept the first-`watchVault`-emit deviation? → Coach: accepted as built (Coach ruling, PR#105 TODO)
+- G225 Keep the Convex tests' `react` dev dependency? → Coach NOTED; kept (Coach ruling, Sprint big_feats)
+- G226 Should `convexVaultDB` keep Convex's validator error (which quotes refused arguments) as a refusal's cause? → Coach: offer a sanitizer; every foreign Convex failure becomes `storage_unavailable` with no cause (PR#117, open)
+- G260 Move `idbVaultDB` into its own package as the key-value adapter template; settle `safebyok/idb` → `safebyok-indexeddb`; `safebyok/idb` keeps `idbDeviceDB` (PR#77)
+- G261 Drop `idbVaultDB`, `inspectIdb`, `IdbShelf` from `safebyok/idb` with no shim → Coach: no back-compat, no re-export (Coach ruling, PR#77)
+- G262 Make IndexedDB `versionedUpdate`, `doEraseVault` and `doUpdateBox` single transactions (orphaned lockboxes) → every write verb one readwrite transaction, four race tests (PR#77)
+- G264 A failed write's cause can be null (`request.error` on abort) → the browser's own error kept; "failed for an unknown reason" otherwise (PR#109)
+- G265 `listBoxes` and `eraseVault` read every user's rows → key range over the vault's lockbox prefix (PR#109)
+- G266 The bell's channel is never closed → closes when the last listener leaves (PR#109)
+- G275 Build a Postgres VaultDB over a host query function (column per field, jsonb for ciphered, RLS, one statement per verb) → `safebyok-postgres` (PR#73)
+- G278 Should Postgres guarantee `maxLockboxes` (counter, trigger, row lock, second read, serialization failures at REPEATABLE READ)? → Coach: declare and enforce best effort; lock-free counting insert, machinery removed (Coach ruling, PR#113)
+- G294 Build a GraphQL VaultDB (server SDL + resolvers, urql client) with the kind in error extensions → `safebyok-graphql` (PR#78)
+- G367 Move `tallyWatches` (written twice) into `safebyok/testing` → done (PR#80)
+- G388 `justify:root` is defined and never used → runs lint, typecheck and test and fails if any failed (PR#99)
+- G390 Shrink zod's share of a bare `openVault` (120-135 kB) → `zod/mini` and an unbundled build, `openVault` 30 to ~15 kB (PR#62)
+- G394 Enforce the "two weeks old" dependency rule with tooling → pnpm `minimumReleaseAge` seven days, Dependabot cooldown (Coach ruling, PR#96)
+- G419 Build releases: changesets, Version PR, per-package tags, lockstep group, staged npm publish → done (PR#11, PR#15, PR#16, PR#22)
+- G421 Write the first changeset and run the first release → `safebyok@0.1.0`, `safebyok-convex@0.1.0` published with provenance (PR#28, PR#39)
+- G423 Flip the Coach's switches: Actions may create PRs, tag ruleset widened to `safebyok*@*` → done by the Coach (human/20261014-changeset_releases)
+- G424 Verify the trusted publisher accepts the rewritten workflow and provenance survives staging and approval → 0.1.0 published with SLSA provenance (old_gripes, Addressed)
+- G430 Limit the `npm` environment to main, add required reviewers; can a rejected stage be restaged? → Coach NOTED: "still a one-person project" (Coach ruling, old_gripes Addressed)
+- G450 Promote the proposed README to `packages/safebyok/README.md`, write the root README front page, and an adapter author's guide → core README, root README, VAULTDB.md and "Your own storage adapter" (PR#33, PR#77, PR#107)
+- G451 Refresh notes/security.md (entries mid-rename, `rememberForMs`) and check VOCABULARY.md line by line against the exports → done; *Names, records and times* section added (PR#69)
+- G470 Land the renames that break after 0.1.0 before it: `keyDeriver` required, `rememberForMs` to `forcePassphraseReentryHours` (VaultProvider prop too), `expiresAt` to `askPassphraseAt` → done (PR#40)

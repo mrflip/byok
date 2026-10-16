@@ -135,6 +135,10 @@ pnpm changeset                     # a PR's release note; `--empty` when it need
   and the configs that check them.
 * `dist/` is built, never committed.
 * `whiteboard/` -- work threads in progress, under a `YYYYMMDD-threadname` directory.
+* `winboard/` -- finished threads, moved from `whiteboard/` once addressed, each with the
+  `human/` reports that went with it (`*-human.md`) and a `*-resolution.md` of its gripes.
+  **Historical files**: what they say may be outdated or no longer relevant. Check the code and
+  current docs before acting on anything there.
 * `human/` -- **from agents, to Coaches.** A scratchpad, not a record: write to it, don't read it
   as input. `human/README.md` has the rules.
 * `notes/` -- durable notes. `notes/security.md` lists decisions a security reviewer should look

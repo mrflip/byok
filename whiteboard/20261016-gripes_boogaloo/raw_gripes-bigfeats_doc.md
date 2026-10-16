@@ -1,0 +1,150 @@
+# raw gripes: bigfeats_doc
+
+Read all 16 tabs of the Claude Doc "Sprint big_feats" (C9kDnwzjidkbmfmjsivjYF): Open Matters first, then the three Matter tabs, Sprint matters, Plan, Progress, Done, Rulings, Paused and Threads 1 to 6.
+
+- Remove seven finished worktree/leftover dirs (three old worktrees, byok-convex, byok-staged-publish, byok-whisper-cap via git worktree remove; byok-comment_width, byok-convex_component, byok-unlock_envelopes, byok-react_publishable by delete) — Open Matters, "For you: housekeeping"
+- Look at byok-strict_configs, which holds four commits not on GitHub, before deleting it — Open Matters, "For you: housekeeping"
+- Look at byok-passkey_unlock, whose work is reachable only from local *-prerestack2 tags, before deleting it — Open Matters, "For you: housekeeping"
+- Decide what rotation does with the other ways in: keep only the ways in the user proves during rotation (passphrase/passkey keys are never kept) vs a key pair per way in with HPKE (a new construction) — Open Matters, "What rotation does with the other ways in (#105)"
+- Rotation's keep-only-proven-ways-in design gates the rotation build's verb thread — Open Matters, "What rotation does with the other ways in (#105)"
+- (Coach) Move the rotation/other-ways-in matter into a TODO section and land whatever is best for now — Open Matters, "What rotation does with the other ways in (#105)"
+- Confirm that a random per-vault-per-device device_id on each envelope fits Apple's fingerprinting ban and Google's private-random-ID guidance (not legal advice) — Open Matters, "the device identifier for a later lock-out (#105)"
+- (Coach) Combine the Coach's response, the existing NOTYET, and the question "what are we permitted to retain about devices (e.g. 'Bob's Awesome iPhone 11') to tell which device a213423bcf is" back into the NOTYET in TODO.md — Open Matters, "device identifier for a later lock-out (#105)"
+- Add a snapshot test rendering each stored-record schema with Zod toJSONSchema, keyed by its format literal, failing with "bump format" when a schema changes under the same literal — Open Matters, "Who bumps format (#115)"
+- Adopt the broad rule: any change to what a stored record may hold (field, shape, or accepted range such as .min(1) to .min(0)) bumps format — Open Matters, "Who bumps format (#115)"
+- Decide where Convex's client-pairing tests live (#111 moved the whole deployment test file to e2e/): options (a) keep as built, (b) fake as safebyok-convex/testing entry, (c) relative import, (d) own copy in e2e/, (e) close #111 — Open Matters, "Where Convex's client-pairing tests live"
+- (Coach) Asks what the equivalent of the Convex deployment test "File" (migration-like, with all its functions) is for the Postgres adapter — Open Matters, "Where Convex's client-pairing tests live"
+- Settle fakeDeployment(host) signature for the published safebyok-convex/testing entry: drop convex-test, or make convex-test an optional peer — Open Matters, "Where Convex's client-pairing tests live" (#111)
+- Avoid the looped Convex test bodies being written twice (once per client) so a change is not made in two files — Open Matters, "Where Convex's client-pairing tests live" (#111)
+- Make a coverage report measure convex-vault-db.ts (as built the e2e report covers only the fake) — Open Matters, "Where Convex's client-pairing tests live" (#111)
+- Resume thread 15 (Convex testing entry, option b), paused locally with nothing pushed — Open Matters, "Where Convex's client-pairing tests live"
+- Decide whether Postgres keeps guaranteeing the lockbox limit on the server (#89 trigger, lockbox_count, FOR UPDATE, StillFullSql) or declares one and lets the vault enforce it; Rec (b) declare, don't guarantee — Open Matters, Elevated; Matter: Postgres vault cap (PR#89)
+- Postgres should declare no practical maxLockboxes (Infinity or 1_200_300_400_500_600) and drop the default of 1000; GraphQL follows — Matter: Postgres vault cap, Recommendation
+- If (b): remove the lockbox_count column, trigger, row lock and second read; return README promise to "every verb is one statement" — Matter: Postgres vault cap, Options (b)
+- README should say quotas are the host's (abuse quota owned by host) — Matter: Postgres vault cap, Recommendation
+- Battery cap tests should run only on stores that declare a finite limit — Matter: Postgres vault cap, Recommendation
+- (Coach) Vaults should offer a contract satisfiable even on a transactionless backing store: simple table setup, performant, succeeds if safe, clear actionable errors, no retry logic or record locking required; can it be satisfied in full? — Matter: Postgres vault cap, Your thoughts
+- (Coach) Clarify which layer owns the versioned-update logic, given "updates obey versioned-update guarantees, otherwise last-write-wins" — Matter: Postgres vault cap, Your thoughts
+- (Coach) Decide listing guarantees: exactly LIMIT records if a limit is given (else all), same each time absent commits, and promise of which ones (e.g. most recently changed_at) — Matter: Postgres vault cap, Your thoughts
+- (Coach) State per store the guarantee on the written count (e.g. recalculated after commit, exact at commit, exact at start of transaction); adapter makes best effort not to exceed SOFTMAX; too-many-records need not be reported — Matter: Postgres vault cap, Your thoughts
+- (Coach) After deleting below SOFTMAX listings must include all records; any inserted record retrievable by id even above SOFTMAX — Matter: Postgres vault cap, Your thoughts
+- (Coach) Baseline adapter contract should meet these guarantees; tighter guarantees needing ops work, retries or perf cost must be opt-in; adapters may ship "vaya con dios" instructions for a stronger guarantee — Matter: Postgres vault cap, Your thoughts
+- Single-statement conditional INSERT ... WHERE (SELECT COUNT(*)) < limit RETURNING count is the Coach's sketch for a lock-free Postgres cap — Matter: Postgres vault cap, Your thoughts
+- Ask whether (c) a lock-free count(*) check, which can overshoot by a few, or (d) opt-in guarantee fits the Coach's contract — Matter: Postgres vault cap, Options
+- Decide whether the server signs the vault key / what real revocation looks like; Rec: note now, build rotation before 1.0, no server signing — Open Matters, Elevated; Matter: revocation
+- Say in notes/security.md that removing a way in does not revoke against an old copy of the bundle (old envelope still opens the vault key) — Matter: revocation, Recommendation
+- Build vault-key rotation (new vault key, re-encrypt every lockbox, re-wrap remaining envelopes, atomic or resumable) as its own thread before 1.0, run on way-in removal and on demand — Matter: revocation, Recommendation
+- Check whether a device refuses a bundle whose unlock_epoch went backwards; if not, add client highest-epoch rollback detection to the rotation thread — Matter: revocation, Recommendation
+- (Coach) Find a legit-under-Apple/Google-privacy way to lock all entryways on a given device; UX is non-trivial so NOTYET, but make sure the needed data is stored — Matter: revocation, Your thoughts
+- Decide how much VaultDB carries as base class: deep base vs opt-in helpers; shared subscribe-and-notify with per-listener catch (reportError else logger) — Matter: store base class
+- VaultDB base should offer a failure-report hook so silent failures (Postgres listen, GraphQL subscription, Convex watch) reach the logger with calm message, nothing secret — Matter: store base class
+- Subscriptions fail inconsistently: Postgres listen / GraphQL / Convex watch go silent; IndexedDB drops a throwing listener; core memory store lets it escape into the write — Matter: store base class
+- VaultDB base should carry shared error constructors (storage_unavailable, stale_write, not_permitted, vault_full) with a never-null cause — Matter: store base class
+- VaultDB base should carry no-op defaults only for verbs truly optional (e.g. watch on a store that can't push) — Matter: store base class
+- listBoxRecords (public only on Postgres, used by GraphQL) should be built in the base from common verbs and overridden where one query does it — Matter: store base class
+- (Coach) Base VaultDB could implement fetch via list-then-select and update as fetch-merge-replace so a connector need only implement list, replace and delete; elevate memory-backed code to the base; implement no verbs we don't need — Matter: store base class
+- (Coach) Decide whether label grammar validation on the server is a convenience or a guarantee ("Label grammar on the server?"); do what comes naturally — Matter: store base class
+- (Coach) Make it super simple to add and test a new adapter (no-adapter-exists problem, not a refactoring problem) — Matter: store base class
+- Decide who holds the logger: vault owns it today; a store needs it handed over, e.g. by openVault, or each major facility keeps its own (Coach comment on logger chain) — Matter: store base class
+- Write a design proposal in whiteboard/ for the base class and review it before building; sequence after the battery thread — Matter: store base class, Recommendation / Sequencing
+- Base class lives in core so counts against openVault size budget (Coach: not a concern at present) — Matter: store base class, Size
+- Finish the helpers sweep left after the vaultdb_battery thread — Sprint matters, thread 5 vaultdb_battery (PR#114)
+- Build thread 6 race_helper (opus) — Sprint matters, thread 6 (status: building)
+- Rebuild thread 15 e2e_home as option (b): Convex tests stay in safebyok-convex with a safebyok-convex/testing entry — Sprint matters, thread 15 (PR#111)
+- Build thread 14 rotation_shape: rotation's stored fields and checks, no verb yet (opus) — Sprint matters, thread 14
+- Thread 18 rotation_adapters: put the unlock_epoch epoch check in every adapter, waits on 14 — Sprint matters, thread 18
+- Thread 19 rotation_verb: build rotateVaultKey and its walk, waits on 18 and the Coach's ways-in answer — Sprint matters, thread 19
+- Thread 20 rotation_docs: README, adapter note and a demo button for rotation, waits on 19 — Sprint matters, thread 20
+- Thread 17 validation_note: write label grammar on the server into #101's TODO section, waits on #101 merging — Sprint matters, thread 17
+- Merge/land flake_fixes (#118): CI flakes, a dialog race in VaultProvider and two ceilings, in review — Sprint matters, thread 22
+- HKDF info binding for the passkey envelope (leaves out vault_id and scope) was not yet ruled, so not built — Plan, Amendments; thread 3 review (PR#76)
+- Report swallowed subscription failures to the logger was not yet ruled, so not built — Plan, Amendments
+- addPasskey should check its proof before the authenticator creates a passkey (wrong passphrase leaves an orphan credential) — Plan, thread 9 unlock_fixes; thread 3 review (PR#76)
+- createPasskey's doc should say a dismissed fallback also orphans a credential — Plan, thread 3 passkey_unlock review (PR#76)
+- safebyok-indexeddb BroadcastChannel should unref so it does not keep a Node/Bun process alive, and a throwing listener should not escape as an uncaught error (reportError an option) — Plan, thread 4 review (PR#77) / thread 9
+- Add a test that sends a passkey envelope through safebyok-graphql to back the claim that a new way in crosses with no change — Plan, thread 9 unlock_fixes
+- Update CLAUDE.md Layout, PROCESS.md and other guidance docs to list every package (safebyok-react, -convex, -indexeddb, -postgres, -graphql, -argon2-wasm) and the safebyok-<store> naming rule — Plan, thread 10 docs_housekeeping
+- notes/security.md should say hash-wasm has no published audit and never zeroes its working memory — Plan, thread 10 docs_housekeeping; thread 1 review (PR#74)
+- Move TH.perUser from the Postgres and GraphQL tests into safebyok/testing with doc block and test — Plan, thread 10 docs_housekeeping
+- Pin graphql-yoga and @graphql-tools/schema (dev only) to the newest release at least two weeks old — Plan, thread 10 docs_housekeeping
+- Rename passphrase_epoch to unlock_epoch across core and all five adapters, with docs and changeset — Plan, thread 7 epoch_rename
+- Every VaultDB declares abstract maxLockboxes with no core default constant; openVault refuses a larger maxLockboxes with bad_option; Postgres enforces vault_full in the insert; Convex/GraphQL declare theirs — Plan, thread 8 store_vault_cap
+- Thread 1 left (minor): the 1 GiB refusal still names @noble/hashes; parseKeyDeriverSpec takes KeyDeriverSpec not unknown; hash-wasm caches a failed compile and older Safari may need 'unsafe-eval'; pnpm size builds the core twice; a duplicated test helper — Plan, thread 1 review (PR#74)
+- Check real browsers' CSP behaviour with hash-wasm (not checked) — Plan, thread 1 review (PR#74)
+- Thread 2 left (minor): a taken unlocklabel is bad_label (misuse) not a condition; another deriver's envelopes are passed over silently; small cleanups — Plan, thread 2 review (PR#71)
+- Thread 2 call to settle: how a passphrase is tried against several envelopes (one Argon2id each), bound worst case (cap on envelopes) and record unlock-time cost — Plan, thread 2 unlock_envelopes (PR#71)
+- Thread 3 left (minor): HKDF info leaves out vault_id and scope (construction call for the Coach); addPasskey checks proof only after passkey exists; one damaged passkey envelope blocks every passkey; the demo button reads the snapshot without subscribing — Plan, thread 3 review (PR#76)
+- Test passkey unlock with a real authenticator (not checked, mocks only) — Plan, thread 3 review (PR#76)
+- Thread 4 left (minor): device store's bell keeps old ways; list and erase read the whole store; a failed write's cause can be null; race tests share one connection — Plan, thread 4 review (PR#77)
+- Thread 5 left (minor): a rejected listen is dropped silently; route-borne records unvalidated past scope and boxlabel; NOTIFY scope visible to any role; listBoxRecords copies the core's messages; placeholderOf's plain Error — Plan, thread 5 review (PR#73)
+- Thread 6 left (minor): passphrase_epoch as Int32 in the schema; validation errors read as storage_unavailable; a vaultDBFor misconfiguration crosses with its kind; helpers duplicated from the core — Plan, thread 6 review (PR#78)
+- Try safebyok-graphql with graphql 16, Apollo, Mercurius, graphql-ws and a real disconnect (not tried) — Plan, thread 6 review (PR#78)
+- Merge order: two sprints (big_feats, gripe_fixes) rewrite vault.ts at once; whichever merges second rebases — Plan, For the Coach
+- Hermes (React Native) has no WebAssembly: README for safebyok-argon2-wasm should say so; measure both derivers' time in Node — Plan, thread 1 argon2_wasm
+- Removal is not revocation: notes/security.md entry required for removing an envelope — Plan, thread 2 unlock_envelopes
+- Public-surface addition parseKeyDeriverSpec exported from the core awaits the Coach's yes — Progress, Thread 1 argon2_wasm ready
+- hash-wasm runs synchronously (~130 ms) and needs a CSP allowing 'wasm-unsafe-eval'; document for hosts — Progress, Thread 1 argon2_wasm ready
+- Strike the "IndexedDB versionedUpdate truly atomic" side quest from TODO at wrap-up (thread 4 did it) — Progress, Thread 4 indexeddb_package ready
+- Rebase the sprint branch onto main at wrap-up (cut from ea4b93d, which is not on main after the stack merged) — Progress, second_harvest stack has merged
+- Sweep CLAUDE.md Layout, which lists only the old packages, after the new package PRs land — Progress, Thread 4 indexeddb_package ready
+- Thread 4 splits inspectIdb into inspectIdbDeviceDB (core) and inspectIdbVaultDB (package), a public-surface break that settles roadmap 3's "decision on safebyok/idb" — Progress, Thread 4 indexeddb_package ready
+- Every envelope change needs a proof (session vaultKey is non-extractable): adding a passkey needs a passphrase or another passkey's PRF bytes via a generalized reviseUnlocks — Progress, Thread 2 what later threads inherit
+- Build test bundles with TH.bundleOf / TH.envelopeOf, never by hand with old field names — Progress, Thread 2 what later threads inherit
+- Thread 6's listBoxes resolver must use PostgresVaultDB.listBoxRecords(scope), not listBoxes, because a VaultDB's public listing summaries are not valid doListBoxes input over a wire — Progress, Thread 5 for thread 6
+- describeVaultDB over a per-request VaultDB needs TH.perUser; PGlite shared per test file and truncated between tests — Progress, Thread 5 for thread 6
+- #68 plus #70 together likely exceed the 16.5 kB openVault size budget; budgets were raised (openVault 19 kB, everything 27 kB, idbDeviceDB 9.5 kB, browserOpts 14.5 kB) — Progress, Orchestrator restack / Thread 4's base
+- Merge the six PRs in order: #71, then #73 and #76, then #78; #74 after #68, #77 after #70; expect one-line conflicts in .changeset/config.json fixed group, root README package list, .size-limit.json — Done, Merge order (PR#79)
+- Decide whether to keep "every envelope change takes a proof, and any way in proves any change" (one passkey can set a new passphrase and remove the others) — Done, Needs your word (PR#71, PR#76)
+- Decide whether a vault always keeps a passphrase (no passwordless vaults for now) — Done, Needs your word (PR#76)
+- Decide whether the epoch stays out of the envelope binding (a backend can splice a removed envelope back, no worse than rolling back the whole bundle) — Done, Needs your word (PR#71); Rulings, Still open
+- Decide whether passkey HKDF info should add vault_id and scope (Rec: add; free before 1.0, a construction change) — Done, Needs your word (PR#76); Rulings, Still open
+- Decide whether the ~4.8 s un-aimed wrong-passphrase cost at the 8-envelope cap is acceptable (Rec: leave it) — Done, Needs your word (PR#71); Rulings, Smaller ones
+- Approve new public surface: parseKeyDeriverSpec, PasskeyEnvelope, PasskeyProof, toB64/fromB64 in safebyok/utils, two error kinds, four React exports (Rec: keep) — Done, Public surface; Rulings, Smaller ones
+- Confirm safebyok/idb dropping idbVaultDB, inspectIdb and IdbShelf with no shim (changeset says so) — Done, Public surface (PR#77)
+- Confirm graphql as an optional runtime peer of safebyok-graphql/server (Yoga masks other errors; dev mode would send the driver's error to the browser) — Done, Public surface (PR#78); Rulings, Smaller ones
+- Pin graphql-yoga 5.24.5 and @graphql-tools/schema 10.1.4 (only days old) to the newest release at least two weeks old — Done, Public surface (PR#78); Rulings, Smaller ones
+- Set the final openVault size budget after the restack (went 16.5 to 18.5 kB, #68 and #70 add more) — Done, Public surface; Rulings, Smaller ones
+- Follow-ups in TODO.md "Open from big_feats": epoch rename, real-authenticator pass on #76, Postgres vault cap, listBoxRecords, swallowed LISTEN and subscription failures, TH.perUser into safebyok/testing, CLAUDE.md Layout — Done, Follow-ups
+- Try real authenticators: Chrome, Safari and a security key once #76 merges — Rulings, Your rulings (Coach)
+- Decide listBoxRecords: (a) each served store writes it, (b) core listing check accepts a summary so a server forwards listBoxes, (c) move it into the VaultDB base class (Rec c) — Rulings, Still open, listBoxRecords
+- Make the vault give each store's subscribe a way to report failure, sent to the vault's logger (#65) as a warning naming the error kind, never record content; optionally live: false in the snapshot for a "not syncing" UI — Rulings, Failures that are swallowed
+- Add note in notes/security.md that removing an envelope doesn't revoke against a backend that kept the old bundle; vaultKey rotation is the real revocation and its own TODO — Rulings, epoch out of the envelope binding
+- Delete deregistered worktree dirs /workspace/byok-passkey_unlock and /workspace/byok-unlock_envelopes (everything in them is pushed) and local *-prerebase / *-prefold tags for threads 2, 5 and the sprint branch — Done, Housekeeping
+- Thread 1 argon2_wasm worker stopped mid-build with all work uncommitted; the CI and CLAUDE.md edits need its explanation before they ride — Paused, thread 1
+- Redecide gripe_fixes #68 and #70 ordering: siblings cut from #66, nothing holds both; gripe_fixes' orchestrator will put its PRs in one line if told — Rulings, The restack
+- Decide whether deriveKeyBytes should refuse a salt whose length differs from the spec's (a corrupt stored salt reaches hash-wasm/noble as a plain Error) — Thread 1: argon2_wasm, For the Coach
+- A security reviewer should look at hash-wasm (no published audit; C after Go's x/crypto/argon2 compiled to wasm) — Thread 1: argon2_wasm, For the Coach
+- CI comment in .github/workflows/ci.yml still says the size budget is "each way of importing the core" after the package was added — Thread 1: argon2_wasm, Deviations
+- Add a Content-Security-Policy note to README: hash-wasm holds the thread ~130 ms (synchronous), unlike noble which yields — Thread 1: argon2_wasm, Discoveries
+- A Convex deployment holding old bundles refuses the new unlocks schema until those rows are deleted; say so for hosts — Thread 2: unlock_envelopes, For the Coach (PR#71)
+- Consider a relabel verb for unlocklabel (label is bound into the wrap so it needs a proof); none exists — Thread 2: unlock_envelopes, Decisions taken (PR#71)
+- Make UnlockSummary a union and filter non-passphrase envelopes in openWithPassphrase (lint refuses the always-true check) — Thread 2: unlock_envelopes, Discoveries for thread 3 (PR#71)
+- Decide whether unknown_key_deriver (only when no envelope left to try) is the right behaviour once kdf_configs lets hosts choose configurations — Thread 2: unlock_envelopes, Mixed derivers (PR#71)
+- Move the passkey helper out of safebyok-react into its own package if a Vue binding wants it — Thread 3: passkey_unlock, Decisions taken (PR#76)
+- Relax "a vault always keeps a passphrase" later if passwordless vaults are wanted (tightening later would strand vaults) — Thread 3: passkey_unlock, Decisions taken (PR#76)
+- changePassphrase stays passphrase-only; a passkey proof is bad_option; recovery is addPassphrase(passkey) then removeUnlock(passkey, oldId) — revisit if wanted — Thread 3: passkey_unlock, Decisions taken (PR#76)
+- PasskeyUnlockButton rpId: a host with a custom rp.id must render its own dialog button; PassphraseModal uses the page's rpId — Thread 3: passkey_unlock, Deviations (PR#76)
+- Reconcile lint conflict between prefer-spread and prefer-iterator-to-array on Array.from(map.keys()) (Iterator#toArray missing from the React package's TS lib) — Thread 3: passkey_unlock, Discoveries (PR#76)
+- Manual pass of passkeys in Chrome (platform passkey) and Safari before release — Thread 3: passkey_unlock, For the Coach (PR#76)
+- Add a size-limit entry for safebyok-indexeddb (root size script builds only the core; its built index.js is 15.5 kB, mostly doc comments) — Thread 4: indexeddb_package, Discoveries (PR#77)
+- Core device-store bell still posts only once subscribed and calls listeners synchronously; fix if it ever matters beyond inspectIdbDeviceDB — Thread 4: indexeddb_package, Discoveries (PR#77)
+- inOneTransaction work must await only IndexedDB requests or the browser commits early; keep doc block and security note — Thread 4: indexeddb_package, Discoveries (PR#77)
+- Strike TODO roadmap 3's "decision on safebyok/idb" bullet and the two IndexedDB side quests (settled by PR#77) — Thread 4: indexeddb_package, For the Coach
+- Confirm the no-shim break: safebyok/idb stops exporting idbVaultDB, inspectIdb, IdbShelf; changeset tells hosts the one import to change — Thread 4: indexeddb_package, For the Coach (PR#77)
+- Resolve the server holding no vault limit in Postgres (Convex's component has one): a lockbox count cap inside the insert statement refusing vault_full — Thread 5: postgres_vaultdb, For the Coach (PR#73)
+- A rejected listen in postgresVaultDB is dropped silently; subscriber never hears — Thread 5: postgres_vaultdb, For the Coach (PR#73)
+- Server-side record validation past scope and boxlabel is only what the core's VaultDB validates — Thread 5: postgres_vaultdb, For the Coach (PR#73)
+- NOTIFY payload scope is visible to any role that can connect and LISTEN — Thread 5: postgres_vaultdb, For the Coach (PR#73)
+- listBoxRecords duplicates core bad_label/storage_unavailable messages because checkScope and asStorageTrouble aren't exported; weigh against a core change letting doListBoxes return summaries — Thread 5: postgres_vaultdb, For the Coach (PR#73)
+- placeholderOf throws a plain Error at module load for a column-list mistake — Thread 5: postgres_vaultdb, For the Coach (PR#73)
+- Test the README's Supabase section against Supabase (written from docs, untested) — Thread 5: postgres_vaultdb, For the Coach (PR#73)
+- If vaultdb_validation moves listing to whole-row validation, listBoxRecords would then select every column — Thread 5: postgres_vaultdb, Discoveries (PR#73)
+- Confirm graphql as a runtime optional peer of safebyok-graphql/server (Yoga's masking is the need) — Thread 6: graphql_vaultdb, For the Coach (PR#78)
+- Confirm opaque JSON envelopes ([SafebyokUnlockEnvelope!]!) over a union type for unlocks in the GraphQL schema — Thread 6: graphql_vaultdb, For the Coach (PR#78)
+- Test Apollo Server, Mercurius and graphql-ws (README names them in prose only) — Thread 6: graphql_vaultdb, For the Coach (PR#78)
+- A failed subscription on the GraphQL client is silent, as Postgres's rejected listen is — Thread 6: graphql_vaultdb, For the Coach (PR#78)
+- Decide whether to export VaultOperations (client documents) for hosts with persisted-operation allowlists — Thread 6: graphql_vaultdb, For the Coach (PR#78)
+- passphrase_epoch rename reaches the GraphQL SDL too — Thread 6: graphql_vaultdb, For the Coach (PR#78)
+- Publish perUser (copied from safebyok-postgres tests into safebyok-graphql) via safebyok/testing — Thread 6: graphql_vaultdb, Deviations (PR#78)
+- A listed record missing a non-null field crosses as storage_unavailable rather than corrupt_record; another ServedVaultDB could meet it — Thread 6: graphql_vaultdb, Discoveries (PR#78)
+- Writes through GraphQL validate only via the core's VaultDB (vaultdb_validation); nothing inside an envelope is checked by GraphQL — Thread 6: graphql_vaultdb, Discoveries (PR#78)
