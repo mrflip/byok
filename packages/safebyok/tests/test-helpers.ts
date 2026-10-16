@@ -372,7 +372,7 @@ export const tallyWatches = (vaultDB: Pick<VaultDB, 'subscribe'>) => {
  * Where every round trip one backend's devices make passes, so that a race can stop a device just
  * before one of them and run another device's write while it waits. A device's adapter awaits
  * `pass()` before each call it makes to its backend -- each statement, each request, each
- * transaction -- and goes straight on unless the race is holding that one. Wire it around a
+ * transaction, each watch it starts -- and goes straight on unless the race is holding that one. Wire it around a
  * client's methods with {@link throughTurnstile}, or await `pass()` wherever a round trip begins.
  */
 export type Turnstile = {
