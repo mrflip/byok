@@ -87,7 +87,10 @@ agent already working in the doc may act on flipped rows whenever it is there.
 2. **Act on every flipped row** in that pass. Investigation goes to subagents, so the code they
    read stays out of the session's context and only their paragraph comes back; independent
    proceed work goes to workers or threads at once.
-3. **Edit by id, cell by cell.** Make every write from that one read, against the ids it gave:
+3. **Edit by id, cell by cell.** To reset a chip, `replace` the chip's paragraph with
+   `"as":"markdown"`, the chip in the `blocks` map beside `from` (`{"st":{"type":"dropdown",
+   "enum":"<the State enum id>","index":0}}`, content `<?claude block st?>`): a `"as":"blocks"`
+   replace of that paragraph keeps the old chip and adds the new one beside it. Make every write from that one read, against the ids it gave:
    replace one *Matter* cell's paragraph, one chip's paragraph, or delete one swept row. Each
    replace or delete of a whole block carries the guards that read printed for it, `ifHash` (its
    `h`) and `ifRev` (the read's rev). If the Coach has changed the block since, the write is

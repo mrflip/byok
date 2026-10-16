@@ -1,13 +1,13 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: threads 2 and 10 underway; 14 in review; 1, 3, 4, 6, 7, 8 and 11 filed; 5b cleared, cut once 4 files.
+**Status**: thread 10 underway; 2 and 14 in review; 1, 3, 4, 6, 7, 8 and 11 filed; 5b cleared, cut once 4 files.
 
 ## Status
 
 | # | Thread | Base | Status | PR |
 |---|---|---|---|---|
 | 1 | names_and_keys | main | filed #128 | [#128](https://github.com/mrflip/safebyok/pull/128) |
-| 2 | public_bag | on 1 (ce653fbb) | underway | |
+| 2 | public_bag | on 1 (ce653fbb) | in review | [#133](https://github.com/mrflip/safebyok/pull/133) |
 | 3 | locks_and_expiry | main | filed #127 | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 (98b70b80) | filed #132 | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
