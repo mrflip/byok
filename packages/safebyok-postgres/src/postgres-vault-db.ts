@@ -180,7 +180,7 @@ const ListBoxesSql = `SELECT ${Columns.selected(ListedLockboxColumns)} FROM safe
 // racers), which the contract allows, and a refused write inserted nothing, since the refusal is
 // the WHERE of one atomic statement. The bundle is read from the snapshot too, so a vault erased
 // after it began is met by the foreign key, which reads the bundle that stands now: that failure
-// is catchable (see doUpdateBox), and no lockbox ever lands in a vault but its own.
+// is caught as a stale writer (see insertBox), and no lockbox ever lands in a vault but its own.
 const InsertBoxSql = `WITH vault AS (
     SELECT applabel, user_id, vaultlabel, vault_id FROM safebyok_bundles
     WHERE ${ScopeIs} AND vault_id = $4::text
