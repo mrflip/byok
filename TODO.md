@@ -23,7 +23,7 @@ Straightforward, likely to be done, not needed yet. Each is a thread cut from `m
   container and by a contributor locally. It is what the race battery
   ([#119](https://github.com/mrflip/safebyok/pull/119)) cannot do in-process: Postgres's
   one-statement writes under concurrent connections (one `pg` pool per device) are reasoned in
-  sprint matters' thread 11 (`whiteboard/20261015-matters/thread-11-postgres_verdict.md`), not
+  sprint matters' thread 11 (`winboard/20261015-matters/thread-11-postgres_verdict.md`), not
   tested, and Convex runs against `convex-test`, not a real deployment. Decide: one image or a
   compose file of services; whether `e2e/` owns it; which suites run against it in CI and which
   stay in-process so `pnpm justify` needs no Docker.
