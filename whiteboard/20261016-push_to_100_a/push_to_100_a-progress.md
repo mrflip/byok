@@ -7,8 +7,8 @@
 | # | Thread | Base | Status | PR |
 |---|---|---|---|---|
 | 1 | names_and_keys | main | filed #128 | [#128](https://github.com/mrflip/safebyok/pull/128) |
-| 2 | public_bag | on 1 (ce653fbb) | filing (YOLO 15) | [#133](https://github.com/mrflip/safebyok/pull/133) |
-| 3 | locks_and_expiry | main | filed #127 | [#127](https://github.com/mrflip/safebyok/pull/127) |
+| 2 | public_bag | on 1 (ce653fbb) | filed | [#133](https://github.com/mrflip/safebyok/pull/133) |
+| 3 | locks_and_expiry | main → restacking onto 2 (c397b745) | filed, restacking | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 (98b70b80) | filed #132 | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
 | 5b | store_base build | on 4 (restacked) | pending: 4 | |

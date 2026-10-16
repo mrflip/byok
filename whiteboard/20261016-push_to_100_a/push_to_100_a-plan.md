@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: 15 underway; 13 (#137) in review; 2 (#133) in its second review; 1 (#128), 3 (#127), 4 (#132), 6 (#126), 7 (#129), 8 (#130), 10 (#136), 11 (#131), 14 (#134) filed; 5b cut once 2 files and 3 → 4 are restacked onto it; then 9, and 12 after 23:01Z
+* **Status**: 15 underway; 13 (#137) filing; 3 (#127) restacking onto 2, then 4 (#132) onto 3, then 5b is cut; 1 (#128), 2 (#133), 6 (#126), 7 (#129), 8 (#130), 10 (#136), 11 (#131), 14 (#134) filed; then 9, and 12 after 23:01Z
 
 ## Read first
 
@@ -119,6 +119,15 @@ handoff carries it whole. Below, the orchestrator's gloss.
 * **Look-ahead**: the format-snapshot test (G482) is its first commit; every later thread that
   changes a stored shape (3's `DeviceMark`) must bump the format it guards -- 3 is cut from main
   without it, so the restack onto 2 will show whether 3's bump was made (3 bumps it anyway).
+* *Review* (`flagged` twice, #133): the first review fixed `store()`'s doc (`67244e8d`) and
+  flagged two findings, sent back in YOLO 12: a tampered bag was resealed by the next store
+  (now carried forward only from a record that deciphers), and a deep bag made `openVault` throw
+  a bare `RangeError` (the record check now demands canonical text). The second review confirmed
+  both and flagged the depth band below the check (a bag or whisper ~3,000-6,000 deep still
+  reaches a bare `RangeError` in `store()` and `lockSoon`): filed for the Coach (YOLO 15), a row
+  asking a ~64-level cap before #133 merges, built in thread 9 if yes. Rows also: `lockSoon`
+  erasing first, `Lockbox` in its own module (2 kB off two budgets), `__proto__` keys, unknown
+  `store()` options, `cipherBinding`'s guard. Filed at `c397b745`.
 
 ### 3. `locks_and_expiry` -- the soft lock as ruled, versioned device erase, `Millis`
 
