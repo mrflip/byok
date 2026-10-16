@@ -8,7 +8,7 @@
 | 2 | release_age       | filed #96                  |
 | 3 | passkey_button_ux | filed #98                  |
 | 4 | small_sweep       | filed #99                  |
-| 5 | vaultdb_battery   | in review (#114)           |
+| 5 | vaultdb_battery   | review clean; files after 12 |
 | 6 | race_helper       | waiting on thread 5        |
 | 7 | indexeddb_fixes   | filed #109 (on #108)       |
 | 8 | size_rule         | filed #99 (commits on it)  |
@@ -62,7 +62,9 @@
   12; a helpers sweep (`TH.expectRefusal`, `eventually`/`changeCounter` into `safebyok/testing`).
   **For thread 6:** a second-device factory (two adapters over one backend, no shared connection or
   lock), writers that really overshoot (4.5), and a way to know a watch is live (to retire
-  `watchSettled`'s 50 ms guess).
+  `watchSettled`'s 50 ms guess). *Review: clean*; nothing lost in the trim; each new test caught a
+  scratch break. Left for thread 6: push tests count "more calls than before" with one tick for a
+  leaked listener -- an adapter pushing twice or late could slip past.
 
 *Orchestrator (~02:40Z):* the Coach merged #99 expecting the line above it to go too; a merge
 takes only what is beneath. At the Coach's word ("restack any other prs on main so that closing
