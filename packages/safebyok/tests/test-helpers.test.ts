@@ -731,6 +731,8 @@ type RoundTripOpts = {
   ringsOnlyItself?: boolean
   /** Round trips it makes before each write, as a device fetching a session first does. */
   preludes?:        number
+  /** Starts each watch with a round trip, as a listen or a subscription over a wire does: `late`, and no more, or `late, calling once live`. */
+  watchStarts?:     'late' | 'late, calling once live'
 }
 
 /**
@@ -809,8 +811,23 @@ class RoundTripVaultDB extends VaultDB {
 
   protected override doSubscribe(_scope: VaultScope, onChange: () => void) {
     const listeners = this.listeners()
-    listeners.add(onChange)
-    return () => { listeners.delete(onChange) }
+    const watch = { ended: false }
+    if (this.opts.watchStarts) {
+      void this.startWatch(watch, onChange)
+    } else {
+      listeners.add(onChange)
+    }
+    return () => {
+      watch.ended = true
+      listeners.delete(onChange)
+    }
+  }
+
+  private async startWatch(watch: { ended: boolean }, onChange: () => void) {
+    await this.backend.atomically(() => undefined)
+    if (watch.ended) { return }
+    this.listeners().add(onChange)
+    if (this.opts.watchStarts === 'late, calling once live') { onChange() }
   }
 
   private listeners() { return this.opts.ringsOnlyItself ? this.ownListeners : this.backend.listeners }
@@ -973,6 +990,14 @@ describe("vaultDBTimingChecks, against adapters that do not guard", () => {
     const leaky: StringStore = { ...store, subscribe: (listener) => { store.subscribe(listener); return noDevice } }
     const checks = TH.vaultDBTimingChecks(() => localVaultDB(leaky), { pushes: true })
     await expect(checks.push_ends_on_unsubscribe.check()).rejects.toThrow(/an unsubscribed onChange was called/)
+  })
+
+  it("fails a watch that starts on its own time and never calls once it is live, missing a write made meanwhile", async () => {
+    await expect(checksOver({ stepping: inOneStep, watchStarts: 'late' }).push_from_the_start.check()).rejects.toThrow(/no call to onChange read the vault as the write left it/)
+  })
+
+  it("passes that watch once it calls as it goes live", async () => {
+    await expectToHold(checksOver({ stepping: inOneStep, watchStarts: 'late, calling once live' }).push_from_the_start)
   })
 
   it("fails a device that never hears another device's writes", async () => {

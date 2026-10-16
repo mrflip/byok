@@ -22,8 +22,10 @@ adapter's next call (`holdNextCall`, `beforeNextCall`) and to count its storage 
 (`tallyWatches`), a logger that keeps what it hears (`spyLogger`), checks that a call refuses
 (`expectRefusal`) and that what it threw quotes nothing it should not (`thrownText`,
 `leafTexts`), and `describeVaultDB` and `describeDeviceDB`, the vitest suites every storage
-adapter owes, with `perUser` to run the first over an adapter made per signed-in user and
-`VaultDBContract` to cite the contract's lines in an adapter's own tests.
+adapter owes, with `perUser` to run the first over an adapter made per signed-in user,
+`VaultDBContract` to cite the contract's lines in an adapter's own tests, and `raceEveryWay`,
+`throughTurnstile` and `expectRoundTripsThroughTurnstile` to race an adapter's devices under every
+interleaving a test can make.
 `safebyok/utils` holds small helpers for the app around the vault, such as `mask`, which shows
 which API key a lockbox holds (`sk***...***wxyz`) without showing the key. `mask` is intended
 for plain text; calling it with arbitrary blobs may give unusual behavior. It strips every
@@ -122,7 +124,9 @@ await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team acc
 Extend `VaultDB` and implement its `do*` methods: its doc block says what each one owes, the
 [VaultDB contract](VAULTDB.md) says what an adapter promises in all and what it may leave
 undone, and `describeVaultDB` from `safebyok/testing` checks it, a group of tests to each of the
-contract's numbered lines. A backend with columns (Convex, SQL) keeps
+contract's numbered lines. Give it `makeDevices` -- devices over one backend, each round trip
+through a turnstile -- and it races your writes from two devices, holding one before each round
+trip while the other moves ([Proving the races](VAULTDB.md#proving-the-races)). A backend with columns (Convex, SQL) keeps
 the applabel, user id, vaultlabel and boxlabel in columns of their own. A backend that holds rows
 under one string -- a key-value store, localStorage -- files them under `Ckeys`, as
 `localVaultDB` and `idbVaultDB` do:
