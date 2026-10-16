@@ -37,10 +37,15 @@ security expert who knows what questions to ask.
   way in open, and the mark refuses one at a lower `vault_key_epoch` whatever its `unlock_epoch`:
   a bundle from before a rotation, and with it the vaultKey the rotation replaced, is caught even
   so. What still passes is an older bundle at the same `vault_key_epoch` under a forged higher
-  `unlock_epoch`: it can bring back only a way in `removeUnlock` dropped, which still opens only
-  the vaultKey the vault stands under, never a replaced one. The way out of a refusal is the
-  host's: it erases the device's mark (`deviceDB.eraseMark(scope)`) and opens again, taking the
-  older copy as it stands, the core README's recipe, which asks the user first. `destroy()` and `eraseDamagedVault` erase the mark. Two tabs of one device
+  `unlock_epoch`: it can bring back only a way in `removeUnlock` dropped, or a passphrase
+  `changePassphrase` replaced, which still opens only the vaultKey the vault stands under, never a
+  replaced one. (A device that opens such a bundle through its remembered unlock opens no envelope:
+  it takes the vaultKey it already held, and lists the older copy's ways in.) The way out of a
+  refusal is the host's: it erases the device's mark (`deviceDB.eraseMark(scope)`) and opens again,
+  taking the older copy as it stands, the core README's recipe. The README has the host decide that
+  from its own knowledge of a restore, never from the user's answer: storage that rolls back on its
+  own would ask the user the same, and the user cannot tell the two apart. `destroy()` and
+  `eraseDamagedVault` erase the mark. Two tabs of one device
   each read and write the mark without a lock, so a tab that read an older bundle before the
   other tab's newer one can write the mark back down: the check weakens to the older epoch. A
   bundle is held to the mark as read before the bundle itself, so a newer bundle that another tab,
