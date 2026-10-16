@@ -23,7 +23,8 @@ export const MaxLabelChars = 40
 export const LabelPattern = /^[a-z](_?[a-z0-9])+$/
 
 /**
- * The default check for every label in the package: `applabel`, `vaultlabel` and `boxlabel`.
+ * The default check for every label in the package: `applabel`, `vaultlabel`, `boxlabel` and an
+ * unlock's `unlocklabel`.
  * Lowercase words of letters and digits joined by single underscores, starting with a letter,
  * two to forty characters (STYLE.md's tag glossary). A host that wants other labels passes its own
  * schema in openVault's `validators`. (A scope's `user_id` is the host's auth identity,
@@ -114,10 +115,14 @@ export type NameValidator = Z.core.$ZodType<string>
  * 'bad_option' for a note), and never quotes the schema's issues, which may quote the name.
  *
  * The vault checks with them everywhere a name passes: at openVault for the scope; at store,
- * read, use and erase for the boxlabel; at store for the note; and on every record read back. So
- * a host that narrows a check later finds a lockbox stored under a name or note the new one
- * refuses listed as damaged: `read()` refuses it, `erase()` still reaches it by the name it was
- * stored under, and `store()` writes over it only where the name passes.
+ * read, use and erase for the boxlabel; at store for the note; at addPassphrase and addPasskey
+ * for the unlocklabel; and on every record read back. So a host that narrows a check later finds
+ * a lockbox stored under a name or note the new one refuses listed as damaged: `read()` refuses
+ * it, `erase()` still reaches it by the name it was stored under, and `store()` writes over it
+ * only where the name passes. A way in already stored under an unlocklabel the new check refuses
+ * is the exception: it still opens the vault and lists as it is, since refusing it could lock a
+ * user out. The first way in, which the vault names `passphrase`, is the vault's own name, and
+ * not checked.
  *
  * @example
  *   import * as z from 'zod'
@@ -130,29 +135,32 @@ export type NameValidator = Z.core.$ZodType<string>
  */
 export type VaultValidators = {
   /** Checks the host application's label. Default: {@link Label}. */
-  applabel?:   NameValidator | undefined
+  applabel?:    NameValidator | undefined
   /** Checks the vault's label. Default: {@link Label}. */
-  vaultlabel?: NameValidator | undefined
+  vaultlabel?:  NameValidator | undefined
   /** Checks each lockbox's label. Default: {@link Label}. */
-  boxlabel?:   NameValidator | undefined
+  boxlabel?:    NameValidator | undefined
   /** Checks the signed-in user's id. Default: {@link UserId}. */
-  userId?:     NameValidator | undefined
+  userId?:      NameValidator | undefined
   /** Checks each lockbox's public note. Default: {@link LockboxNote}. */
-  note?:       NameValidator | undefined
+  note?:        NameValidator | undefined
+  /** Checks the label of each way in a host adds: a passphrase or a passkey. Default: {@link Label}. */
+  unlocklabel?: NameValidator | undefined
 }
 
 /**
- * The checks a vault runs when its host passes none: {@link Label} for each label,
- * {@link UserId} for the user, {@link LockboxNote} for a note. Frozen.
+ * The checks a vault runs when its host passes none: {@link Label} for each label, an
+ * unlocklabel's among them, {@link UserId} for the user, {@link LockboxNote} for a note. Frozen.
  *
  * @example DefaultValidators.boxlabel.safeParse('anthropic_api_key').success  // true
  */
 export const DefaultValidators = Object.freeze({
-  applabel:   Label,
-  vaultlabel: Label,
-  boxlabel:   Label,
-  userId:     UserId,
-  note:       LockboxNote,
+  applabel:    Label,
+  vaultlabel:  Label,
+  boxlabel:    Label,
+  userId:      UserId,
+  note:        LockboxNote,
+  unlocklabel: Label,
 })
 
 /** A check for any well-formed text: each of {@link AnyTextValidators} is one of its own. */
@@ -172,9 +180,10 @@ const anyText = () => Z.string().check(WellFormed)
  * @example AnyTextValidators.boxlabel.safeParse('key \uD83D').success      // false: half of an emoji
  */
 export const AnyTextValidators = Object.freeze({
-  applabel:   anyText(),
-  vaultlabel: anyText(),
-  boxlabel:   anyText(),
-  userId:     anyText(),
-  note:       anyText(),
+  applabel:    anyText(),
+  vaultlabel:  anyText(),
+  boxlabel:    anyText(),
+  userId:      anyText(),
+  note:        anyText(),
+  unlocklabel: anyText(),
 })

@@ -203,8 +203,8 @@ describe("AnyTextValidators", () => {
 })
 
 describe("DefaultValidators", () => {
-  it("checks each label with Label, the user with UserId, and a note with LockboxNote", () => {
-    expect(DefaultValidators).to.deep.equal({ applabel: Label, vaultlabel: Label, boxlabel: Label, userId: UserId, note: LockboxNote })
+  it("checks each label with Label, an unlocklabel included, the user with UserId, and a note with LockboxNote", () => {
+    expect(DefaultValidators).to.deep.equal({ applabel: Label, vaultlabel: Label, boxlabel: Label, userId: UserId, note: LockboxNote, unlocklabel: Label })
     expect(DefaultValidators.applabel).to.eq(Label)
     expect(DefaultValidators.userId).to.eq(UserId)
     expect(DefaultValidators.note).to.eq(LockboxNote)

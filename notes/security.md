@@ -801,3 +801,10 @@ security expert who knows what questions to ask.
   other server error but by its text, so all of them are dropped. The cost is debugging: the
   deployment's logs keep the full error. The other adapters still carry their client's error as
   `cause`, as above.
+* 2026-10-16: **`validators.unlocklabel`**, a sixth slot, checks the label of each way in a host
+  adds (`addPassphrase`, `addPasskey`), `Label` by default, refused as `bad_label` without
+  quoting it, as the other names are. It is checked only there: a stored unlock envelope's
+  `unlocklabel` is still read as plain text, so a way in stored under a label a narrowed check
+  refuses still opens the vault and lists as it is. Refusing it on read would make the bundle
+  `corrupt_record` and lock the user out of their own vault, or hide a way in they rely on. The
+  first way in, named `passphrase` by the vault itself, is not checked.
