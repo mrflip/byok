@@ -49,8 +49,11 @@ const browserVaultDB = (fetcher: typeof fetch) => graphqlVaultDB(new Client({
 
 // ------------------------------------------------------------------------------------- tests
 
-/** The test's stand-in for a session: the request's `x-test-user` header. */
-const byHeader = (request: Request) => Promise.resolve(request.headers.get('x-test-user'))
+/** The test's stand-in for a session: the request's `x-test-user` header, URI-encoded, as a header holds only Latin-1. */
+const byHeader = (request: Request) => {
+  const userHeader = request.headers.get('x-test-user')
+  return Promise.resolve(userHeader === null ? null : decodeURIComponent(userHeader))
+}
 
 /** The route over this file's database, signing each request in as its `x-test-user` header. */
 const routeOver = async () => {
@@ -62,7 +65,7 @@ const routeOver = async () => {
 const browserFor = (route: (request: Request) => Promise<Response>, userId: string | null) => (
   browserVaultDB((url, init) => {
     const request = new Request(url, init)
-    if (userId !== null) { request.headers.set('x-test-user', userId) }
+    if (userId !== null) { request.headers.set('x-test-user', encodeURIComponent(userId)) }
     return route(request)
   })
 )

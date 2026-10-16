@@ -151,8 +151,11 @@ const fanOut = (listener: Pick<Client, 'on'>): PostgresListen => {
 /** The route over this file's database, signing each request in as its `x-test-user` header. */
 const routeOver = async () => vaultRoute(await TH.emptyDatabase(), byHeader)
 
-/** The test's stand-in for a session: the request's `x-test-user` header. */
-const byHeader = (request: Request) => Promise.resolve(request.headers.get('x-test-user'))
+/** The test's stand-in for a session: the request's `x-test-user` header, URI-encoded, as a header holds only Latin-1. */
+const byHeader = (request: Request) => {
+  const userHeader = request.headers.get('x-test-user')
+  return Promise.resolve(userHeader === null ? null : decodeURIComponent(userHeader))
+}
 
 /** A POST of `body` to the route. */
 const postOf = (body: unknown) => new Request(`https://app.example.test${VaultRouteUrl}`, { method: 'POST', body: JSON.stringify(body) })
@@ -164,7 +167,7 @@ const browserFor = (route: (request: Request) => Promise<Response>, userId: stri
 const sessionedBrowser = (route: (request: Request) => Promise<Response>, session: { userId: string | null }) => (
   new RouteVaultDB((url, init) => {
     const headers = new Headers(init.headers)
-    if (session.userId !== null) { headers.set('x-test-user', session.userId) }
+    if (session.userId !== null) { headers.set('x-test-user', encodeURIComponent(session.userId)) }
     return route(new Request(`https://app.example.test${url}`, { ...init, headers }))
   })
 )
