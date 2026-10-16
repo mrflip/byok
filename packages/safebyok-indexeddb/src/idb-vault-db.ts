@@ -1,11 +1,10 @@
-import { entries, get, promisifyRequest } from 'idb-keyval'
 import { Ckeys, VaultDB } from 'safebyok'
 import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, StoredLockbox, VaultBundle, VaultScope } from 'safebyok'
 import { onBell, ringBell } from './bell'
-import { boxCkey, bundleCkey, isBoxCkeyOf } from './ckeys'
+import { boxCkey, boxRange, bundleCkey } from './ckeys'
 import { bundleMeetsExpectation, lockboxMeetsExpectation, vaultMeetsExpectation } from './expectations'
 import { parseDbName, type IdbVaultDBOpts } from './idb-opts'
-import { inOneTransaction, shelfOf } from './shelf'
+import { inOneTransaction, settle, shelfOf } from './shelf'
 
 /**
  * safebyok's storage in this browser's IndexedDB: a VaultDB for an app with no backend, keeping
@@ -49,7 +48,7 @@ class IdbVaultDB extends VaultDB {
   private get shelf() { return shelfOf(this.dbName) }
 
   protected async doReadBundle(scope: VaultScope): Promise<unknown> {
-    return (await get(bundleCkey(scope), this.shelf)) ?? null
+    return (await this.shelf('readonly', (store) => rowAt(store, bundleCkey(scope)))) ?? null
   }
 
   protected async doCreateBundle(bundle: VaultBundle): Promise<unknown> {
@@ -73,14 +72,16 @@ class IdbVaultDB extends VaultDB {
   }
 
   protected async doReadBox(scope: VaultScope, boxlabel: string): Promise<unknown> {
-    return (await get(boxCkey(scope, boxlabel), this.shelf)) ?? null
+    return (await this.shelf('readonly', (store) => rowAt(store, boxCkey(scope, boxlabel)))) ?? null
   }
 
+  // Reads the key range of the scope's lockboxes, not the whole shelf: every other vault's rows, of
+  // every user in this database, stay unread. The ckeys and their rows come from one transaction.
   protected async doListBoxes(scope: VaultScope): Promise<StoredLockbox[]> {
-    const rows = await entries(this.shelf)
-    return rows
-      .filter((entry): entry is [string, unknown] => isBoxCkeyOf(scope, entry[0]))
-      .map(([ckey, row]) => ({ boxlabel: Ckeys.boxlabelOf(ckey), lockbox: row }))
+    const range = boxRange(scope)
+    const [ckeys, rows] = await this.shelf('readonly', (store) => Promise.all([settle(store.getAllKeys(range)), settle<unknown[]>(store.getAll(range))]))
+    return ckeys
+      .map((ckey, idx) => ({ boxlabel: typeof ckey === 'string' ? Ckeys.boxlabelOf(ckey) : null, lockbox: rows[idx] }))
       .filter((stored): stored is StoredLockbox => stored.boxlabel !== null)
   }
 
@@ -102,15 +103,15 @@ class IdbVaultDB extends VaultDB {
     }))
   }
 
-  // The look at the bundle, the listing and every deletion are one transaction: a lockbox another
-  // tab writes waits for the erase and then finds no bundle, so no lockbox outlives its vault.
+  // The look at the bundle and every deletion (the lockboxes by their key range, then the bundle)
+  // are one transaction: a lockbox another tab writes waits for the erase and then finds no
+  // bundle, so no lockbox outlives its vault.
   protected async doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
     return this.ringIfLanded(await inOneTransaction(this.shelf, async (store) => {
       const standing = await rowAt(store, bundleCkey(scope))
       if (! vaultMeetsExpectation(standing, expected)) { return false }
-      const ckeys = await promisifyRequest(store.getAllKeys())
-      const doomed = ckeys.filter((ckey) => isBoxCkeyOf(scope, ckey))
-      for (const ckey of [...doomed, bundleCkey(scope)]) { store.delete(ckey) }
+      store.delete(boxRange(scope))
+      store.delete(bundleCkey(scope))
       return true
     }))
   }
@@ -129,4 +130,4 @@ class IdbVaultDB extends VaultDB {
 }
 
 /** The row standing at `ckey`, read within the transaction `store` belongs to: undefined for none. */
-const rowAt = (store: IDBObjectStore, ckey: string): Promise<unknown> => promisifyRequest<unknown>(store.get(ckey))
+const rowAt = (store: IDBObjectStore, ckey: string): Promise<unknown> => settle<unknown>(store.get(ckey))

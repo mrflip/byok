@@ -25,13 +25,31 @@ export const shelfOf = (dbName: string): UseStore => {
 }
 
 /**
+ * The result of an IndexedDB request, or the outcome of a transaction, as a promise: `idb-keyval`'s
+ * `promisifyRequest`, except that a failure the browser gives no error for (`request.error` is
+ * null, as it can be when a transaction is aborted or the storage is gone) rejects with an Error
+ * saying so, never with null, which would reach a caller as an error with a null cause.
+ *
+ * @example const standing = await settle<unknown>(store.get(ckey))
+ */
+export const settle = async <ValT = undefined>(request: IDBRequest<ValT> | IDBTransaction): Promise<ValT> => {
+  try {
+    return await promisifyRequest<ValT>(request)
+  } catch (err) {
+    throw err instanceof Error ? err : new Error(UnknownFailure)
+  }
+}
+
+const UnknownFailure = 'The IndexedDB request failed for an unknown reason: the browser gave no error. Try again shortly.'
+
+/**
  * `work`, run in one readwrite IndexedDB transaction over the shelf: what it reads and what it
  * writes go together, and no other tab's write lands in between, since IndexedDB runs readwrite
  * transactions over one store one after another. Resolves with what `work` resolves with, once
  * the transaction has committed; rejects, writing nothing, when `work` or any request in it
  * fails.
  *
- * `work` must wait only on the store's own requests (through `promisifyRequest`): IndexedDB
+ * `work` must wait only on the store's own requests (through {@link settle}): IndexedDB
  * commits a transaction as soon as it has no request pending, so awaiting anything else -- a
  * timer, a fetch, WebCrypto -- would end it midway, and its next request would throw.
  *
@@ -40,7 +58,7 @@ export const shelfOf = (dbName: string): UseStore => {
  *
  * @example
  *   const landed = await inOneTransaction(shelfOf('acme'), async (store) => {
- *     const standing = await promisifyRequest(store.get(ckey))
+ *     const standing = await settle(store.get(ckey))
  *     if (! meetsExpectation(standing)) { return false }
  *     store.put(record, ckey)
  *     return true
@@ -55,7 +73,7 @@ export const inOneTransaction = <ValT>(shelf: UseStore, work: (store: IDBObjectS
       abandon(store.transaction)
       throw err
     }
-    await promisifyRequest(store.transaction)
+    await settle(store.transaction)
     return outcome
   })
 )

@@ -6,8 +6,11 @@
  * and it reads again. A backend of your own with push of its own (a live query, a socket) rings
  * from that instead.
  *
- * Under Node or Bun, where a test or a server-side render may open a vault, the channel never
- * keeps the process alive: it exits when its own work is done, as it would without the bell.
+ * The channel lives only while it has work: it is closed when its database's last listener
+ * leaves (a vault's `close()` is its listener leaving), and a write that finds no listener in
+ * this tab opens one to ring the other tabs and closes it again. Where a platform's channel
+ * holds a Node or Bun process open, it is also unref'd, so a process exits when its own work is
+ * done, as it would without the bell.
  */
 
 const listenersByDbName = new Map<string, Set<() => void>>()
@@ -44,6 +47,7 @@ const callEach = (listeners: Set<() => void> | undefined) => {
 export const ringBell = (dbName: string): void => {
   callEach(listenersByDbName.get(dbName))
   channelOf(dbName)?.postMessage('changed')
+  closeIfIdle(dbName)
 }
 
 /**
@@ -59,7 +63,10 @@ export const onBell = (dbName: string, listener: () => void): (() => void) => {
   const listeners = listenersByDbName.get(dbName) ?? new Set()
   listenersByDbName.set(dbName, listeners)
   listeners.add(listener)
-  return () => { listeners.delete(listener) }
+  return () => {
+    listeners.delete(listener)
+    closeIfIdle(dbName)
+  }
 }
 
 // The channel of `dbName`, opened on first use by a write or a listener alike, so a tab that
@@ -75,9 +82,18 @@ const channelOf = (dbName: string): BroadcastChannel | undefined => {
   return channel
 }
 
-// Node's and Bun's BroadcastChannel holds its process open until it is closed, and this one is
-// kept for the life of the page; unref() lets the process exit regardless. A browser's has no
-// unref, and needs none.
+// Closes the channel of `dbName`, once nothing in this tab listens to it. A message already posted
+// is on its way to the other tabs: closing ends this tab's end only.
+const closeIfIdle = (dbName: string) => {
+  if ((listenersByDbName.get(dbName)?.size ?? 0) > 0) { return }
+  listenersByDbName.delete(dbName)
+  channels.get(dbName)?.close()
+  channels.delete(dbName)
+}
+
+// Node's and Bun's BroadcastChannel holds its process open until it is closed, and a listener may
+// keep one open for the life of the page; unref() lets the process exit regardless. A browser's
+// has no unref, and needs none.
 const letProcessExit = (channel: BroadcastChannel & { unref?: () => unknown }) => {
   if (typeof channel.unref === 'function') { channel.unref() }
 }
