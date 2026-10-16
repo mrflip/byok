@@ -65,7 +65,7 @@ Beyond CLAUDE.md, and STYLE.md and VOCABULARY.md before naming anything or writi
 
 > hash-wasm as a pluggable KDF
 
-*Gloss.* TODO roadmap 6: a package, `safebyok-argon2-wasm`, exporting a `KeyDeriver` over
+*Gloss.* TODO roadmap 6: a package, `safebyok-fastkey`, exporting a `KeyDeriver` over
 hash-wasm's Argon2id, `hash-wasm` its dependency and `safebyok` a peer. The core keeps noble as
 the default in `safebyok/browser`. It wears the same label, `argon2id_web_v1`, with the same
 parameters; a test derives one fixed passphrase and salt through both implementations and
@@ -80,7 +80,7 @@ wasm twin of that seam: `argon2idWasmDeriver(spec)` (or as STYLE.md names it) an
 WebAssembly too. *Fallback*: if every other thread of this sprint has started and `kdf_configs`
 still has not filed, the orchestrator cuts this from #63 instead, and the deriver is
 `{ ...Argon2idWebV1, deriveKeyBytes }`, which fits both shapes.
-*Touches*: a new `packages/safebyok-argon2-wasm/`, `.changeset/config.json`, the lockfile,
+*Touches*: a new `packages/safebyok-fastkey/`, `.changeset/config.json`, the lockfile,
 `notes/security.md` (a second implementation behind one label). *Depends on*: kdf_configs.
 *Look-ahead*: nothing later builds on it.
 
@@ -356,7 +356,7 @@ From the rulings' *Smaller ones*, recommended as amendments:
 
 *Gloss*:
 * CLAUDE.md's *Layout* lists every package (`safebyok`, `safebyok-react`, `safebyok-convex`,
-  `safebyok-indexeddb`, `safebyok-postgres`, `safebyok-graphql`, `safebyok-argon2-wasm`) and the
+  `safebyok-indexeddb`, `safebyok-postgres`, `safebyok-graphql`, `safebyok-fastkey`) and the
   `safebyok-<store>` naming rule for storage adapters. Do the same for PROCESS.md and any other
   guidance doc that names the packages.
 * `notes/security.md` gets the hash-wasm entry: no published audit, and its working memory is

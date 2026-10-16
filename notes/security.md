@@ -615,7 +615,7 @@ security expert who knows what questions to ask.
   from it. A subscription's user is fixed when it starts (over a websocket, when the connection
   opened), so a session revoked meanwhile keeps hearing the vault's scope -- never a record --
   until the subscription ends.
-* 2026-10-15: **a second implementation behind one label.** `safebyok-argon2-wasm` runs Argon2id
+* 2026-10-15: **a second implementation behind one label.** `safebyok-fastkey` runs Argon2id
   through `hash-wasm` (4.12.0, MIT, no dependencies; its Argon2 is C written for it after Go's
   `x/crypto/argon2`, compiled to WebAssembly and embedded in its JavaScript; widely used, but
   with no published audit, as the core's `@noble/hashes` Argon2id has none: its README says its
@@ -636,7 +636,7 @@ security expert who knows what questions to ask.
   its working memory (the spec's whole memory_kib, in a fresh WebAssembly instance, and in Node
   the passphrase's UTF-8 bytes in a pooled Buffer) as it is, for the garbage collector: material
   from which the passphraseKey follows stays in the heap until then.
-* 2026-10-15: **Dependencies: hash-wasm has no published audit.** `safebyok-argon2-wasm`'s one
+* 2026-10-15: **Dependencies: hash-wasm has no published audit.** `safebyok-fastkey`'s one
   runtime dependency, `hash-wasm`, derives the passphraseKey for every vault made or opened
   through it, and no audit of it, or of the C its WebAssembly is compiled from, has been
   published. Nor has one of the core's Argon2id: `@noble/hashes`'s one audit (Cure53, January

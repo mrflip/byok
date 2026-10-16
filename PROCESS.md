@@ -31,7 +31,11 @@ cd ../byok-<label> && pnpm install
 tracking `origin/main` would push to main. A thread built on another's unmerged work is cut from
 that branch's tip instead of `origin/main`, and its PR says "Stacked on #N". Push with
 `git -c credential.helper= -c credential.helper='!gh auth git-credential' push`. Once the PR is
-filed, `git worktree remove ../byok-<label>`; the branch stays for the PR.
+filed, `git worktree remove ../byok-<label>`; the branch stays for the PR. Once it has merged,
+`/branch-sweep`, run when the Coach asks, has `scripts/git-survey.sh` tag the branch
+`closed/<branch>` and point it at its merged head, and remove the thread's worktree if it was
+left behind clean and idle (`notes/housekeeping.md`): the one place an agent moves a branch or
+removes a worktree that is not its own.
 
 An ordered series of threads issued at once is a **sprint**, run by `/sprint`
 (`.claude/skills/sprint/SKILL.md`) through `thread-worker` and `thread-reviewer` agents.
@@ -119,7 +123,7 @@ The published packages live in `packages/`: `safebyok`, the core, and its compan
 for what it plugs in. A storage adapter is `safebyok-<store>` (`safebyok-convex`,
 `safebyok-indexeddb`, `safebyok-postgres`, `safebyok-graphql`), a framework binding
 `safebyok-<framework>` (`safebyok-react`), and anything else is named for what it supplies
-(`safebyok-argon2-wasm`, a key deriver). A new one copies an existing package's packaging -- its
+(`safebyok-fastkey`, a key deriver). A new one copies an existing package's packaging -- its
 own `eslint.config.mjs` cut from the core's, a README, a changeset -- takes `safebyok` as a peer
 dependency, so a `VaultError` is one class across them, and joins the `fixed` group in
 `.changeset/config.json` (a test refuses a public package left out). `safebyok-indexeddb`'s
