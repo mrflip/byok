@@ -55,11 +55,14 @@ export const makeWorld = ({ vaultDB = localVaultDB(memoryStore()) }: { vaultDB?:
 
   const seed = async (whispers: Record<string, Whisper>, userId = 'u1') => {
     const vault = await openVault({ ...opts, userId, deviceDB: memoryDeviceDB() })
-    await vault.unlock(Passphrase)
-    for (const [boxlabel, whisper] of Object.entries(whispers)) {
-      await vault.store(boxlabel, whisper)
+    try {
+      await vault.unlock(Passphrase)
+      for (const [boxlabel, whisper] of Object.entries(whispers)) {
+        await vault.store(boxlabel, whisper)
+      }
+    } finally {
+      vault.close()
     }
-    vault.close()
   }
 
   return { vaultDB, deviceDB, renderInVault, open, openUnlocked, seed }
