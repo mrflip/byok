@@ -16,10 +16,10 @@
 | 7 | react_tidy | main | filed #129 | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | main | filed #130 | [#130](https://github.com/mrflip/safebyok/pull/130) |
 | 9 | sweep_small | top of the line | pending | |
-| 10 | secure_floor | on 4 (57cdb168) | filed | [#136](https://github.com/mrflip/safebyok/pull/136) |
+| 10 | secure_floor | restacking onto 13 (f89b0c42) | filed, restacking | [#136](https://github.com/mrflip/safebyok/pull/136) |
 | 11 | pg_container | main | filed #131 | [#131](https://github.com/mrflip/safebyok/pull/131) |
 | 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
-| 13 | epoch_expectation | restacking onto 4 (f6d424ef) | filed, restacking | [#137](https://github.com/mrflip/safebyok/pull/137) |
+| 13 | epoch_expectation | on 4 (f6d424ef), restacked | filed (tip f89b0c42) | [#137](https://github.com/mrflip/safebyok/pull/137) |
 | 14 | uncontrolled_fields | on 7 (3d62fc04) | filed | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 (adc94772) | in review [#138](https://github.com/mrflip/safebyok/pull/138) | |
 
