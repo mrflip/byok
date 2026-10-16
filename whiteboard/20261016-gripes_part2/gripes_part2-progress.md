@@ -4,12 +4,32 @@
 
 | #   | Thread                | Status   |
 | --- | --------------------- | -------- |
-| 1   | validators_tightening | in review (#104) |
+| 1   | validators_tightening | filed #104 |
 | 2   | convex_setup_check    | filed #102 |
 | 3   | test_hygiene          | filed #103 |
 | 4   | docs_rulings          | filed #101 |
 
 ## What the threads have taught
+
+*Orchestrator:* **restacked** into one line, biggest first: main (`b60e516`) → #104 → #103 → #102
+→ #101 → #100. No conflicts; `pnpm justify` and `pnpm size` green once, at the top.
+
+* **Thread 1 (#104), validators_tightening.** `UserId`, `LockboxNote` and every
+  `AnyTextValidators` field refuse lone surrogates (a search for `\p{Cs}`, not a whole-text match,
+  so 12M characters don't overflow V8's regex stack); the default note refuses C0 (CR included),
+  DEL and C1 but tab and newline; our refusals say which rule failed, quoting nothing; the
+  `safebyok/validators` entry 8.36 → 3.86 kB; `checkValidators` exported, used by `openVault`,
+  `rulesOf` and `VaultProvider` (a misspelt `boxLabel` is `bad_option`); a bare `VaultDB` verb
+  admits any well-formed text instead of the defaults. Beyond the plan: `reviseUnlocks` passed no
+  rules to `updateBundle`, so a host with wider checks got `bad_label` on every passphrase or
+  passkey change. Convex's own refusal text can't be verified (`convex-test` admits lone
+  surrogates; server errors arrive as a bare `Error`). *Review:* fixed two (erase() could not
+  reach a box a host's `z.string()` stored under a lone surrogate; docs said "never refuses" where
+  only well-formed names hold). The regex rewrite came after, at the orchestrator's word, with a
+  test. Left, minor: `OurChecks` recognises our schemas by identity (two copies of the core fall
+  back to vaguer wording); `checkValidators` runs on every verb call and render (cheap, kept).
+  For the Coach: the forgotten bag harmless (as built) or a required argument; boxes stored with
+  a control character or lone surrogate now list as damaged; `\p{}` on Hermes untested.
 
 * **Thread 3 (#103), test_hygiene.** `tallyWatches` counts each watch closed at most once;
   `expectRefusal` asserts `instanceOf(VaultError)` (matching `isVaultError`; the pending
