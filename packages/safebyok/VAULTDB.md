@@ -133,6 +133,13 @@ its scope, and nothing of any other scope, while the standing bundle has the exp
 otherwise it refuses as `stale_write` and erases nothing, so a vault made anew survives a device
 that missed its predecessor's end.
 
+It compares the `vault_id` and nothing else, so a vault whose bundle is damaged in any other field
+is still erased: the vault's `eraseDamagedVault`, the one way to clear a vault `openVault` refuses
+as `damaged_bundle`, reads the bundle through `doReadBundle` as stored, takes its `vault_id`, and
+aims this erase at it. An adapter that hands each call on to another VaultDB's public verbs hands
+`eraseDamagedVault` on too. Proven by the base class's own tests for a damaged record, which the
+battery cannot plant, and by the battery for a sound vault, which it refuses to erase.
+
 **3.6. A refused write wrote nothing.** Whatever the refusal -- `stale_write`, `vault_full`,
 `lockbox_too_large`, a malformed record -- the vault stands afterwards exactly as it stood before:
 its bundle, its lockboxes, its listing. When storage is unreachable or fails partway
