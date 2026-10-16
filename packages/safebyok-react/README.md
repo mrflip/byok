@@ -10,7 +10,9 @@ otherwise write itself.
   a whisper: on `vault_locked` it asks for the passphrase and retries, and resolves `null` if
   dismissed (unambiguous for reads: a whisper is never null). Every call settles: calls that
   overlap wait on one dialog, and each resolves `null` if the vault goes while it is open (a
-  sign-out, another user, the provider unmounting). Beside them, `openError` and
+  sign-out, another user, the provider unmounting). A dialog still asking when the vault unlocks
+  by any other route -- an earlier, cancelled dialog's unlock finishing late -- closes, and its
+  calls run again. Beside them, `openError` and
   `retryOpen()` for an open that failed (below).
 * `useVaultSnapshot()` -- the live snapshot via `useSyncExternalStore`.
 * `PassphraseModal` -- the default dialog: unstyled markup under `modal-scrim` / `modal` class

@@ -34,6 +34,8 @@ export type VaultContextShape = {
    * Every call settles: actions that find the vault locked while the dialog is already open wait
    * on that same dialog, and each resolves null when the dialog goes without an unlock -- the
    * user signs out or switches, the vault reopens, or the provider unmounts.
+   * A dialog the vault unlocks under, however that came about (an earlier, cancelled dialog's
+   * unlock finishing late, say), closes as unlocked, and the actions waiting on it run again.
    *
    * @example const whisper = await withUnlockedVault(() => vault.read('anthropic_api_key'))
    *          // whisper === null: the user dismissed the dialog
@@ -185,6 +187,16 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   // A dialog belongs to the vault it was opened over: when that handle goes -- a sign-out, another
   // user, a reopen, the provider unmounting -- its actions resolve null, and it closes.
   useEffect(() => () => { endAsking(askingRef.current, false) }, [vault, endAsking])
+
+  // An unlock that lands while a dialog is asking -- the first dialog's, finishing after its Cancel,
+  // or another tab's remembered unlock arriving -- answers it: the dialog closes, and the actions
+  // waiting on it run again. Only a change is heard, never the state at the dialog's opening.
+  useEffect(() => {
+    if (vault === null) { return }
+    return vault.subscribe(() => {
+      if (vault.getSnapshot().state === 'unlocked') { endAsking(askingRef.current, true) }
+    })
+  }, [vault, endAsking])
 
   const withUnlockedVault = useCallback(async <ResultT,>(action: () => Promise<ResultT>): Promise<ResultT | null> => {
     try {
