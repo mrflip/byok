@@ -1,9 +1,12 @@
 # Thread 9: damaged_bundle (2026-10-16)
 
-Branch `20261016-damaged_bundle`, PR [#108](https://github.com/mrflip/safebyok/pull/108), stacked on [#97](https://github.com/mrflip/safebyok/pull/97) (base `8d665aa`, after #97's restack onto
-main with the gripes line merged). Justify: green, every package (core 1158, react 95, demo 131,
-convex 282, graphql 159, postgres 162, indexeddb 108, argon2-wasm 44, root 123). `pnpm size`
-within every budget (`everything` 28.31 of 30 kB, `openVault` 20.18 of 23 kB).
+Branch `20261016-damaged_bundle`, PR [#108](https://github.com/mrflip/safebyok/pull/108), stacked on
+[#107](https://github.com/mrflip/safebyok/pull/107), the top of the line main → #98 → #97 → #105 →
+#106 → #107 (`3d06488`). Justify: green, every package (core 1246 + 18 skipped, react 98, demo 141
++ 9 skipped, convex 311 + 14, graphql 188 + 9, postgres 192 + 9, indexeddb 118 + 9, argon2-wasm 44,
+root 123). `pnpm size` within every budget (`everything` 28.93 of 30 kB, `openVault` 20.76 of 23
+kB). The demo's `answerPassphraseDialog` test failed once under the full parallel run and passed
+on three reruns alone and on a second full run: a flake, not this thread's.
 
 * **Built**: the Coach's "fine-grained error messages" for a damaged vault, as far as the code can
   know it.
@@ -61,3 +64,14 @@ within every budget (`everything` 28.31 of 30 kB, `openVault` 20.18 of 23 kB).
   and `openVault`'s refusals change kind (`corrupt_record` to `damaged_lockbox`/`damaged_bundle`),
   and `askPasskey`'s too (`corrupt_record` to `damaged_unlock`). Whether a damaged bundle should
   have a way to be cleared (an `openVault` that can still `destroy()`) is open.
+* **Review** (thread-reviewer, `fixed`): when every passphrase envelope this deriver can try is
+  damaged and another deriver made the rest, the message now says to update safebyok or open the
+  vault where it was made, not that every passphrase is damaged; `askPasskey` also leaves out a
+  passkey whose salt is base64url but not 32 bytes. Left, minor: `damagedAs` maps only a rejected
+  promise, so a `VaultDB` that throws synchronously still surfaces `corrupt_record`; the lockbox
+  messages quote the stored boxlabel (only a duck-typed adapter could put odd text there); a plain
+  `wrong_passphrase` beside other-deriver envelopes does not mention the deriver.
+* **Filing**: rebased onto #107's line. Conflicts with #106 (thread 10) in `errors.ts`, the
+  core and React READMEs, `VaultProvider`'s doc and its test, and `notes/security.md`: both sides'
+  kinds and entries kept. #107's `VAULTDB.md` agrees: `corrupt_record` stays the base class's own
+  refusal (5.1). The Coach's yes to an erase path for a damaged vault is thread 21.
