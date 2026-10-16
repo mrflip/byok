@@ -1401,6 +1401,23 @@ describe("the host's validators", () => {
     expect(boxlabelsOf(narrow)).to.deep.equal(['anthropic'])
   })
 
+  it("erase() reads storage once for the lockbox it erases, under a refused boxlabel or a passing one", async () => {
+    const world = makeWorld()
+    const roomy = await world.openUnlocked('pw', { validators: AnyScript })
+    await roomy.store('OpenAI: work', 'sk-fake')
+    await roomy.store('anthropic', 'sk-ant-fake')
+    roomy.close()
+    const narrow = await world.openUnlocked('pw')
+    const readBox = vi.spyOn(world.vaultDB, 'readBox')
+    await narrow.erase('OpenAI: work')
+    expect(readBox.mock.calls).to.have.lengthOf(1)
+    await narrow.erase('anthropic')
+    expect(readBox.mock.calls).to.have.lengthOf(2)
+    await TH.expectRefusal(narrow.erase('OpenAI: work'), 'bad_label')
+    expect(readBox.mock.calls).to.have.lengthOf(3)
+    expect(boxlabelsOf(narrow)).to.deep.equal([])
+  })
+
   it("erase() reaches a lockbox the host's own check let stand under a name holding a lone surrogate", async () => {
     const world = makeWorld({ validators: { boxlabel: ZClassic.string() } })
     const vault = await world.openUnlocked('pw')
