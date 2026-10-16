@@ -1,14 +1,16 @@
 # Thread 1: validators_tightening (2026-10-16)
 
 Branch `20261016-validators_tightening`, PR [#104](https://github.com/mrflip/safebyok/pull/104),
-cut from main at b60e516. Justify: green -- root 123, safebyok 1161, indexeddb 108, postgres 162,
+cut from main at b60e516 (main had not moved at filing). Justify: green -- root 123, safebyok 1163, indexeddb 108, postgres 162,
 react 74, convex 282, demo 131, argon2-wasm 44, graphql 159. `pnpm size` within every budget.
 
 * **Built**
-  - **Well-formed text** (`src/validators.ts`): a `WellFormed` check, `Z.regex(/^\P{Cs}*$/u)`, on
+  - **Well-formed text** (`src/validators.ts`): a `WellFormed` check, a refine refusing a match of
+    `/\p{Cs}/u`, on
     `UserId`, `LockboxNote` and every field of `AnyTextValidators` (`Label`'s ASCII pattern
     already refused). Refused as `bad_label`, `bad_option` for a note.
-  - **Control characters in a default note**: `NoteChars`, `/^[\t\n\P{Cc}]*$/u`, refuses C0 (CR
+  - **Control characters in a default note**: `NoteChars`, a refine refusing a match of
+    `/(?![\t\n])\p{Cc}/u`, refuses C0 (CR
     included), DEL and C1. A host's `validators.note` is untouched.
   - **Fine-grained refusals** (`src/names.ts`): `check` passes on the first issue's message when
     the refusing schema is one of ours (`OurChecks`, the identities of `DefaultValidators` and
@@ -16,8 +18,8 @@ react 74, convex 282, demo 131, argon2-wasm 44, graphql 159. `pnpm size` within 
     check passed in openVault's validators"); a non-string says "missing, or not text". The
     `DefaultSaid` table is gone.
   - **The entry**: `safebyok/validators` drops `Whisper` and `EpochMillis`. Size 8.36 kB to
-    3.66 kB; `DefaultValidators` 3.42 to 3.54; `openVault` 20.01 to 20.11 (of 20.5);
-    `everything` 28.16 to 28.29.
+    3.86 kB; `DefaultValidators` 3.42 to 3.74 (of 4); `openVault` 20.01 to 20.14 (of 20.5);
+    `everything` 28.16 to 28.27.
   - **The misspelt field**: `checkValidators(bag)` (`names.ts`, exported from the main entry) is
     the strictObject check that lived privately in `vault.ts`; `rulesOf` runs it, so `openVault`
     and every `VaultDB` verb refuse a misspelt bag, and `VaultProvider` calls it in render (a
@@ -33,8 +35,8 @@ react 74, convex 282, demo 131, argon2-wasm 44, graphql 159. `pnpm size` within 
   - **A Unicode property escape, not `String.prototype.isWellFormed`.** `isWellFormed` is ES2024:
     every package's tsconfig that reads the core's source, and the demo's, would need
     `ES2024.String` in its lib, and it needs a newer engine than anything the core uses today. `\p{Cs}` under the `u` flag is
-    ES2018 and is Unicode's own category for surrogates, matching only a lone one; it also sits
-    in Zod as a plain `Z.regex`. Not a hand-rolled scan.
+    ES2018 and is Unicode's own category for surrogates, matching only a lone one; it sits
+    in Zod as a one-line refine. Not a hand-rolled scan.
   - **The forgotten bag made harmless rather than loud.** The plan offered "impossible or loud";
     making the bag required reshapes every public verb's signature (the blocking case). Defaulting
     an omitted bag to any well-formed text keeps the signatures, and the mistake stops mattering:
@@ -45,6 +47,12 @@ react 74, convex 282, demo 131, argon2-wasm 44, graphql 159. `pnpm size` within 
   - **`AnyTextValidators` keeps five distinct schemas**, not one shared: `VaultProvider` reopens on
     a schema's identity, and a test swaps one field's for another's.
   - **Carriage return is refused** in a default note: a textarea's value hands up newlines alone.
+* **Review** (`fixed`): af44ea2 makes `erase()`'s standing boxlabel check plain `Z.string()`
+  again, so a box a host's own check stored under a lone surrogate stays erasable; 57aa845 says
+  "well-formed" names where the docs promised any. At filing, from its finding 1: both checks
+  first matched the whole text, which overflowed V8's regex stack on ~10M characters and came out
+  as "threw rather than answering"; they now search for a stray character instead (a test runs
+  12M characters). Its findings 2-4 left as they are, on the PR.
 * **Deviations**: none from the plan's items. The `updateBundle` fix is beyond it, found while
   checking every call site.
 * **Discoveries**
