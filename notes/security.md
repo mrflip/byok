@@ -783,8 +783,8 @@ security expert who knows what questions to ask.
   is untouched. A refusal by one of our checks now passes on that check's message, which quotes
   nothing; a host schema's issues are still never passed on. **A `VaultDB` verb handed no
   validators now admits any well-formed text** (`AnyTextValidators`), where it used to apply the
-  defaults: a wrapper that forgets to forward the vault's bag can no longer refuse a name the
-  vault's own checks passed. The vault passes its bag to every verb (a test spies each one); it
-  had left it off `updateBundle`, so a host with a wider `userId` check could not change a
-  passphrase. Before the change, a server calling the verbs bare got the default checks; it now
+  defaults: a wrapper that forgets to forward the vault's bag can no longer refuse a well-formed
+  name the vault's own checks passed. The vault passes its bag to every verb (a test spies each
+  one); it had left it off `updateBundle`, so a host with a wider `userId` check could not change
+  a passphrase. Before the change, a server calling the verbs bare got the default checks; it now
   gets text-only checks, which is what the shipped server recipes already passed.
