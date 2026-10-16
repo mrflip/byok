@@ -11,7 +11,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { toB64, type Ciphered } from '../src/crypto'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
-import type { VaultError, VaultErrorKind } from '../src/errors'
+import { VaultError, type VaultErrorKind } from '../src/errors'
 import type { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import { memoryStore } from '../src/string-store'
@@ -297,7 +297,8 @@ export type AsyncVerbOf<Target> = {
 /**
  * Has `meanwhile` run inside the next call to `target[verb]`, before the call itself goes on: for
  * slipping another device's doings, or a pause, between a vault's look at storage and its write.
- * Only the next call is touched; later ones go straight through.
+ * Only the next call is touched; later ones go straight through. A method the test already spies
+ * on keeps counting its calls, each once.
  *
  * @param target - The object whose method to intercept: an adapter, a deriver.
  * @param verb - The method, one returning a promise.
@@ -309,11 +310,21 @@ export type AsyncVerbOf<Target> = {
 export const beforeNextCall = <Target extends object>(target: Target, verb: AsyncVerbOf<Target> & string, meanwhile: () => Promise<unknown>): void => {
   // Typed loosely from here: the caller's types were checked at the signature.
   type AsyncFn = (...args: unknown[]) => Promise<unknown>
-  const original = (target as unknown as Record<string, AsyncFn | undefined>)[verb]?.bind(target)
-  if (original === undefined) { throw new TypeError(`beforeNextCall found no method ${verb} to intercept.`) }
+  const method = (target as unknown as Record<string, AsyncFn | undefined>)[verb]
+  if (method === undefined) { throw new TypeError(`beforeNextCall found no method ${verb} to intercept.`) }
+  if (vi.isMockFunction(method)) {
+    // A mock already stands here: stand in front of it for one call, and call it through, so it
+    // records that call once. A second spy on top of it would record the call twice.
+    Reflect.set(target, verb, async (...args: unknown[]) => {
+      Reflect.set(target, verb, method)
+      await meanwhile()
+      return await method.apply(target, args)
+    })
+    return
+  }
   vi.spyOn(target as unknown as Record<string, AsyncFn>, verb).mockImplementationOnce(async (...args: unknown[]) => {
     await meanwhile()
-    return await original(...args)
+    return await method.apply(target, args)
   })
 }
 
@@ -344,6 +355,9 @@ export const holdNextCall = <Target extends object>(target: Target, verb: AsyncV
  * `subscribe`: for a test that a failed open, a close or a lock leaves no watch running that
  * nobody could end. Each watch still reaches the adapter's own `subscribe`.
  *
+ * A watch counts as closed the first time it is closed: closing it again changes nothing, so a
+ * double close cannot stand in for a watch that was never closed.
+ *
  * @param vaultDB - The adapter whose watches to count.
  * @returns The tally, live: `opened` and `closed`, each a count so far.
  *
@@ -358,8 +372,12 @@ export const tallyWatches = (vaultDB: Pick<VaultDB, 'subscribe'>) => {
   vi.spyOn(vaultDB, 'subscribe').mockImplementation((scope, onChange) => {
     tally.opened += 1
     const unsubscribe = subscribe(scope, onChange)
+    let closedYet = false
     return () => {
-      tally.closed += 1
+      if (! closedYet) {
+        closedYet = true
+        tally.closed += 1
+      }
       unsubscribe()
     }
   })
@@ -878,9 +896,8 @@ const NotRefused = Symbol('not refused')
 
 /**
  * The VaultError `operation` rejected with, once the test has checked it is one, of `kind`; the
- * test fails if `operation` resolves. Checked by name and `kind`, not by class: an adapter built
- * on the published package throws that package's VaultError, a different class from `src/`'s. A
- * test that means to prove the class adds its own `instanceOf`.
+ * test fails if `operation` resolves, or rejects with anything else: a plain Error, a lookalike
+ * from another copy of the package, a VaultError of another kind.
  *
  * @param operation - The call that should refuse.
  * @param kind - The refusal's expected `kind`.
@@ -899,8 +916,7 @@ export const expectRefusal = async (operation: Promise<unknown>, kind: VaultErro
     refusal = err
   }
   expect(refusal, `expected a refusal of kind '${kind}', but the operation resolved`).to.not.eq(NotRefused)
-  expect(refusal).to.be.instanceOf(Error)
-  expect(refusal).to.have.property('name', 'VaultError')
+  expect(refusal).to.be.instanceOf(VaultError)
   expect(refusal).to.have.property('kind', kind)
   return refusal as VaultError
 }
