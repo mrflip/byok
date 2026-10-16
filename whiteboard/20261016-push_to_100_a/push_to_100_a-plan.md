@@ -10,7 +10,7 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: 15 underway; 3 (#127) restacked onto 2; 4 (#132) restacking onto 3, then 5b is cut; 1 (#128), 2 (#133), 6 (#126), 7 (#129), 8 (#130), 10 (#136), 11 (#131), 13 (#137), 14 (#134) filed; then 9, and 12 after 23:01Z
+* **Status**: 15 underway; 3 (#127) and 4 (#132) restacked onto 2; 13 (#137) restacking onto 4, then 10 (#136) onto 13, then 5b is cut from 10 (YOLO 16); 1 (#128), 2 (#133), 6 (#126), 7 (#129), 8 (#130), 10 (#136), 11 (#131), 13 (#137), 14 (#134) filed; then 9, and 12 after 23:01Z
 
 ## Read first
 
@@ -469,6 +469,11 @@ From the sprint doc's *Open Matters*, as rows are swept:
     cap the Coach rules on. Holding #133 would stall 5b and the 3 → 4 restack. The PR's open
     questions name it first, and the row says #133 waits on the Coach's word before it merges;
     if yes, thread 9 builds the cap.
+16. **5b is cut from 10's restacked tip, not 4's.** The line runs 4 → 13 → 10 → 5, and 13
+    edits `safebyok-indexeddb/src/expectations.ts`, which 5b deletes, while 10 changes
+    `openVault`, where 5b hands over the logger. Restacking 13 and 10 first (their own workers,
+    each with a lease) moves those conflicts to now, where each worker knows its own code, rather
+    than to the wrap-up. Thread 4 dropped `312bcd50` in its restack, as YOLO 10 corrected says.
 
 ## For the Coach
 
