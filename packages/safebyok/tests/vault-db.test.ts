@@ -10,13 +10,21 @@ import * as TH from './test-helpers'
 
 /**
  * The smallest honest adapter: a Map of records, each check-and-write in one synchronous step.
- * What an adapter author writes; the validation around it comes from the base class.
+ * What an adapter author writes; the validation around it comes from the base class. Given a
+ * `maxLockboxes`, it refuses a new lockbox in a vault already holding that many, after the
+ * expectation is checked, so a first write under a boxlabel already taken is stale, never full.
  */
 class MapVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
   readonly maxVaultBytes = Infinity
-  readonly maxLockboxes = Infinity
+  readonly maxLockboxes: number
   readonly rows = new Map<string, unknown>()
+
+  constructor(maxLockboxes = Infinity) {
+    super()
+    this.maxLockboxes = maxLockboxes
+  }
+
   private standingBundle(scope: VaultScope) { return this.rows.get(Ckeys.bundle(scope)) as VaultBundle | undefined }
 
   protected doReadBundle(scope: VaultScope): Promise<unknown> { return Promise.resolve(this.rows.get(Ckeys.bundle(scope)) ?? null) }
@@ -45,6 +53,11 @@ class MapVaultDB extends VaultDB {
     const standingBox = this.rows.get(Ckeys.box(scope, lockbox.boxlabel)) as Lockbox | undefined
     if (this.standingBundle(scope)?.vault_id !== expected.vault_id || (standingBox?.revision_id ?? null) !== expected.revision_id) {
       return Promise.resolve(false)
+    }
+    const isBox = Ckeys.isBoxIn(scope)
+    const held = [...this.rows].filter(([ckey]) => isBox(ckey)).length
+    if (standingBox === undefined && held >= this.maxLockboxes) {
+      return Promise.reject(new VaultError('vault_full', 'This vault is full: erase a lockbox to make room, then try again.'))
     }
     this.rows.set(Ckeys.box(scope, lockbox.boxlabel), lockbox)
     return Promise.resolve(true)
@@ -84,7 +97,9 @@ class TroubledVaultDB extends MapVaultDB {
 const unheard = (): void => undefined
 
 TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()))
-TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB())
+TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB(), {
+  makeCappedVaultDB: (maxLockboxes) => new MapVaultDB(maxLockboxes),
+})
 
 // The ckeys u1's main vault is filed under, spelled out rather than computed: they are stored.
 const u1BundleCkey = '["vault","acme","u1","main"]'
