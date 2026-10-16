@@ -80,10 +80,10 @@ marked `sideEffects: false`: what you never import never ships.
 
 ## Names, notes, and your own checks
 
-By default a label (`applabel`, `vaultlabel`, `boxlabel`) is lowercase words of letters and
-digits joined by single underscores, 2 to 40 characters (`Label`); a `userId` is text of 1 to 100
-characters (`UserId`); and a note is text of at most 256 characters, with no control characters
-but tab and newline (`LockboxNote`). That suits API keys. Every default, `AnyTextValidators`
+By default a label (`applabel`, `vaultlabel`, `boxlabel`, and the `unlocklabel` of each way in
+you add) is lowercase words of letters and digits joined by single underscores, 2 to 40
+characters (`Label`); a `userId` is text of 1 to 100 characters (`UserId`); and a note is text
+of at most 256 characters, with no control characters but tab and newline (`LockboxNote`). That suits API keys. Every default, `AnyTextValidators`
 included, refuses text that is not well-formed Unicode: a lone surrogate, half of a character such
 as an emoji, which text cut off mid-character holds and which storage such as Convex refuses. A host that wants more -- labels in Hebrew, Arabic or Thai, a password manager's
 long notes, its own auth's id shape -- passes its own Zod schemas as `validators`, and each
@@ -117,7 +117,9 @@ await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team acc
 * **Every name is checked everywhere**, records read back included. Narrow a check later and a
   lockbox stored under a name or note the new one refuses is listed as damaged (see *Damaged
   lockboxes*). `erase()` still reaches it by the name it was stored under; `store()` refuses a
-  refused name, and stores afresh over a box whose note alone is refused.
+  refused name, and stores afresh over a box whose note alone is refused. An `unlocklabel` is
+  checked only as a way in is added: one already stored still opens the vault, whatever the
+  check says now, and the first way in, which the vault names `passphrase`, is not checked.
 * **Sizes follow the names.** Each `store()` weighs its lockbox -- whisper, names and note -- and
   refuses one heavier than the backend holds in a record (`lockbox_too_large`), or one that
   would take the vault past what the backend holds of a vault (`vault_full`). The record is

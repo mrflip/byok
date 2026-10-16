@@ -28,6 +28,7 @@ describe("Names.checkValidators", () => {
     expect(Names.checkValidators(undefined)).to.be.undefined
     expect(Names.checkValidators({ boxlabel: undefined, note: Z.string() })).to.have.property('note')
     expect(Names.checkValidators(AnyTextValidators)).to.eq(AnyTextValidators)
+    expect(Names.checkValidators({ unlocklabel: Z.string() })).to.have.property('unlocklabel')
   })
 
   it("refuses a misspelt field as 'bad_option', as its second example shows, rather than keep the default unseen", () => {
@@ -55,6 +56,8 @@ describe("Names.rulesOf", () => {
     expect(rules.applabel).to.eq(Label)
     expect(rules.userId).to.eq(UserId)
     expect(rules.note).to.eq(LockboxNote)
+    expect(rules.unlocklabel).to.eq(Label)
+    expect(Names.rulesOf({ unlocklabel: AnyBoxlabel }).unlocklabel).to.eq(AnyBoxlabel)
   })
 
   it("refuses a misspelt field, as checkValidators does", () => {

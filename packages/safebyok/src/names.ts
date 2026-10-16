@@ -21,18 +21,20 @@ const nameValidator = Z.optional(Z.custom<NameValidator>((candidate: unknown) =>
 
 /** What `validators` may hold: a schema or undefined for each field it knows, and no other field. */
 const validatorsShape = Z.optional(Z.strictObject({
-  applabel:   nameValidator,
-  vaultlabel: nameValidator,
-  boxlabel:   nameValidator,
-  userId:     nameValidator,
-  note:       nameValidator,
+  applabel:    nameValidator,
+  vaultlabel:  nameValidator,
+  boxlabel:    nameValidator,
+  userId:      nameValidator,
+  note:        nameValidator,
+  unlocklabel: nameValidator,
 }))
 
 /**
  * A host's `validators` bag, exactly as handed in, once its shape passes: each field one of
- * applabel, vaultlabel, boxlabel, userId and note, and each a Zod schema or undefined. Kind
- * 'bad_option' otherwise, so a misspelt field (`boxLabel`) is refused rather than leaving the
- * default check quietly in its place. Only the shape is checked: the schemas are the host's.
+ * applabel, vaultlabel, boxlabel, userId, note and unlocklabel, and each a Zod schema or
+ * undefined. Kind 'bad_option' otherwise, so a misspelt field (`boxLabel`) is refused rather
+ * than leaving the default check quietly in its place. Only the shape is checked: the schemas
+ * are the host's.
  * openVault runs it on its `validators` option; a binding or wrapper that takes the bag apart
  * runs it first, once, on the bag it was handed.
  *
@@ -41,7 +43,7 @@ const validatorsShape = Z.optional(Z.strictObject({
  */
 export const checkValidators = (validators: VaultValidators | undefined): VaultValidators | undefined => {
   if (! validatorsShape.safeParse(validators).success) {
-    throw new VaultError('bad_option', 'validators is a bag of Zod schemas, each checking one of applabel, vaultlabel, boxlabel, userId and note: leave out any field to keep its default check, and check the spelling of each one given.')
+    throw new VaultError('bad_option', 'validators is a bag of Zod schemas, each checking one of applabel, vaultlabel, boxlabel, userId, note and unlocklabel: leave out any field to keep its default check, and check the spelling of each one given.')
   }
   return validators
 }
@@ -56,11 +58,12 @@ export const checkValidators = (validators: VaultValidators | undefined): VaultV
 export const rulesOf = (validators: VaultValidators = {}): NameRules => {
   checkValidators(validators)
   return {
-    applabel:   validators.applabel ?? DefaultValidators.applabel,
-    vaultlabel: validators.vaultlabel ?? DefaultValidators.vaultlabel,
-    boxlabel:   validators.boxlabel ?? DefaultValidators.boxlabel,
-    userId:     validators.userId ?? DefaultValidators.userId,
-    note:       validators.note ?? DefaultValidators.note,
+    applabel:    validators.applabel ?? DefaultValidators.applabel,
+    vaultlabel:  validators.vaultlabel ?? DefaultValidators.vaultlabel,
+    boxlabel:    validators.boxlabel ?? DefaultValidators.boxlabel,
+    userId:      validators.userId ?? DefaultValidators.userId,
+    note:        validators.note ?? DefaultValidators.note,
+    unlocklabel: validators.unlocklabel ?? DefaultValidators.unlocklabel,
   }
 }
 

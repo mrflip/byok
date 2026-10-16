@@ -1399,6 +1399,48 @@ describe("the host's validators", () => {
     expect(boxlabelsOf(narrow)).to.deep.equal([])
   })
 
+  it("check each new way in's unlocklabel with the host's unlocklabel check, at addPassphrase and addPasskey", async () => {
+    const world = makeWorld({ validators: { unlocklabel: ZClassic.string().min(1).max(60) } })
+    const vault = await world.openUnlocked('pw')
+    await vault.addPassphrase('pw', 'pw two', { unlocklabel: 'Written down, in the drawer' })
+    await vault.addPasskey('pw', () => TH.passkeyOf('laptop'), { unlocklabel: 'Laptop: fingerprint' })
+    expect(unlocklabelsOf(vault)).to.deep.equal(['passphrase', 'Written down, in the drawer', 'Laptop: fingerprint'])
+    const err = await TH.expectRefusal(vault.addPassphrase('pw', 'pw three', { unlocklabel: 'u'.repeat(61) }), 'bad_label')
+    expect(err.message).to.include('unlocklabel')
+    expect(err.message).to.not.include('uuu')
+    const makePasskey = vi.fn(() => TH.passkeyOf('phone'))
+    await TH.expectRefusal(vault.addPasskey('pw', makePasskey, { unlocklabel: '' }), 'bad_label')
+    expect(makePasskey).not.toHaveBeenCalled()
+    expect(unlocklabelsOf(vault)).to.have.lengthOf(3)
+  })
+
+  it("check an unlocklabel with Label when the host gives no unlocklabel check, saying what was wrong", async () => {
+    const vault = await makeWorld({ validators: AnyScript }).openUnlocked('pw')
+    const err = await TH.expectRefusal(vault.addPassphrase('pw', 'pw two', { unlocklabel: 'Written down' }), 'bad_label')
+    expect(err.message).to.include('lowercase')
+    expect(unlocklabelsOf(vault)).to.deep.equal(['passphrase'])
+  })
+
+  it("leave a way in stored under an unlocklabel narrowed checks refuse opening the vault, listed as it is", async () => {
+    const world = makeWorld()
+    const roomy = await world.openUnlocked('pw', { validators: { unlocklabel: ZClassic.string() } })
+    await roomy.addPassphrase('pw', 'home pw', { unlocklabel: 'Home phrase' })
+    roomy.close()
+    const narrow = await world.open({ deviceDB: memoryDeviceDB() })
+    expect(unlocklabelsOf(narrow)).to.deep.equal(['passphrase', 'Home phrase'])
+    await narrow.unlock('home pw')
+    expect(narrow.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("name a vault's first way in 'passphrase' whatever the host's unlocklabel check, which checks only the ways in it adds", async () => {
+    const world = makeWorld({ validators: { unlocklabel: ZClassic.string().startsWith('my_') } })
+    const vault = await world.openUnlocked('pw')
+    expect(unlocklabelsOf(vault)).to.deep.equal(['passphrase'])
+    await TH.expectRefusal(vault.addPassphrase('pw', 'pw two', { unlocklabel: 'spare' }), 'bad_label')
+    await vault.addPassphrase('pw', 'pw two', { unlocklabel: 'my_spare' })
+    expect(unlocklabelsOf(vault)).to.deep.equal(['passphrase', 'my_spare'])
+  })
+
   it("erase() reaches a lockbox the host's own check let stand under a name holding a lone surrogate", async () => {
     const world = makeWorld({ validators: { boxlabel: ZClassic.string() } })
     const vault = await world.openUnlocked('pw')

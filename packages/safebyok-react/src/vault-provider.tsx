@@ -107,6 +107,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   const boxlabelCheck = validators?.boxlabel
   const userIdCheck = validators?.userId
   const noteCheck = validators?.note
+  const unlocklabelCheck = validators?.unlocklabel
   const [vault, setVault] = useState<Vault | null>(null)
   const [asking, setAsking] = useState<{ settle: (unlocked: boolean) => void } | null>(null)
   // Wrapped, so that a rejection carrying any value at all (null, say) still reads as "failed".
@@ -121,7 +122,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     let gone = false
     // Listed one by one so the effect re-runs on each; `satisfies` fails the build if an openVault
     // option is ever added and not passed through.
-    const checks = { applabel: applabelCheck, vaultlabel: vaultlabelCheck, boxlabel: boxlabelCheck, userId: userIdCheck, note: noteCheck } satisfies Record<keyof VaultValidators, unknown>
+    const checks = { applabel: applabelCheck, vaultlabel: vaultlabelCheck, boxlabel: boxlabelCheck, userId: userIdCheck, note: noteCheck, unlocklabel: unlocklabelCheck } satisfies Record<keyof VaultValidators, unknown>
     const openOpts = { applabel, vaultlabel, userId, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, validators: checks } satisfies Record<keyof OpenVaultOpts, unknown>
     void openVault(openOpts).then((opened) => {
       if (gone) { opened.close(); return }
@@ -142,7 +143,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
       setOpenFailure(null)
       setOpenError(null)
     }
-  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt])
+  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, unlocklabelCheck, openAttempt])
 
   const retryOpen = useCallback(() => {
     if (openError !== null) { setOpenAttempt((prev) => prev + 1) }

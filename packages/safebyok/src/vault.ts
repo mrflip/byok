@@ -1,7 +1,7 @@
 import * as Z from 'zod/mini'
 import { DeviceUnlock, LockboxSummary, type DamagedLockbox, type Lockbox, ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, PasskeySaltBytes, VaultBundle, type VaultScope, Whisper, wallClock, type Clock, type PasskeyProof, type UnlockEnvelope, type UnlockSummary } from './types'
 import * as Names from './names'
-import { Label, type VaultValidators } from './validators'
+import type { VaultValidators } from './validators'
 import { VaultError, isVaultError } from './errors'
 import type { KeyDeriver } from './key-deriver'
 import { MaxSaltBytes, ensureSuppliedSpecKept } from './key-deriver-spec'
@@ -119,8 +119,9 @@ export type OpenVaultOpts = {
   logger?: VaultLogger | undefined
   /**
    * The checks for the vault's names and notes, as a {@link VaultValidators} bag: each field given
-   * replaces ours outright (`Label` for each label, `UserId` for the user, `LockboxNote` for a
-   * note, from `safebyok/validators`), and each left out keeps ours. Each is a Zod schema that
+   * replaces ours outright (`Label` for each label, an unlock's `unlocklabel` among them, `UserId`
+   * for the user, `LockboxNote` for a note, from `safebyok/validators`), and each left out keeps
+   * ours. Each is a Zod schema that
    * checks synchronously, and only checks: what passes is kept exactly as given. Kind
    * 'bad_option' for a bag holding anything else, or a field it does not know.
    */
@@ -243,7 +244,8 @@ export type Vault = {
    *
    * Refuses with kind 'wrong_passphrase' when `proof` opens nothing (or `newPassphrase` is
    * empty), 'wrong_passkey' or 'absent_unlock' for a passkey's answer that does not open the
-   * vault, 'bad_label' for an unlocklabel that fails the label rules or is already taken, and
+   * vault, 'bad_label' for an unlocklabel that fails the vault's unlocklabel check (by default
+   * `Label`; a host's own in openVault's `validators`) or is already taken, and
    * 'too_many_unlocks' when the vault already holds {@link MaxUnlocks}: remove one first. Like
    * `changePassphrase()`, it moves the unlockEpoch, so every other device locks; it leaves
    * this one unlocked, and throws kind 'stale_write' when another device changed the vault's ways
@@ -1014,7 +1016,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       parsePassphrase(newPassphrase, 'addPassphrase')
       if (! newPassphrase.trim()) { throw new VaultError('wrong_passphrase', "A passphrase can't be empty or only spaces.") }
       const proof = parseProof(givenProof)
-      const unlocklabel = parseUnlocklabel(labelling, 'addPassphrase')
+      const unlocklabel = parseUnlocklabel(rules, labelling, 'addPassphrase')
       const naming = { unlock_id: randomId(), unlocklabel }
       await reviseUnlocks(proof, undefined, {
         check: (standing) => { ensureRoomForUnlock(standing, unlocklabel) },
@@ -1027,7 +1029,7 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
       ensureOpen()
       const proof = parseProof(givenProof)
       parsePasskeyMaker(makePasskey)
-      const unlocklabel = parseUnlocklabel(labelling, 'addPasskey')
+      const unlocklabel = parseUnlocklabel(rules, labelling, 'addPasskey')
       const naming = { unlock_id: randomId(), unlocklabel }
       const added = await reviseUnlocks(proof, undefined, {
         check:  (standing) => { ensureRoomForUnlock(standing, unlocklabel) },
@@ -1307,12 +1309,13 @@ const parseUnlockId = (candidate: string): string => {
   return checked.data
 }
 
-const parseUnlocklabel = (candidate: { unlocklabel: string } | undefined, call: 'addPassphrase' | 'addPasskey'): string => {
-  const checked = Label.safeParse(candidate?.unlocklabel)
-  if (! checked.success) {
-    throw new VaultError('bad_label', `${call} needs an unlocklabel, what the user calls this way in: 2-40 lowercase letters and digits, words joined by single underscores, starting with a letter.`)
+/** `opts.unlocklabel`, once it passes the vault's unlocklabel check: kind 'bad_label' otherwise. */
+const parseUnlocklabel = (rules: Names.NameRules, candidate: { unlocklabel: string } | undefined, call: 'addPassphrase' | 'addPasskey'): string => {
+  const unlocklabel: unknown = candidate?.unlocklabel
+  if (typeof unlocklabel !== 'string') {
+    throw new VaultError('bad_label', `${call} needs an unlocklabel, what the user calls this way in, as text.`)
   }
-  return checked.data
+  return Names.check(rules, 'unlocklabel', unlocklabel)
 }
 
 /**
