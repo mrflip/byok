@@ -1,10 +1,11 @@
 # Thread 11: vaultdb_contract (2026-10-16)
 
-Branch `20261016-vaultdb_contract`, PR [#107](https://github.com/mrflip/safebyok/pull/107), cut
-from main at `b60e516` (the gripes line merged). Justify: green -- safebyok 1171 passed, 14
-skipped; postgres 189/7; graphql 186/7; convex 302/14; indexeddb 118/7; react 73; argon2-wasm
-44; demo 141/7; root 123. The skips are the lockbox limit's battery lines over adapters given no
-`makeCappedVaultDB` (7 per such run).
+Branch `20261016-vaultdb_contract`, PR [#107](https://github.com/mrflip/safebyok/pull/107),
+stacked on [#106](https://github.com/mrflip/safebyok/pull/106) (the line main -> #98 -> #97 ->
+#105 -> #106), rebased at filing onto `ad435db`. Justify: green -- safebyok 1231 passed, 18
+skipped; postgres 192/9; graphql 188/9; convex 311/14; indexeddb 118/9; react 97; argon2-wasm
+44; demo 141/9; root 123. `pnpm size` green. The skips are lines run only over an adapter given
+`makeCappedVaultDB` (4.2 to 4.5, and 5.3's full half) or `makeVaultDBFor` (5.4).
 
 **Thread 12 reads `thread-11-postgres_verdict.md`, beside this file, first.**
 
@@ -68,16 +69,28 @@ skipped; postgres 189/7; graphql 186/7; convex 302/14; indexeddb 118/7; react 73
     convex-test and fake-indexeddb all serialize: they prove the outcome, not the race. Thread 6's
     honest race helper is what proves the race.
   - 2.1 says "on any device"; the battery checks it through one adapter. Thread 6 again.
-* **For thread 10 (#106)**: lines 5.5 on are kept for `identity_revoked` (a comment in
-  `VAULTDB.md` marks the place). From #106's thread file, they would say: a scope not the
-  signed-in user's, or any while signed out, refused `identity_revoked` (revising 5.4, which says
-  `not_permitted` as main does today); that kind only when the user really is gone, a passing
-  fault staying `storage_unavailable`; `not_permitted` for the scope's own user who may not make
-  the call; neither from an adapter with no notion of identity; a failing live watch calls
-  `onChange`. Whichever of #106 and this lands second adds them, with `VaultDBContract` entries.
+* **#106's `identity_revoked` lines, written in at filing** (this thread lands second): 5.4 now
+  says another user, or no one, is refused every verb as `identity_revoked`, reading and writing
+  nothing; 5.5 that kind only when the user is really gone; 5.6 `not_permitted` refuses one call
+  and locks nothing; 5.7 an adapter with no identity says neither; and #106's fifth, a failing
+  watch calls `onChange`, as **6.2**, beside `subscribe`'s other line rather than among the
+  errors. 5.4 has battery tests, run over a new option, `makeVaultDBFor` (a fresh backend as a
+  way to sign in as anyone, or no one), wired for postgres, graphql, convex (both clients) and the
+  core's `servingOnly` fake; 5.5 to 5.7 and 6.2 say they are tested per adapter.
 * **For thread 13/14 (#105)**: rotation's new line (`LockboxExpectation.vault_key_epoch`, compared
   atomically) fits 3.3 as written; nothing here rules it out. It becomes a clause of 3.3 and a
   battery test when thread 14 builds it.
+* **Review** (`thread-reviewer`, verdict `fixed`): its one fix, `28b1ea2` -- the 4.2 test now
+  compares the whole standing vault around a `vault_full` refusal. It checked the Postgres verdict
+  as reasoning and found it holds, with one correction made in the verdict file (REPEATABLE READ's
+  count-then-insert racers overshoot rather than fail; its `40001`s come from `ON CONFLICT` and
+  the foreign key's cross-check), and confirmed `eraseVault` racing an insert is safe. At the
+  orchestrator's word: 4.4 retitled "Under the limit, a new lockbox lands" (the old title was
+  untrue once racers overshoot), the `VAULTDB.md` comment marker dropped, and the
+  transactionless paragraph said plainly. Minor, left: 5.3's two same-titled groups (now merged
+  into one, its full half `it.runIf`); Postgres's README and code still promise a hard limit
+  until thread 12; the battery's race tests prove outcomes, not races (thread 6); the capped and
+  sign-in factories omit `listen`, so they exercise no push.
 * **For the Coach**:
   - The write-returns-a-count deviation above.
   - Whether `VAULTDB.md` should ship in the npm tarball (it does now) or live only on GitHub.

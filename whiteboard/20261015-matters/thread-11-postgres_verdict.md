@@ -44,18 +44,25 @@ Postgres's default isolation, **provided**:
    committed bundle, not the snapshot, and raises `23503`. No lockbox lands in the wrong vault --
    the foreign key still guarantees that -- but the adapter must map that error code to `false`
    (`stale_write`), or line 5.2 breaks (contention reported as `storage_unavailable`).
-3. **The README says the guarantee holds at READ COMMITTED.** Under REPEATABLE READ or
-   SERIALIZABLE (a host's session default, or a host wrapping calls in its own transaction), two
-   inserts into one vault reading `count(*)` and inserting into the range it read conflict, and
-   one fails with `40001` -- a retry the baseline promises not to ask for. Also, at REPEATABLE
-   READ, `ON CONFLICT DO NOTHING` against a row its snapshot cannot see raises `40001`. These are
-   `storage_unavailable` (5.2 allows that: it is real contention, under a non-default setting).
+3. **The README says the guarantee holds at READ COMMITTED.** Above it (a host's session
+   default, or a host wrapping calls in its own transaction), some races fail with `40001` -- a
+   retry the baseline promises not to ask for. At SERIALIZABLE, two inserts into one vault that
+   each read `count(*)` and insert into the range read conflict through its predicate locks, and
+   one fails. At REPEATABLE READ the count-then-insert race does not conflict (it overshoots, as
+   at READ COMMITTED); the `40001`s there come from `ON CONFLICT DO NOTHING` meeting a row its
+   snapshot cannot see, and from the foreign key's cross-check finding the bundle changed since
+   the snapshot. These are `storage_unavailable` (5.2 allows that: real contention, under a
+   non-default setting). *Corrected by the review: an earlier draft had REPEATABLE READ's
+   count-then-insert racers fail too.*
 
 Under concurrency at READ COMMITTED: each statement sees the vault as of its own start, so `N`
 racers at `cap - 1` can all see room and all land, overshooting by up to `N - 1`. Line 4.2 allows
 exactly this; writes made one after another always see each other and never overshoot. A refusal
 for the count inserted nothing (the `WHERE` failed inside one atomic statement), which is line
-3.6. Every row that landed is readable by boxlabel (2.2), and erases always make room (4.4).
+3.6. Every row that landed is readable by boxlabel (2.2), and once erases bring a vault under its
+limit, a new lockbox lands (4.4). `eraseVault` racing an insert is safe too: the cascade runs on
+a fresh snapshot and waits behind the insert's key-share lock on the bundle, so it takes the new
+lockbox with the vault.
 
 ## What else goes with it
 
