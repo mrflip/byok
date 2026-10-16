@@ -507,6 +507,9 @@ fields; decide them together.
   foreign error to what may ride along, say to keep Convex's error on a dev deployment), where a
   host passes it, and whether the other adapters, which still carry their client's error as
   `cause` (Postgres, GraphQL, IndexedDB), go through it too.
+  - The core's `asStorageTrouble` (`vault-db.ts`), and so every adapter's failure that is not a
+    VaultError, and the Postgres and GraphQL adapters still attach their client's error as
+    `cause` (`notes/security.md` says so): how far the sanitizer reaches is this entry's decision.
 
 #### Re-examine the pluggable validators interface
 
