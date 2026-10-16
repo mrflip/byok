@@ -184,6 +184,25 @@ offering a **disciplined interface**.
 
 The toolchain: TypeScript, Vitest, ESLint, tsdown.
 
+## Size budgets
+
+`.size-limit.json` holds one budget per import shape of the built packages, checked by `pnpm size`
+(CI runs it after the build). JSON has no comments, so the rule for setting a budget lives here.
+size-limit's `kB` is 1000 bytes, and it measures minified and brotlied.
+
+1. **Start from the measure** (`pnpm size`, or `npx size-limit --json` for exact bytes).
+2. **Add the room.** A bundle of 5 kB or more gets **+3 kB**; one under 5 kB gets **+50%**, and at
+   least +1 kB, so a small bundle is not given more room than its own size.
+3. **Round up to a round number**: two significant figures, never down (2.3 kB of measure is
+   3.5 kB of budget; 22.15 kB is 23 kB; 26.83 kB is 30 kB). Round numbers keep a stack of PRs
+   from fighting over digits: a budget of 2_431 bytes is a conflict waiting for the next
+   thread, and 2_500 is not.
+
+A sprint's orchestrator guesses the target up front and has the first thread set it, so the
+stacked PRs agree (`.claude/skills/sprint/SKILL.md`); a late thread lowers the budgets to this
+rule once the sprint's sizes are known. Anyone else raising a budget follows the same rule, and
+says in the PR why the bundle grew.
+
 ## Where things are written
 
 * **`human/`** -- from agents, to Coaches: one file per entry (`human/README.md`).
