@@ -22,6 +22,7 @@ This repository is a pnpm workspace. Its packages:
 * [`safebyok-indexeddb`](packages/safebyok-indexeddb) -- IndexedDB storage: a vault kept in this
   browser, every verb one transaction, and the template for a key-value backend of your own.
 * [`safebyok-demo-react`](demos/safebyok-demo-react) -- a playground app; never published.
+* [`safebyok-e2e`](e2e) -- the tests that pair an adapter with a framework's client; never published.
 
 `pnpm install`, then `pnpm justify` lints, typechecks, tests and builds every package.
 [CONTRIBUTING.md](CONTRIBUTING.md) has the rest.

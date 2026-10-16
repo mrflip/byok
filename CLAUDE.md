@@ -127,6 +127,10 @@ pnpm changeset                     # a PR's release note; `--empty` when it need
 * `tests/` mirrors `src/` path for path: `src/foo/bar.ts` is tested in `tests/foo/bar.test.ts`.
   `fixtures/` holds sample data, when there is some.
 * `demos/` -- private playground apps exercising the packages; never published.
+* `e2e/` -- the private `safebyok-e2e` package: the adapter-by-framework checks (Convex with
+  `ConvexReactClient`; later Vue) and any heavyweight browser spec, so no adapter's `package.json`
+  lists a framework. An adapter's own tests stay in its package. Never published; its README says
+  where a new pairing goes.
 * The root is a private workspace, never published: its own `scripts/` (tested in `tests/scripts/`)
   and the configs that check them.
 * `dist/` is built, never committed.
