@@ -144,6 +144,16 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   // Bumped by retryOpen: a fresh value re-runs the open effect.
   const [openAttempt, setOpenAttempt] = useState(0)
 
+  /** Closes `ending` if it is still the dialog showing, and settles every action waiting on it. */
+  const endAsking = useCallback((ending: Asking | null, unlocked: boolean) => {
+    if (ending === null) { return }
+    if (askingRef.current === ending) {
+      askingRef.current = null
+      setAsking(null)
+    }
+    for (const settle of ending.waiters) { settle(unlocked) }
+  }, [])
+
   useEffect(() => {
     if (userId === null) { return }
     let handle: Vault | null = null
@@ -166,12 +176,17 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     })
     return () => {
       gone = true
+      // A dialog belongs to the vault it was opened over: when that handle goes -- a sign-out,
+      // another user, a reopen, the provider unmounting -- its actions resolve null, and it closes.
+      // Here and not in an effect on `vault`, whose cleanup from the render before the vault came
+      // would end a dialog opened in the very commit that brought it.
+      endAsking(askingRef.current, false)
       handle?.close()
       setVault(null)
       setOpenFailure(null)
       setOpenError(null)
     }
-  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, whenIdentityRevoked, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt])
+  }, [userId, applabel, vaultlabel, vaultDB, deviceDB, forcePassphraseReentryHours, clock, keyDeriver, maxWhisperBytes, maxLockboxes, logger, whenIdentityRevoked, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck, openAttempt, endAsking])
 
   const retryOpen = useCallback(() => {
     if (openError !== null) { setOpenAttempt((prev) => prev + 1) }
@@ -191,16 +206,6 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     setOpenAttempt((prev) => prev + 1)
   }, [openError, userId, applabel, vaultlabel, vaultDB, deviceDB, applabelCheck, vaultlabelCheck, boxlabelCheck, userIdCheck, noteCheck])
 
-  /** Closes `ending` if it is still the dialog showing, and settles every action waiting on it. */
-  const endAsking = useCallback((ending: Asking | null, unlocked: boolean) => {
-    if (ending === null) { return }
-    if (askingRef.current === ending) {
-      askingRef.current = null
-      setAsking(null)
-    }
-    for (const settle of ending.waiters) { settle(unlocked) }
-  }, [])
-
   /** Waits on the dialog showing now, opening one if none is. */
   const awaitUnlock = useCallback(() => new Promise<boolean>((settle) => {
     const { current } = askingRef
@@ -213,10 +218,6 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
     askingRef.current = opening
     setAsking(opening)
   }), [])
-
-  // A dialog belongs to the vault it was opened over: when that handle goes -- a sign-out, another
-  // user, a reopen, the provider unmounting -- its actions resolve null, and it closes.
-  useEffect(() => () => { endAsking(askingRef.current, false) }, [vault, endAsking])
 
   // An unlock that lands while a dialog is asking -- the first dialog's, finishing after its Cancel,
   // or one the app made itself through the handle -- answers it: the dialog closes, and the actions
