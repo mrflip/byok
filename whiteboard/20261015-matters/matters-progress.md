@@ -12,8 +12,8 @@
 | 6 | race_helper       | waiting on thread 5        |
 | 7 | indexeddb_fixes   | underway (on #105)         |
 | 8 | size_rule         | filed #99 (commits on it)  |
-| 9 | damaged_bundle    | resumed on #97's restacked tip |
-| 10 | identity_revoked | in review (#106)           |
+| 9 | damaged_bundle    | in review (#108)           |
+| 10 | identity_revoked | filing #106 onto #105 (review fixed) |
 | 11 | vaultdb_contract | in review (#107)           |
 | 12 | postgres_soft_cap | waiting on 11             |
 | 13 | rotation_design  | filed #105 (on #97)        |
@@ -22,7 +22,7 @@
 | 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
 | 20 | rotation_docs    | waits on 19                |
 | 15 | e2e_home         | underway (on #105)         |
-| 16 | late_unlock      | queued (cut from the line's top) |
+| 16 | late_unlock      | underway (on #105)         |
 | 17 | validation_note  | waits on #101 merging      |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
@@ -60,7 +60,19 @@
   erased); `openVault({ whenIdentityRevoked: 'lock' | 'stay' })`; Convex and Postgres refuse a
   signed-out or other user as `identity_revoked`; Convex's failed watch now calls `onChange`. Its
   thread file holds five lines the VaultDB contract should carry (threads 11 and 5). Size: 245 B
-  over main's budget, inside the line's (#99).
+  over main's budget, inside the line's (#99). *Review:* fixed two -- `rememberedUnlock` now
+  yields to a shut since it began (a refresh meeting `identity_revoked` mid-open left the open
+  `unlocked` holding the dropped key), and `heed`'s pass-through is tested for all eight verbs.
+  Left, minor: a read past `ensureUnlocked()` still returns its whisper if a lock lands mid-read
+  (always so; to the Coach); a never-settling device erase hangs the refused call; a closed
+  handle's late refusal erases the remembered unlock; every ConvexClient watch error refreshes.
+* **Thread 9 (#108), damaged_bundle.** `damaged_bundle`, `damaged_unlock`, `damaged_lockbox`: the
+  vault translates storage's `corrupt_record` (kept as `cause`), so no adapter or contract
+  changes. A damaged way in is passed over, not a lock-out. A tampered bundle still reads as
+  `wrong_passphrase` (AES-GCM can't tell), with "the stored vault may be damaged" in the message;
+  the plan's "remembered unlock" example was refused as a home-made construction. Argon2 sentence
+  in security.md. Open: a damaged bundle can't be destroyed (no handle opens); VOCABULARY's
+  *damaged* row could widen; #106 meets it in `errors.ts` at restack.
 
 * **The restack (#96 to #99 onto `b60e516`).** One line, bottom to top: #96 `34171fd`, #99
   `88b7b05`, #98 `4eb2d74`, #97 `8d665aa` (#97 on top: it rewrote `vault.ts` logic main also
