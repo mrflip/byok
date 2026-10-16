@@ -40,14 +40,21 @@ security expert who knows what questions to ask.
   lasts (clearing site data, a damaged mark, or another `vault_id` -- a vault made anew -- starts
   a new mark). Its blind spot: bundles cannot be ordered across `vault_id`s, so storage serving an
   old, destroyed vault in place of the current one is not caught, nor is anything on a device
-  that never saw the newer bundle. `destroy()` and `eraseDamagedVault` erase the mark. Two tabs of
-  one device each read and write the mark without a lock, so a tab that read an older bundle
-  before the other tab's newer one can write the mark back down: the check weakens to the older
-  epoch. A bundle is held to the mark as read before the bundle itself, so a newer bundle that
-  another tab, or this one, landed while it was being read never passes for a rollback: against
-  storage whose reads see every write landed before them, the check never refuses wrongly. Within a bundle, an envelope whose `vault_key_epoch` is not the
-  bundle's is passed over as damaged (`damaged_unlock`), so an envelope spliced in from an older
-  bundle never hands over its vaultKey as the current one.
+  that never saw the newer bundle. A mark holds one vault per scope, so storage that hands back
+  another vault's bundle even once moves the mark to that vault, and an older copy of the first is
+  then taken as it stands. And `unlock_epoch` is bound into no encryption, so storage that alters
+  it -- an older bundle served under a higher epoch -- passes the check: it catches a backup
+  restored as it was, not storage set on deceiving the device. (`vault_key_epoch`, bound into
+  every envelope, is what such storage cannot raise and still have the envelopes open; the mark
+  does not hold it.) `destroy()` and `eraseDamagedVault` erase the mark. Two tabs of one device
+  each read and write the mark without a lock, so a tab that read an older bundle before the
+  other tab's newer one can write the mark back down: the check weakens to the older epoch. A
+  bundle is held to the mark as read before the bundle itself, so a newer bundle that another tab,
+  or this one, landed while it was being read never passes for a rollback: against storage whose
+  reads see every write landed before them, the check never refuses wrongly. Within a bundle, an
+  envelope whose `vault_key_epoch` is not the bundle's is passed over as damaged
+  (`damaged_unlock`), so an envelope spliced in from an older bundle never hands over its vaultKey
+  as the current one.
 * 2026-10-16: **`device_id`.** Every unlock envelope carries the `device_id` of the device that
   added it, and its `registered_at`, both in its header and so bound into its wrap (and, for a
   passkey, its HKDF `info`), and kept when the envelope is sealed anew. The id is a random UUID
