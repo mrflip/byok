@@ -522,7 +522,7 @@ export type VaultDBContractLine = keyof typeof VaultDBContract
  * VaultDB from the built package (`safebyok`) qualifies as readily as one extending `src/`.
  */
 export type VaultDBVerbs = Pick<VaultDB,
-  'maxRecordBytes' | 'maxVaultBytes' | 'maxLockboxes' | 'readBundle' | 'createBundle' | 'updateBundle' | 'readBox' | 'listBoxes' | 'updateBox' | 'eraseBox' | 'eraseVault' | 'subscribe'
+  'maxRecordBytes' | 'maxVaultBytes' | 'maxLockboxes' | 'readBundle' | 'createBundle' | 'updateBundle' | 'readBox' | 'listBoxes' | 'updateBox' | 'eraseBox' | 'eraseVault' | 'eraseDamagedVault' | 'subscribe'
 >
 
 /** What {@link describeVaultDB} takes beside its adapter. */
@@ -901,6 +901,17 @@ export const describeVaultDB = (adapterTitle: string, makeVaultDB: () => VaultDB
       await expectRefusal(vaultDB.eraseVault(scopeOf('u1'), thisVault), 'stale_write')
       expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
     })
+
+    it("eraseDamagedVault leaves a vault that stands sound as it is, and is quiet where none stands", async () => {
+      const vaultDB = await withBundle()
+      await vaultDB.updateBox(scopeOf('u1'), boxOf('anthropic', 'one'), noBoxYet)
+      await expectRefusal(vaultDB.eraseDamagedVault(scopeOf('u1')), 'bad_option')
+      expect(await vaultDB.readBundle(scopeOf('u1'))).to.deep.equal(bundleOf('u1'))
+      expect(await vaultDB.listBoxes(scopeOf('u1'))).to.have.lengthOf(1)
+      await vaultDB.eraseVault(scopeOf('u1'), thisVault)
+      await vaultDB.eraseDamagedVault(scopeOf('u1'))
+      expect(await vaultDB.readBundle(scopeOf('u1'))).to.be.null
+    })
   })
 
   describe(lineTitle('3.6'), () => {
@@ -1194,6 +1205,7 @@ export const perUser = (vaultDBFor: (userId: string) => VaultDBVerbs): VaultDBVe
     updateBox:      (scope, lockbox, expected, validators) => as(scope).updateBox(scope, lockbox, expected, validators),
     eraseBox:       (scope, boxlabel, expected, validators) => as(scope).eraseBox(scope, boxlabel, expected, validators),
     eraseVault:     (scope, expected, validators) => as(scope).eraseVault(scope, expected, validators),
+    eraseDamagedVault: (scope, validators) => as(scope).eraseDamagedVault(scope, validators),
     subscribe:      (scope, onChange, validators) => as(scope).subscribe(scope, onChange, validators),
   }
 }

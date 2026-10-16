@@ -98,6 +98,27 @@ describe("idbVaultDB", () => {
     expect(refusal.kind).to.eq('stale_write')
   })
 
+  it("erases a vault whose bundle is damaged -- eraseDamagedVault reads its vault_id as stored -- and only that vault", async () => {
+    const dbName = TH.freshDbName()
+    const vaultDB = idbVaultDB({ dbName })
+    for (const user of ['u1', 'u2']) {
+      await vaultDB.createBundle(TH.bundleOf(user))
+      await vaultDB.updateBox(TH.scopeOf(user), TH.boxOf('anthropic', 'one'), { vault_id: `vault-id-${user}`, revision_id: null })
+    }
+    await set(bundleCkey(TH.scopeOf('u1')), { vault_id: 'vault-id-u1', unlock_epoch: 'one' }, rawShelf(dbName))
+    const soundRefusal = await TH.refusalOf(vaultDB.eraseDamagedVault(TH.scopeOf('u2')))
+    expect(soundRefusal.kind).to.eq('bad_option')
+    await vaultDB.eraseDamagedVault(TH.scopeOf('u1'))
+    const shelf = rawShelf(dbName)
+    const ourBundle = bundleCkey(TH.scopeOf('u1'))
+    const ourBox = boxCkey(TH.scopeOf('u1'), 'anthropic')
+    expect(await get(ourBundle, shelf)).to.be.undefined
+    expect(await get(ourBox, shelf)).to.be.undefined
+    expect(await vaultDB.readBundle(TH.scopeOf('u2'))).to.deep.equal(TH.bundleOf('u2'))
+    const theirs = await vaultDB.listBoxes(TH.scopeOf('u2'))
+    expect(theirs.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
+  })
+
   it("refuses trouble from IndexedDB itself as storage_unavailable", async () => {
     const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
     const blocked = vi.spyOn(globalThis.indexedDB, 'open').mockImplementation(() => { throw new DOMException('IndexedDB is off', 'InvalidStateError') })

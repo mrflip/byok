@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bundleMeetsExpectation, lockboxMeetsExpectation, vaultMeetsExpectation } from '../src/expectations'
+import { bundleMeetsExpectation, lockboxMeetsExpectation, vaultIdMeetsExpectation, vaultMeetsExpectation } from '../src/expectations'
 import * as TH from './test-helpers'
 
 const Bundle = TH.bundleOf('u1')
@@ -36,6 +36,21 @@ describe("vaultMeetsExpectation", () => {
   it("fails a bundle too damaged to show an epoch, though it shows the vault_id", () => {
     expect(vaultMeetsExpectation({ vault_id: 'vault-id-u1' }, { vault_id: 'vault-id-u1' })).to.be.false
     expect(vaultMeetsExpectation({ vault_id: 'vault-id-u1', unlock_epoch: '1' }, { vault_id: 'vault-id-u1' })).to.be.false
+  })
+})
+
+describe("vaultIdMeetsExpectation", () => {
+  it("holds for any standing bundle that names the vault, however damaged the rest of it", () => {
+    expect(vaultIdMeetsExpectation(Bundle, { vault_id: 'vault-id-u1' })).to.be.true
+    expect(vaultIdMeetsExpectation({ vault_id: 'vault-id-u1' }, { vault_id: 'vault-id-u1' })).to.be.true
+    expect(vaultIdMeetsExpectation({ vault_id: 'vault-id-u1', unlock_epoch: '1' }, { vault_id: 'vault-id-u1' })).to.be.true
+  })
+
+  it("fails a bundle of another vault, a bundle that names none, and none at all", () => {
+    expect(vaultIdMeetsExpectation(Bundle, { vault_id: 'reborn' })).to.be.false
+    expect(vaultIdMeetsExpectation({ unlock_epoch: 1 }, { vault_id: 'vault-id-u1' })).to.be.false
+    expect(vaultIdMeetsExpectation(undefined, { vault_id: 'vault-id-u1' })).to.be.false
+    expect(vaultIdMeetsExpectation('not a bundle', { vault_id: 'vault-id-u1' })).to.be.false
   })
 })
 

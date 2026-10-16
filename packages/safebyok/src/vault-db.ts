@@ -1,6 +1,6 @@
 import * as Z from 'zod/mini'
 import { Lockbox, LockboxSummary, VaultBundle, VaultScope, type DamagedLockbox } from './types'
-import { VaultError } from './errors'
+import { VaultError, isVaultError } from './errors'
 import * as Names from './names'
 import type { VaultValidators } from './validators'
 import type { StringStore } from './string-store'
@@ -262,6 +262,36 @@ export abstract class VaultDB {
   }
 
   /**
+   * Remove a vault whose stored bundle fails its checks -- the one vault `readBundle` refuses as
+   * `corrupt_record`, which `openVault` says as `damaged_bundle` -- and no other: the escape
+   * hatch behind `eraseDamagedVault`, for a vault that no handle can be opened on to `destroy()`.
+   * It reads the bundle as stored, takes the `vault_id` out of it, and erases the bundle and
+   * every lockbox only while the standing bundle still has that `vault_id` (`eraseVault`'s own
+   * expectation). Resolves quietly when the scope holds no bundle. Refuses with kind `bad_option`
+   * when the bundle stands sound, and erases nothing, since a sound vault is deleted through its
+   * handle's `destroy()`; with kind `damaged_bundle` when the record is too damaged to name the
+   * vault it belongs to, which only the backend's own tools can clear; and with kind
+   * `stale_write` when the vault was replaced meanwhile.
+   *
+   * An adapter that hands each call on to another VaultDB's public verbs hands this one on too:
+   * its `doReadBundle` would meet the inner adapter's refusal of the damaged record, never the
+   * record, and so could not name the vault. So does a backend whose server validates what it
+   * reads, as `safebyok-graphql`'s: there a damaged record is the backend's own to clear.
+   */
+  async eraseDamagedVault(scope: VaultScope, validators?: VaultValidators): Promise<void> {
+    const asked = Names.checkScope(Names.rulesOf(validators), scope)
+    const raw = await readStoredBundle(() => this.doReadBundle(asked))
+    if (raw === null || raw === undefined) { return }
+    if (isSoundBundle(raw, asked)) {
+      throw new VaultError('bad_option', "That vault's stored bundle is sound, so it is not erased here: a vault that opens is deleted through its handle's destroy(). Only a vault that openVault refuses as damaged_bundle is erased this way.")
+    }
+    const named = StoredVaultId.safeParse(raw)
+    if (! named.success) { throw unnamedBundle() }
+    const landed = await fromStorage(() => this.doEraseVault(asked, { vault_id: named.data.vault_id }))
+    if (! landed) { throw staleErase() }
+  }
+
+  /**
    * Calls `onChange` after any write touching `scope`, from this device or another; returns the
    * unsubscribe. A backend without push never calls: safebyok refreshes after its own writes
    * regardless, so all it loses is news of *other* devices' writes.
@@ -421,6 +451,36 @@ const checkBundle = (raw: unknown, scope: VaultScope): VaultBundle => {
   return bundle
 }
 
+const unnamedBundle = (opts?: ErrorOptions) => new VaultError('damaged_bundle', "This vault's stored record is too damaged to say which vault it is, so storage can't be told which one to erase, and nothing was erased. Its backend's own tools can clear it.", opts)
+
+/**
+ * The bundle as the adapter stores it. An adapter that validates on the way up, as a wrapper over
+ * another VaultDB's public verbs or a server's checked reads do, refuses the damaged record
+ * instead of handing it up: that refusal is the vault's id being out of reach, said as such.
+ */
+const readStoredBundle = async (reading: () => Promise<unknown>): Promise<unknown> => {
+  try {
+    return await fromStorage(reading)
+  } catch (err) {
+    if (isVaultError(err, 'corrupt_record')) { throw unnamedBundle({ cause: err }) }
+    throw err
+  }
+}
+
+/** True when `raw` reads back as the scope's bundle: what `readBundle` would hand up rather than refuse. */
+const isSoundBundle = (raw: unknown, scope: VaultScope): boolean => {
+  try {
+    checkBundle(raw, scope)
+    return true
+  } catch (err) {
+    if (isVaultError(err, 'corrupt_record')) { return false }
+    throw err
+  }
+}
+
+/** The one field of a stored bundle an erase needs, as the vault's own check has it. */
+const StoredVaultId = Z.object({ vault_id: VaultBundle.shape.vault_id })
+
 /**
  * A stored record through its validator, with failure as a calm VaultError: storage is someone
  * else's database, and a record may be damaged or written by another version of this package.
@@ -438,6 +498,7 @@ const checkRecord = <RecordT>(recordSchema: Z.ZodMiniType<RecordT>, raw: unknown
 
 // Just the fields an expectation compares; a standing row too damaged to show them fails it.
 const StandingBundle = Z.object({ vault_id: Z.string(), unlock_epoch: Z.number() })
+const StandingVault = Z.object({ vault_id: Z.string() })
 const StandingBox = Z.object({ revision_id: Z.string() })
 
 /** True when the bundle row standing in storage is the one `expected` names. */
@@ -451,6 +512,16 @@ const bundleMeetsExpectation = (standingBundle: unknown, expected: BundleExpecta
 /** True when the bundle row standing in storage belongs to the vault `expected` names. */
 const vaultMeetsExpectation = (standingBundle: unknown, expected: { vault_id: string }): boolean => {
   const standing = StandingBundle.safeParse(standingBundle)
+  return standing.success && standing.data.vault_id === expected.vault_id
+}
+
+/**
+ * True when the bundle row standing in storage names the vault `expected` names, whatever else of
+ * it is damaged: what erasing a whole vault compares, so that a vault whose bundle fails its
+ * checks can still be erased.
+ */
+const vaultIdMeetsExpectation = (standingBundle: unknown, expected: { vault_id: string }): boolean => {
+  const standing = StandingVault.safeParse(standingBundle)
   return standing.success && standing.data.vault_id === expected.vault_id
 }
 
@@ -558,7 +629,7 @@ class StringStoreVaultDB extends VaultDB {
 
   protected doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
     return soon(() => {
-      if (! vaultMeetsExpectation(readJson(this.store, Ckeys.bundle(scope)), expected)) { return false }
+      if (! vaultIdMeetsExpectation(readJson(this.store, Ckeys.bundle(scope)), expected)) { return false }
       const doomed = this.store.ckeys().filter(Ckeys.isBoxIn(scope))
       for (const ckey of [...doomed, Ckeys.bundle(scope)]) { this.store.erase(ckey) }
       return true

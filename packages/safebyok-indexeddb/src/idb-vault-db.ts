@@ -3,7 +3,7 @@ import { Ckeys, VaultDB } from 'safebyok'
 import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, StoredLockbox, VaultBundle, VaultScope } from 'safebyok'
 import { onBell, ringBell } from './bell'
 import { boxCkey, bundleCkey, isBoxCkeyOf } from './ckeys'
-import { bundleMeetsExpectation, lockboxMeetsExpectation, vaultMeetsExpectation } from './expectations'
+import { bundleMeetsExpectation, lockboxMeetsExpectation, vaultIdMeetsExpectation, vaultMeetsExpectation } from './expectations'
 import { parseDbName, type IdbVaultDBOpts } from './idb-opts'
 import { inOneTransaction, shelfOf } from './shelf'
 
@@ -107,7 +107,7 @@ class IdbVaultDB extends VaultDB {
   protected async doEraseVault(scope: VaultScope, expected: EraseExpectation): Promise<boolean> {
     return this.ringIfLanded(await inOneTransaction(this.shelf, async (store) => {
       const standing = await rowAt(store, bundleCkey(scope))
-      if (! vaultMeetsExpectation(standing, expected)) { return false }
+      if (! vaultIdMeetsExpectation(standing, expected)) { return false }
       const ckeys = await promisifyRequest(store.getAllKeys())
       const doomed = ckeys.filter((ckey) => isBoxCkeyOf(scope, ckey))
       for (const ckey of [...doomed, bundleCkey(scope)]) { store.delete(ckey) }

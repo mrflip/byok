@@ -7,7 +7,7 @@ import { VaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { jsonBytes, localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore } from '../src/string-store'
-import { LockboxFieldsBytes, LockboxFixedBytes, StoredBytesPerWhisperByte, openVault, type OpenVaultOpts, type Vault } from '../src/vault'
+import { LockboxFieldsBytes, LockboxFixedBytes, StoredBytesPerWhisperByte, eraseDamagedVault, openVault, type OpenVaultOpts, type Vault } from '../src/vault'
 import { cipherBinding, cipherBytes, fromB64, makeLockboxKey, makeVaultKey, randomBytes, toB64, wrapKeyUnder } from '../src/crypto'
 import type { KeyDeriver } from '../src/key-deriver'
 import { Argon2idWebV1, MaxSaltBytes } from '../src/key-deriver-spec'
@@ -1571,6 +1571,134 @@ describe("erase and destroy", () => {
     await vault.destroy()
     await vault.destroy()
     expect(vault.getSnapshot().state).to.eq('absent')
+  })
+})
+
+/** The ckeys of every row `userId`'s vault has in storage: its bundle and its lockboxes. */
+const rowsOf = (world: ReturnType<typeof makeWorld>, userId: string) => (
+  world.dbStore.ckeys().filter((ckey) => ckey === Ckeys.bundle(TH.scopeOf(userId)) || Ckeys.isBoxIn(TH.scopeOf(userId))(ckey))
+)
+
+/** A world whose `u1` vault, with a lockbox and a remembered unlock, has had its stored bundle spoiled. */
+const damagedVaultWorld = async () => {
+  const world = makeWorld()
+  const vault = await world.openUnlocked('pw')
+  await vault.store('anthropic', 'sk-fake')
+  vault.close()
+  world.dbStore.write(u1BundleCkey, JSON.stringify({ ...storedBundleOf(world), unlock_epoch: 'one' }))
+  return world
+}
+
+/** The verbs openVault asks of a VaultDB, and so all a duck-typed one has. */
+const OpenVaultVerbs = ['readBundle', 'createBundle', 'updateBundle', 'readBox', 'listBoxes', 'updateBox', 'eraseBox', 'eraseVault', 'subscribe'] as const
+
+describe("eraseDamagedVault", () => {
+  it("clears a vault that openVault refuses as damaged_bundle -- its bundle, its lockboxes and the unlock this device remembers -- so a new one can be made", async () => {
+    const world = await damagedVaultWorld()
+    expect(await world.rememberedUnlock()).to.not.be.null
+    await TH.expectRefusal(world.open(), 'damaged_bundle')
+    await eraseDamagedVault(world.optsWith())
+    expect(rowsOf(world, 'u1')).to.deep.equal([])
+    expect(await world.rememberedUnlock()).to.be.null
+    const fresh = await world.open()
+    expect(fresh.getSnapshot().state).to.eq('absent')
+    await fresh.unlock('another pw')
+    await fresh.store('anthropic', 'sk-new-fake')
+    expect(await fresh.read('anthropic')).to.eq('sk-new-fake')
+  })
+
+  it("erases that vault alone: another user's vault, and the unlock this device remembers for it, stay", async () => {
+    const world = await damagedVaultWorld()
+    const theirs = await world.openUnlocked('their pw', { userId: 'u2' })
+    await theirs.store('anthropic', 'theirs')
+    await eraseDamagedVault(world.optsWith())
+    expect(await theirs.read('anthropic')).to.eq('theirs')
+    expect(await world.deviceDB.readUnlock(TH.scopeOf('u2'))).to.not.be.null
+    expect(rowsOf(world, 'u2')).to.not.deep.equal([])
+  })
+
+  it("refuses a vault that stands sound, erasing nothing from storage or the device: that one is destroy()'s", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    await vault.store('anthropic', 'sk-fake')
+    const before = world.dbStore.ckeys().map((ckey) => [ckey, world.dbStore.read(ckey)])
+    const remembered = await world.rememberedUnlock()
+    const err = await TH.expectRefusal(eraseDamagedVault(world.optsWith()), 'bad_option')
+    expect(err.message).to.include('destroy()')
+    expect(world.dbStore.ckeys().map((ckey) => [ckey, world.dbStore.read(ckey)])).to.deep.equal(before)
+    expect(await world.rememberedUnlock()).to.deep.equal(remembered)
+    expect(await vault.read('anthropic')).to.eq('sk-fake')
+  })
+
+  it("refuses a bundle too damaged to name its vault, erasing nothing, the remembered unlock included", async () => {
+    const world = await damagedVaultWorld()
+    world.dbStore.write(u1BundleCkey, '{"format":"not-a-vault"}')
+    const err = await TH.expectRefusal(eraseDamagedVault(world.optsWith()), 'damaged_bundle')
+    expect(err.message).to.include('nothing was erased')
+    expect(world.dbStore.read(u1BundleCkey)).to.eq('{"format":"not-a-vault"}')
+    expect(world.dbStore.ckeys().some((ckey) => isU1Box(ckey))).to.eq(true)
+    expect(await world.rememberedUnlock()).to.not.be.null
+  })
+
+  it("with no vault stored, clears only a leftover remembered unlock, and a call cut short by the device can be made again", async () => {
+    const world = await damagedVaultWorld()
+    let failures = 1
+    const flakyDevice: DeviceDB = {
+      ...world.deviceDB,
+      eraseUnlock: async (scope) => {
+        if (failures > 0) { failures -= 1; throw new Error('device store is busy') }
+        await world.deviceDB.eraseUnlock(scope)
+      },
+    }
+    await expect(eraseDamagedVault(world.optsWith({ deviceDB: flakyDevice }))).rejects.toThrow('busy')
+    expect(rowsOf(world, 'u1')).to.deep.equal([])
+    expect(await world.rememberedUnlock()).to.not.be.null
+    await eraseDamagedVault(world.optsWith({ deviceDB: flakyDevice }))
+    expect(await world.rememberedUnlock()).to.be.null
+  })
+
+  it("lets a vault made anew since survive: stale_write, the new vault and its unlock untouched", async () => {
+    const world = await damagedVaultWorld()
+    // Storage answers the first look at the bundle with the damaged vault, and every later one with another.
+    let looks = 0
+    const replacing = localVaultDB({
+      ...world.dbStore,
+      read: (ckey) => {
+        if (ckey !== u1BundleCkey) { return world.dbStore.read(ckey) }
+        looks += 1
+        return looks === 1 ? world.dbStore.read(ckey) : JSON.stringify({ ...storedBundleOf(world), vault_id: 'made-anew' })
+      },
+    })
+    await TH.expectRefusal(eraseDamagedVault(world.optsWith({ vaultDB: replacing })), 'stale_write')
+    expect(world.dbStore.ckeys().some((ckey) => isU1Box(ckey))).to.eq(true)
+    expect(await world.rememberedUnlock()).to.not.be.null
+  })
+
+  it("takes the options openVault took, and refuses misuse before touching storage", async () => {
+    const world = await damagedVaultWorld()
+    await TH.expectRefusal(eraseDamagedVault(world.optsWith({ applabel: 'not-a-label' })), 'bad_label')
+    await TH.expectRefusal(eraseDamagedVault(world.optsWith({ userId: '' })), 'bad_label')
+    await TH.expectRefusal(eraseDamagedVault(null as unknown as OpenVaultOpts), 'bad_option')
+    for (const [misfit] of MisfitStores) {
+      await TH.expectRefusal(eraseDamagedVault(world.optsWith(misfit)), 'bad_option')
+    }
+    const withoutTheVerb = Object.fromEntries(OpenVaultVerbs.map((verb) => [verb, () => Promise.resolve(null)])) as unknown as VaultDB
+    await TH.expectRefusal(eraseDamagedVault(world.optsWith({ vaultDB: withoutTheVerb })), 'bad_option')
+    expect(world.dbStore.ckeys().some((ckey) => isU1Box(ckey))).to.eq(true)
+    expect(await world.rememberedUnlock()).to.not.be.null
+  })
+
+  it("checks names with the host's validators, as openVault does", async () => {
+    const world = makeWorld()
+    const opts = world.optsWith({ userId: 'u1@example', validators: { userId: Z.string() } })
+    const vault = await openVault(opts)
+    await vault.unlock('pw')
+    vault.close()
+    const ckey = Ckeys.bundle({ applabel: 'acme', user_id: 'u1@example', vaultlabel: 'main' })
+    const bundle = JSON.parse(world.dbStore.read(ckey) ?? 'null') as object
+    world.dbStore.write(ckey, JSON.stringify({ ...bundle, unlock_epoch: 'one' }))
+    await eraseDamagedVault(opts)
+    expect(world.dbStore.read(ckey)).to.be.null
   })
 })
 

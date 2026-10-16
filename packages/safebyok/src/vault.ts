@@ -1277,6 +1277,46 @@ export const openVault = async (opts: OpenVaultOpts): Promise<Vault> => {
   return vault
 }
 
+/** What {@link eraseDamagedVault} needs of openVault's options: which vault, and the two stores it lives in. */
+export type EraseDamagedVaultOpts = Pick<OpenVaultOpts, 'applabel' | 'userId' | 'vaultlabel' | 'vaultDB' | 'deviceDB' | 'validators'>
+
+/**
+ * Erase a vault that `openVault` refuses as `damaged_bundle`, and only that: its stored bundle and
+ * every lockbox, through the VaultDB, and the unlock this device remembered for it, through the
+ * DeviceDB -- what `destroy()` does for a vault that opens, and nothing else. A stored bundle that
+ * fails its checks cannot be opened, so no handle exists to `destroy()`; this is the way to clear
+ * it and start over. Whatever the vault held is gone for good, so ask the user first.
+ *
+ * It takes the options `openVault` took, and refuses a vault that is sound: kind 'bad_option' and
+ * nothing erased, since a vault that opens is deleted with its handle's `destroy()`, which takes
+ * the care of a handle that has seen the vault it deletes. With no vault stored it erases only the
+ * device's remembered unlock, so a call that was cut short can be made again. Kind 'damaged_bundle'
+ * when the record is too damaged to say which vault it is, which only the backend's own tools can
+ * clear; 'stale_write' when the vault was replaced elsewhere meanwhile. Other refusals are
+ * storage's: 'storage_unavailable', 'identity_revoked', 'not_permitted'. Misuse is refused before
+ * storage is touched, as `openVault` does: 'bad_label' for a label that fails its check, and
+ * 'bad_option' for an option missing.
+ *
+ * @example
+ *   try { await openVault(opts) } catch (err) {
+ *     if (isVaultError(err, 'damaged_bundle') && userConfirmedStartingOver()) { await eraseDamagedVault(opts) }
+ *   }
+ */
+export const eraseDamagedVault = async (opts: EraseDamagedVaultOpts): Promise<void> => {
+  if (! isBag(opts)) { throw new VaultError('bad_option', 'eraseDamagedVault takes one bag of options: applabel, userId, vaultlabel, vaultDB and deviceDB, as openVault did.') }
+  const validators = parseValidators(opts.validators)
+  const scope = Names.checkScope(Names.rulesOf(validators), { applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
+  const vaultDB = parseVaultDB(opts.vaultDB)
+  if (typeof vaultDB.eraseDamagedVault !== 'function') {
+    throw new VaultError('bad_option', "vaultDB has no eraseDamagedVault: a storage adapter that hands each call on to another's must hand this one on too.")
+  }
+  const deviceDB = parseDeviceDB(opts.deviceDB)
+  // The vault first: a sound one refuses, and then the device keeps what it remembers of it. A
+  // retry after a failure here finds the vault gone, and still clears the device.
+  await vaultDB.eraseDamagedVault(scope, validators)
+  await deviceDB.eraseUnlock(scope)
+}
+
 /**
  * What `reading` resolves to, with storage's refusal of the record as corrupt said instead as
  * `damaged` says it: what a record failing its checks means for this vault. Storage's refusal is
