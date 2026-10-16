@@ -31,7 +31,9 @@ security expert who knows what questions to ask.
   that never saw the newer bundle. `destroy()` and `eraseDamagedVault` erase the mark. Two tabs of
   one device each read and write the mark without a lock, so a tab that read an older bundle
   before the other tab's newer one can write the mark back down: the check weakens to the older
-  epoch, never refuses wrongly. Within a bundle, an envelope whose `vault_key_epoch` is not the
+  epoch. A bundle is held to the mark as read before the bundle itself, so a newer bundle that
+  another tab, or this one, landed while it was being read never passes for a rollback: against
+  storage whose reads see every write landed before them, the check never refuses wrongly. Within a bundle, an envelope whose `vault_key_epoch` is not the
   bundle's is passed over as damaged (`damaged_unlock`), so an envelope spliced in from an older
   bundle never hands over its vaultKey as the current one.
 * 2026-10-16: **`device_id`.** Every unlock envelope carries the `device_id` of the device that
