@@ -230,7 +230,9 @@ const isKind = (kind: unknown): kind is VaultErrorKind => (VaultErrorKindVals as
 
   **For a hard cap**, *vaya con dios*: this is unsupported, and it costs what the package does not
   ask of you -- a trigger of your own, and a row lock that makes lockbox inserts into one vault
-  take turns, so that racing writers can no longer overshoot. Its refusal is a database error, so
+  take turns, so that racing writers can no longer overshoot under READ COMMITTED. (Under
+  REPEATABLE READ the trigger counts from its transaction's snapshot, which misses a racer's
+  lockbox committed meanwhile, and racers may still overshoot.) Its refusal is a database error, so
   the adapter reports it as `storage_unavailable` rather than `vault_full`, and a first write
   under a boxlabel already taken refuses the same way in a full vault. Put your number where
   `1000` is, and `maxLockboxes` beside it; the package's tests run this on PGlite, one statement at a
