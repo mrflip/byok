@@ -1,9 +1,9 @@
 # Thread 5: vaultdb_battery (2026-10-16)
 
 Branch `20261016-vaultdb_battery`, PR [#114](https://github.com/mrflip/safebyok/pull/114),
-stacked on [#107](https://github.com/mrflip/safebyok/pull/107). Justify: green -- safebyok 1253
-passed, 22 skipped; indexeddb 121/9; postgres 206/9; graphql 203/9; convex 325/18; react 97;
-argon2-wasm 44; demo 148/11; root 123. `pnpm size` green.
+stacked on [#113](https://github.com/mrflip/safebyok/pull/113) (rebased at filing onto `5c0c0a7`).
+Justify: green -- safebyok 1268 passed, 22 skipped; indexeddb 135/9; postgres 215/9; graphql
+203/9; convex 325/18; react 101; argon2-wasm 44; demo 148/11; root 123. `pnpm size` green.
 
 * **Built**:
   - **The battery grew** (`packages/safebyok/tests/test-helpers.ts`, `describeVaultDB`), taking
@@ -80,9 +80,16 @@ argon2-wasm 44; demo 148/11; root 123. `pnpm size` green.
   4.5, writers that really overshoot a best-effort limit, so "nothing is lost" is checked past the
   limit and not only at it. `watchSettled` is the battery's one timing guess; a helper that knows
   when a watch is live would replace it.
-* **For thread 12**: `postgresVaultDB over PGlite` now runs with `pushes: true`, over
-  `TH.requestFor` (which passes `listen`). If the NOTIFY trigger becomes opt-in, the test
-  database must still install it, or drop `pushes` there and say why.
+* **Thread 12 (#113)** made NOTIFY opt-in (`VaultNotifySql`); its test database installs it, so
+  Postgres's `pushes: true` holds. Its rewritten cap group still repeats 4.3 and 4.4 (above).
+* **Review** (`thread-reviewer`, verdict `clean`, no commits): nothing lost in the trim, and each
+  new test caught a scratch break. Minor, left: IndexedDB's stray-field test is covered by the
+  core's base-class test, not a battery test over `idbVaultDB` (sound: it overrides no public
+  verb); 6.1's push tests count "more calls than before" and give a leaked listener one tick, so an
+  adapter pushing twice or late could slip past (for thread 6's watch-is-live helper); the race
+  tests prove outcomes within one process, not races across connections (thread 6).
+* **Filing**: rebased onto #113; one conflict, IndexedDB's tests, where #109's key-range erase
+  test sat beside the races removed here: kept it, dropped the races.
 * **For the Coach**: whether `safebyok-convex` should run the `ConvexClient` half of the battery in
   its own package again (thread 15's question, with a cost: a test-only entry for the fake
   deployment).
