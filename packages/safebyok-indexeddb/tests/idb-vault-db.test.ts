@@ -66,6 +66,33 @@ describe("idbVaultDB", () => {
     expect(await inspectIdbVaultDB({ dbName }).rows()).to.have.lengthOf(2)
   })
 
+  it("lists a vault's lockboxes by a key range over its prefix, reading no other vault's rows", async () => {
+    const dbName = TH.freshDbName()
+    const vaultDB = idbVaultDB({ dbName })
+    const lookalike = TH.scopeOf('u1","main')
+    for (const user of ['u1', 'u12', 'u2']) {
+      await vaultDB.createBundle(TH.bundleOf(user))
+      await vaultDB.updateBox(TH.scopeOf(user), TH.boxOf('anthropic', user), { vault_id: `vault-id-${user}`, revision_id: null })
+    }
+    await set(boxCkey(lookalike, 'x'), TH.boxOf('x', 'lookalike'), rawShelf(dbName))
+    const rangedGetAll = vi.spyOn(IDBObjectStore.prototype, 'getAll')
+    const rangedGetAllKeys = vi.spyOn(IDBObjectStore.prototype, 'getAllKeys')
+    const cursoring = vi.spyOn(IDBObjectStore.prototype, 'openCursor')
+    try {
+      const listed = await vaultDB.listBoxes(TH.scopeOf('u1'))
+      expect(listed.map((box) => box.boxlabel)).to.deep.equal(['anthropic'])
+      expect(rangedGetAll).toHaveBeenCalledTimes(1)
+      expect(rangedGetAll.mock.calls[0]?.[0]).to.be.instanceOf(IDBKeyRange)
+      expect(rangedGetAllKeys).toHaveBeenCalledTimes(1)
+      expect(rangedGetAllKeys.mock.calls[0]?.[0]).to.be.instanceOf(IDBKeyRange)
+      expect(cursoring).not.toHaveBeenCalled()
+    } finally {
+      rangedGetAll.mockRestore()
+      rangedGetAllKeys.mockRestore()
+      cursoring.mockRestore()
+    }
+  })
+
   it("lists a row that is no lockbox as damaged, under the boxlabel it is stored under", async () => {
     const dbName = TH.freshDbName()
     await set(bundleCkey(TH.scopeOf('u1')), TH.bundleOf('u1'), rawShelf(dbName))
@@ -107,6 +134,26 @@ describe("idbVaultDB", () => {
     } finally {
       blocked.mockRestore()
     }
+  })
+
+  it("reports a write the browser gives no error for as an unknown failure, never a null cause", async () => {
+    const vaultDB = idbVaultDB({ dbName: TH.freshDbName() })
+    // A transaction aborted from outside fails with a null error.
+    const aborting = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementationOnce(function (this: IDBObjectStore, ...args) {
+      const request = this.put(...args)
+      this.transaction.abort()
+      return request
+    })
+    try {
+      const refusal = await TH.refusalOf(vaultDB.createBundle(TH.bundleOf('u1')))
+      expect(refusal.kind).to.eq('storage_unavailable')
+      const { cause } = refusal as { cause?: unknown }
+      expect(cause).to.be.instanceOf(Error)
+      expect((cause as Error).message).to.match(/failed for an unknown reason/)
+    } finally {
+      aborting.mockRestore()
+    }
+    expect(await vaultDB.readBundle(TH.scopeOf('u1'))).to.be.null
   })
 
   it("serves openVault: a vault made, stored in and reopened over it", async () => {
@@ -171,6 +218,32 @@ describe("idbVaultDB, every verb one transaction", () => {
     expect(outcomes.map((outcome) => outcome.status)).to.deep.equal(['fulfilled', 'rejected'])
     expect(await vaultDB.readBox(scope, 'anthropic')).to.be.null
     expect(await vaultDB.readBundle(scope)).to.be.null
+  })
+
+  it("erases a vault's lockboxes by a key range over its prefix, leaving every other vault's rows", async () => {
+    const dbName = TH.freshDbName()
+    const vaultDB = idbVaultDB({ dbName })
+    const lookalike = TH.scopeOf('u1","main')
+    for (const user of ['u1', 'u12', 'u2']) {
+      await vaultDB.createBundle(TH.bundleOf(user))
+      await vaultDB.updateBox(TH.scopeOf(user), TH.boxOf('anthropic', user), { vault_id: `vault-id-${user}`, revision_id: null })
+    }
+    await set(boxCkey(lookalike, 'x'), TH.boxOf('x', 'lookalike'), rawShelf(dbName))
+    const wholeShelf = vi.spyOn(IDBObjectStore.prototype, 'getAllKeys')
+    try {
+      await vaultDB.eraseVault(scope, { vault_id: 'vault-id-u1' })
+      expect(wholeShelf).not.toHaveBeenCalled()
+    } finally {
+      wholeShelf.mockRestore()
+    }
+    const rows = await inspectIdbVaultDB({ dbName }).rows()
+    expect(rows.map((row) => row.ckey)).to.deep.equal([
+      boxCkey(lookalike, 'x'),
+      boxCkey(TH.scopeOf('u12'), 'anthropic'),
+      boxCkey(TH.scopeOf('u2'), 'anthropic'),
+      bundleCkey(TH.scopeOf('u12')),
+      bundleCkey(TH.scopeOf('u2')),
+    ].toSorted((one, two) => one.localeCompare(two)))
   })
 
   it("erases a whole vault or none of it: a deletion failing midway undoes the ones before it", async () => {
@@ -238,6 +311,34 @@ describe("idbVaultDB's subscribe", () => {
     await idbVaultDB({ dbName }).createBundle(TH.bundleOf('u1'))
     await vi.waitFor(() => { expect(heardCount).to.eq(1) })
     otherTab.close()
+  })
+
+  it("closes the bell's channel when the last subscriber leaves, and not before", () => {
+    const dbName = TH.freshDbName()
+    const vaultDB = idbVaultDB({ dbName })
+    const closing = vi.spyOn(BroadcastChannel.prototype, 'close')
+    try {
+      const stopOne = vaultDB.subscribe(TH.scopeOf('u1'), () => undefined)
+      const stopTwo = vaultDB.subscribe(TH.scopeOf('u1'), () => undefined)
+      stopOne()
+      expect(closing).not.toHaveBeenCalled()
+      stopTwo()
+      expect(closing).toHaveBeenCalledTimes(1)
+    } finally {
+      closing.mockRestore()
+    }
+  })
+
+  it("closes the bell's channel when its vault closes", async () => {
+    const dbName = TH.freshDbName()
+    const vault = await openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', keyDeriver: TH.testDeriver, deviceDB: memoryDeviceDB(), vaultDB: idbVaultDB({ dbName }) })
+    const closing = vi.spyOn(BroadcastChannel.prototype, 'close')
+    try {
+      vault.close()
+      expect(closing).toHaveBeenCalledTimes(1)
+    } finally {
+      closing.mockRestore()
+    }
   })
 
   it("lands a write whose subscriber throws, and calls the others, letting nothing escape uncaught", async () => {

@@ -43,7 +43,8 @@ const vault = await openVault({
   expects still stands, and refuses with kind `stale_write` otherwise. Two tabs creating a vault
   at once settle on one; erasing a vault takes its every lockbox with it, or none of them.
 * **Other tabs' writes** ring `subscribe`, over a BroadcastChannel, so a vault open in two tabs
-  stays current in both. The bell says only that something changed; the vault reads again.
+  stays current in both. The bell says only that something changed; the vault reads again. Its
+  channel is closed when the last vault listening to it closes.
 * **No limits of its own.** IndexedDB sets none per record or per vault, so `maxRecordBytes`,
   `maxVaultBytes` and `maxLockboxes` are `Infinity`: a vault holds what `openVault`'s
   `maxLockboxes` allows (100 by default), the origin's storage quota bounds the whole database,
@@ -100,9 +101,9 @@ browser store, a native one in an app shell, a key-value service -- copy it, and
 places:
 
 1. **`src/ckeys.ts`: where each record lives.** A ckey per record, built from its scope, so a
-   read is one lookup and a vault's lockboxes are the rows under its prefix. A `user_id` may hold
-   the separator, so a listing takes only the rows whose remainder is a bare boxlabel
-   (`isBoxCkeyOf`). If your store has columns or namespaces, use them instead.
+   read is one lookup and a vault's lockboxes are the rows under its prefix, read as a key range
+   (`boxRange`) rather than by scanning the shelf. The core's `Ckeys.boxPrefix` is exact whatever
+   characters a `user_id` holds. If your store has columns or namespaces, use them instead.
 2. **`src/idb-vault-db.ts`: each verb, in one transaction of your store.** Extend `VaultDB` and
    write its `do*` methods, never its public verbs: the base class checks labels, scope, records
    and expectations on the way in, validates every record on the way out, and turns a `false`
@@ -114,7 +115,8 @@ places:
    a BroadcastChannel to the others. A store with push of its own -- a live query, a socket --
    rings from that, and one with none leaves `doSubscribe` out: the vault refreshes after its own
    writes regardless. Whatever rings, call each listener so that one that throws stops neither
-   the others nor the write, and let no handle (a channel, a socket) hold a Node process open.
+   the others nor the write, let no handle (a channel, a socket) hold a Node process open, and
+   close it when its last listener leaves.
 
 And keep, as they are:
 
