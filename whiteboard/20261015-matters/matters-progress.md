@@ -9,7 +9,7 @@
 | 3 | passkey_button_ux | merged #98                 |
 | 4 | small_sweep       | merged #99                 |
 | 5 | vaultdb_battery   | merged #114; helpers sweep and Postgres cap duplicates left |
-| 6 | race_helper       | review fixed; files onto #111 |
+| 6 | race_helper       | review fixed; filing #119 onto #111 |
 | 7 | indexeddb_fixes   | merged #109                |
 | 8 | size_rule         | merged with #99            |
 | 9 | damaged_bundle    | merged #108                |
@@ -21,7 +21,7 @@
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 (ways in: keep the proven ones, ruled) |
 | 20 | rotation_docs    | waits on 19                |
-| 15 | e2e_home         | review fixed; filing #111 onto main |
+| 15 | e2e_home         | filed #111 (on main)       |
 | 16 | late_unlock      | merged #110                |
 | 17 | validation_note  | waits on #101 merging      |
 | 21 | damaged_erase    | merged #115                |
