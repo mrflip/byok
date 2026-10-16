@@ -1,6 +1,0 @@
----
-'safebyok': minor
-'safebyok-indexeddb': minor
----
-
-**The IndexedDB vault store is a package of its own, `safebyok-indexeddb`; `safebyok/idb` keeps the device store.** A host using `idbVaultDB` changes one import, `from 'safebyok/idb'` to `from 'safebyok-indexeddb'`, and adds the package: its vaults read on unchanged, from the same IndexedDB database, rows and ckeys. `safebyok/idb` no longer exports `idbVaultDB` (no re-export is kept), and its `inspectIdb({ dbName, shelf })` becomes two windows, one beside each store: `inspectIdbDeviceDB({ dbName })` in `safebyok/idb`, and `inspectIdbVaultDB({ dbName })` in `safebyok-indexeddb`; the `IdbShelf` type is gone. Every verb of the new `idbVaultDB` is one IndexedDB transaction, where the old one read and wrote in two: a write racing another tab's now lands only while what it expects still stands, and is refused `stale_write` otherwise, two tabs creating a vault at once settle on one, and erasing a vault removes its every lockbox or none. A write now also tells other tabs over the BroadcastChannel when nothing in its own tab is listening, and a subscriber that throws no longer turns a write that landed into a refusal. Its README is the template for a key-value storage adapter of your own.
