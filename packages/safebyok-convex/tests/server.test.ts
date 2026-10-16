@@ -164,6 +164,14 @@ describe("SafebyokComponent.api, at setup", () => {
     })
   }
 
+  for (const [forgotten, blurb] of [[undefined, 'undefined'], [null, 'null'], ['safebyok', 'text']] as const) {
+    it(`refuses ${blurb} for the component with a bad_option that says how to install it`, () => {
+      expect(() => new SafebyokComponent(forgotten as never))
+        .to.throw(/app\.use\(safebyok\) in convex\.config\.ts/)
+        .with.property('kind', 'bad_option')
+    })
+  }
+
   it("builds the functions when getUserId is a function, sync or async", () => {
     expect(Object.keys(component.api({ getUserId: () => null }))).to.have.length(9)
     expect(Object.keys(component.api({ getUserId: () => Promise.resolve('u1') }))).to.have.length(9)
