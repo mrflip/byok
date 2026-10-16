@@ -140,7 +140,7 @@ const BundleCases = [
   // names are any text to both: the vault's validators check them, client side
   [{ ...TH.bundleOf('u1'), unlocks: [TH.envelopeOf('passphrase'), TH.passkeyEnvelopeOf('laptop')] }, true, true, 'a bundle with a passphrase and a passkey'],
   // both refuse -- what Convex can see:
-  [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v2' },                    false,  false,  'a format this package does not know'],
+  [{ ...TH.bundleOf('u1'), format: 'safebyok-vault-v3' },                    false,  false,  'a format this package does not know'],
   [{ ...TH.bundleOf('u1'), format: 'safebyok-lockbox-v1' },                  false,  false,  "another record's format"],
   [bundleWithoutVaultId,                                                     false,  false,  'a bundle missing its vault_id'],
   [{ ...TH.bundleOf('u1'), unlock_epoch: '1' },                              false,  false,  'an epoch written as text'],

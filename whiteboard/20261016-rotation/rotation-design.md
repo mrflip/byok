@@ -86,7 +86,7 @@ That needs no change to the binding code, provided #97 has landed first (this de
 | `PassphraseEnvelope`, `PasskeyEnvelope` | `device_id` | The device mark's id on the device that added this way in (section 10). It is kept when the envelope is re-sealed. |
 | `PassphraseEnvelope`, `PasskeyEnvelope` | `registered_at` (recommended; open question 4) | When this way in was added, as an `EpochMillis`, so a host can say "added 3 October". |
 | `Lockbox` | `vault_key_epoch` | Which vaultKey wraps this lockbox's lockboxKey. It is listed while the vault is locked, so the walk's progress shows without opening anything. |
-| *new*, device-local: `DeviceMark` | `format` (`safebyok-mark-v1`), the scope, `device_id`, `vault_id`, `unlock_epoch` | What a device keeps about a vault even while locked: its own id for that vault, and the newest bundle it has seen. It is not secret, and it survives `lock()`. `destroy()` erases it. |
+| *new*, device-local: `DeviceMark` | `format` (`safebyok-mark-v1`), the scope, `device_id`, `vault_id`, `unlock_epoch`, `vault_key_epoch` | What a device keeps about a vault even while locked: its own id for that vault, and the newest bundle it has seen, by both epochs. It is not secret, and it survives `lock()`. `destroy()` erases it. |
 
 The prior key's wrap is `wrapKeyUnder(newKey, oldKey, cipherBinding('safebyok-vault-v1',
 applabel, user_id, vaultlabel, vault_id, registered_at, 'prior_vault_key_wrapped',
@@ -222,11 +222,23 @@ whatever bundle is served. So a server that restores an older bundle gets that b
 bring back a removed envelope, or, after a rotation, make a device write under the old key again.
 
 Thread 14 adds the check. Each device keeps a **device mark** per vault: its `vault_id` and the
-highest `unlock_epoch` it has seen, updated whenever it reads a newer bundle. A bundle with the
-same `vault_id` and a lower `unlock_epoch` is refused, at open and at every refresh, with a new
-kind (proposed: `rolled_back`; open question 3). Nothing is unlocked and nothing is written. The
-message says calmly that storage handed back an older copy of the vault than this device has
-already seen, and that this device won't use it. Within a bundle, each envelope's
+highest `unlock_epoch` and `vault_key_epoch` it has seen, updated whenever it reads a newer
+bundle. A bundle with the same `vault_id` and a lower `unlock_epoch`, or a lower
+`vault_key_epoch`, is refused, at open and at every refresh, with a new kind, `rolled_back`.
+Nothing is unlocked and nothing is written. The message says calmly that this device has already
+seen a newer copy of the vault than storage offers now, and how a host accepts an older copy
+restored on purpose: it erases the device's mark (`deviceDB.eraseMark(scope)`) and opens again,
+on its own knowledge that the restore was meant, never on the user's answer (the core README's
+recipe).
+
+Why the mark holds both epochs: `unlock_epoch` is bound into nothing, so storage can serve an
+older bundle under a raised `unlock_epoch` and pass a check on it alone. After a rotation that
+would bring the replaced vaultKey back. `vault_key_epoch` is bound into every envelope and held
+equal to the bundle's, so storage cannot raise it on a pre-rotation bundle and still have a way in
+open: the mark's `vault_key_epoch` catches it whatever the `unlock_epoch`. What still passes is an
+older bundle at the *same* `vault_key_epoch` under a forged higher `unlock_epoch`. That can bring
+back only a way in `removeUnlock` dropped -- which is not revocation anyway -- never a replaced
+vaultKey. Within a bundle, each envelope's
 `vault_key_epoch` must equal the bundle's. An envelope with another epoch is refused as damaged
 (thread 9's vocabulary), so an old envelope spliced into a current bundle can't hand a device the
 old key as if it were current.

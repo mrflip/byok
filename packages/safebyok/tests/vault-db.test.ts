@@ -14,16 +14,19 @@ import * as TH from './test-helpers'
  * What an adapter author writes; the validation around it comes from the base class. Given a
  * `maxLockboxes`, it refuses a new lockbox in a vault already holding that many, after the
  * expectation is checked, so a first write under a boxlabel already taken is stale, never full.
+ * Given `rows`, it shares them with every other MapVaultDB given the same: another device of one
+ * backend in this process.
  */
 class MapVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
   readonly maxVaultBytes = Infinity
   readonly maxLockboxes: number
-  readonly rows = new Map<string, unknown>()
+  readonly rows: Map<string, unknown>
 
-  constructor(maxLockboxes = Infinity) {
+  constructor(maxLockboxes = Infinity, rows = new Map<string, unknown>()) {
     super()
     this.maxLockboxes = maxLockboxes
+    this.rows = rows
   }
 
   private standingBundle(scope: VaultScope) { return this.rows.get(Ckeys.bundle(scope)) as VaultBundle | undefined }
@@ -52,7 +55,10 @@ class MapVaultDB extends VaultDB {
 
   protected doUpdateBox(scope: VaultScope, lockbox: Lockbox, expected: LockboxExpectation) {
     const standingBox = this.rows.get(Ckeys.box(scope, lockbox.boxlabel)) as Lockbox | undefined
-    if (this.standingBundle(scope)?.vault_id !== expected.vault_id || (standingBox?.revision_id ?? null) !== expected.revision_id) {
+    const standingBundle = this.standingBundle(scope)
+    const meets = standingBundle?.vault_id === expected.vault_id && standingBundle.vault_key_epoch === expected.vault_key_epoch
+      && (standingBox?.revision_id ?? null) === expected.revision_id
+    if (! meets) {
       return Promise.resolve(false)
     }
     const isBox = Ckeys.isBoxIn(scope)
@@ -97,9 +103,21 @@ class TroubledVaultDB extends MapVaultDB {
 
 const unheard = (): void => undefined
 
-TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()), { pushes: true })
+// Each adapter's devices share one store or Map, synchronous and in this process, so they make no
+// round trips for a turnstile to hold: the races interleave them at every await.
+TH.describeVaultDB('localVaultDB', () => localVaultDB(memoryStore()), {
+  pushes:      true,
+  makeDevices: () => {
+    const store = memoryStore()
+    return () => localVaultDB(store)
+  },
+})
 TH.describeVaultDB('the smallest honest adapter', () => new MapVaultDB(), {
   makeCappedVaultDB: (maxLockboxes) => new MapVaultDB(maxLockboxes),
+  makeDevices:       () => {
+    const rows = new Map<string, unknown>()
+    return ({ maxLockboxes }) => new MapVaultDB(maxLockboxes, rows)
+  },
 })
 
 // The ckeys u1's main vault is filed under, spelled out rather than computed: they are stored.
@@ -140,7 +158,7 @@ describe("localVaultDB", () => {
     expect(summaries.map((box) => TH.summaryOf(box)?.note)).to.deep.equal(['a test box', null])
     const prev = await vaultDB.readBox(TH.scopeOf('u1'), 'openai')
     expect(prev).to.deep.equal(noteless)
-    await vaultDB.updateBox(TH.scopeOf('u1'), noteless, { vault_id: 'vault-id-u1', revision_id: 'rev-two' })
+    await vaultDB.updateBox(TH.scopeOf('u1'), noteless, { vault_id: 'vault-id-u1', revision_id: 'rev-two', vault_key_epoch: 1 })
     expect(store.read(u1BoxCkey('openai'))).to.eq(notelessRow)
   })
 
@@ -317,10 +335,12 @@ const RefusedWrites = [
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 0 }),          'a bundle expectation at epoch zero'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBundle(TH.bundleOf('u1'), undefined as unknown as BundleExpectation),            'no bundle expectation at all'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1' } as LockboxExpectation), 'a lockbox expectation missing its revision_id'],
+  ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null } as LockboxExpectation), 'a lockbox expectation naming no vaultKey epoch'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.eraseBox(TH.scopeOf('u1'), 'anthropic', {} as EraseExpectation),                        'an erase expectation naming no vault'],
   ['bad_option', (vaultDB: VaultDB) => vaultDB.eraseVault(TH.scopeOf('u1'), { vault_id: '' }),                                         'an erase expectation naming an empty vault_id'],
   // the two together:
   ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBundle(TH.bundleOf('u1', { vault_id: 'vault-id-new', unlock_epoch: 2 }), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'a bundle update that would change the vault_id'],
+  ['bad_option', (vaultDB: VaultDB) => vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one', { vault_key_epoch: 2 }), TH.noBoxYet), 'a lockbox sealed under another vaultKey than the expected one'],
 ] as const
 
 /** A vault in `u1`'s slot with a lockbox, its bundle spoiled by `spoil`, and a sound neighbour beside it. */
@@ -378,8 +398,8 @@ describe("the abstract VaultDB, erasing a vault whose bundle is damaged", () => 
 
   const Envelope = TH.bundleOf('u1').unlocks[0]
   const NewerRecords = [
-    [{ format: 'safebyok-vault-v2' },                                                      'a format this version does not know, whatever else it holds'],
-    [(bundle: VaultBundle) => ({ ...bundle, format: 'safebyok-vault-v2' }),                'a bundle that is otherwise sound but for its format'],
+    [{ format: 'safebyok-vault-v3' },                                                      'a format this version does not know, whatever else it holds'],
+    [(bundle: VaultBundle) => ({ ...bundle, format: 'safebyok-vault-v3' }),                'a bundle that is otherwise sound but for its format'],
     [(bundle: VaultBundle) => ({ ...bundle, format: 2 }),                                  'a format of another type'],
     [(bundle: VaultBundle) => ({ ...bundle, unlocks: [...bundle.unlocks, { method: 'smartcard', unlock_id: 'x' }] }), 'an unlock method this version does not know'],
     [(bundle: VaultBundle) => ({ ...bundle, unlocks: Array.from({ length: 9 }, () => Envelope) }), 'more unlocks than this version holds'],
@@ -397,6 +417,12 @@ describe("the abstract VaultDB, erasing a vault whose bundle is damaged", () => 
 
   it("still erases a bundle that fails for anything it can only take for damage: a known format and methods, in number", async () => {
     const vaultDB = withDamagedBundle((bundle) => ({ ...bundle, unlocks: [{ ...Envelope, salt_b64: 7 }], registered_at: 'later' }))
+    await vaultDB.eraseDamagedVault(TH.scopeOf('u1'))
+    expect(vaultDB.rows.size).to.eq(2)
+  })
+
+  it("erases a bundle in a format an earlier version wrote, which is older, never newer", async () => {
+    const vaultDB = withDamagedBundle(({ vault_key_epoch: _epoch, ...bundle }) => ({ ...bundle, format: 'safebyok-vault-v1' }))
     await vaultDB.eraseDamagedVault(TH.scopeOf('u1'))
     expect(vaultDB.rows.size).to.eq(2)
   })
@@ -478,7 +504,7 @@ describe("the abstract VaultDB, on the way in", () => {
     const noteless = omit(TH.boxOf('anthropic', 'one'), ['note'])
     await vaultDB.updateBox(TH.scopeOf('u1'), noteless, TH.noBoxYet)
     expect(vaultDB.rows.get(u1BoxCkey('anthropic'))).to.deep.equal(noteless)
-    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-one' })
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-one', vault_key_epoch: 1 })
     await vaultDB.eraseBox(TH.scopeOf('u1'), 'anthropic', TH.thisVault)
     expect(await vaultDB.listBoxes(TH.scopeOf('u1'))).to.have.lengthOf(0)
   })

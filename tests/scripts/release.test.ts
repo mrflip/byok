@@ -31,6 +31,7 @@ const Core    = pkgAt('safebyok',            'packages/safebyok',         '0.1.0
 const Binding = pkgAt('safebyok-react',      'packages/safebyok-react',   '0.1.0')
 const Convex  = pkgAt('safebyok-convex',     'packages/safebyok-convex',  '0.0.0', true)
 const Demo    = pkgAt('safebyok-demo-react', 'demos/safebyok-demo-react', '0.0.0', true)
+const E2e     = pkgAt('safebyok-e2e',        'e2e',                       '0.0.0', true)
 const Lockstep = [['safebyok', 'safebyok-react']]
 
 const ProblemCases = [
@@ -40,6 +41,7 @@ const ProblemCases = [
   // what the check is for:
   [[Root, Core, Binding, { ...Convex, private: false }, Demo],   Lockstep,                                 /safebyok-convex is public but not/, 'a package made public but left out of the fixed group is refused'],
   [[Root, Core, Binding, Convex, { ...Demo, private: false }],   Lockstep,                                 /under demos\/ but not private/,   'a demo made public is refused'],
+  [[Root, Core, Binding, Convex, { ...E2e, private: false }],    Lockstep,                                 /under e2e\/ but not private/,     'the cross-harness tests made public are refused'],
   [[Root, Core, Binding, Convex, Demo],                          [['safebyok', 'safebyok-react', 'safebyok-convex']], /safebyok-convex is in .* not a public/, 'a private package in the fixed group is refused'],
   [[Root, Core, Binding, Convex, Demo],                          [['safebyok'], ['safebyok-react']],       /2 fixed groups/,                  'two fixed groups are refused: lockstep is one'],
   [[Root, Core, { ...Binding, version: '0.2.0' }, Convex, Demo], Lockstep,                                 /disagree on their version/,       'public packages at different versions are refused'],
@@ -54,9 +56,10 @@ describe("releaseProblems", () => {
 })
 
 describe("publicPackages", () => {
-  it("leaves out private packages and everything under demos/", () => {
+  it("leaves out private packages and everything under demos/ or e2e/", () => {
     const publicDemo = { ...Demo, private: false }
-    const publicNames = Release.publicPackages([Root, Core, Binding, Convex, publicDemo], '/repo').map((pkg) => pkg.name)
+    const publicE2e = { ...E2e, private: false }
+    const publicNames = Release.publicPackages([Root, Core, Binding, Convex, publicDemo, publicE2e], '/repo').map((pkg) => pkg.name)
     expect(publicNames).to.deep.equal(['safebyok', 'safebyok-react'])
   })
 })

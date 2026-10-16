@@ -100,6 +100,7 @@ const FamilyCases = [
   ["damaged_unlock",      "condition", 'a way in stored damaged sends the user to another way in'],
   ["damaged_lockbox",     "condition", 'a lockbox stored damaged is told to the user, who may erase it'],
   ["stale_write",         "condition", 'another device writing first is a fact of syncing'],
+  ["rolled_back",         "condition", 'storage handing back an older copy of the vault is a fact a user can be told'],
   ["not_permitted",       "condition", 'a call refused to the signed-in owner is told to them'],
   ["identity_revoked",    "condition", 'a signed-out user signs in again'],
   ["storage_unavailable", "condition", 'unreachable storage is tried again shortly'],

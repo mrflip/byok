@@ -22,8 +22,10 @@ adapter's next call (`holdNextCall`, `beforeNextCall`) and to count its storage 
 (`tallyWatches`), a logger that keeps what it hears (`spyLogger`), checks that a call refuses
 (`expectRefusal`) and that what it threw quotes nothing it should not (`thrownText`,
 `leafTexts`), and `describeVaultDB` and `describeDeviceDB`, the vitest suites every storage
-adapter owes, with `perUser` to run the first over an adapter made per signed-in user and
-`VaultDBContract` to cite the contract's lines in an adapter's own tests.
+adapter owes, with `perUser` to run the first over an adapter made per signed-in user,
+`VaultDBContract` to cite the contract's lines in an adapter's own tests, and `raceEveryWay`,
+`throughTurnstile` and `expectRoundTripsThroughTurnstile` to race an adapter's devices under every
+interleaving a test can make.
 `safebyok/utils` holds small helpers for the app around the vault, such as `mask`, which shows
 which API key a lockbox holds (`sk***...***wxyz`) without showing the key. `mask` is intended
 for plain text; calling it with arbitrary blobs may give unusual behavior. It strips every
@@ -135,7 +137,9 @@ await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team acc
 Extend `VaultDB` and implement its `do*` methods: its doc block says what each one owes, the
 [VaultDB contract](VAULTDB.md) says what an adapter promises in all and what it may leave
 undone, and `describeVaultDB` from `safebyok/testing` checks it, a group of tests to each of the
-contract's numbered lines. A backend with columns (Convex, SQL) keeps
+contract's numbered lines. Give it `makeDevices` -- devices over one backend, each round trip
+through a turnstile -- and it races your writes from two devices, holding one before each round
+trip while the other moves ([Proving the races](VAULTDB.md#proving-the-races)). A backend with columns (Convex, SQL) keeps
 the applabel, user id, vaultlabel and boxlabel in columns of their own. A backend that holds rows
 under one string -- a key-value store, localStorage -- files them under `Ckeys`, as
 `localVaultDB` and `idbVaultDB` do:
@@ -447,6 +451,7 @@ Part of normal operation. Each can reach the user; the app decides how.
 | `damaged_unlock`      | a way in is stored in a form this package never writes (a salt of the wrong length, or not base64url), so it cannot be tried: the passkey asked for, the passphrase `unlockId` aims at, or every passphrase the vault has. Other ways in are still tried | Unlock another way, then `removeUnlock()` the damaged one and add it again |
 | `damaged_lockbox`     | a lockbox failed its checks as read, or would not open under the vault's own vaultKey, or opened to no whisper: altered in storage, or moved there from elsewhere | Nothing was changed. Offer `erase()`, or a fresh `store()` over it (see *Damaged lockboxes*) |
 | `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
+| `rolled_back`         | this device has already seen a newer copy of the vault's bundle than storage offers now (storage restored from a backup, or altered), so it won't use this one: nothing was unlocked or written | Tell the user this device has seen a newer copy of the vault than storage holds. If the storage was restored from an older copy on purpose, accept it on this device (see *A vault rolled back*, below); otherwise the app's support should look at its storage |
 | `not_permitted`       | the storage backend refused the signed-in user, still the vault's own, this one call | Tell the user they may not; signing in again will not help |
 | `identity_revoked`    | the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in. The vault has locked itself (see *When the user signs out*) | Have the user sign in again, then open the vault for whoever that is |
 | `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause`, unless it may quote the call (Convex's) |
@@ -469,10 +474,9 @@ vault held is gone for good, so ask the user first.
 try {
   vault = await openVault(opts)
 } catch (err) {
-  if (isVaultError(err, 'damaged_bundle') && await userAgreesToStartOver()) {
-    await eraseDamagedVault(opts)
-    vault = await openVault(opts)   // absent: a new vault is made on the next unlock
-  }
+  if (! isVaultError(err, 'damaged_bundle') || ! await userAgreesToStartOver()) { throw err }
+  await eraseDamagedVault(opts)
+  vault = await openVault(opts)   // absent: a new vault is made on the next unlock
 }
 ```
 
@@ -491,6 +495,40 @@ tell, it refuses rather than erases. So is any backend that checks a record befo
 it hands it over, as `safebyok-graphql`'s server does: there a damaged row is the backend's to
 clear. `safebyok-react` hands `eraseDamagedVault()` down beside `retryOpen`. A `VaultDB` that
 wraps another's public verbs hands `VaultDB.eraseDamagedVault` on too (`VAULTDB.md`, line 3.5).
+
+### A vault rolled back
+
+Each device keeps a mark of the newest copy of each vault's bundle it has seen (its device mark,
+in the `DeviceDB`), and refuses an older copy of that vault with `rolled_back`, taking nothing
+from it: storage handing back an older bundle could otherwise bring back a way in that was
+removed, or, once a vaultKey can be replaced, a vaultKey too. A device that never saw the newer
+copy, or whose site data was cleared, cannot tell, and takes the older copy as it stands.
+
+When the vault's storage was restored from an older copy on purpose, each device that saw a
+newer one accepts it by forgetting its mark of the vault, through the `DeviceDB` it opens the vault
+with, and opening it again. Whether the restore was on purpose is for the app to know, from its
+own backend or its operators, and not for the user to guess: storage that rolls a vault back on
+its own meets the user with the same refusal, so a prompt asking "was your vault restored?" turns
+the check off for whoever the check is there to stop.
+
+```ts
+try {
+  vault = await openVault(opts)
+} catch (err) {
+  if (! isVaultError(err, 'rolled_back') || ! await storageWasRestoredOnPurpose()) { throw err }
+  await opts.deviceDB.eraseMark({ applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
+  vault = await openVault(opts)
+}
+```
+
+Close any handle already open on the vault first; `rolled_back` also reaches an open handle, from
+`unlock()`, a change to the ways in or a store. Whatever the older copy holds stands then, so tell
+the user what that means: ways in removed since, and passphrases since changed, open the vault
+again, and a passphrase added or changed since opens it no longer. The unlock this device
+remembered is from the newer copy, so it lapses, and the user enters a passphrase again. The
+device takes a new `device_id` for the vault, so the ways in it adds from then on carry a different
+one than those it added before. A restore for a vault refused as `damaged_bundle` meets the same
+refusal on every device that saw a newer copy than the backup.
 
 ### Damaged lockboxes
 

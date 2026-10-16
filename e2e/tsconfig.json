@@ -1,0 +1,20 @@
+{
+  // The cross-harness tests: Convex's fake deployment is a Node-side fake of a WebSocket, and the
+  // clients are the browser builds, so the DOM lib types both.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": [
+      "ES2023",
+      "DOM",
+      "DOM.Iterable"
+    ]
+  },
+  "include": [
+    "tests",
+    "*.config.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "coverage"
+  ]
+}

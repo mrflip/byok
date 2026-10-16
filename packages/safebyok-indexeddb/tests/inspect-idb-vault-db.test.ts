@@ -15,7 +15,7 @@ describe("inspectIdbVaultDB", () => {
     const unsubscribe = inspector.subscribe(() => { heardCount += 1 })
 
     await vaultDB.createBundle(TH.bundleOf('u1'))
-    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null })
+    await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 })
     const rows = await inspector.rows()
     expect(rows.map((row) => row.ckey)).to.deep.equal(['["box","acme","u1","main","anthropic"]', '["vault","acme","u1","main"]'])
     await vi.waitFor(() => { expect(heardCount).to.eq(2) })

@@ -1,7 +1,7 @@
 // eslint.config.mjs -- the workspace root's own lint: its tooling in scripts/, those scripts'
 // tests, and the root's config files. Cut from the core's (packages/safebyok/), which is the
 // authority on house style: where the two disagree, the core's is right and this one is the bug.
-// Each package under packages/ and demos/ is its own workspace package, with its own dependencies,
+// Each package under packages/, demos/ and e2e/ is its own workspace package, with its own dependencies,
 // TS project and eslint config, and lints itself; the root's `pnpm lint` runs them all.
 //
 import { defineConfig, globalIgnores } from 'eslint/config'
@@ -63,6 +63,7 @@ export default defineConfig([
     // Workspace packages: each lints itself, with its own config.
     'packages/**',
     'demos/**',
+    'e2e/**',
     '**/*.generated.*',
   ]),
 

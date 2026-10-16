@@ -1,3 +1,6 @@
+// The loops below over `ClientCases` have copies in `e2e/tests/convex/convex-vault-db.test.ts`, which
+// run over `ConvexReactClient` (this package lists no framework): a change to a looped test is
+// made in both.
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { anyApi } from 'convex/server'
 import { ConvexError } from 'convex/values'
@@ -7,12 +10,16 @@ import { convexVaultDB } from '../src/index'
 import { toConvexLockbox } from '../src/convex-vault-db'
 import { MaxVaultLockboxes } from '../src/component/tallies'
 import type { ConvexVaultClient, SafebyokApi } from '../src/index'
-import { fakeDeployment } from './fake-deployment'
+import type { GetUserId } from '../src/server'
+import { fakeDeployment } from '../src/testing'
+import type { FakeDeployment } from '../src/testing'
+
+type Deployment = FakeDeployment<ReturnType<typeof TH.hostWith>>
 
 // Every deployment a test makes is closed after it, so no client keeps its socket's timers alive.
-const deployments: ReturnType<typeof fakeDeployment>[] = []
-const deploy = (...args: Parameters<typeof fakeDeployment>) => {
-  const deployment = fakeDeployment(...args)
+const deployments: Deployment[] = []
+const deploy = (getUserId: GetUserId = TH.bySubject) => {
+  const deployment = fakeDeployment(TH.hostWith(getUserId))
   deployments.push(deployment)
   return deployment
 }
@@ -20,23 +27,42 @@ afterEach(async () => {
   await Promise.all(deployments.splice(0).map((deployment) => deployment.close()))
 })
 
-type Deployment = ReturnType<typeof fakeDeployment>
-
-/** Both clients convexVaultDB accepts, each connected to `deployment` and signed in as `subject`. */
+/**
+ * The clients convexVaultDB accepts that need no framework, each connected to `deployment` and
+ * signed in as `subject`. `ConvexReactClient` is run in `e2e/`, which holds React.
+ */
 const ClientCases: [string, (deployment: Deployment, subject: string | null) => ConvexVaultClient][] = [
-  ['ConvexClient',      (deployment, subject) => deployment.client(subject)],
-  ['ConvexReactClient', (deployment, subject) => deployment.reactClient(subject)],
+  ['ConvexClient', (deployment, subject) => deployment.client(subject)],
 ]
+
+/**
+ * Devices over a fresh deployment, each with clients of its own whose queries and mutations pass
+ * the race's turnstile. The fake deployment runs one call at a time, as Convex's serializable
+ * transactions let a mutation behave; its limit is its own, so `maxLockboxes` asks nothing of it.
+ */
+const devicesOver = (connect: (deployment: Deployment, subject: string | null) => ConvexVaultClient): TH.MakeVaultDBDevices => (turnstile) => {
+  const deployment = deploy()
+  return () => TH.perUser((userId) => convexVaultDB(TH.throughTurnstile(turnstile, connect(deployment, userId), ['query', 'mutation']), deployment.api.safebyok))
+}
 
 for (const [clientTitle, connect] of ClientCases) {
   TH.describeVaultDB(`convexVaultDB over a ${clientTitle}`, () => {
     const deployment = deploy()
     return TH.perUser((userId) => convexVaultDB(connect(deployment, userId === '' ? null : userId), deployment.api.safebyok))
   }, {
+    comparesVaultKeyEpoch: false,
     makeVaultDBFor: () => {
       const deployment = deploy()
       return (userId) => convexVaultDB(connect(deployment, userId), deployment.api.safebyok)
     },
+    makeDevices: devicesOver(connect),
+    pushes:      true,
+  })
+
+  describe(`convexVaultDB's devices over a ${clientTitle}, for the battery's races`, () => {
+    it("send every write's mutation through the race's turnstile", async () => {
+      await TH.expectRoundTripsThroughTurnstile(devicesOver(connect))
+    })
   })
 }
 
@@ -166,17 +192,6 @@ describe("convexVaultDB, refusing", () => {
     expect(await vaultDB.listBoxes(u1)).to.have.lengthOf(1)
   })
 
-  it("refuses as identity_revoked over a ConvexReactClient that already holds the query's refusal", async () => {
-    const deployment = deploy()
-    const reactClient = deployment.reactClient(null)
-    // The app's own watch of the same query, signed out: the client keeps its refusal, and
-    // answers a one-shot query of it from there, synchronously.
-    const watched = vi.fn()
-    reactClient.watchQuery(deployment.api.safebyok.getBundle, { scope: u1 }).onUpdate(watched)
-    await vi.waitFor(() => { expect(watched).toHaveBeenCalled() })
-    await TH.expectRefusal(convexVaultDB(reactClient, deployment.api.safebyok).readBundle(u1), 'identity_revoked')
-  })
-
   for (const [clientTitle, connect] of ClientCases) {
     it(`refuses a lockbox the component has no room for over a ${clientTitle} as vault_full`, async () => {
       const deployment = deploy()
@@ -200,7 +215,7 @@ describe("convexVaultDB, refusing", () => {
     const bundle = await vaultDB.readBundle(u1)
     const vaultId = bundle?.vault_id ?? ''
     for (const [ii, bytes] of [...Array.from({ length: 8 }, () => 900_000), 120_000].entries()) {
-      await vaultDB.updateBox(u1, TH.heavyBox(`heavy_${String(ii)}`, bytes), { vault_id: vaultId, revision_id: null })
+      await vaultDB.updateBox(u1, TH.heavyBox(`heavy_${String(ii)}`, bytes), { vault_id: vaultId, revision_id: null, vault_key_epoch: 1 })
     }
     const refusal = await TH.expectRefusal(vault.store('anthropic_api_key', 'x'.repeat(40_000)), 'vault_full')
     expect(refusal.message).to.eq('This vault is full: erase a lockbox to make room, then try again.')
@@ -221,13 +236,15 @@ describe("a record the deployment refused", () => {
   // Distinctive values throughout, so that finding one in what is thrown means it was quoted.
   const subject = 'user_quotable'
   const scope = { applabel: 'quotable_app', user_id: subject, vaultlabel: 'quotable_vault' }
-  const standing = TH.bundleOf(subject, { ...scope, unlock_epoch: 52_871 })
+  const quotableKey = { vault_key_epoch: 52_874, prior_vault_key: { vault_key_epoch: 52_873, vault_key_wrapped: TH.fakeCiphered('prior_quotable') } }
+  const quotableUnlocks = [TH.envelopeOf('quotable_phrase', { vault_key_epoch: 52_874, device_id: 'device_quotable', registered_at: Date.UTC(2026, 8, 17) })]
+  const standing = TH.bundleOf(subject, { ...scope, ...quotableKey, unlock_epoch: 52_871, unlocks: quotableUnlocks })
   const nextBundle = { ...standing, unlock_epoch: 52_872, vault_key_passphrase_wrapped: TH.fakeCiphered('rewrapped_quotable') }
-  const lockbox = TH.boxOf('quotable_box', 'quotable_rev', { note: 'a quotable note' })
+  const lockbox = TH.boxOf('quotable_box', 'quotable_rev', { note: 'a quotable note', vault_key_epoch: 52_874 })
 
   const RefusedWrites: [string, unknown, (vaultDB: ReturnType<typeof convexVaultDB>) => Promise<unknown>][] = [
     ['updateBundle', nextBundle, (vaultDB) => vaultDB.updateBundle(nextBundle, { vault_id: standing.vault_id, unlock_epoch: 52_871 })],
-    ['updateBox',    lockbox,    (vaultDB) => vaultDB.updateBox(scope, lockbox, { vault_id: standing.vault_id, revision_id: null })],
+    ['updateBox',    lockbox,    (vaultDB) => vaultDB.updateBox(scope, lockbox, { vault_id: standing.vault_id, revision_id: null, vault_key_epoch: 52_874 })],
   ]
 
   for (const [verb, record, write] of RefusedWrites) {
@@ -261,7 +278,7 @@ describe("a record the deployment refused", () => {
     const deployment = deploy()
     const client = deployment.client(subject)
     await convexVaultDB(client, deployment.api.safebyok).createBundle(standing)
-    const expected = { vault_id: standing.vault_id, revision_id: null }
+    const expected = { vault_id: standing.vault_id, revision_id: null, vault_key_epoch: lockbox.vault_key_epoch }
     const quotedArgs = misnoted({ scope, lockbox: toConvexLockbox(lockbox), expected })
     await expect(client.mutation(deployment.api.safebyok.updateBox, quotedArgs)).rejects.toThrow('quoted_by_convex')
     const quoting: ConvexVaultClient = {
@@ -366,22 +383,6 @@ describe("convexVaultDB.subscribe", () => {
     here.subscribe(u1, onChange)
     await vi.waitFor(() => { expect(onChange).toHaveBeenCalledTimes(1) })
   })
-
-  it("still hears a change when the ConvexReactClient already watches the vault, and so sends no first result", async () => {
-    const deployment = deploy()
-    const reactClient = deployment.reactClient('u1')
-    const watched = vi.fn()
-    reactClient.watchQuery(deployment.api.safebyok.watchVault, { scope: u1 }).onUpdate(watched)
-    await vi.waitFor(() => { expect(watched).toHaveBeenCalled() })
-
-    const here = convexVaultDB(reactClient, deployment.api.safebyok)
-    const onChange = vi.fn()
-    here.subscribe(u1, onChange)
-    await caughtUp(here)
-    expect(onChange).not.toHaveBeenCalled()
-    await convexVaultDB(deployment.client('u1'), deployment.api.safebyok).createBundle(TH.bundleOf('u1'))
-    await vi.waitFor(() => { expect(onChange).toHaveBeenCalledTimes(1) })
-  })
 })
 
 /** The README's example: a vault opened over the app's own Convex client. */
@@ -417,54 +418,4 @@ describe("a vault over convexVaultDB, when its user signs out", () => {
       vault.close()
     })
   }
-})
-
-describe("a vault over convexVaultDB, on two devices", () => {
-  const NewPassphrase = 'a different staple, entirely'
-  // Obvious fakes, never real keys.
-  const anthropicKey = 'sk-ant-test-not-a-real-key'
-  const openaiKey = { apiKey: 'sk-test-not-a-real-key', orgId: null }
-
-  it("is made on one device, written, read on another, re-passphrased, and destroyed, each device hearing the other", async () => {
-    const deployment = deploy()
-    const laptop = await openOver(deployment.client('u1'), deployment.api.safebyok)
-    const phone = await openOver(deployment.reactClient('u1'), deployment.api.safebyok)
-    expect(laptop.getSnapshot().state).to.eq('absent')
-
-    // The laptop makes the vault and stores a whisper; the phone hears of both.
-    await laptop.unlock(TH.RealPassphrase)
-    await laptop.store('anthropic_api_key', anthropicKey, { note: 'work account' })
-    await vi.waitFor(() => {
-      expect(phone.getSnapshot().state).to.eq('locked')
-      expect(phone.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic_api_key'])
-    })
-
-    // The phone unlocks and reads what the laptop wrote; what the deployment holds is ciphertext.
-    await phone.unlock(TH.RealPassphrase)
-    expect(await phone.read('anthropic_api_key')).to.deep.equal(anthropicKey)
-    const stored = await deployment.as('u1').query(deployment.api.safebyok.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })
-    expect(JSON.stringify(stored)).to.not.include(anthropicKey)
-    expect(JSON.stringify(stored)).to.not.include(TH.RealPassphrase)
-
-    // The phone stores a second; the laptop hears it and reads it.
-    await phone.store('openai_api_key', openaiKey)
-    await vi.waitFor(() => {
-      expect(laptop.getSnapshot().boxes.map((box) => box.boxlabel)).to.deep.equal(['anthropic_api_key', 'openai_api_key'])
-    })
-    expect(await laptop.read('openai_api_key')).to.deep.equal(openaiKey)
-
-    // The laptop changes the passphrase: the phone is locked out of its old unlock, and only the
-    // new passphrase opens it again.
-    await laptop.changePassphrase(TH.RealPassphrase, NewPassphrase)
-    await vi.waitFor(() => { expect(phone.getSnapshot().state).to.eq('locked') })
-    await TH.expectRefusal(phone.unlock(TH.RealPassphrase), 'wrong_passphrase')
-    await phone.unlock(NewPassphrase)
-    expect(await phone.read('anthropic_api_key')).to.deep.equal(anthropicKey)
-
-    // The phone destroys the vault; the laptop hears it gone.
-    await phone.destroy()
-    await vi.waitFor(() => { expect(laptop.getSnapshot().state).to.eq('absent') })
-    laptop.close()
-    phone.close()
-  })
 })

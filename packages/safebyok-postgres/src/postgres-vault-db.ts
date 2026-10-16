@@ -98,8 +98,9 @@ const DefaultMaxLockboxes = 1000
  *   call), some races fail with a serialization error instead, as `storage_unavailable`, and
  *   the call may simply be tried again.
  * * **Other writes**: with `listen` and the optional triggers `VaultNotifySql` installs,
- *   `subscribe` hears every write to the vault, from any server and any device; without either,
- *   nothing is pushed.
+ *   `subscribe` hears every write to the vault, from any server and any device, and calls once as
+ *   its listen begins, so a write made while it began is read too; without either, nothing is
+ *   pushed.
  * * **Trouble**: anything the driver throws refuses with kind `storage_unavailable`, the driver's
  *   own error as its `cause`. Every refusal is a VaultError, whose `kind` a wire can carry.
  *
@@ -332,6 +333,11 @@ class TablesVaultDB extends VaultDB implements PostgresVaultDB {
       if (listening && namesScope(payload, scope)) { onChange() }
     }
     const unlistening = settled(this.listen(VaultChangeChannel, heard))
+    // Once listening, it calls once: a write that landed while the listen began was never notified
+    // to it, and its subscriber, which read the vault before, reads again now.
+    void onceListening(unlistening, () => {
+      if (listening) { onChange() }
+    })
     return () => {
       if (! listening) { return }
       listening = false
@@ -390,6 +396,11 @@ const settled = async (unlisten: PostgresUnlisten | Promise<PostgresUnlisten>): 
   } catch {
     return null
   }
+}
+
+/** Calls `onListening` once the listen has begun, if it began. */
+const onceListening = async (unlistening: Promise<PostgresUnlisten | null>, onListening: () => void): Promise<void> => {
+  if (await unlistening) { onListening() }
 }
 
 /**

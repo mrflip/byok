@@ -92,7 +92,7 @@ describe("vaultResolvers, in a host's schema", () => {
   it("answers a listing with the records as stored, format and all, not a vault's summaries", async () => {
     const db = await TH.emptyDatabase()
     await TH.requestFor(db, 'u1').createBundle(TH.bundleOf('u1'))
-    await TH.requestFor(db, 'u1').updateBox(u1, TH.boxOf('openai', 'r1'), { vault_id: 'vault-id-u1', revision_id: null })
+    await TH.requestFor(db, 'u1').updateBox(u1, TH.boxOf('openai', 'r1'), { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 })
     const result = await asked(TH.schemaOver(db), VaultOperations.safebyokListBoxes, { scope: u1 })
     const { lockbox_key_wrapped: _wrapped, whisper_ciphered: _ciphered, ...listed } = TH.boxOf('openai', 'r1')
     expect(result.data).to.deep.equal({ safebyokListBoxes: [listed] })
@@ -101,7 +101,7 @@ describe("vaultResolvers, in a host's schema", () => {
   it("takes a lockbox expectation that leaves out its null revision_id as one that means it", async () => {
     const db = await TH.emptyDatabase()
     await TH.requestFor(db, 'u1').createBundle(TH.bundleOf('u1'))
-    const result = await asked(TH.schemaOver(db), VaultOperations.safebyokUpdateBox, { scope: u1, lockbox: TH.boxOf('openai', 'r1'), expected: { vault_id: 'vault-id-u1' } })
+    const result = await asked(TH.schemaOver(db), VaultOperations.safebyokUpdateBox, { scope: u1, lockbox: TH.boxOf('openai', 'r1'), expected: { vault_id: 'vault-id-u1', vault_key_epoch: 1 } })
     expect(result).to.deep.equal({ data: { safebyokUpdateBox: true } })
   })
 })

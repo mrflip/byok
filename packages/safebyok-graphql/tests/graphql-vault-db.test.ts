@@ -10,10 +10,26 @@ import type { GraphqlVaultClient, GraphqlVaultDBOpts } from '../src/index'
 
 TH.bootDatabaseFirst()
 
+/**
+ * Devices over this file's database, emptied: each a browser of its own, with urql Clients of its
+ * own, served by a server of its own whose statements pass the race's turnstile on their way to
+ * the one PGlite beneath them all. The turnstile is at the database, where a server's write is
+ * one statement, rather than at the wire, where it is one request.
+ */
+const browsersOverPGlite: TH.MakeVaultDBDevices = async (turnstile) => {
+  const db = await TH.emptyDatabase()
+  return ({ maxLockboxes }) => {
+    const client = TH.throughTurnstile(turnstile, db, ['query', 'listen'])
+    const schema = TH.schemaOver(db, ({ userId }) => postgresVaultDB({ client, userId, listen: (channel, onNotify) => client.listen(channel, onNotify), maxLockboxes }))
+    return TH.perUser((userId) => graphqlVaultDB(TH.urqlClientFor(schema, userId), { maxLockboxes }))
+  }
+}
+
 TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB over PGlite', async () => {
   const schema = TH.schemaOver(await TH.emptyDatabase())
   return TH.perUser((userId) => TH.browserFor(schema, userId))
 }, {
+  comparesVaultKeyEpoch: false,
   makeCappedVaultDB: async (maxLockboxes) => {
     const db = await TH.emptyDatabase()
     const schema = TH.schemaOver(db, ({ userId }) => postgresVaultDB({ client: db, userId, maxLockboxes }))
@@ -23,7 +39,14 @@ TH.describeVaultDB('graphqlVaultDB, through vaultResolvers to postgresVaultDB ov
     const schema = TH.schemaOver(await TH.emptyDatabase())
     return (userId) => TH.browserFor(schema, userId)
   },
-  pushes: true,
+  pushes:      true,
+  makeDevices: browsersOverPGlite,
+})
+
+describe("graphqlVaultDB's devices, for the battery's races", () => {
+  it("send every write's statement, on the server, through the race's turnstile", async () => {
+    await TH.expectRoundTripsThroughTurnstile(browsersOverPGlite)
+  })
 })
 
 const u1 = TH.scopeOf('u1')
@@ -95,8 +118,8 @@ describe("graphqlVaultDB, a server's lockbox limit", () => {
     // A browser declaring more than its server holds: the server holds the line.
     const vaultDB = graphqlVaultDB(TH.urqlClientFor(schema, 'u1'), { maxLockboxes: Infinity })
     await vaultDB.createBundle(TH.bundleOf('u1'))
-    await vaultDB.updateBox(u1, TH.boxOf('openai', 'sk-fake-one'), { vault_id: 'vault-id-u1', revision_id: null })
-    const refusal = await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('secret_project_x', 'sk-fake-two'), { vault_id: 'vault-id-u1', revision_id: null }), 'vault_full')
+    await vaultDB.updateBox(u1, TH.boxOf('openai', 'sk-fake-one'), { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 })
+    const refusal = await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('secret_project_x', 'sk-fake-two'), { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 }), 'vault_full')
     expect(refusal).to.be.instanceOf(VaultError)
     expect(refusal.message).to.include('1 lockboxes')
     expect(refusal.message).to.not.include('secret_project_x')
@@ -200,7 +223,7 @@ describe("graphqlVaultDB, its refusals", () => {
 
   it("refuses with storage_unavailable when the network fails", async () => {
     const vaultDB = graphqlVaultDB(new Client({ url: 'https://app.example.test/api/graphql', exchanges: [fetchExchange], fetch: offline }))
-    const refusal = await TH.refusalOf(vaultDB.updateBox(u1, TH.boxOf('openai', 'r1'), { vault_id: 'vault-id-u1', revision_id: null }))
+    const refusal = await TH.refusalOf(vaultDB.updateBox(u1, TH.boxOf('openai', 'r1'), { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 }))
     expect(refusal.kind).to.eq('storage_unavailable')
   })
 
@@ -225,11 +248,8 @@ describe("graphqlVaultDB, hearing other writes", () => {
     const schema = TH.schemaOver(await TH.emptyDatabase())
     const elsewhere = TH.browserFor(schema, 'u1')
     await elsewhere.createBundle(TH.bundleOf('u1'))
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.browserFor(schema, 'u1').subscribe(u1, onChange)
-    await TH.aWhile()
-
-    await elsewhere.updateBox(u1, TH.boxOf('openai', 'r1'), { ...thisVault, revision_id: null })
+    const { heard, unsubscribe } = await TH.liveWatch(TH.browserFor(schema, 'u1'), u1)
+    await elsewhere.updateBox(u1, TH.boxOf('openai', 'r1'), { ...thisVault, revision_id: null, vault_key_epoch: 1 })
     await TH.eventually(() => heard.count === 1)
     unsubscribe()
     await elsewhere.eraseBox(u1, 'openai', thisVault)
@@ -239,9 +259,7 @@ describe("graphqlVaultDB, hearing other writes", () => {
 
   it("hears nothing of another vault's writes", async () => {
     const schema = TH.schemaOver(await TH.emptyDatabase())
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.browserFor(schema, 'u1').subscribe(u1, onChange)
-    await TH.aWhile()
+    const { heard, unsubscribe } = await TH.liveWatch(TH.browserFor(schema, 'u1'), u1)
     await TH.browserFor(schema, 'u2').createBundle(TH.bundleOf('u2'))
     await TH.browserFor(schema, 'u1').createBundle(TH.bundleOf('u1', { vaultlabel: 'spare' }))
     await TH.aWhile()

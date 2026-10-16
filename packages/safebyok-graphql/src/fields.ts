@@ -1,8 +1,8 @@
 import type { Lockbox, VaultBundle, VaultScope } from 'safebyok'
 
 /**
- * How one field crosses the wire: `plain`, as it is -- text, a number, or the bundle's list of
- * unlock envelopes, each one opaque JSON -- or `ciphered`, a Ciphered sent as its own two fields,
+ * How one field crosses the wire: `plain`, as it is -- text, a number, or the bundle's prior
+ * vaultKey and its list of unlock envelopes, each one opaque JSON -- or `ciphered`, a Ciphered sent as its own two fields,
  * `cipher_iv_b64` and `ciphertext_b64`.
  */
 export type FieldKind = 'plain' | 'ciphered'
@@ -42,6 +42,8 @@ export const BundleFields = everyFieldOf<VaultBundle>()([
   ['vaultlabel',       'plain'],
   ['vault_id',         'plain'],
   ['unlock_epoch',     'plain'],
+  ['vault_key_epoch',  'plain'],
+  ['prior_vault_key',  'plain'],
   ['unlocks',          'plain'],
   ['registered_at',    'plain'],
 ] as const)
@@ -54,6 +56,7 @@ export const LockboxFields = everyFieldOf<Lockbox>()([
   ['format',              'plain'],
   ['boxlabel',            'plain'],
   ['revision_id',         'plain'],
+  ['vault_key_epoch',     'plain'],
   ['lockbox_key_wrapped', 'ciphered'],
   ['whisper_ciphered',    'ciphered'],
   ['note',                'plain'],

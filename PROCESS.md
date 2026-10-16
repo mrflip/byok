@@ -142,7 +142,7 @@ numbers and the CHANGELOGs; `.github/workflows/release.yml` does the rest.
   carries an empty one, `pnpm changeset --empty`. Agents write changesets: they state intent, not a version.
 * **Versions are semver, in lockstep.** The public packages are one `fixed` group in
   `.changeset/config.json`, so one bump moves them all; a test refuses a public package left out
-  of it. Private packages and demos are never versioned or released. Until 1.0, a minor bump may
+  of it. Private packages, demos and `e2e/` are never versioned or released. Until 1.0, a minor bump may
   break the public surface, and its changeset says how. Between releases, main's version is the
   last one released: the next is not knowable until release time.
 * **The Version PR**, named for the release it makes ("Release 0.2.0: safebyok, ..."), is rebuilt

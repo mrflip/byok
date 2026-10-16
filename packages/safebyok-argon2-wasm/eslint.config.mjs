@@ -343,7 +343,7 @@ export default defineConfig([
       // which tells the reader nothing about what the test is for. `expectRefusal` is the
       // tests' own helper (tests/vault.test.ts): it asserts on the rejection it is handed.
       'vitest/expect-expect': ['error', {
-        assertFunctionNames: ['expect', 'expectTypeOf', 'expectRefusal'],
+        assertFunctionNames: ['expect*', 'TH.expect*'],
       }],
       // A bulk example list indexes a namespace by a name from its table, which this rule cannot
       // follow. tsc checks the same thing properly, and does.

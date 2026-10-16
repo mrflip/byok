@@ -16,14 +16,26 @@ const countingDeriver = () => {
   return { keyDeriver: { ...TH.testDeriver, deriveKeyBytes: derivations }, derivations }
 }
 
+/** What a way in labelled `unlocklabel` is stamped with: its id, the bundle's vaultKey epoch, the device that added it and when. */
+const stampOf = (unlocklabel: string): Envelope.EnvelopeStamp => ({
+  unlock_id:       `unlock-${unlocklabel}`,
+  unlocklabel,
+  vault_key_epoch: 1,
+  device_id:       'device-one',
+  registered_at:   Date.UTC(2026, 9, 15),
+})
+
 /** A real passphrase envelope around `vaultKey`, labelled `unlocklabel`. */
 const sealed = async (passphrase: string, unlocklabel: string, vaultKey: CryptoKey, keyDeriver: KeyDeriver = TH.testDeriver) => {
-  const { envelope } = await Envelope.sealPassphrase(keyDeriver, passphrase, scope, identity, { unlock_id: `unlock-${unlocklabel}`, unlocklabel }, vaultKey)
+  const { envelope } = await Envelope.sealPassphrase(keyDeriver, passphrase, scope, identity, stampOf(unlocklabel), vaultKey)
   return envelope
 }
 
 /** A bundle of `unlocks`, validated as storage would read it back. */
 const bundleWith = (unlocks: UnlockEnvelope[]): VaultBundle => VaultBundle.parse(TH.bundleOf('u1', { unlocks }))
+
+/** A bundle of `unlocks` at its second vaultKey, the first kept as its prior, validated as storage would read it back. */
+const secondKeyBundleWith = (unlocks: UnlockEnvelope[]): VaultBundle => VaultBundle.parse({ ...TH.rotatedBundleOf('u1'), unlocks })
 
 /** Expect `operation` to reject with a VaultError of `kind`. */
 const expectRefusal = async (operation: Promise<unknown>, kind: VaultError['kind']): Promise<VaultError> => {
@@ -47,12 +59,13 @@ describe("Envelope.sealPassphrase", () => {
     const two = await sealed('pw', 'home_phrase', vaultKey)
     expect(VaultBundle.safeParse(TH.bundleOf('u1', { unlocks: [one, two] })).success).to.be.true
     expect(one).to.include({ method: 'passphrase', unlock_id: 'unlock-passphrase', unlocklabel: 'passphrase', key_deriver_label: 'test_digest_v0' })
+    expect(one).to.include({ vault_key_epoch: 1, device_id: 'device-one', registered_at: Date.UTC(2026, 9, 15) })
     expect(one.salt_b64).to.not.eq(two.salt_b64)
   })
 
   it("hands back a session handle on the vaultKey that cannot be exported", async () => {
     const vaultKey = await makeVaultKey()
-    const { sessionKey } = await Envelope.sealPassphrase(TH.testDeriver, 'pw', scope, identity, { unlock_id: 'unlock-one', unlocklabel: 'one' }, vaultKey)
+    const { sessionKey } = await Envelope.sealPassphrase(TH.testDeriver, 'pw', scope, identity, stampOf('one'), vaultKey)
     expect(sessionKey.extractable).to.be.false
     expect(sessionKey.usages).to.have.members(['wrapKey', 'unwrapKey'])
   })
@@ -152,6 +165,24 @@ describe("Envelope.openWithPassphrase", () => {
       expect(err.message).to.not.include('Every passphrase of this vault is stored damaged')
     })
 
+    it("passes over, deriving nothing for it, an envelope at another vaultKey epoch than the bundle's, and opens a sound one beside it", async () => {
+      const vaultKey = await makeVaultKey()
+      const spliced = { ...await sealed('second', 'two', vaultKey), vault_key_epoch: 2 }
+      const bundle = bundleWith([spliced, await sealed('first', 'one', vaultKey)])
+      const { keyDeriver, derivations } = countingDeriver()
+      await expectRefusal(Envelope.openWithPassphrase(keyDeriver, 'second', scope, bundle), 'wrong_passphrase')
+      expect(derivations).toHaveBeenCalledTimes(1)
+      const opened = await Envelope.openWithPassphrase(TH.testDeriver, 'first', scope, bundle)
+      expect(opened.unlockId).to.eq('unlock-one')
+    })
+
+    it("refuses as damaged_unlock when every passphrase is at another vaultKey epoch than the bundle's", async () => {
+      const vaultKey = await makeVaultKey()
+      const bundle = secondKeyBundleWith([await sealed('first', 'one', vaultKey)])
+      const err = await expectRefusal(Envelope.openWithPassphrase(TH.testDeriver, 'first', scope, bundle), 'damaged_unlock')
+      expect(err.message).to.include('Every passphrase')
+    })
+
     it("refuses as damaged_unlock an aim at a damaged one, though a sound one stands beside it", async () => {
       const vaultKey = await makeVaultKey()
       const bundle = bundleWith([await sealed('first', 'one', vaultKey), { ...await sealed('second', 'two', vaultKey), salt_b64: 'c2FsdA' }])
@@ -185,6 +216,8 @@ const TamperCases: readonly (readonly [Partial<PassphraseEnvelope>, string])[] =
   [{ unlock_id: 'unlock-elsewhere' },            'its unlock_id swapped'],
   [{ unlocklabel: 'relabelled' },                'its unlocklabel swapped'],
   [{ key_deriver_label: 'test_digest_v1' },      'its key_deriver_label swapped, to one the deriver then wears'],
+  [{ device_id: 'device-elsewhere' },            'its device_id swapped'],
+  [{ registered_at: Date.UTC(2026, 9, 1) },      'its registered_at moved'],
 ]
 
 describe("an envelope's binding", () => {
@@ -196,6 +229,12 @@ describe("an envelope's binding", () => {
       await expectRefusal(Envelope.openWithPassphrase(keyDeriver, 'pw', scope, bundle), 'wrong_passphrase')
     })
   }
+
+  it("refuses to open with its vault_key_epoch moved, though the bundle's is moved with it", async () => {
+    const vaultKey = await makeVaultKey()
+    const bundle = secondKeyBundleWith([{ ...await sealed('pw', 'passphrase', vaultKey), vault_key_epoch: 2 }])
+    await expectRefusal(Envelope.openWithPassphrase(TH.testDeriver, 'pw', scope, bundle), 'wrong_passphrase')
+  })
 
   it("refuses to open with its salt swapped for another envelope's", async () => {
     const vaultKey = await makeVaultKey()
@@ -243,7 +282,7 @@ describe("Envelope.summarize", () => {
 
 /** A real passkey envelope around `vaultKey`, labelled `unlocklabel`, for the passkey `passkey` answered. */
 const sealedPasskey = async (passkey: PasskeyProof, unlocklabel: string, vaultKey: CryptoKey) => {
-  const { envelope } = await Envelope.sealPasskey(passkey, scope, identity, { unlock_id: `unlock-${unlocklabel}`, unlocklabel }, vaultKey)
+  const { envelope } = await Envelope.sealPasskey(passkey, scope, identity, stampOf(unlocklabel), vaultKey)
   return envelope
 }
 
@@ -258,7 +297,7 @@ describe("Envelope.sealPasskey", () => {
   })
 
   it("hands back a session handle on the vaultKey that cannot be exported", async () => {
-    const { sessionKey } = await Envelope.sealPasskey(await TH.passkeyOf('laptop'), scope, identity, { unlock_id: 'unlock-laptop', unlocklabel: 'laptop' }, await makeVaultKey())
+    const { sessionKey } = await Envelope.sealPasskey(await TH.passkeyOf('laptop'), scope, identity, stampOf('laptop'), await makeVaultKey())
     expect(sessionKey.extractable).to.be.false
     expect(sessionKey.usages).to.have.members(['wrapKey', 'unwrapKey'])
   })
@@ -305,6 +344,14 @@ describe("Envelope.openWithPasskey", () => {
     }
   })
 
+  it("refuses as damaged_unlock an envelope at another vaultKey epoch than the bundle's", async () => {
+    const laptop = await TH.passkeyOf('laptop')
+    const envelope = await sealedPasskey(laptop, 'laptop', await makeVaultKey())
+    const bundle = bundleWith([{ ...envelope, vault_key_epoch: 2 }])
+    const err = await expectRefusal(Envelope.openWithPasskey(laptop, scope, bundle), 'damaged_unlock')
+    expect(err.message).to.include('stored damaged')
+  })
+
   it("says, refusing an answer for its own salt that does not open it, that the way in may be damaged", async () => {
     const laptop = await TH.passkeyOf('laptop')
     const bundle = bundleWith([await sealedPasskey(laptop, 'laptop', await makeVaultKey())])
@@ -325,6 +372,8 @@ const PasskeyTamperCases = [
   [{ unlock_id: 'unlock-other' },     'its unlock_id changed'],
   [{ unlocklabel: 'other' },          'its unlocklabel changed'],
   [{ credential_id: 'Y3JlZC1vdGhlcg' }, 'its credential_id swapped, the answer kept'],
+  [{ device_id: 'device-elsewhere' },  'its device_id swapped'],
+  [{ registered_at: Date.UTC(2026, 9, 1) }, 'its registered_at moved'],
 ] as const
 
 describe("a passkey envelope's binding", () => {
@@ -371,7 +420,7 @@ describe("a passkey envelope's key", () => {
     const laptop = await TH.passkeyOf('laptop')
     const envelope = await sealedPasskey(laptop, 'laptop', await makeVaultKey())
     const { vault_key_wrapped: _wrapped, ...header } = envelope
-    const binding = cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', 'vault-id-u1', identity.registered_at, 'vault_key_passkey_wrapped', header)
+    const binding = cipherBinding('safebyok-vault-v2', 'acme', 'u1', 'main', 'vault-id-u1', identity.registered_at, 'vault_key_passkey_wrapped', header)
     expect(await unwrapsUnder(envelope, laptop.prfBytes, binding, binding)).to.be.instanceOf(CryptoKey)
   })
 
@@ -379,8 +428,8 @@ describe("a passkey envelope's key", () => {
     const laptop = await TH.passkeyOf('laptop')
     const envelope = await sealedPasskey(laptop, 'laptop', await makeVaultKey())
     const { vault_key_wrapped: _wrapped, ...header } = envelope
-    const binding = cipherBinding('safebyok-vault-v1', 'acme', 'u1', 'main', 'vault-id-u1', identity.registered_at, 'vault_key_passkey_wrapped', header)
-    const vaultlessInfo = cipherBinding('safebyok-vault-v1', 'vault_key_passkey_wrapped', laptop.credentialId)
+    const binding = cipherBinding('safebyok-vault-v2', 'acme', 'u1', 'main', 'vault-id-u1', identity.registered_at, 'vault_key_passkey_wrapped', header)
+    const vaultlessInfo = cipherBinding('safebyok-vault-v2', 'vault_key_passkey_wrapped', laptop.credentialId)
     await expect(unwrapsUnder(envelope, laptop.prfBytes, vaultlessInfo, binding)).rejects.toThrow()
   })
 })

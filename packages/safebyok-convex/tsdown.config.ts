@@ -6,10 +6,11 @@ import { defineConfig } from 'tsdown'
 // modules itself at deploy. `exports` is written by hand in package.json, since two of its entries
 // are Convex's conventions rather than built entry points: the types-only
 // `./_generated/component.js`, and `./test`, which ships as source because its `import.meta.glob`
-// must find the component's .ts modules. publint and attw read the package as a consumer would;
-// attw leaves out `./test`, which only a test runner resolving as a bundler does (vitest) loads.
+// must find the component's .ts modules. `./testing` is built like the client: a fake deployment
+// for tests, which imports `convex` and nothing else. publint and attw read the package as a
+// consumer would; attw leaves out `./test`, which only a test runner resolving as a bundler does (vitest) loads.
 export default defineConfig({
-  entry:      ['src/index.ts', 'src/server.ts', 'src/component-api.ts', 'src/component/**/*.ts'],
+  entry:      ['src/index.ts', 'src/server.ts', 'src/testing.ts', 'src/component-api.ts', 'src/component/**/*.ts'],
   format:     ['esm'],
   unbundle:   true,
   // The component runs in Convex's isolates and the client in browsers; nothing here is either's alone.

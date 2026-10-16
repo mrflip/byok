@@ -77,7 +77,8 @@ export type VaultResolvers<ContextT> = {
  * * **`safebyokVaultChanged`** sends the vault's scope after every write to it, as the VaultDB's
  *   `subscribe` hears them -- for `postgresVaultDB`, through its `listen` -- and stops listening
  *   when the subscriber goes. Changes that come while the subscriber is still busy with the last
- *   one are sent as one.
+ *   one are sent as one. It sends one as it starts, too, when the VaultDB calls as its watch
+ *   begins, as `postgresVaultDB` does: a write made while the browser was subscribing is read then.
  *
  * @param opts - `vaultDBFor`, which makes the VaultDB for a request from its context.
  * @returns The resolver map, for your GraphQL server beside your own.
@@ -158,8 +159,8 @@ const bundleExpectationIn = (args: VaultFieldArgs): BundleExpectation => {
 
 // A revision_id left out, as a GraphQL client may leave out a null, is the null it means.
 const lockboxExpectationIn = (args: VaultFieldArgs): LockboxExpectation => {
-  const { vault_id, revision_id = null } = args.expected as { vault_id: string, revision_id?: string | null }
-  return { vault_id, revision_id }
+  const { vault_id, revision_id = null, vault_key_epoch } = args.expected as { vault_id: string, revision_id?: string | null, vault_key_epoch: number }
+  return { vault_id, revision_id, vault_key_epoch }
 }
 
 const eraseExpectationIn = (args: VaultFieldArgs): EraseExpectation => {

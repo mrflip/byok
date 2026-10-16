@@ -7,6 +7,79 @@ security expert who knows what questions to ask.
 
 ## Of Interest
 
+* 2026-10-16: `describeVaultDB` now races every compare-and-write line (VAULTDB.md, 3.1 to 3.5, 3.7,
+  4.5) from two devices, holding one before each of its round trips while the other moves
+  (`raceEveryWay`, a turnstile the adapter's test factory wires into its client). What it shows: no
+  check is split from its write across round trips or awaits, and no in-process lock or queue
+  makes the devices take turns. What it cannot: split one round trip. Every in-tree backend under
+  test runs one call at a time, which is the real promise of Convex's mutations and of IndexedDB's
+  readwrite transactions, but not of Postgres at READ COMMITTED, whose statements run at once: the
+  atomicity of `postgresVaultDB`'s one-statement writes under concurrent connections is reasoned
+  (thread 11's verdict), not tested. The self-tests that prove the races catch a broken adapter
+  run over an in-memory backend, not over each real one. Separately, `postgresVaultDB` now calls a
+  subscriber once as its listen begins (6.1), so a vault reads a write that landed while its watch
+  was starting, which it missed before.
+* 2026-10-16: **the `vault_key_epoch` expectation** (`VAULTDB.md` line 3.8). Every lockbox carries
+  the `vault_key_epoch` of the vaultKey its lockboxKey is wrapped under (bound into both its
+  encryptions with the rest of its header), and `updateBox` lands only while the scope's standing
+  bundle has that epoch, compared by the adapter in the same atomic step as `vault_id` and
+  `revision_id`; the base class refuses a lockbox whose own epoch is not the expected one. This is
+  the only thing that stops a device still holding a replaced vaultKey, which has not looked at
+  the bundle since, from sealing a new whisper under it: `store()` does not read the bundle first.
+  An adapter that skips the comparison lets that device write a lockbox the replaced vaultKey
+  opens. `localVaultDB` compares it now; IndexedDB, Convex, Postgres (and GraphQL through it) do
+  not yet, and the battery holds them to it as a pending test until they do. Every vault is at
+  epoch 1 today: nothing replaces a vaultKey yet. Erases name no epoch. A lockbox whose epoch is
+  not the bundle's reads as `damaged_lockbox`, its key never tried.
+* 2026-10-16: **the rollback check.** Each device keeps a device mark per scope in its deviceDB:
+  the vault's `vault_id` and the highest `unlock_epoch` and `vault_key_epoch` it has seen the
+  bundle at, raised on every read of a newer bundle and after its own writes. A bundle of the same
+  `vault_id` at a lower `unlock_epoch`, or a lower `vault_key_epoch`, is refused as `rolled_back`
+  at open, unlock, every change to the ways in, and
+  every refresh, before anything is taken from it; a vault unlocked when it meets one stays as it
+  stood. Its reach: only a device that saw the newer bundle, and only while its local storage
+  lasts (clearing site data, a damaged mark, or another `vault_id` -- a vault made anew -- starts
+  a new mark). Its blind spot: bundles cannot be ordered across `vault_id`s, so storage serving an
+  old, destroyed vault in place of the current one is not caught, nor is anything on a device
+  that never saw the newer bundle. A mark holds one vault per scope, so storage that hands back
+  another vault's bundle even once moves the mark to that vault, and an older copy of the first is
+  then taken as it stands. `unlock_epoch` is bound into no encryption, so storage can serve an
+  older bundle under a raised `unlock_epoch`; but `vault_key_epoch` is bound into every envelope
+  and held equal to the bundle's, so storage cannot raise it on an older bundle and still have a
+  way in open, and the mark refuses one at a lower `vault_key_epoch` whatever its `unlock_epoch`:
+  a bundle from before a rotation, and with it the vaultKey the rotation replaced, is caught even
+  so. What still passes is an older bundle at the same `vault_key_epoch` under a forged higher
+  `unlock_epoch`: it can bring back only a way in `removeUnlock` dropped, or a passphrase
+  `changePassphrase` replaced, which still opens only the vaultKey the vault stands under, never a
+  replaced one. (A device that opens such a bundle through its remembered unlock opens no envelope:
+  it takes the vaultKey it already held, and lists the older copy's ways in.) The way out of a
+  refusal is the host's: it erases the device's mark (`deviceDB.eraseMark(scope)`) and opens again,
+  taking the older copy as it stands, the core README's recipe. The README has the host decide that
+  from its own knowledge of a restore, never from the user's answer: storage that rolls back on its
+  own would ask the user the same, and the user cannot tell the two apart. `destroy()` and
+  `eraseDamagedVault` erase the mark. Two tabs of one device
+  each read and write the mark without a lock, so a tab that read an older bundle before the
+  other tab's newer one can write the mark back down: the check weakens to the older epoch. A
+  bundle is held to the mark as read before the bundle itself, so a newer bundle that another tab,
+  or this one, landed while it was being read never passes for a rollback: against storage whose
+  reads see every write landed before them, the check never refuses wrongly. Within a bundle, an
+  envelope whose `vault_key_epoch` is not the bundle's is passed over as damaged
+  (`damaged_unlock`), so an envelope spliced in from an older bundle never hands over its vaultKey
+  as the current one.
+* 2026-10-16: **`device_id`.** Every unlock envelope carries the `device_id` of the device that
+  added it, and its `registered_at`, both in its header and so bound into its wrap (and, for a
+  passkey, its HKDF `info`), and kept when the envelope is sealed anew. The id is a random UUID
+  (`crypto.randomUUID`) a device mints for one vault the first time it reads or makes it, kept
+  only in its device mark: never derived from the device (no fingerprinting, hardware or
+  advertising identifier, no user-agent label), and one per vault per device, so the server learns
+  which envelopes one device added to one vault and nothing more -- no link between a user's
+  vaults, or between users on one device. It is visible to the server in the clear. No
+  user-chosen device label is stored. Clearing site data mints a new id; envelopes keep the old.
+* 2026-10-16: the record formats moved on with these fields (`safebyok-vault-v2`,
+  `safebyok-lockbox-v2`, and the new `safebyok-mark-v1`), and each binding's first part with
+  them. No vault written before reads: its bundle is `damaged_bundle`, and `eraseDamagedVault`
+  recognizes `safebyok-vault-v1` as an older format, not a possibly newer one, so it clears such a
+  vault rather than asking the user to update the app.
 * 2026-10-16: the VaultDB contract (`packages/safebyok/VAULTDB.md`, line 4.2) makes a storage
   adapter's lockbox limit a best effort: writes made one after another never pass it, but writers
   racing for the last places may take a vault a few past it, and a client that bypasses the
@@ -772,9 +845,9 @@ security expert who knows what questions to ask.
   on an old build, a vault every up-to-date device opens. So the hatch refuses (kind
   `damaged_bundle`, a message to update the app, nothing erased) a record with a `format` this
   build does not know (of any type), an unlock `method` it does not know, or more unlocks than
-  `MaxUnlocks`, and erases only what fails otherwise. **The rule this rests on, for the Coach to
-  confirm: any change to what a stored record may hold -- a field, a shape, or a range a check
-  accepts -- bumps `format`**, so that an older build can tell newer from damaged. Where it cannot tell, it refuses: the hatch fails safe. Not routed through
+  `MaxUnlocks`, and erases only what fails otherwise. **The rule this rests on, which the Coach
+  has ruled (2026-10-16): any change to what a stored record may hold -- a field, a shape, or a
+  range a check accepts -- bumps `format`**, so that an older build can tell newer from damaged. Where it cannot tell, it refuses: the hatch fails safe. Not routed through
   `RefusalPolicy.heed`: there is no handle to lock and no key in memory, so `whenIdentityRevoked`
   has nothing to act on, and the hatch's own last step is erasing the remembered unlock.
 * 2026-10-16: **the checks tightened, and a forgotten bag made harmless.** Every default check,

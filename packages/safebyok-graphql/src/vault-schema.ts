@@ -17,6 +17,12 @@ vaultKey wrapped (\`vault_key_wrapped\`). Carried as it is, never looked inside.
 """
 scalar SafebyokUnlockEnvelope
 
+"""
+The vaultKey before a vault's own, as safebyok stored it: JSON, its \`vault_key_epoch\` and that
+vaultKey wrapped under the vault's own (\`vault_key_wrapped\`). Carried as it is, never looked inside.
+"""
+scalar SafebyokPriorVaultKey
+
 """An encrypted value: its cipherIv and its ciphertext, each base64url text."""
 type SafebyokCiphered {
   cipher_iv_b64:  String!
@@ -54,6 +60,8 @@ type SafebyokVaultBundle {
   vaultlabel:       String!
   vault_id:         String!
   unlock_epoch:     Int!
+  vault_key_epoch:  Int!
+  prior_vault_key:  SafebyokPriorVaultKey
   unlocks:          [SafebyokUnlockEnvelope!]!
   registered_at:    Float!
 }
@@ -66,6 +74,8 @@ input SafebyokVaultBundleInput {
   vaultlabel:       String!
   vault_id:         String!
   unlock_epoch:     Int!
+  vault_key_epoch:  Int!
+  prior_vault_key:  SafebyokPriorVaultKey
   unlocks:          [SafebyokUnlockEnvelope!]!
   registered_at:    Float!
 }
@@ -79,6 +89,7 @@ type SafebyokLockbox {
   format:              String!
   boxlabel:            String!
   revision_id:         String!
+  vault_key_epoch:     Int!
   lockbox_key_wrapped: SafebyokCiphered!
   whisper_ciphered:    SafebyokCiphered!
   note:                String
@@ -91,6 +102,7 @@ input SafebyokLockboxInput {
   format:              String!
   boxlabel:            String!
   revision_id:         String!
+  vault_key_epoch:     Int!
   lockbox_key_wrapped: SafebyokCipheredInput!
   whisper_ciphered:    SafebyokCipheredInput!
   note:                String
@@ -100,10 +112,11 @@ input SafebyokLockboxInput {
 
 """A lockbox as a listing has it: every field but the two encrypted ones."""
 type SafebyokListedLockbox {
-  format:        String!
-  boxlabel:      String!
-  revision_id:   String!
-  note:          String
+  format:          String!
+  boxlabel:        String!
+  revision_id:     String!
+  vault_key_epoch: Int!
+  note:            String
   registered_at: Float!
   changed_at:    Float!
 }
@@ -116,11 +129,13 @@ input SafebyokBundleExpectationInput {
 
 """
 What a lockbox write was written for and read: it lands only while the vault has that vault_id
-and the lockbox that revision_id, or, for a null revision_id, while there is no lockbox there.
+and that vault_key_epoch, and the lockbox that revision_id, or, for a null revision_id, while
+there is no lockbox there.
 """
 input SafebyokLockboxExpectationInput {
-  vault_id:    String!
-  revision_id: String
+  vault_id:        String!
+  revision_id:     String
+  vault_key_epoch: Int!
 }
 
 """What an erase was aimed at: it lands only while the vault has that vault_id."""
@@ -151,7 +166,7 @@ type Mutation {
 }
 
 type Subscription {
-  """The vault's scope, after every write to the vault, from any server and any device."""
+  """The vault's scope whenever the vault may have changed: after every write to it, from any server and any device."""
   safebyokVaultChanged(scope: SafebyokVaultScopeInput!): SafebyokVaultScope!
 }
 `

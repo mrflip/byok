@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
 import * as ZClassic from 'zod'
 import * as Z from 'zod/mini'
-import { ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, Lockbox, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, VaultScope, type DeviceUnlock, type PasskeyProof, type Whisper } from '../src/types'
+import { ForcePassphraseReentryHours, FarFuture, FarPast, ForeverMs, Lockbox, MaxLockboxes, MaxUnlocks, MaxWhisperBytes, VaultScope, type DeviceMark, type DeviceUnlock, type VaultBundle, type PasskeyProof, type Whisper } from '../src/types'
 import { AnyTextValidators, LockboxNote, MaxUserIdChars, type VaultValidators } from '../src/validators'
-import { VaultError } from '../src/errors'
+import { VaultError, isVaultError } from '../src/errors'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { jsonBytes, localVaultDB, type VaultDB } from '../src/vault-db'
 import { memoryStore } from '../src/string-store'
@@ -66,6 +66,7 @@ const boxlabelsOf = (vault: Vault) => vault.getSnapshot().boxes.map((summary) =>
 const MisfitStores: readonly (readonly [Partial<OpenVaultOpts>, string])[] = [
   [{ vaultDB: { readBundle: () => Promise.resolve(null) } as unknown as OpenVaultOpts['vaultDB'] }, 'a vaultDB with only some of its verbs'],
   [{ deviceDB: { ...memoryDeviceDB(), eraseAll: 'never' } as unknown as OpenVaultOpts['deviceDB'] }, 'a deviceDB whose eraseAll is no function'],
+  [{ deviceDB: TH.omitting(memoryDeviceDB(), 'readMark') }, 'a deviceDB that keeps no device mark'],
 ]
 
 const HourMs = 60 * 60 * 1000
@@ -565,11 +566,15 @@ const ckeyOf = (scope: VaultScope) => `${scope.applabel}:${scope.user_id}:${scop
  */
 const uncheckingDeviceDB = () => {
   const rows = new Map<string, unknown>()
+  const marks = new Map<string, unknown>()
   const deviceDB: DeviceDB = {
     readUnlock:  (scope) => Promise.resolve((rows.get(ckeyOf(scope)) ?? null) as DeviceUnlock | null),
     writeUnlock: (unlock) => { rows.set(ckeyOf(unlock), unlock); return Promise.resolve() },
     eraseUnlock: (scope) => { rows.delete(ckeyOf(scope)); return Promise.resolve() },
-    eraseAll:    () => { rows.clear(); return Promise.resolve() },
+    readMark:    (scope) => Promise.resolve((marks.get(ckeyOf(scope)) ?? null) as DeviceMark | null),
+    writeMark:   (mark) => { marks.set(ckeyOf(mark), mark); return Promise.resolve() },
+    eraseMark:   (scope) => { marks.delete(ckeyOf(scope)); return Promise.resolve() },
+    eraseAll:    () => { rows.clear(); marks.clear(); return Promise.resolve() },
   }
   /** Rewrite the one stored row through `spoil`. */
   const spoilRow = (spoil: (row: Record<string, unknown>) => unknown) => {
@@ -1014,7 +1019,7 @@ const declaringLockboxes = (vaultDB: VaultDB, maxLockboxes: unknown): VaultDB =>
 /**
  * A lockbox row as a backend files it, with every field but the whisper at its largest: the
  * longest labels, a note of 256 UTF-16 code units and a user_id of 100, each at three UTF-8 bytes
- * apiece, the latest times, and real ciphertext of `whisperBytes` random bytes.
+ * apiece, the latest times, the longest vaultKey epoch, and real ciphertext of `whisperBytes` random bytes.
  */
 const heaviestRowOf = async (whisperBytes: number) => {
   const binding = cipherBinding('a test binding')
@@ -1023,9 +1028,10 @@ const heaviestRowOf = async (whisperBytes: number) => {
     applabel:            'a'.repeat(40),
     user_id:             '\u{4E00}'.repeat(MaxUserIdChars),
     vaultlabel:          'v'.repeat(40),
-    format:              'safebyok-lockbox-v1',
+    format:              'safebyok-lockbox-v2',
     boxlabel:            'b'.repeat(40),
     revision_id:         crypto.randomUUID(),
+    vault_key_epoch:     Number.MAX_SAFE_INTEGER,
     lockbox_key_wrapped: await wrapKeyUnder(await makeVaultKey(), lockboxKey, binding),
     whisper_ciphered:    await cipherBytes(lockboxKey, randomBytes(whisperBytes), binding),
     note:                '\u{4E00}'.repeat(256),
@@ -1765,7 +1771,7 @@ describe("eraseDamagedVault", () => {
 
   it("refuses a vault a newer safebyok may have written, as openVault sees it damaged: nothing erased, the remembered unlock kept", async () => {
     const world = await damagedVaultWorld()
-    const newer = JSON.stringify({ ...storedBundleOf(world), format: 'safebyok-vault-v2' })
+    const newer = JSON.stringify({ ...storedBundleOf(world), format: 'safebyok-vault-v3' })
     world.dbStore.write(u1BundleCkey, newer)
     await TH.expectRefusal(world.open(), 'damaged_bundle')
     const err = await TH.expectRefusal(eraseDamagedVault(world.optsWith()), 'damaged_bundle')
@@ -4396,5 +4402,330 @@ describe("when storage says the user is no longer signed in", () => {
   it("refuses a whenIdentityRevoked that is neither 'lock' nor 'stay'", async () => {
     const world = makeWorld()
     await TH.expectRefusal(world.open({ whenIdentityRevoked: 'erase' as unknown as 'lock' }), 'bad_option')
+  })
+})
+
+/** This device's mark for `u1`'s vault, as its deviceDB keeps it. */
+const markIn = (world: ReturnType<typeof makeWorld>) => world.deviceDB.readMark(TH.scopeOf('u1'))
+
+/** The stored bundle's ways in, as the backend holds them. */
+const storedUnlocksOf = (world: ReturnType<typeof makeWorld>) => storedBundleOf(world)['unlocks'] as Record<string, unknown>[]
+
+describe("the device mark", () => {
+  it("is kept from the vault's making: its vault_id, the epoch seen, and an id of its own, which the first way in carries", async () => {
+    const world = makeWorld()
+    await world.openUnlocked('pw')
+    const mark = await markIn(world)
+    const bundle = storedBundleOf(world)
+    expect(mark).to.deep.include({ format: 'safebyok-mark-v1', ...TH.scopeOf('u1'), vault_id: bundle['vault_id'], unlock_epoch: 1, vault_key_epoch: 1 })
+    expect(storedUnlocksOf(world)[0]).to.deep.include({ device_id: mark?.device_id, vault_key_epoch: 1, registered_at: world.clock.now() })
+  })
+
+  it("is started under the id the first way in carries, though a refresh the vault's making set off gets there first", async () => {
+    const world = makeWorld()
+    const vault = await world.open()
+    const createBundle = world.vaultDB.createBundle.bind(world.vaultDB)
+    // The write rings this handle's own watch, whose refresh runs to its end before the unlock goes on.
+    vi.spyOn(world.vaultDB, 'createBundle').mockImplementationOnce(async (...args) => {
+      const settled = await createBundle(...args)
+      await TH.wakeupAtNextTick()
+      return settled
+    })
+    await vault.unlock('pw')
+    const mark = await markIn(world)
+    expect(storedUnlocksOf(world)[0]?.['device_id']).to.eq(mark?.device_id)
+  })
+
+  it("rises with each newer bundle, its own writes and another device's, and every way in this device adds carries its id", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    const { device_id: deviceId } = await markIn(world) ?? {}
+    world.advance(HourMs)
+    await vault.addPassphrase('pw', 'spare phrase', { unlocklabel: 'spare' })
+    expect(await markIn(world)).to.deep.include({ device_id: deviceId, unlock_epoch: 2 })
+    expect(storedUnlocksOf(world)[1]).to.deep.include({ device_id: deviceId, registered_at: world.clock.now() })
+    const elsewhere = await world.openUnlocked('pw', { deviceDB: memoryDeviceDB() })
+    await elsewhere.addPassphrase('pw', 'third phrase', { unlocklabel: 'third' })
+    await TH.wakeupAtNextTick()
+    expect(await markIn(world)).to.deep.include({ device_id: deviceId, unlock_epoch: 3 })
+    expect(storedUnlocksOf(world)[2]?.['device_id']).to.be.a('string').and.not.eq(deviceId)
+  })
+
+  it("keeps a way in's device and time when its passphrase changes", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    const [before] = storedUnlocksOf(world)
+    world.advance(HourMs)
+    await vault.changePassphrase('pw', 'pw two')
+    const [after] = storedUnlocksOf(world)
+    expect(after).to.deep.include({ device_id: before?.['device_id'], registered_at: before?.['registered_at'], unlock_id: before?.['unlock_id'] })
+    expect(after?.['salt_b64']).to.not.eq(before?.['salt_b64'])
+  })
+
+  it("survives lock(), and destroy() erases it", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    await vault.lock()
+    expect(await markIn(world)).to.not.be.null
+    await vault.destroy()
+    expect(await markIn(world)).to.be.null
+  })
+
+  it("starts anew, under a new id, for a vault made anew under the scope", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    await vault.addPassphrase('pw', 'spare phrase', { unlocklabel: 'spare' })
+    const before = await markIn(world)
+    vault.close()
+    const elsewhere = await world.open({ deviceDB: memoryDeviceDB() })
+    await elsewhere.destroy()
+    await elsewhere.unlock('pw anew')
+    await world.open()
+    const after = await markIn(world)
+    expect(after).to.deep.include({ vault_id: storedBundleOf(world)['vault_id'], unlock_epoch: 1 })
+    expect(after?.vault_id).to.not.eq(before?.vault_id)
+    expect(after?.device_id).to.not.eq(before?.device_id)
+  })
+
+  it("reads a mark naming another scope as none, says so through the logger, and starts again", async () => {
+    const world = makeWorld()
+    await world.openUnlocked('pw')
+    const before = await markIn(world)
+    // Every read of the mark at this open hands back u2's: the one before the bundle, and the one after.
+    const misfiled = vi.spyOn(world.deviceDB, 'readMark').mockResolvedValue(TH.markOf('u2', { unlock_epoch: 9 }))
+    await world.open()
+    misfiled.mockRestore()
+    expect(world.logged.map((call) => call.level)).to.deep.equal(['warn'])
+    expect(world.logged[0]?.message).to.include('mark')
+    const after = await markIn(world)
+    expect(after?.device_id).to.not.eq(before?.device_id)
+  })
+
+  it("is erased by eraseDamagedVault, with the vault", async () => {
+    const world = await damagedVaultWorld()
+    expect(await markIn(world)).to.not.be.null
+    await eraseDamagedVault(world.optsWith())
+    expect(await markIn(world)).to.be.null
+  })
+})
+
+/**
+ * A world whose `u1` vault had a way in, `spare`, removed, and the vault's bundle text from before
+ * the removal, for storage to hand back.
+ */
+const rolledBackWorld = async () => {
+  const world = makeWorld()
+  const vault = await world.openUnlocked('pw')
+  const spareId = await vault.addPassphrase('pw', 'spare phrase', { unlocklabel: 'spare' })
+  const older = world.dbStore.read(u1BundleCkey) ?? ''
+  await vault.removeUnlock('pw', spareId)
+  const newer = world.dbStore.read(u1BundleCkey) ?? ''
+  return { world, vault, older, newer }
+}
+
+/**
+ * The README's recipe for a vault whose storage was restored from an older copy on purpose: open
+ * it, and on 'rolled_back', when the host knows of the restore, erase this device's mark and open
+ * it again; any other refusal goes on up.
+ */
+const openAcceptingRestore = async (opts: OpenVaultOpts, storageWasRestoredOnPurpose: () => Promise<boolean>): Promise<Vault> => {
+  try {
+    return await openVault(opts)
+  } catch (err) {
+    if (! isVaultError(err, 'rolled_back') || ! await storageWasRestoredOnPurpose()) { throw err }
+    await opts.deviceDB.eraseMark({ applabel: opts.applabel, user_id: opts.userId, vaultlabel: opts.vaultlabel })
+    return await openVault(opts)
+  }
+}
+
+describe("a bundle rolled back", () => {
+  it("refuses an older copy at open as rolled_back, writing nothing, and quoting none of it", async () => {
+    const { world, vault, older } = await rolledBackWorld()
+    vault.close()
+    world.dbStore.write(u1BundleCkey, older)
+    const err = await TH.expectRefusal(world.open(), 'rolled_back')
+    expect(err.message).to.include('already seen a newer copy')
+    expect(err.message).to.include('eraseMark')
+    expect(err.message).to.not.include('Try again later')
+    expect(TH.thrownText(err)).to.not.include((JSON.parse(older) as { vault_id: string }).vault_id)
+    expect(world.dbStore.read(u1BundleCkey)).to.eq(older)
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 3 })
+  })
+
+  it("refuses an older copy at unlock, so a removed way in stays removed on this device", async () => {
+    const { world, vault, older } = await rolledBackWorld()
+    await vault.lock()
+    const deaf = await world.open({ vaultDB: world.deafVaultDB() })
+    world.dbStore.write(u1BundleCkey, older)
+    await TH.expectRefusal(deaf.unlock('spare phrase'), 'rolled_back')
+    expect(deaf.getSnapshot().state).to.eq('locked')
+    expect(deaf.getSnapshot().unlocks.map((unlock) => unlock.unlocklabel)).to.deep.equal(['passphrase'])
+    expect(await world.rememberedUnlock()).to.be.null
+  })
+
+  it("refuses an older copy at a background refresh, leaving the vault as it stood, and says so through the logger", async () => {
+    const { world, vault, older } = await rolledBackWorld()
+    const standing = vault.getSnapshot()
+    world.dbStore.write(u1BundleCkey, older)
+    await TH.wakeupAtNextTick()
+    expect(vault.getSnapshot()).to.eq(standing)
+    expect(standing.state).to.eq('unlocked')
+    expect(world.logged.map((call) => [call.level, (call.err as VaultError | null | undefined)?.kind])).to.deep.equal([['warn', 'rolled_back']])
+  })
+
+  it("refuses no copy that was the newest when storage handed it back, though another tab of this device raised the mark meanwhile", async () => {
+    const world = makeWorld()
+    const here = await world.openUnlocked('pw')
+    const slowVaultDB = world.deafVaultDB()
+    const there = await world.open({ vaultDB: slowVaultDB })
+    const readBundle = slowVaultDB.readBundle.bind(slowVaultDB)
+    // There's next read is served at epoch 1, and handed back only once here's change has landed.
+    vi.spyOn(slowVaultDB, 'readBundle').mockImplementationOnce(async (...args) => {
+      const served = await readBundle(...args)
+      await here.addPassphrase('pw', 'spare phrase', { unlocklabel: 'spare' })
+      return served
+    })
+    await there.unlock('pw')
+    expect(there.getSnapshot().state).to.eq('unlocked')
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2 })
+  })
+
+  it("refuses no vault another tab made while this one was making it, though that tab raised the mark meanwhile", async () => {
+    const world = makeWorld()
+    const there = await world.open()
+    const slowVaultDB = world.deafVaultDB()
+    const late = await world.open({ vaultDB: slowVaultDB })
+    const createBundle = slowVaultDB.createBundle.bind(slowVaultDB)
+    // There makes the vault first, so late's write hands back there's bundle at epoch 1, and only
+    // after that does there change it, raising the mark this device shares to epoch 2.
+    vi.spyOn(slowVaultDB, 'createBundle').mockImplementationOnce(async (...args) => {
+      await there.unlock('pw')
+      const settled = await createBundle(...args)
+      await there.changePassphrase('pw', 'pw two')
+      return settled
+    })
+    await late.unlock('pw')
+    expect(late.getSnapshot().state).to.eq('unlocked')
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2 })
+  })
+
+  it("takes the copy up again once storage hands back the newest", async () => {
+    const { world, vault, older, newer } = await rolledBackWorld()
+    vault.close()
+    world.dbStore.write(u1BundleCkey, older)
+    await TH.expectRefusal(world.open(), 'rolled_back')
+    world.dbStore.write(u1BundleCkey, newer)
+    const reopened = await world.open()
+    expect(reopened.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("refuses an older copy at a lower vaultKey epoch as rolled_back, though storage raised its unlock epoch past the one seen", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    vault.close()
+    const first = storedBundleOf(world) as unknown as VaultBundle
+    const second: VaultBundle = {
+      ...first,
+      unlock_epoch:    2,
+      vault_key_epoch: 2,
+      prior_vault_key: { vault_key_epoch: 1, vault_key_wrapped: TH.fakeCiphered('prior') },
+      unlocks:         first.unlocks.map((envelope) => ({ ...envelope, vault_key_epoch: 2 })),
+    }
+    world.dbStore.write(u1BundleCkey, JSON.stringify(second))
+    await world.open()
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2, vault_key_epoch: 2 })
+    world.dbStore.write(u1BundleCkey, JSON.stringify({ ...first, unlock_epoch: 9 }))
+    await TH.expectRefusal(world.open(), 'rolled_back')
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2, vault_key_epoch: 2 })
+  })
+
+  it("takes an older copy at the same vaultKey epoch under a raised unlock epoch as it stands, its removed way in opening again", async () => {
+    const { world, vault, older } = await rolledBackWorld()
+    vault.close()
+    world.dbStore.write(u1BundleCkey, JSON.stringify({ ...(JSON.parse(older) as object), unlock_epoch: 9 }))
+    const reopened = await world.open()
+    await reopened.unlock('spare phrase')
+    expect(reopened.getSnapshot().state).to.eq('unlocked')
+  })
+
+  it("is accepted on this device once its mark of the vault is erased, as the README's recipe does", async () => {
+    const { world, vault, older } = await rolledBackWorld()
+    vault.close()
+    world.dbStore.write(u1BundleCkey, older)
+    const reopened = await openAcceptingRestore(world.optsWith(), () => Promise.resolve(true))
+    expect(reopened.getSnapshot().unlocks.map((unlock) => unlock.unlocklabel)).to.deep.equal(['passphrase', 'spare'])
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 2 })
+  })
+
+  it("is still refused by the README's recipe when the host knows of no restore", async () => {
+    const { world, vault, older } = await rolledBackWorld()
+    vault.close()
+    world.dbStore.write(u1BundleCkey, older)
+    await TH.expectRefusal(openAcceptingRestore(world.optsWith(), () => Promise.resolve(false)), 'rolled_back')
+    expect(await markIn(world)).to.deep.include({ unlock_epoch: 3 })
+  })
+
+  it("is not caught on a device that never saw the newer copy, which takes the older as it stands", async () => {
+    const { world, older } = await rolledBackWorld()
+    world.dbStore.write(u1BundleCkey, older)
+    const stranger = await world.open({ deviceDB: memoryDeviceDB() })
+    await stranger.unlock('spare phrase')
+    expect(stranger.getSnapshot().state).to.eq('unlocked')
+  })
+})
+
+describe("the vaultKey's epoch", () => {
+  it("makes a vault at its first vaultKey, with no prior one", async () => {
+    const world = makeWorld()
+    await world.openUnlocked('pw')
+    expect(storedBundleOf(world)).to.deep.include({ format: 'safebyok-vault-v2', vault_key_epoch: 1 })
+    expect(storedBundleOf(world)).to.not.have.property('prior_vault_key')
+  })
+
+  it("seals each lockbox under the bundle's vaultKey, its epoch shown in the listing while locked", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    await vault.store('anthropic', 'sk-fake')
+    await vault.lock()
+    expect(storedRowOf(world, 'anthropic')).to.deep.include({ format: 'safebyok-lockbox-v2', vault_key_epoch: 1 })
+    expect(TH.summaryOf(vault.getSnapshot().boxes[0])?.vault_key_epoch).to.eq(1)
+  })
+
+  it("refuses as damaged_lockbox a lockbox that says it was sealed under another vaultKey, quoting not its boxlabel", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    await vault.store('anthropic', 'sk-fake')
+    world.dbStore.write(u1BoxCkey('anthropic'), JSON.stringify({ ...storedRowOf(world, 'anthropic'), vault_key_epoch: 2 }))
+    const err = await TH.expectRefusal(vault.read('anthropic'), 'damaged_lockbox')
+    expect(err.message).to.include('does not hold')
+    expect(TH.thrownText(err)).to.not.include('anthropic')
+  })
+
+  it("writes nothing from a device still holding a vaultKey since replaced, which has not looked at the bundle since", async () => {
+    const world = makeWorld()
+    const stale = await world.openUnlocked('pw', { vaultDB: world.deafVaultDB() })
+    const standing = storedBundleOf(world) as unknown as VaultBundle
+    const replaced: VaultBundle = {
+      ...standing,
+      unlock_epoch:    2,
+      vault_key_epoch: 2,
+      prior_vault_key: { vault_key_epoch: 1, vault_key_wrapped: TH.fakeCiphered('prior') },
+      unlocks:         standing.unlocks.map((envelope) => ({ ...envelope, vault_key_epoch: 2 })),
+    }
+    await world.vaultDB.updateBundle(replaced, { vault_id: standing.vault_id, unlock_epoch: 1 })
+    await TH.expectRefusal(stale.store('anthropic', 'sk-fake'), 'vault_locked')
+    expect(world.dbStore.read(u1BoxCkey('anthropic'))).to.be.null
+  })
+
+  it("opens a vault stored before vaultKey epochs as damaged_bundle, which eraseDamagedVault clears", async () => {
+    const world = makeWorld()
+    const vault = await world.openUnlocked('pw')
+    await vault.store('anthropic', 'sk-fake')
+    vault.close()
+    const { vault_key_epoch: _epoch, ...older } = storedBundleOf(world)
+    world.dbStore.write(u1BundleCkey, JSON.stringify({ ...older, format: 'safebyok-vault-v1' }))
+    await TH.expectRefusal(world.open(), 'damaged_bundle')
+    await eraseDamagedVault(world.optsWith())
+    expect(rowsOf(world, 'u1')).to.deep.equal([])
   })
 })

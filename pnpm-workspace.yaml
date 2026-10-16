@@ -1,8 +1,10 @@
 # The root is a private workspace that is never published. packages/ holds the published packages
-# (safebyok, the core, and its companions); demos/ holds private playground apps that exercise them.
+# (safebyok, the core, and its companions); demos/ holds private playground apps that exercise them;
+# e2e/ holds the private tests that pair an adapter with a framework's client.
 packages:
   - packages/*
   - demos/*
+  - e2e
 
 # `pnpm -r` runs one package at a time, in dependency order. A package that depends on another
 # builds it first (its `build:deps`), and tsdown starts by emptying `dist/`: two such packages run

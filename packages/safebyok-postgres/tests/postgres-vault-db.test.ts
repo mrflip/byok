@@ -9,10 +9,24 @@ import type { PostgresClient, PostgresListen, PostgresVaultDBOpts } from '../src
 
 TH.bootDatabaseFirst()
 
+/**
+ * Devices over this file's database, emptied: each sends its statements through a client of its
+ * own, every one passing the race's turnstile. Beneath them all is the one PGlite, which runs one
+ * statement at a time, so no two statements ever run at once.
+ */
+const devicesOverPGlite: TH.MakeVaultDBDevices = async (turnstile) => {
+  const db = await TH.emptyDatabase()
+  return ({ maxLockboxes }) => {
+    const client = TH.throughTurnstile(turnstile, db, ['query', 'listen'])
+    return TH.perUser((userId) => postgresVaultDB({ client, userId, listen: (channel, onNotify) => client.listen(channel, onNotify), maxLockboxes }))
+  }
+}
+
 TH.describeVaultDB('postgresVaultDB over PGlite', async () => {
   const db = await TH.emptyDatabase()
   return TH.perUser((userId) => TH.requestFor(db, userId))
 }, {
+  comparesVaultKeyEpoch: false,
   makeCappedVaultDB: async (maxLockboxes) => {
     const db = await TH.emptyDatabase()
     return TH.perUser((userId) => postgresVaultDB({ client: db, userId, maxLockboxes }))
@@ -21,12 +35,19 @@ TH.describeVaultDB('postgresVaultDB over PGlite', async () => {
     const db = await TH.emptyDatabase()
     return (userId) => TH.requestFor(db, userId)
   },
-  pushes: true,
+  pushes:      true,
+  makeDevices: devicesOverPGlite,
+})
+
+describe("postgresVaultDB's devices, for the battery's races", () => {
+  it("send every write's statement through the race's turnstile", async () => {
+    await TH.expectRoundTripsThroughTurnstile(devicesOverPGlite)
+  })
 })
 
 const u1 = TH.scopeOf('u1')
 const thisVault = { vault_id: 'vault-id-u1' }
-const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null }
+const noBoxYet = { vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 }
 
 describe("postgresVaultDB, its options", () => {
   const BadOpts = [
@@ -108,7 +129,7 @@ describe("postgresVaultDB, who may reach a vault", () => {
     ['readBox',      (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.readBox(u2, 'anthropic')],
     ['listBoxes',    (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.listBoxes(u2)],
     ['listBoxRecords', (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.listBoxRecords(u2)],
-    ['updateBox',    (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.updateBox(u2, TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u2', revision_id: null })],
+    ['updateBox',    (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.updateBox(u2, TH.boxOf('anthropic', 'one'), { vault_id: 'vault-id-u2', revision_id: null, vault_key_epoch: 1 })],
     ['eraseBox',     (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.eraseBox(u2, 'anthropic', { vault_id: 'vault-id-u2' })],
     ['eraseVault',   (vaultDB: ReturnType<typeof postgresVaultDB>) => vaultDB.eraseVault(u2, { vault_id: 'vault-id-u2' })],
     ['subscribe',    (vaultDB: ReturnType<typeof postgresVaultDB>) => new Promise<void>((resolve) => { vaultDB.subscribe(u2, TH.changeCounter().onChange); resolve() })],
@@ -164,9 +185,11 @@ describe("postgresVaultDB, what it stores", () => {
       applabel:         'acme',
       user_id:          'u1',
       vaultlabel:       'main',
-      format:           'safebyok-vault-v1',
+      format:           'safebyok-vault-v2',
       vault_id:         'vault-id-u1',
       unlock_epoch:     1,
+      vault_key_epoch:  1,
+      prior_vault_key:  null,
       unlocks:          TH.bundleOf('u1').unlocks,
       registered_at:    Date.UTC(2026, 9, 14),
     }])
@@ -196,9 +219,10 @@ describe("postgresVaultDB, what it stores", () => {
       user_id:             'u1',
       vaultlabel:          'main',
       vault_id:            'vault-id-u1',
-      format:              'safebyok-lockbox-v1',
+      format:              'safebyok-lockbox-v2',
       boxlabel:            'anthropic',
       revision_id:         'rev-one',
+      vault_key_epoch:     1,
       lockbox_key_wrapped: TH.fakeCiphered('boxkey-one'),
       whisper_ciphered:    TH.fakeCiphered('whisper-one'),
       note:                null,
@@ -225,7 +249,7 @@ describe("postgresVaultDB, what it stores", () => {
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.updateBundle({ ...TH.bundleOf('u1'), unlock_epoch: 2 }, { vault_id: 'vault-id-u1', unlock_epoch: 1 })
     await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'one'), noBoxYet)
-    await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-one' })
+    await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'two'), { vault_id: 'vault-id-u1', revision_id: 'rev-one', vault_key_epoch: 1 })
     await vaultDB.readBox(u1, 'anthropic')
     await vaultDB.eraseBox(u1, 'anthropic', thisVault)
     await vaultDB.eraseVault(u1, thisVault)
@@ -279,7 +303,7 @@ describe("postgresVaultDB, its lockbox limit", () => {
     const db = await TH.emptyDatabase()
     const vaultDB = await filledTo(db, 1, ['openai'])
     const standing = await vaultDB.readBox(u1, 'openai')
-    await vaultDB.updateBox(u1, { ...TH.boxOf('openai', 'sk-fake-new'), revision_id: 'rev-new' }, { vault_id: 'vault-id-u1', revision_id: standing?.revision_id ?? null })
+    await vaultDB.updateBox(u1, { ...TH.boxOf('openai', 'sk-fake-new'), revision_id: 'rev-new' }, { vault_id: 'vault-id-u1', revision_id: standing?.revision_id ?? null, vault_key_epoch: 1 })
     const replaced = await vaultDB.readBox(u1, 'openai')
     expect(replaced?.revision_id).to.eq('rev-new')
     expect(await boxlabelsIn(vaultDB)).to.deep.equal(['openai'])
@@ -296,7 +320,7 @@ describe("postgresVaultDB, its lockbox limit", () => {
   it("refuses a first write in a full vault of another vault_id as stale_write: the count is the standing vault's", async () => {
     const db = await TH.emptyDatabase()
     const vaultDB = await filledTo(db, 1, ['openai'])
-    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-gone', revision_id: null }), 'stale_write')
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), { vault_id: 'vault-id-gone', revision_id: null, vault_key_epoch: 1 }), 'stale_write')
     expect(await boxlabelsIn(vaultDB)).to.deep.equal(['openai'])
   })
 
@@ -341,8 +365,8 @@ describe("postgresVaultDB, its lockbox limit", () => {
     const vaultDB = await filledTo(db, 5, [])
     const orphan = TH.boxOf('anthropic', 'sk-fake')
     const insertOrphan = db.query(
-      `INSERT INTO safebyok_lockboxes (applabel, user_id, vaultlabel, vault_id, format, boxlabel, revision_id, lockbox_key_wrapped, whisper_ciphered, registered_at, changed_at)
-       VALUES ('acme', 'u1', 'main', 'vault-id-gone', $1, $2, $3, '{}', '{}', 0, 0)`,
+      `INSERT INTO safebyok_lockboxes (applabel, user_id, vaultlabel, vault_id, format, boxlabel, revision_id, vault_key_epoch, lockbox_key_wrapped, whisper_ciphered, registered_at, changed_at)
+       VALUES ('acme', 'u1', 'main', 'vault-id-gone', $1, $2, $3, 1, '{}', '{}', 0, 0)`,
       [orphan.format, orphan.boxlabel, orphan.revision_id],
     )
     expect(await TH.refusalOf(insertOrphan)).to.have.property('code', '23503')
@@ -356,7 +380,7 @@ describe("postgresVaultDB, its lockbox limit", () => {
     const vaultDB = postgresVaultDB({ client: spy.client, userId: 'u1', maxLockboxes: 2 })
     await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'sk-fake'), noBoxYet)
     await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('mistral', 'sk-fake'), noBoxYet), 'vault_full')
-    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('mistral', 'sk-fake'), { vault_id: 'vault-id-gone', revision_id: null }), 'stale_write')
+    await TH.expectRefusal(vaultDB.updateBox(u1, TH.boxOf('mistral', 'sk-fake'), { vault_id: 'vault-id-gone', revision_id: null, vault_key_epoch: 1 }), 'stale_write')
     await vaultDB.eraseBox(u1, 'anthropic', thisVault)
     expect(spy.sent).to.have.lengthOf(4)
     for (const { text } of spy.sent) {
@@ -479,7 +503,7 @@ describe("postgresVaultDB, listBoxRecords", () => {
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.updateBox(u1, TH.boxOf('anthropic', 'one'), noBoxYet)
     const [record] = await vaultDB.listBoxRecords(u1)
-    expect(record).to.have.property('format', 'safebyok-lockbox-v1')
+    expect(record).to.have.property('format', 'safebyok-lockbox-v2')
     const [summary] = await vaultDB.listBoxes(u1)
     expect(summary).to.not.have.property('format')
   })
@@ -541,17 +565,31 @@ describe("postgresVaultDB, in trouble", () => {
 })
 
 const throwsClosed = () => { throw new Error('already closed') }
+const unlistened = () => undefined
 const rejectsClosed = () => Promise.reject(new Error('already closed'))
 
 /** Listens whose unlisten fails, at once or later. */
 const UnlistenCases: PostgresListen[] = [() => throwsClosed, () => rejectsClosed]
 
 describe("postgresVaultDB, subscribe", () => {
+  it("calls onChange once as its listen begins, so its subscriber reads what landed meanwhile", async () => {
+    const gate = TH.makeGate()
+    const listen: PostgresListen = async () => {
+      await gate.pass()
+      return unlistened
+    }
+    const { heard, onChange } = TH.changeCounter()
+    const unsubscribe = postgresVaultDB({ client: TH.failingClient(new Error('unused')), userId: 'u1', listen }).subscribe(u1, onChange)
+    await gate.reached
+    expect(heard.count).to.eq(0)
+    gate.release()
+    await TH.eventually(() => heard.count === 1)
+    unsubscribe()
+  })
+
   it("calls onChange after a write to the vault from another request, and not after its unsubscribe", async () => {
     const db = await TH.emptyDatabase()
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.requestFor(db, 'u1').subscribe(u1, onChange)
-    await TH.wakeupAtNextTick()
+    const { heard, unsubscribe } = await TH.liveWatch(TH.requestFor(db, 'u1'), u1)
     await TH.requestFor(db, 'u1').createBundle(TH.bundleOf('u1'))
     await TH.eventually(() => heard.count === 1)
     unsubscribe()
@@ -562,9 +600,7 @@ describe("postgresVaultDB, subscribe", () => {
 
   it("hears nothing of another user's vault, nor of another vault of the same user", async () => {
     const db = await TH.emptyDatabase()
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.requestFor(db, 'u1').subscribe(u1, onChange)
-    await TH.wakeupAtNextTick()
+    const { heard, unsubscribe } = await TH.liveWatch(TH.requestFor(db, 'u1'), u1)
     await TH.requestFor(db, 'u2').createBundle(TH.bundleOf('u2'))
     await TH.requestFor(db, 'u1').createBundle({ ...TH.bundleOf('u1'), ...TH.scopeOf('u1', 'spare') })
     await TH.requestFor(db, 'u1').createBundle(TH.bundleOf('u1'))
@@ -593,9 +629,7 @@ describe("postgresVaultDB, subscribe", () => {
   it("calls onChange on an empty notification: a scope too long for a payload", async () => {
     const db = await TH.emptyDatabase()
     const longUserId = 'u'.repeat(8000)
-    const { heard, onChange } = TH.changeCounter()
-    const unsubscribe = TH.requestFor(db, longUserId).subscribe(TH.scopeOf(longUserId), onChange, AnyTextValidators)
-    await TH.wakeupAtNextTick()
+    const { heard, unsubscribe } = await TH.liveWatch(TH.requestFor(db, longUserId), TH.scopeOf(longUserId), AnyTextValidators)
     await TH.requestFor(db, longUserId).createBundle(TH.bundleOf(longUserId), AnyTextValidators)
     await TH.eventually(() => heard.count > 0)
     expect(heard.count).to.eq(1)
