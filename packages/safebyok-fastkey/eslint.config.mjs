@@ -75,7 +75,7 @@ export default defineConfig([
   // src/, through the `@safebyok/source` condition the tsconfig asks for too (tsconfig.base.json),
   // so lint never depends on a dist/ that may be missing or stale.
   {
-    name: 'safebyok-argon2-wasm/type-aware',
+    name: 'safebyok-fastkey/type-aware',
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -93,7 +93,7 @@ export default defineConfig([
 
   // == [3a. House style] ==
   {
-    name: 'safebyok-argon2-wasm/house-style',
+    name: 'safebyok-fastkey/house-style',
     files: SourceFiles,
     plugins: { '@stylistic': stylistic },
     rules: {
@@ -187,7 +187,7 @@ export default defineConfig([
   // decides what may be logged. A stray debug line is how a key ends up in someone's log drain.
   // Randomness is the platform's CSPRNG (`crypto.getRandomValues`), never Math.random.
   {
-    name: 'safebyok-argon2-wasm/secret-keeping',
+    name: 'safebyok-fastkey/secret-keeping',
     files: ['src/**/*.ts'],
     rules: {
       'no-console':              'error',
@@ -205,7 +205,7 @@ export default defineConfig([
   // src/ is platform-neutral: no Node module, and none of Node's globals. The tests and configs run
   // under Node, so the TS project types Node's globals for them, and only this rule keeps src/ clean.
   {
-    name: 'safebyok-argon2-wasm/platform-neutral',
+    name: 'safebyok-fastkey/platform-neutral',
     files: ['src/**/*.ts'],
     rules: {
       'import-x/no-nodejs-modules': 'error',
@@ -220,7 +220,7 @@ export default defineConfig([
   // bundler drops when nothing reaches them; classic zod's it cannot, so one import of classic
   // would put all of it in every host's bundle.
   {
-    name: 'safebyok-argon2-wasm/tree-shaking',
+    name: 'safebyok-fastkey/tree-shaking',
     files: ['src/**/*.ts'],
     rules: {
       'no-restricted-imports': ['error', {
@@ -237,7 +237,7 @@ export default defineConfig([
   // Each of these is a reasonable default that STYLE.md rules out explicitly. Turned off here
   // rather than disabled at every call site.
   {
-    name: 'safebyok-argon2-wasm/house-overrides',
+    name: 'safebyok-fastkey/house-overrides',
     files: SourceFiles,
     rules: {
       // STYLE.md sanctions the one-line doc block: `/** Brief statement, if that's truly enough */`.
@@ -283,7 +283,7 @@ export default defineConfig([
   // variable, a parameter, a destructured name -- never a property, so `{ name: 'AES-GCM' }`, as
   // WebCrypto spells its algorithms, stays legal.
   {
-    name: 'safebyok-argon2-wasm/forbidden-names',
+    name: 'safebyok-fastkey/forbidden-names',
     files: SourceFiles,
     rules: {
       'no-restricted-syntax': ['error', ...[
@@ -302,7 +302,7 @@ export default defineConfig([
   // A config file's whole job is the call it exports. The package itself is `sideEffects: false`,
   // so the rule stays on everywhere else.
   {
-    name: 'safebyok-argon2-wasm/config-files',
+    name: 'safebyok-fastkey/config-files',
     files: ['*.config.{ts,mts,mjs}', 'eslint.config.mjs'],
     rules: {
       'unicorn/no-top-level-side-effects': 'off',
@@ -313,7 +313,7 @@ export default defineConfig([
   // etc can send the coach-coder development loop into a tailspin.
   // Use them judiciously, and ALWAYS report it in chat.
   {
-    name: 'safebyok-argon2-wasm/can-we-be-adults-yes-we-can',
+    name: 'safebyok-fastkey/can-we-be-adults-yes-we-can',
     files: SourceFiles,
     rules: {
       '@typescript-eslint/ban-ts-comment':                'off',
@@ -325,14 +325,14 @@ export default defineConfig([
   // This file and any other loose script sit outside the TS project, so the
   // type-aware rules above cannot run on them. Last, so it wins.
   {
-    name: 'safebyok-argon2-wasm/untyped-config-files',
+    name: 'safebyok-fastkey/untyped-config-files',
     files: ['**/*.mjs', '**/*.js', '**/*.cjs'],
     extends: [tseslint.configs.disableTypeChecked],
   },
 
   // == [Tests] ==
   {
-    name: 'safebyok-argon2-wasm/tests',
+    name: 'safebyok-fastkey/tests',
     files: ['tests/**/*.ts'],
     extends: [vitest.configs.recommended],
     rules: {
@@ -365,7 +365,7 @@ export default defineConfig([
   // no-unused-expressions lets an expect chain stand as a statement, and still reports any other
   // expression that does nothing.
   {
-    name: 'safebyok-argon2-wasm/tests-chai',
+    name: 'safebyok-fastkey/tests-chai',
     files: ['tests/**/*.ts'],
     plugins: { 'chai-expect': chaiExpect, 'chai-friendly': chaiFriendly },
     rules: {

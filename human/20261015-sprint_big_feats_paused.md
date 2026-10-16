@@ -6,7 +6,7 @@ context, and finds its worktree as it left it.
 
 | # | Thread            | Worktree                              | State at pause |
 | - | ----------------- | ------------------------------------- | -------------- |
-| 1 | argon2_wasm       | `/workspace/byok-argon2_wasm`, on #68 `80ac694` | worker stopped mid-build: **all its work is uncommitted** (a new `packages/safebyok-argon2-wasm/`, plus edits to `key-deriver.ts`, `index.ts`, `.size-limit.json`, `package.json`, the lockfile, `.github/workflows/ci.yml` and `CLAUDE.md`). Resume the same worker; the CI and CLAUDE.md edits need its explanation before they ride. |
+| 1 | argon2_wasm       | `/workspace/byok-argon2_wasm`, on #68 `80ac694` | worker stopped mid-build: **all its work is uncommitted** (a new `packages/safebyok-fastkey/`, plus edits to `key-deriver.ts`, `index.ts`, `.size-limit.json`, `package.json`, the lockfile, `.github/workflows/ci.yml` and `CLAUDE.md`). Resume the same worker; the CI and CLAUDE.md edits need its explanation before they ride. |
 | 2 | unlock_envelopes  | `/workspace/byok-unlock_envelopes`, `c7fc91d` | built, `ready`; reviewer stopped mid-fix ("the aimed unlock on an absent vault"), with uncommitted edits to `vault.ts` and `vault.test.ts`. Resume the same reviewer. |
 | 3 | passkey_unlock    | not cut                               | waits on thread 2 filing |
 | 4 | indexeddb_package | not cut                               | base ready (#70 `d874db3`), waits for a slot |

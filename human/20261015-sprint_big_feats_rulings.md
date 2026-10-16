@@ -29,7 +29,7 @@ work lands in amendment PRs on top of that stack.
 - **`TH.perUser` moves into `safebyok/testing`.** Helpers the core's own tests don't use are fine
   there, as long as they need no new dependency.
 - **Package names:** `safebyok-postgres`, `safebyok-graphql`, `safebyok-indexeddb`,
-  `safebyok-argon2-wasm`, and CLAUDE.md and the guidance docs updated to match.
+  `safebyok-fastkey`, and CLAUDE.md and the guidance docs updated to match.
 - **No backward compatibility:** every published version is deprecated. `safebyok/idb` loses its
   exports with no re-export, and the changeset says so.
 

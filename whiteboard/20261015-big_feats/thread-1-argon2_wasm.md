@@ -3,7 +3,7 @@
 Branch `20261015-argon2_wasm`, PR #74, stacked on #68 (kdf_configs). Justify: green --
 root 105, core 756, argon2-wasm 44, convex 265, react 28, demo 61. `pnpm size` within every budget.
 
-* **Built**: `packages/safebyok-argon2-wasm/`, a new public package (version 0.0.0, the
+* **Built**: `packages/safebyok-fastkey/`, a new public package (version 0.0.0, the
   placeholder; in the `fixed` group). `argon2idWasmDeriver(spec)` and `argon2idWasmWebV1Deriver`
   (`src/wasm-deriver.ts`) run Argon2id through `hash-wasm` 4.12.0 (the current release, 2024-11;
   MIT, no dependencies). `safebyok` is a peer. Each spreads its spec, as the core's derivers do.

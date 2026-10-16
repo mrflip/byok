@@ -53,7 +53,7 @@ argon2-wasm 44); `pnpm size` green.
   - Left as minor: perUser's `@example` (`postgresVaultDB({ client, userId })`) is not a call the
     core's tests make, and leaves out `listen`; `servingOnly` lets a blank `user_id` through to
     `localVaultDB` (which refuses it `bad_label`), where a server refuses `not_permitted`.
-  - TODO.md still names `safebyok-argon2-wasm` "or so" and lists the IndexedDB and Postgres
+  - TODO.md still names `safebyok-fastkey` "or so" and lists the IndexedDB and Postgres
     side quests; that is the sprint's wrap-up to strike, so left alone.
 * **For the Coach**:
   - pnpm (12.4 here) has a `minimumReleaseAge` setting that would hold every install, transitive

@@ -123,7 +123,7 @@ The published packages live in `packages/`: `safebyok`, the core, and its compan
 for what it plugs in. A storage adapter is `safebyok-<store>` (`safebyok-convex`,
 `safebyok-indexeddb`, `safebyok-postgres`, `safebyok-graphql`), a framework binding
 `safebyok-<framework>` (`safebyok-react`), and anything else is named for what it supplies
-(`safebyok-argon2-wasm`, a key deriver). A new one copies an existing package's packaging -- its
+(`safebyok-fastkey`, a key deriver). A new one copies an existing package's packaging -- its
 own `eslint.config.mjs` cut from the core's, a README, a changeset -- takes `safebyok` as a peer
 dependency, so a `VaultError` is one class across them, and joins the `fixed` group in
 `.changeset/config.json` (a test refuses a public package left out). `safebyok-indexeddb`'s

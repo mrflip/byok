@@ -472,7 +472,7 @@ importers:
         specifier: ^4.6.5
         version: 4.6.5
 
-  packages/safebyok-argon2-wasm:
+  packages/safebyok-fastkey:
     dependencies:
       hash-wasm:
         specifier: ^4.12.0
