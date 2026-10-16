@@ -189,7 +189,7 @@ export const VaultProvider = ({ userId, children, ...opts }: VaultProviderProps)
   useEffect(() => () => { endAsking(askingRef.current, false) }, [vault, endAsking])
 
   // An unlock that lands while a dialog is asking -- the first dialog's, finishing after its Cancel,
-  // or another tab's remembered unlock arriving -- answers it: the dialog closes, and the actions
+  // or one the app made itself through the handle -- answers it: the dialog closes, and the actions
   // waiting on it run again. Only a change is heard, never the state at the dialog's opening.
   useEffect(() => {
     if (vault === null) { return }
