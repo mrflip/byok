@@ -24,10 +24,19 @@
 | 15 | e2e_home         | held: the Coach weighs options (Open Matters) |
 | 16 | late_unlock      | filed #110 (on #109)       |
 | 17 | validation_note  | waits on #101 merging      |
-| 21 | damaged_erase    | underway (on #108)         |
+| 21 | damaged_erase    | in review (#115)           |
 | -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
 
 ## What the threads have taught
+
+* **Thread 21 (#115), damaged_erase.** `eraseDamagedVault(opts)` erases a vault `openVault` refuses
+  as `damaged_bundle`, and the device's remembered unlock; a sound vault is refused (`bad_option`),
+  nothing erased. A new base-class verb `VaultDB.eraseDamagedVault(scope)` reads the stored record
+  for its `vault_id` and aims `doEraseVault` at it (a vault made anew meanwhile survives as
+  `stale_write`). `localVaultDB`/`idbVaultDB` now erase a vault on `vault_id` alone (VAULTDB.md 3.5).
+  React: `useVault().eraseDamagedVault()`; the demo offers "Erase and start over". Proven on local,
+  IndexedDB and the base class only (Convex/Postgres rows can't be damaged this way; GraphQL's
+  server validates first).
 
 * **Thread 5 (#114), vaultdb_battery.** Audited all five adapters; did all but Convex here. New
   battery tests: 1.1/1.2 (text never normalized), five races under 3.2-3.5, a `pushes: true` option
