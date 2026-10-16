@@ -210,8 +210,8 @@ The vault picks the key by the lockbox's `vault_key_epoch`:
 | `lock()`, `lockSoon()` or `close()` during a walk | Before each box, the walk checks that the key is still in hand (`keyInHand`), and stops when it isn't. The keys go with the lock. The next unlock, on any device, resumes. |
 | A lock between the proof and the commit | As `reviseUnlocks` does today: the commit still lands, the vault stays locked, and the walk waits for the next unlock. |
 | Storage fails, or the tab dies, partway through the walk | The vault is consistent (section 4), and the next refresh while unlocked resumes. |
-| The identity is revoked before the commit (thread 10) | The commit is refused, as `identity_revoked` or `not_permitted`. Nothing was written, and the vault locks, as thread 10's policy decides. |
-| The identity is revoked during the walk (thread 10) | A box write is refused. The walk stops, and the policy locks the vault and drops both keys. The device mark is local data, and thread 10's default never erases that. The same user unlocking after signing back in resumes the walk. A different user is a different scope, so nothing crosses over. |
+| The identity is revoked before the commit (thread 10) | The commit is refused as `identity_revoked`. Nothing was written, and `rotateVaultKey` rejects with that error. Whether the vault also locks is `whenIdentityRevoked`'s call. |
+| The identity is revoked during the walk (thread 10) | A box write is refused as `identity_revoked`, and the walk stops. Under thread 10's default (`whenIdentityRevoked: 'lock'`, [#106](https://github.com/mrflip/safebyok/pull/106)) the vault locks and drops both keys. Under `'stay'` it keeps them, and the walk tries again at the next refresh, which goes through once the user signs back in. The device mark is local data, and a revocation never erases it. The same user unlocking after signing back in resumes the walk. A different user is a different scope, so nothing crosses over. |
 
 ## 8. The rollback check
 
