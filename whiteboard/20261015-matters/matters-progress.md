@@ -4,29 +4,29 @@
 
 | # | Thread            | Status                     |
 | - | ----------------- | -------------------------- |
-| 1 | hkdf_info         | filed #97                  |
-| 2 | release_age       | filed #96                  |
-| 3 | passkey_button_ux | filed #98                  |
-| 4 | small_sweep       | filed #99                  |
-| 5 | vaultdb_battery   | filed #114 (on #113)       |
-| 6 | race_helper       | underway (on #114)         |
-| 7 | indexeddb_fixes   | filed #109 (on #108)       |
-| 8 | size_rule         | filed #99 (commits on it)  |
-| 9 | damaged_bundle    | filed #108 (on #107)       |
-| 10 | identity_revoked | filed #106 (on #105)        |
-| 11 | vaultdb_contract | filed #107 (on #106)       |
-| 12 | postgres_soft_cap | filed #113 (on #110)      |
-| 13 | rotation_design  | filed #105 (on #97)        |
-| 14 | rotation_shape   | waits on 11, #97 landing   |
+| 1 | hkdf_info         | merged #97                 |
+| 2 | release_age       | merged #96                 |
+| 3 | passkey_button_ux | merged #98                 |
+| 4 | small_sweep       | merged #99                 |
+| 5 | vaultdb_battery   | merged #114; helpers sweep and Postgres cap duplicates left |
+| 6 | race_helper       | underway (cut from #114; files onto main) |
+| 7 | indexeddb_fixes   | merged #109                |
+| 8 | size_rule         | merged with #99            |
+| 9 | damaged_bundle    | merged #108                |
+| 10 | identity_revoked | merged #106                |
+| 11 | vaultdb_contract | merged #107                |
+| 12 | postgres_soft_cap | merged #113               |
+| 13 | rotation_design  | merged #105                |
+| 14 | rotation_shape   | underway (cut from main 23f263a) |
 | 18 | rotation_adapters | waits on 14               |
 | 19 | rotation_verb    | waits on 18 and the Coach (ways in kept) |
 | 20 | rotation_docs    | waits on 19                |
-| 15 | e2e_home         | held: the Coach weighs options (Open Matters) |
-| 16 | late_unlock      | filed #110 (on #109)       |
+| 15 | e2e_home         | resumed: the Coach chose (b), a `safebyok-convex/testing` entry |
+| 16 | late_unlock      | merged #110                |
 | 17 | validation_note  | waits on #101 merging      |
-| 21 | damaged_erase    | filed #115 (on #114)       |
-| 22 | flake_fixes      | in review #118 (on #110)   |
-| -- | restack #96-#99  | done: main → #96 → #99 → #98 → #97 |
+| 21 | damaged_erase    | merged #115                |
+| 22 | flake_fixes      | in review #118 (files onto main) |
+| -- | the line #98-#115 | merged 2026-10-16 03:09 (main 23f263a) |
 
 ## What the threads have taught
 
@@ -34,8 +34,8 @@
   b16d15b, #106 9aef481, #107 3f1449b, #108 85cb18d, #109 06f4f37, #110 d0d6fb5 (top). Trees
   byte-identical. The "mainly main" ruleset requires test-build, lint-typecheck and both CodeQL
   checks, with **strict up-to-date**: every PR goes BEHIND whenever main moves, and merging the top
-  takes all. #107's test-build hit the Convex timeout flake twice; rerun requested. **Line's top
-  now: #115.**
+  takes all. #107's test-build hit the Convex timeout flake twice; rerun requested. **The whole line
+  merged with #115 (main `23f263a`); new work files onto main.**
 
 * **Thread 21 (#115), damaged_erase.** `eraseDamagedVault(opts)` erases a vault `openVault` refuses
   as `damaged_bundle`, and the device's remembered unlock; a sound vault is refused (`bad_option`),
