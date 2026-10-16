@@ -297,8 +297,9 @@ export type AsyncVerbOf<Target> = {
 /**
  * Has `meanwhile` run inside the next call to `target[verb]`, before the call itself goes on: for
  * slipping another device's doings, or a pause, between a vault's look at storage and its write.
- * Only the next call is touched; later ones go straight through. A method the test already spies
- * on keeps counting its calls, each once.
+ * Only the next call is touched; later ones go straight through, unless armed again: each arming
+ * is for one call, in the order armed. A method the test already spies on keeps counting its
+ * calls, each once.
  *
  * @param target - The object whose method to intercept: an adapter, a deriver.
  * @param verb - The method, one returning a promise.
@@ -308,25 +309,46 @@ export type AsyncVerbOf<Target> = {
  *   TH.beforeNextCall(vaultDB, 'updateBox', () => there.store('anthropic', 'sk-ant-fake-theirs'))
  */
 export const beforeNextCall = <Target extends object>(target: Target, verb: AsyncVerbOf<Target> & string, meanwhile: () => Promise<unknown>): void => {
-  // Typed loosely from here: the caller's types were checked at the signature.
-  type AsyncFn = (...args: unknown[]) => Promise<unknown>
   const method = (target as unknown as Record<string, AsyncFn | undefined>)[verb]
   if (method === undefined) { throw new TypeError(`beforeNextCall found no method ${verb} to intercept.`) }
-  if (vi.isMockFunction(method)) {
-    // A mock already stands here: stand in front of it for one call, and call it through, so it
-    // records that call once. A second spy on top of it would record the call twice.
-    Reflect.set(target, verb, async (...args: unknown[]) => {
-      Reflect.set(target, verb, method)
-      await meanwhile()
-      return await method.apply(target, args)
-    })
+  // Armed already, once per call: this errand waits its turn behind the others.
+  const waiting = errandsAt.get(method)
+  if (waiting !== undefined) {
+    waiting.push(meanwhile)
     return
   }
-  vi.spyOn(target as unknown as Record<string, AsyncFn>, verb).mockImplementationOnce(async (...args: unknown[]) => {
+  const original = originalOf.get(method) ?? method
+  if (original === method && vi.isMockFunction(method)) {
+    // A mock of the test's own stands here: stand in front of it for one call, and call it
+    // through, so it records that call once. A second spy on top of it would record it twice.
+    const errands = [meanwhile]
+    const standIn = async (...args: unknown[]) => {
+      const errand = errands.shift()
+      if (errands.length === 0) { Reflect.set(target, verb, method) }
+      await errand?.()
+      return await method.apply(target, args)
+    }
+    errandsAt.set(standIn, errands)
+    Reflect.set(target, verb, standIn)
+    return
+  }
+  // Otherwise our own spy, whose once-implementations vitest runs one per call, in order.
+  const spy = vi.spyOn(target as unknown as Record<string, AsyncFn>, verb)
+  originalOf.set(spy, original)
+  spy.mockImplementationOnce(async (...args: unknown[]) => {
     await meanwhile()
-    return await method.apply(target, args)
+    return await original.apply(target, args)
   })
 }
+
+/** Typed loosely: the caller's types were checked at the signature. */
+type AsyncFn = (...args: unknown[]) => Promise<unknown>
+
+/** The errands still waiting to run, by the stand-in {@link beforeNextCall} put in front of a test's own mock. */
+const errandsAt = new WeakMap<object, (() => Promise<unknown>)[]>()
+
+/** The method a spy of {@link beforeNextCall}'s own stands in front of. */
+const originalOf = new WeakMap<object, AsyncFn>()
 
 /**
  * Holds the next call to `target[verb]` at a gate (see {@link makeGate}) until the test releases
