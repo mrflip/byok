@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status** (2026-10-17 03:10Z): 5b underway (finishing its list); 6, 7, 8 and 11 restacking onto 10's tip, 14 after 7; 15 waits on the Coach; 16, 17, 9, 12 pending.
+**Status** (2026-10-17 04:15Z): the chain 10 → 6 → 7 → 14 → 8 is assembled; 11 chaining onto 8; 5b reviewed `fixed`, filing onto 11 next; 15 waits on the Coach; then 16 and 17 from 5's tip, 9, 12.
 
 ## Status
 
@@ -11,16 +11,16 @@
 | 3 | locks_and_expiry | on 2 (c397b745), restacked | filed (tip 65642238) | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 (65642238), restacked | filed (tip f6d424ef) | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
-| 5b | store_base build | on 10 (8439aa01); filer rebases onto 11 (YOLO 20) | underway: a fresh worker finishes the nine items | [#139](https://github.com/mrflip/safebyok/pull/139) |
-| 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3); chain next | [#126](https://github.com/mrflip/safebyok/pull/126) |
-| 7 | react_tidy | main; restacking onto 10 (8439aa01) | filed; restacking | [#129](https://github.com/mrflip/safebyok/pull/129) |
-| 8 | ci_release | on 10 (8439aa01), restacked | filed (tip 88915cb1); chain next | [#130](https://github.com/mrflip/safebyok/pull/130) |
+| 5b | store_base build | on 10 (8439aa01); filer rebases onto 11 (YOLO 20) | reviewed `fixed` (tip 935dbc98); filing once 11 is chained | [#139](https://github.com/mrflip/safebyok/pull/139) |
+| 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3) | [#126](https://github.com/mrflip/safebyok/pull/126) |
+| 7 | react_tidy | on 6 (83ed9ce3), chained | filed (tip 9169da4d) | [#129](https://github.com/mrflip/safebyok/pull/129) |
+| 8 | ci_release | on 14 (e2711c21), chained | filed (tip 8eb453fd) | [#130](https://github.com/mrflip/safebyok/pull/130) |
 | 9 | sweep_small | top of the line | pending | |
 | 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
-| 11 | pg_container | on 10 (8439aa01), restacked | filed (tip 52c69b23); chain next | [#131](https://github.com/mrflip/safebyok/pull/131) |
+| 11 | pg_container | on 8 (8eb453fd), chaining | filed; chaining onto 8 | [#131](https://github.com/mrflip/safebyok/pull/131) |
 | 12 | floors_forward | top of the line | pending (clock passed) | |
 | 13 | epoch_expectation | on 4 (f6d424ef), restacked | filed (tip f89b0c42) | [#137](https://github.com/mrflip/safebyok/pull/137) |
-| 14 | uncontrolled_fields | on 7 (3d62fc04); restacks onto 7's new tip | filed; restack pending | [#134](https://github.com/mrflip/safebyok/pull/134) |
+| 14 | uncontrolled_fields | on 7 (9169da4d), chained | filed (tip e2711c21) | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 (adc94772) | flagged: waits on the Coach [#138](https://github.com/mrflip/safebyok/pull/138) | |
 | 16 | strength_principles (new) | on 5 | pending | |
 | 17 | written_at (new) | on 5 | pending | |
@@ -38,6 +38,12 @@
   `comparesVaultKeyEpoch` gone from the e2e battery; real-Postgres suites proven only in CI.
   Every join conflicts in `notes/security.md` (append at the end). zxcvbn's line measures 216.26
   of 220 kB: thread 16 changes how it ships.
+* *Orchestrator:* **The chain** (2026-10-17): 7 onto 6 (`9169da4d`; thread 6's `openVault` warns
+  at every open for a `test_` deriver label, so a test counting every warning counts only its
+  own), 14 onto 7 (`e2711c21`; changeset without migration wording; the advice default left to
+  16), 8 onto 14 (`8eb453fd`; React bundles measured against 8's lines for the first time:
+  `VaultProvider` 4.54 of 4.7 kB, `reactEverything` 5.04 of 5.3 kB). One unhandled
+  `vault_closed` from `VaultProvider` in the demo's tests, once (YOLO 23, thread 16).
 
 * *Orchestrator:* **Sweep ledger.** At the start: the 23 no-code rows (G204, G205, G206, G478,
   G215, G291, G135, G321, G440, G443, G445, G474, G475, G235, G238, G253, G293, G376, G400,

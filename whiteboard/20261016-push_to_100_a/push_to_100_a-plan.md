@@ -241,6 +241,14 @@ handoff carries it whole. Below, the orchestrator's gloss.
 * **Model**: opus. **Depends on**: 1 and 4, and the Coach's word on 5a.
 * **Look-ahead**: 9 moves test helpers into `safebyok/testing` (G380): leave shared helpers
   where 9 can find them.
+* *Review* (`fixed`, #139, 2026-10-17): two fixes -- `1f5eb155` (GraphQL's `refusalOf` let a
+  validation code hide a later error's safebyok kind) and `935dbc98` (a security note for G285's
+  unlimited Postgres default). Verified sound: the guarded `subscribe`, G247, G285's SQL null,
+  G303/G304, no secret in a log line. Left, minor: the epoch-forward check is Convex's only (a
+  row); watch failures log the backend's raw error (a row); the fallback logger is rebuilt per
+  line (thread 9 builds it once); a failed Postgres `listen` never calls `onChange` (as
+  designed). 5b's own minors: GraphQL and Convex grew (a row); G304 maps every throw to
+  `bad_option` (a row).
 
 ### 6. `crypto_small` -- refusals with a kind, the KDF tidy-ups, two ways-in verbs
 
@@ -306,6 +314,9 @@ handoff carries it whole. Below, the orchestrator's gloss.
   shadow-DOM host and browser (NOTYET); G499's conflict handler (NOTYET); the adapters' own
   Postgres tests staying on PGlite (NOTYET); RAGEBAIT: an omitted bag keeping the old, and the
   demo App tests' order. Full wording: the resolutions file.
+* **Added, 5b's review** (2026-10-17): the base `VaultDB`'s protected `logger` getter calls
+  `parseLogger(undefined)` on every line when it has no logger of its own or adopted; build that
+  fallback once.
 
 ### 10. `secure_floor` -- the Coach's three Soonish lines
 
@@ -496,6 +507,18 @@ handoff carries it whole. Below, the orchestrator's gloss.
   test's reason as the passphrase advice when the host passes no `passphraseAdvice` (the restack
   wiring of 10 into 14). The 12-character floor inside the good estimator stays unless the worker
   finds cause (NIST's 15 was the Rec; the Coach answered with the principles).
+* **Added, 2026-10-17** (from the restack):
+  * **The advice default** is this thread's, not 14's: thread 14's restacker wired none. Its file
+    sketches `passphraseAdvice ?? adviceFrom(passphraseStrengthTest)` in `VaultProvider`, the
+    host's own advice winning; `passphraseAdvice` hears the passphrase in plain text, so a
+    default built from the strength test stays on the device.
+  * **A read outliving a closed handle** (YOLO 23): thread 8's restacker met an unhandled
+    `vault_closed` rejection from `vault-provider.tsx` (a `vault.read` after the handle closed),
+    once, in the demo's `tests/test-helpers.test.tsx` after "types the passphrase it is given".
+    Find it and settle it at its cause, with a test; a timeout is not a fix.
+  * **React budgets are tight**: `VaultProvider` 4.54 of 4.7 kB, `reactEverything` 5.04 of 5.3
+    kB. If this thread grows them past their lines, raise those two lines by PROCESS.md's rule
+    (thread 9 re-derives every line at the end).
 
 ### 17. `written_at` -- the store compare goes, and the refusals the Coach sharpened (new)
 
@@ -669,6 +692,10 @@ From the sprint doc's *Open Matters*, as rows are swept:
 22. **Thread 9 files the TODO and NOTYET entries the Coach ruled** (2026-10-17): thread 6's
     restacker found the passphrases TODO nowhere, and none of the sprint's ruled entries are in
     `TODO.md` or `NOTYET.md` on main. Thread 9 adds what is missing, in the Coach's words.
+23. **The provider's read after close goes to thread 16** (2026-10-17): an unhandled
+    `vault_closed` rejection from `VaultProvider` showed once in thread 8's justify, in code
+    threads 7 and 14 own. Thread 16 rewrites how the provider holds its options, so it finds and
+    settles the cause there, rather than a new thread or a resumed restacker.
 
 ## For the Coach
 
