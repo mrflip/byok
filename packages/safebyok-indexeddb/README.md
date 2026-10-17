@@ -19,6 +19,9 @@ and your app share one copy, and a `VaultError` from one is a `VaultError` to th
 dependency is [`idb-keyval`](https://github.com/jakearchibald/idb-keyval), which `safebyok`
 already brings for its device store.
 
+Platform: evergreen browsers with IndexedDB, and Node 22 and up (with a fake IndexedDB, for tests);
+the floor is stated in the core's *Where it runs*.
+
 ## Use
 
 ```ts
@@ -38,6 +41,8 @@ const vault = await openVault({
 * **`dbName`** names the IndexedDB databases the records go in, default `'safebyok'`: the vault's
   rows in `<dbName>:vault_db`, and, through `browserOpts`, the remembered unlock in
   `<dbName>:device_db`. Anything but non-empty text refuses with kind `bad_option`.
+* **`logger`**, when given, hears what the store has to say (a listener that threw, say); left
+  out, the store uses the one `openVault` is given, else the console.
 * **Every verb is one IndexedDB transaction.** IndexedDB runs readwrite transactions over one
   store one after another, across every tab of the origin, so a write lands only while what it
   expects still stands, and refuses with kind `stale_write` otherwise. Two tabs creating a vault
@@ -48,8 +53,11 @@ const vault = await openVault({
 * **No limits of its own.** IndexedDB sets none per record or per vault, so `maxRecordBytes`,
   `maxVaultBytes` and `maxLockboxes` are `Infinity`: a vault holds what `openVault`'s
   `maxLockboxes` allows (100 by default), the origin's storage quota bounds the whole database,
-  and a write past it refuses with kind `storage_unavailable`, IndexedDB's own error as its
-  `cause`.
+  and a write past it refuses with kind `storage_blocked`, IndexedDB's own error as its `cause`.
+* **Storage the browser withholds** -- site data blocked, a private window or frame that keeps
+  none, no room left, or no IndexedDB at all -- refuses with kind `storage_blocked`, which a retry
+  cannot mend, by the rule the vault says its device store's failures by; any other trouble from
+  IndexedDB, with kind `storage_unavailable`.
 * **Best-effort storage.** The browser may evict IndexedDB under pressure, and "clear site data"
   removes it: the vault goes with it, and there is no other copy. Call
   `navigator.storage.persist()`, and tell your users plainly that the vault lives only in this
@@ -71,20 +79,23 @@ list holds, so one changed in storage makes the record refuse to open.
 
 | ckey                                               | Row                       |
 | -------------------------------------------------- | ------------------------- |
-| `vault:<applabel>:<user_id>:<vaultlabel>`          | the vault's `VaultBundle` |
-| `box:<applabel>:<user_id>:<vaultlabel>:<boxlabel>` | one `Lockbox`             |
+| `vault^<applabel>^<user_id>^<vaultlabel>`          | the vault's `VaultBundle` |
+| `box^<applabel>^<user_id>^<vaultlabel>^<boxlabel>` | one `Lockbox`             |
+
+The names are joined on `^` (the core's `Ckeys`), which the floor every name is held to keeps out
+of every name, whatever a host's validators admit.
 
 * **Encrypted**: each whisper (`whisper_ciphered`), each lockbox's lockboxKey
   (`lockbox_key_wrapped`), and, inside the bundle, the vaultKey, wrapped under each passphrase.
-* **In the open**: the scope, each `boxlabel` and `note`, the `vault_id`, `unlock_epoch`,
+* **In the open**: the scope, each `boxlabel` and public bag (`public_json`), the `vault_id`, `unlock_epoch`,
   `revision_id`s, how each passphrase was made into a key (its key deriver's label and salt),
-  when each vault and lockbox was first stored and each whisper last changed (epoch
+  when each vault and lockbox was first stored and each lockbox last written (epoch
   milliseconds), and the length of every ciphertext.
 * **Never**: a whisper, a passphrase, any key in usable form. The remembered unlock lives in the
   device store's database, not here.
 
-The ckeys and the database name are the ones `safebyok/idb` used when it held this store, so a
-vault written there reads here unchanged.
+A vault written under the JSON-tuple ckeys of earlier versions (`["vault","acme","u1","main"]`)
+reads as absent, its rows left as they were.
 
 ### Looking at the rows
 
@@ -102,8 +113,9 @@ places:
 
 1. **`src/ckeys.ts`: where each record lives.** A ckey per record, built from its scope, so a
    read is one lookup and a vault's lockboxes are the rows under its prefix, read as a key range
-   (`boxRange`) rather than by scanning the shelf. The core's `Ckeys.boxPrefix` is exact whatever
-   characters a `user_id` holds. If your store has columns or namespaces, use them instead.
+   (`boxRange`) rather than by scanning the shelf. The core's `Ckeys` joins on `^`, which no name
+   holds, so a vault's prefix (`box^acme^u1^main^`) begins its own lockboxes' ckeys and no
+   other's. If your store has columns or namespaces, use them instead.
 2. **`src/idb-vault-db.ts`: each verb, in one transaction of your store.** Extend `VaultDB` and
    write its `do*` methods, never its public verbs: the base class checks labels, scope, records
    and expectations on the way in, validates every record on the way out, and turns a `false`
@@ -111,18 +123,23 @@ places:
    stands, compares, and writes, all in one transaction (`src/shelf.ts`'s `inOneTransaction`);
    a store with no transactions needs a conditional write instead (compare-and-set on the
    ckey), or it cannot keep the promise.
-3. **`src/bell.ts`: how your store tells listeners of a write.** Here, this tab's listeners and
-   a BroadcastChannel to the others. A store with push of its own -- a live query, a socket --
-   rings from that, and one with none leaves `doSubscribe` out: the vault refreshes after its own
-   writes regardless. Whatever rings, call each listener so that one that throws stops neither
-   the others nor the write, let no handle (a channel, a socket) hold a Node process open, and
-   close it when its last listener leaves.
+3. **`doSubscribe`: how your store tells listeners of a write.** Here, `ChangeBell` from
+   `safebyok/idb`, rung after each write that lands: this tab's listeners, and a
+   BroadcastChannel to the others. Another store in this browser rings a bell of its own name the
+   same way. A store with push of its own -- a live query, a socket -- calls from that, and one
+   with none leaves `doSubscribe` out: the vault refreshes after its own writes regardless. The
+   base class calls each listener so that one that throws stops neither the others nor the
+   write, and unsubscribes once; yours is to let no handle (a channel, a socket) hold a Node
+   process open, and to close it when its last listener leaves.
 
 And keep, as they are:
 
-* **`src/expectations.ts`**: the comparisons each write makes before it lands. An adapter
-  compares only the scope, `boxlabel`, `vault_id`, `unlock_epoch` and `revision_id`, and a
-  standing row too damaged to show one of them fails the comparison.
+* **`Expectations`, from `safebyok`**: the comparisons each write makes before it lands
+  (`Expectations.bundleMeets`, `lockboxMeets`, `vaultMeets`, `vaultIdMeets`). An adapter
+  compares only the scope, `boxlabel`, `vault_id`, `unlock_epoch`, `vault_key_epoch` and
+  `revision_id`, and a standing row too damaged to show one of them fails the comparison. A
+  lockbox write compares the bundle's `vault_key_epoch` too, in the same transaction: skip it,
+  and a device still holding a vaultKey since replaced can seal a whisper under it.
 * **Store each record as itself, field by field**, exactly as handed to you, and return it
   exactly as stored, or null for none. Never look inside a ciphered field, never repair a
   damaged row: safebyok validates everything it reads back.

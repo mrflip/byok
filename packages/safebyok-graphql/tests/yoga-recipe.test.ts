@@ -40,12 +40,12 @@ const vaultRoute = (pool: PostgresClient, listen: PostgresListen | undefined, si
 // ------------------------------------------------------------------------- the client half
 
 /** The README's browser half: graphqlVaultDB over an urql Client that posts to the route, and subscribes over it too. */
-const browserVaultDB = (fetcher: typeof fetch) => graphqlVaultDB(new Client({
+const browserVaultDB = (fetcher: typeof fetch) => graphqlVaultDB({ client: new Client({
   url:                'https://app.example.test/api/graphql',
   exchanges:          [fetchExchange],
   fetchSubscriptions: true,
   fetch:              fetcher,
-}))
+}) })
 
 // ------------------------------------------------------------------------------------- tests
 
@@ -74,7 +74,6 @@ TH.describeVaultDB('the README Yoga recipe, over postgresVaultDB', async () => {
   const route = await routeOver()
   return TH.perUser((userId) => browserFor(route, userId))
 }, {
-  comparesVaultKeyEpoch: false,
   makeVaultDBFor: async () => {
     const route = await routeOver()
     return (userId) => browserFor(route, userId)
@@ -85,7 +84,7 @@ describe("the README Yoga recipe", () => {
   it("carries a real vault, made and opened by the core in the browser", async () => {
     const route = await routeOver()
     const vault = await openVault({
-      applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: browserFor(route, 'u1'), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver,
+      applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: browserFor(route, 'u1'), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver, passphraseStrengthTest: TH.anyPassphraseTest,
     })
     await vault.unlock('correct horse battery staple')
     await vault.store('anthropic_api_key', 'sk-ant-test-not-a-real-key')

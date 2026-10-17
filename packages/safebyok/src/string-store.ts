@@ -1,4 +1,5 @@
 import { VaultError } from './errors'
+import { reportToPlatform } from './report-error'
 
 /**
  * The smallest storage the local adapters need: strings by string ckey, with change notification
@@ -18,17 +19,27 @@ export type StringStore = {
 
 /**
  * Listener bookkeeping shared by both stores. A listener that is not a function is refused as it
- * subscribes, with kind 'bad_option', rather than breaking some later write that rings it.
+ * subscribes, with kind 'bad_option', rather than breaking some later write that rings it. Each
+ * listener is called in turn, as the write lands; one that throws stops no other and fails no
+ * write, and what it threw goes to the platform's `reportError` where there is one.
  */
 const makeBell = () => {
   const listeners = new Set<() => void>()
   return {
-    ring: () => { listeners.forEach((listener) => { listener() }) },
+    ring: () => { listeners.forEach((listener) => { callQuietly(listener) }) },
     subscribe: (listener: () => void) => {
       if (typeof listener !== 'function') { throw new VaultError('bad_option', 'subscribe needs a listener function to call after each write or erase.') }
       listeners.add(listener)
       return () => { listeners.delete(listener) }
     },
+  }
+}
+
+const callQuietly = (listener: () => void) => {
+  try {
+    listener()
+  } catch (err) {
+    reportToPlatform(err)
   }
 }
 
@@ -47,8 +58,6 @@ export const memoryStore = (): StringStore => {
     read:  (ckey) => bag.get(ckey) ?? null,
     write: (ckey, text) => { bag.set(ckey, text); bell.ring() },
     erase: (ckey) => { bag.delete(ckey); bell.ring() },
-    // Iterator#toArray would be tidier, but needs lib ES2025; this package targets ES2023.
-    // eslint-disable-next-line unicorn/prefer-iterator-to-array
     ckeys: () => [...bag.keys()],
     subscribe: bell.subscribe,
   }

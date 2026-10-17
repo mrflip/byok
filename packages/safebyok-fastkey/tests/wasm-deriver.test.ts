@@ -3,6 +3,8 @@ import {
   Argon2idWebV1, VaultError, argon2idDeriver, argon2idWebV1Deriver, isVaultError, localVaultDB, memoryDeviceDB, memoryStore, openVault,
   type KeyDeriver, type KeyDeriverSpec,
 } from 'safebyok'
+import { anyPassphraseTest } from 'safebyok/testing'
+import * as TH from 'safebyok/testing'
 import { argon2idWasmDeriver, argon2idWasmWebV1Deriver } from '../src/wasm-deriver'
 
 /** A spec of the host's own, cheap to derive under; no two of its counts alike, so a swap shows. */
@@ -14,17 +16,8 @@ const specOf = ({ deriveKeyBytes: _dropped, ...spec }: { deriveKeyBytes: unknown
 /** Salt bytes that are not all alike, so a byte read out of place would show. */
 const saltOf = (saltBytes: number): Uint8Array => Uint8Array.from({ length: saltBytes }, (_unused, ii) => ((ii * 37) + 11) % 256)
 
-/** Expect `attempt` to throw a VaultError of kind 'bad_option'; hands back its message. */
-const refusalOf = (attempt: () => unknown): string => {
-  try {
-    attempt()
-  } catch (err) {
-    expect(err).to.be.instanceOf(VaultError)
-    expect((err as VaultError).kind).to.eq('bad_option')
-    return (err as VaultError).message
-  }
-  throw new Error("expected a VaultError of kind 'bad_option', but nothing was thrown")
-}
+/** The message of the 'bad_option' refusal `attempt` throws. */
+const refusalOf = (attempt: () => unknown): string => TH.expectSyncRefusal(attempt, 'bad_option').message
 
 /** What `attempt` rejects with; throws if it resolves instead. */
 const rejectionOf = async (attempt: Promise<unknown>): Promise<unknown> => {
@@ -165,6 +158,25 @@ describe("argon2idWasmDeriver", () => {
     await expect(argon2idWasmDeriver(CheapSpec).deriveKeyBytes('', saltOf(16))).rejects.toThrow(VaultError)
     await expect(argon2idWasmDeriver(CheapSpec).deriveKeyBytes('', saltOf(16))).rejects.toThrow(/empty/u)
   })
+
+  it("refuses a label safebyok reserves, as the core's deriver does, in the same words", () => {
+    const spec = { ...CheapSpec, key_deriver_label: 'argon2id_web_v2' }
+    expect(refusalOf(() => argon2idWasmDeriver(spec))).to.eq(refusalOf(() => argon2idDeriver(spec)))
+    expect(refusalOf(() => argon2idWasmDeriver(spec))).to.include('reserved')
+  })
+
+  for (const length of [0, 15, 17]) {
+    it(`refuses a salt of ${String(length)} bytes where the spec asks 16, as bad_option and as the core's deriver does, before deriving`, async () => {
+      const wasmMessage = (await rejectionOf(argon2idWasmDeriver(CheapSpec).deriveKeyBytes('pw', saltOf(length))) as VaultError).message
+      const coreMessage = (await rejectionOf(argon2idDeriver(CheapSpec).deriveKeyBytes('pw', saltOf(length))) as VaultError).message
+      expect(wasmMessage).to.eq(coreMessage)
+    })
+  }
+
+  it("refuses a misfit salt of the supplied spec too, with kind 'bad_option'", async () => {
+    const err = await rejectionOf(argon2idWasmWebV1Deriver.deriveKeyBytes('pw', saltOf(8)))
+    expect(isVaultError(err, 'bad_option')).to.be.true
+  })
 })
 
 // The core's parseKeyDeriverSpec is what both factories check with: these hold the two to the
@@ -203,15 +215,15 @@ describe("argon2idWasmDeriver's bounds", () => {
 
 /** Two devices sharing one vault store: each opens the vault through its own key deriver. */
 const twoDevices = (firstDeriver: KeyDeriver, secondDeriver: KeyDeriver) => {
-  const vaultDB = localVaultDB(memoryStore())
-  const deviceOf = (keyDeriver: KeyDeriver) => openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB: memoryDeviceDB(), keyDeriver })
+  const vaultDB = localVaultDB({ store: memoryStore() })
+  const deviceOf = (keyDeriver: KeyDeriver) => openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB, deviceDB: memoryDeviceDB(), keyDeriver, passphraseStrengthTest: anyPassphraseTest })
   return { first: () => deviceOf(firstDeriver), second: () => deviceOf(secondDeriver) }
 }
 
 // Each runs the real Argon2id at the supplied spec on both devices.
 describe("a vault shared between the two derivers", () => {
   it("is accepted by openVault under the supplied label", async () => {
-    const vault = await openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: localVaultDB(memoryStore()), deviceDB: memoryDeviceDB(), keyDeriver: argon2idWasmWebV1Deriver })
+    const vault = await openVault({ applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: localVaultDB({ store: memoryStore() }), deviceDB: memoryDeviceDB(), keyDeriver: argon2idWasmWebV1Deriver, passphraseStrengthTest: anyPassphraseTest })
     expect(vault.getSnapshot().state).to.eq('absent')
     vault.close()
   })

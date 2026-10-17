@@ -13,8 +13,9 @@ import * as TH from './test-helpers'
 TH.describeDeviceDB('idbDeviceDB', () => idbDeviceDB({ dbName: TH.freshDbName() }))
 
 describe("safebyok/idb", () => {
-  it("exports the device store and its inspector, and no vault store: that is safebyok-indexeddb's", () => {
-    expect(Object.keys(Entry)).to.have.members(['idbDeviceDB', 'inspectIdbDeviceDB'])
+  it("exports the device store, its inspector and the change bell, and no vault store: that is safebyok-indexeddb's", () => {
+    expect(Object.keys(Entry)).to.have.members(['idbDeviceDB', 'inspectIdbDeviceDB', 'ChangeBell'])
+    expect(Object.keys(Entry.ChangeBell)).to.have.members(['ring', 'listen'])
   })
 })
 
@@ -44,14 +45,78 @@ describe("the IndexedDB device store's options", () => {
   }
 })
 
+/** What `attempt` rejects with; it fails the test should it resolve. */
+const rejectionOf = async (attempt: Promise<unknown>): Promise<unknown> => {
+  try {
+    await attempt
+  } catch (err) {
+    return err
+  }
+  throw new Error('it resolved, where a rejection was expected')
+}
+
 describe("idbDeviceDB", () => {
+  const NoIndexedDBCases = [
+    [undefined,  'a runtime with no indexedDB global'],
+    [null,       'a browser with IndexedDB turned off, its indexedDB null'],
+  ] as const
+
+  for (const [factory, blurb] of NoIndexedDBCases) {
+    it(`refuses at its first use with a NotSupportedError, in ${blurb}`, async () => {
+      const deviceDB = idbDeviceDB({ dbName: TH.freshDbName() })
+      vi.stubGlobal('indexedDB', factory)
+      try {
+        await expect(deviceDB.readMark(TH.scopeOf('u1'))).rejects.toThrow(expect.objectContaining({ name: 'NotSupportedError' }))
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+
+    it(`has its inspector's rows() and wipe() refuse with a NotSupportedError too, in ${blurb}`, async () => {
+      const inspector = inspectIdbDeviceDB({ dbName: TH.freshDbName() })
+      vi.stubGlobal('indexedDB', factory)
+      try {
+        await expect(inspector.rows()).rejects.toThrow(expect.objectContaining({ name: 'NotSupportedError' }))
+        await expect(inspector.wipe()).rejects.toThrow(expect.objectContaining({ name: 'NotSupportedError' }))
+      } finally {
+        vi.unstubAllGlobals()
+      }
+    })
+  }
+
+  it("refuses with a DOMException where the runtime has one", async () => {
+    const deviceDB = idbDeviceDB({ dbName: TH.freshDbName() })
+    vi.stubGlobal('indexedDB', undefined)
+    try {
+      const err = await rejectionOf(deviceDB.readMark(TH.scopeOf('u1')))
+      expect(err).to.be.instanceOf(DOMException)
+      expect(err).to.have.property('name', 'NotSupportedError')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it("refuses with a plain Error named NotSupportedError where the runtime has no DOMException, as Hermes has none", async () => {
+    const deviceDB = idbDeviceDB({ dbName: TH.freshDbName() })
+    vi.stubGlobal('indexedDB', undefined)
+    vi.stubGlobal('DOMException', undefined)
+    try {
+      const err = await rejectionOf(deviceDB.readMark(TH.scopeOf('u1')))
+      expect(err).to.be.instanceOf(Error)
+      expect(err).to.have.property('name', 'NotSupportedError')
+      expect(err).to.have.property('message').that.includes('no IndexedDB')
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it("sweeps an unlock filed under an earlier version's ckey at the first read, never reading it", async () => {
     const dbName = TH.freshDbName()
     const shelf = createStore(`${dbName}:device_db`, 'records')
     await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
     await set(['unlock', 'acme', 'u1', 'main'], await TH.unlockOf('u1'), shelf)
     const deviceDB = idbDeviceDB({ dbName })
-    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'), TH.NoLocks)
     const gets = vi.spyOn(IDBObjectStore.prototype, 'get')
     const getAlls = vi.spyOn(IDBObjectStore.prototype, 'getAll')
     const cursors = vi.spyOn(IDBObjectStore.prototype, 'openCursor')
@@ -72,7 +137,7 @@ describe("idbDeviceDB", () => {
     const shelf = createStore(`${dbName}:device_db`, 'records')
     await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
     const deviceDB = idbDeviceDB({ dbName })
-    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'), TH.NoLocks)
     await deviceDB.eraseUnlock(TH.scopeOf('u3'))
     expect(await deviceDB.readUnlock(TH.scopeOf('u2'))).to.not.be.null
     const rows = await inspectIdbDeviceDB({ dbName }).rows()
@@ -93,7 +158,7 @@ describe("idbDeviceDB", () => {
   it("reads a mark that does not pass its check as none, and drops it", async () => {
     const dbName = TH.freshDbName()
     const shelf = createStore(`${dbName}:device_db`, 'records')
-    await set(Ckeys.mark(TH.scopeOf('u1')), { ...TH.markOf('u1'), unlock_epoch: 'one' }, shelf)
+    await set(Ckeys.mark(TH.scopeOf('u1')), { ...TH.markOf('u1', { seen: null }), seen: { ...TH.markOf('u1').seen, unlock_epoch: 'one' } }, shelf)
     const deviceDB = idbDeviceDB({ dbName })
     expect(await deviceDB.readMark(TH.scopeOf('u1'))).to.be.null
     expect(await inspectIdbDeviceDB({ dbName }).rows()).to.have.lengthOf(0)
@@ -113,10 +178,24 @@ describe("idbDeviceDB", () => {
     unsubscribe()
   })
 
+  it("rings another tab's inspector for a write with nothing in this tab listening", async () => {
+    const dbName = TH.freshDbName()
+    // Another tab's inspector of the device shelf: a channel of the shelf's bell, opened apart.
+    const otherTab = new BroadcastChannel(`safebyok-idb:${dbName}:device_db`)
+    const otherHeard: unknown[] = []
+    otherTab.addEventListener('message', (event) => { otherHeard.push(event.data) })
+    try {
+      await idbDeviceDB({ dbName }).eraseUnlock(TH.scopeOf('u1'))
+      await vi.waitFor(() => { expect(otherHeard).to.deep.equal(['changed']) })
+    } finally {
+      otherTab.close()
+    }
+  })
+
   it("forgets the scope's own unlock at an erase even when the sweep fails", async () => {
     const dbName = TH.freshDbName()
     const deviceDB = idbDeviceDB({ dbName })
-    await deviceDB.writeUnlock(await TH.unlockOf('u1'))
+    await deviceDB.writeUnlock(await TH.unlockOf('u1'), TH.NoLocks)
     vi.spyOn(IDBObjectStore.prototype, 'getAllKeys').mockImplementation(() => { throw new Error('the shelf will not list') })
     try {
       await expect(deviceDB.eraseUnlock(TH.scopeOf('u1'))).rejects.toThrow('the shelf will not list')
@@ -131,7 +210,7 @@ describe("idbDeviceDB", () => {
     const shelf = createStore(`${dbName}:device_db`, 'records')
     await set('unlock:acme:u1:main', await TH.unlockOf('u1'), shelf)
     const deviceDB = idbDeviceDB({ dbName })
-    await deviceDB.writeUnlock(await TH.unlockOf('u2'))
+    await deviceDB.writeUnlock(await TH.unlockOf('u2'), TH.NoLocks)
     await deviceDB.eraseAll()
     expect(await inspectIdbDeviceDB({ dbName }).rows()).to.have.lengthOf(0)
   })
@@ -145,9 +224,9 @@ describe("inspectIdbDeviceDB", () => {
     let heardCount = 0
     const unsubscribe = inspector.subscribe(() => { heardCount += 1 })
 
-    await deviceDB.writeUnlock(await TH.unlockOf('u1'))
+    await deviceDB.writeUnlock(await TH.unlockOf('u1'), TH.NoLocks)
     const rows = await inspector.rows()
-    expect(rows.map((row) => row.ckey)).to.deep.equal(['["unlock","acme","u1","main"]'])
+    expect(rows.map((row) => row.ckey)).to.deep.equal(['unlock^acme^u1^main'])
     await vi.waitFor(() => { expect(heardCount).to.be.greaterThan(0) })
 
     await inspector.wipe()
@@ -160,7 +239,7 @@ describe("inspectIdbDeviceDB", () => {
     const dbName = TH.freshDbName()
     const inspector = inspectIdbDeviceDB({ dbName })
     expect(() => inspector.subscribe('not a listener' as unknown as () => void)).to.throw(VaultError, /listener function/)
-    await idbDeviceDB({ dbName }).writeUnlock(await TH.unlockOf('u1'))
+    await idbDeviceDB({ dbName }).writeUnlock(await TH.unlockOf('u1'), TH.NoLocks)
     expect(await inspector.rows()).to.have.lengthOf(1)
   })
 })

@@ -43,10 +43,10 @@ import { idbVaultDB } from 'safebyok-indexeddb'
 
 const vault = await openVault({
   applabel:   'acme',
-  userId:     session.userId,                 // stable and opaque, from your auth, 1 to 100 characters; never an email
+  userId:     session.userId,                 // your auth's stable, opaque id for the user; never an email
   vaultlabel: 'main',
   vaultDB:    idbVaultDB({ dbName: 'acme' }), // or your backend's adapter
-  ...browserOpts({ dbName: 'acme' }),         // the key deriver and device store a browser wants
+  ...browserOpts({ dbName: 'acme' }),         // the key deriver, device store and passphrase strength test a browser wants
 })
 
 vault.getSnapshot().state         // 'absent' | 'locked' | 'unlocked'
@@ -59,21 +59,47 @@ const answer = await vault.use('anthropic_api_key', (whisper) => callAnthropic(w
 The vault store is never among the defaults: where the vault lives is the one choice every app
 makes for itself. Any option you pass after the spread replaces the default it names.
 
+Serve the app over https: a browser withholds WebCrypto from a page served over plain http, so
+`openVault` refuses one at once, with kind `insecure_context` (`http://localhost` counts as
+secure, for development).
+
+## Where it runs
+
+The platform floor, which `engines` and CI hold to:
+
+* **Node 22 and up.** CI runs the tests on Node 22, the floor, and on the newest Node.
+* **Evergreen browsers**: current Chrome, Edge, Firefox and Safari, with WebCrypto
+  (`crypto.subtle`), IndexedDB (for the device store in `safebyok/idb` and `safebyok-indexeddb`),
+  Unicode property escapes in regular expressions, and `Intl.RelativeTimeFormat` (for the
+  dialog's "locks again in 7 days" in `safebyok-react`). The browser paths are tested against
+  jsdom and a fake IndexedDB, not in real browsers; a release is walked by hand first
+  (`notes/release-checklist.md`).
+* **Bun and the frameworks on Node or the browser** (Next.js, Nuxt): they provide the same
+  globals, and are not run in CI.
+* **React Native (Hermes) is untested.** It lacks WebAssembly (so `safebyok-fastkey`) and has
+  partial `Intl` and property-escape support; try it before you rely on it.
+
+No Node built-ins are used in `src/`, and nothing is polyfilled: a host on a platform without one
+of the above supplies it.
+
 ## Entry points, and why the main one asks for everything
 
 * `safebyok` -- `openVault` and the types, errors and stores around it.
 * `safebyok/browser` -- `browserOpts({ dbName }?)`: the pinned Argon2id key deriver
-  (`argon2idWebV1Deriver`) and the IndexedDB device store (`idbDeviceDB`), as a bag of options.
+  (`argon2idWebV1Deriver`), the IndexedDB device store (`idbDeviceDB`) and the passphrase
+  strength test (`zxcvbnPassphraseTest`), as a bag of options. The strength test's zxcvbn
+  dictionary loads, as a chunk of its own, only when a passphrase is first tested (see *A new
+  passphrase's strength*).
 * `safebyok/idb` -- the IndexedDB device store, `idbDeviceDB`, and `inspectIdbDeviceDB`, a raw
   window onto its rows for a debug panel. The IndexedDB vault store, `idbVaultDB`, is a package
   of its own, `safebyok-indexeddb`.
-* `safebyok/validators` -- the checks for names and notes (`Label`, `UserId`, `LockboxNote`,
-  `DefaultValidators`, `AnyTextValidators`) and their bounds (`MaxLabelChars`, `LabelPattern`,
-  `MaxUserIdChars`, `MaxNoteChars`), for a form, a server or another library to check what the
-  vault will, at a few kB. All are in the main entry too, with the record schemas (`Whisper`,
+* `safebyok/validators` -- the checks for names (`Label`, `UserId`, `DefaultValidators`,
+  `AnyTextValidators`), the floor beneath them all (`NameFloor`), and their bounds
+  (`MaxLabelChars`, `LabelPattern`, `MaxUserIdChars`, `UserIdPattern`, `NameFloorBytes`), for a
+  form, a server or another library to check what the vault will, at a few kB. All are in the main entry too, with the record schemas (`Whisper`,
   `EpochMillis` and the rest).
 
-`openVault` takes its `keyDeriver` and `deviceDB` from you, with no default behind them. A
+`openVault` takes its `keyDeriver`, `deviceDB` and `passphraseStrengthTest` from you, with no default behind them. A
 default would be imported by `openVault` itself, so every app would ship it, used or not: a
 bundler drops only the code nothing imports. The key deriver is the choice an app most plausibly
 makes differently -- another implementation of the same Argon2id spec, in WebAssembly or native
@@ -81,16 +107,44 @@ to its platform -- and such an app should not also ship this one (about 15 kB mi
 main entry names no default and imports nothing from `safebyok/browser`, and the package is
 marked `sideEffects: false`: what you never import never ships.
 
-## Names, notes, and your own checks
+## A lockbox's public bag
+
+Each lockbox carries a **public bag** beside its whisper: any JSON value your app keeps about it
+-- what the user calls the account, which project a key belongs to, when it was last rotated --
+shown in the snapshot while the vault is locked, as `box.public`. The vault never looks inside it.
+
+```ts
+await vault.store('anthropic_api_key', 'sk-ant-...', { public: { note: 'work account', project: 'atlas' } })
+await vault.store('anthropic_api_key', 'sk-ant-new')                  // keeps the bag it has
+await vault.store('anthropic_api_key', 'sk-ant-new', { public: {} })  // and empties it
+vault.getSnapshot().boxes[0]  // { boxlabel: 'anthropic_api_key', public: {}, damaged: false, ... }
+```
+
+* **It is public.** It is stored in the clear, so never put secret material in it: a key, a
+  password, a recovery code. Anyone who can read your storage reads it.
+* **It is bound.** Its JSON, keys sorted, is bound into the lockbox's encryption with the rest of
+  the lockbox's public fields, so a bag altered or swapped in storage makes the lockbox refuse to
+  open (`damaged_lockbox`). The snapshot shows the bag as storage holds it; only `read()` proves
+  it unaltered. A bag stored other than as the vault writes it (respaced, reordered) lists the
+  lockbox as damaged.
+* **Its shape is yours.** The vault checks only that it is JSON (`PublicBag`; anything else is
+  `bad_option`): check its shape yourself, with your own schema, before `store()`. Left out of a
+  `store()`, the lockbox keeps the bag it has, once its record opens; a new lockbox's is `{}`, as
+  is one written over a record that will not open.
+* **It shares the whisper's room.** `maxWhisperBytes` counts the whisper's JSON and the bag's
+  together, so a large bag leaves less room for the whisper. Its size shows in storage, as every
+  public field's does.
+
+## Names, and your own checks
 
 By default a label (`applabel`, `vaultlabel`, `boxlabel`, and the `unlocklabel` of each way in
 you add) is lowercase words of letters and digits joined by single underscores, 2 to 40
-characters (`Label`); a `userId` is text of 1 to 100 characters (`UserId`); and a note is text
-of at most 256 characters, with no control characters but tab and newline (`LockboxNote`). That suits API keys. Every default, `AnyTextValidators`
-included, refuses text that is not well-formed Unicode: a lone surrogate, half of a character such
-as an emoji, which text cut off mid-character holds and which storage such as Convex refuses. A host that wants more -- labels in Hebrew, Arabic or Thai, a password manager's
-long notes, its own auth's id shape -- passes its own Zod schemas as `validators`, and each
-**replaces** ours outright:
+characters (`Label`); and a `userId` is 1 to 100 ASCII letters, digits and `-_.:@+|` (`UserId`),
+which holds every stable id an auth provider issues -- a UUID, Auth0's `provider|id`, Clerk's
+`user_...`, a DID -- and pass your provider's stable, opaque id, never an email or a handle,
+which can change and would orphan the vault. That suits API keys. A host that wants more --
+labels in Hebrew, Arabic or Thai, its own auth's id shape -- passes its own Zod schemas as
+`validators`, and each **replaces** ours:
 
 ```ts
 import * as z from 'zod'
@@ -98,43 +152,60 @@ import { AnyTextValidators, UserId } from 'safebyok/validators'
 
 // Built once, at module level.
 const validators = {
-  ...AnyTextValidators,                                 // labels and notes of any text
+  ...AnyTextValidators,                                 // labels of any text above the floor
   boxlabel: z.string().min(1).max(200),                 // ...but box names of 1 to 200 characters
   userId:   z.string().regex(/^user_[A-Za-z0-9]{27}$/), // and Clerk's user ids
 }
 const vault = await openVault({ applabel: 'acme', userId, vaultlabel: 'main', vaultDB, validators, ...browserOpts() })
-await vault.store('מפתח OpenAI: עבודה', 'sk-...', { note: 'the team account, billed monthly' })
+await vault.store('מפתח OpenAI: עבודה', 'sk-...', { public: { note: 'the team account, billed monthly' } })
 ```
 
+* **The floor holds beneath every check.** Whatever your schemas admit, a name is one character
+  to 1 KiB of UTF-8, well-formed Unicode (no lone surrogate, half of a character), in Unicode's
+  composed form (NFC), and with no control character: `NameFloor`. A name holds no `^` either,
+  the character the key-value stores join a row's names on, so every store holds the same names:
+  a vault whose names suit Postgres today suits IndexedDB tomorrow. Below the floor is
+  `bad_label`, and a stored record below it reads back as damaged. Your storage
+  may hold less: Postgres holds a name of at most 640 bytes (`VAULTDB.md`, *Names*).
 * **A check only checks.** What passes is kept exactly as you passed it, never what the schema
   makes of it: a name is bound into the ciphertext and names its rows, so a schema that trims or
-  lowercases would otherwise send the same user to another vault.
-* **The refusal is the vault's own**: kind `bad_label` (`bad_option` for a note), naming the
+  lowercases would otherwise send the same user to another vault. Nothing is normalized either:
+  text not in NFC is refused, never composed for you.
+* **Your checks are an alarm at the door, not a promise about storage.** They run where a name
+  enters the vault: `openVault` (the scope), `store()` (the boxlabel), `addPassphrase` and
+  `addPasskey` (the unlocklabel). A lockbox already stored under a name they refuse
+  -- by another client, or before you narrowed them -- lists, reads and erases as any other, by
+  the name it was stored under; `store()` refuses only to write a new one under a refused name.
+  With nothing stored under it, a name they refuse is `bad_label` at `read()`, `use()` and
+  `erase()`. The first way in, which the vault names `passphrase`, is not checked.
+* **Widen with care.** A check admitting text outside ASCII should require NFC, as the floor
+  does, and widen only once every client you serve runs the wider check: an older one refuses at
+  its door the names a newer one stores.
+* **The refusal is the vault's own**: kind `bad_label`, naming the
   field, never quoting the name or your schema's issues. Where one of our checks refused, it says
   what was wrong (too long, a control character, not well-formed); your schema's, it names only.
   A schema must check synchronously; one that is async or throws is refused as `bad_option`,
-  carrying nothing of what it threw.
+  carrying nothing of what it threw. Each refusal names the first failure: a form checks its
+  fields with the exported schemas first, and the vault's refusal is the backstop.
 * **A misspelt field is refused**, as `bad_option`: `boxLabel` would otherwise leave the default
   check quietly in place. `checkValidators(bag)` runs that check alone, for a binding or wrapper
   that takes the bag apart (`VaultProvider` does).
-* **Every name is checked everywhere**, records read back included. Narrow a check later and a
-  lockbox stored under a name or note the new one refuses is listed as damaged (see *Damaged
-  lockboxes*). `erase()` still reaches it by the name it was stored under; `store()` refuses a
-  refused name, and stores afresh over a box whose note alone is refused. An `unlocklabel` is
-  checked only as a way in is added: one already stored still opens the vault, whatever the
-  check says now, and the first way in, which the vault names `passphrase`, is not checked.
-* **Sizes follow the names.** Each `store()` weighs its lockbox -- whisper, names and note -- and
-  refuses one heavier than the backend holds in a record (`lockbox_too_large`), or one that
-  would take the vault past what the backend holds of a vault (`vault_full`). The record is
-  weighed as its real serialized bytes; the vault's total is a conservative estimate made before
-  the lockbox is sealed (each counted at twice `maxWhisperBytes`, with its names and note as
-  measured), so at a `maxVaultBytes` set exactly tight it may refuse a write that would just fit.
+* **Sizes follow the names.** Each `store()` weighs its lockbox -- whisper, public bag and names
+  -- and refuses one heavier than the backend holds in a record (`lockbox_too_large`), or a new
+  one that would take the vault past what the backend holds of a vault (`vault_full`). The record
+  is weighed as its real serialized bytes; the vault's total is a conservative estimate made
+  before the lockbox is sealed (each counted at twice `maxWhisperBytes` for its whisper and bag,
+  with its names as measured), so at a `maxVaultBytes` set exactly tight it may refuse a write
+  that would just fit. A replacement weighs what it replaces, and is never refused as full.
+  `maxWhisperBytes` is checked as a whisper is stored, never as one is read, so lowering it
+  strands nothing.
 * Labels of any text are shown to your users as written: mind what bidirectional and invisible
   characters can make one look like.
 
 ## Your own storage adapter
 
-Extend `VaultDB` and implement its `do*` methods: its doc block says what each one owes, the
+Extend `VaultDB` and implement its `do*` methods (`openVault` takes nothing but a `VaultDB`,
+whose public verbs check every record your code sees): its doc block says what each one owes, the
 [VaultDB contract](VAULTDB.md) says what an adapter promises in all and what it may leave
 undone, and `describeVaultDB` from `safebyok/testing` checks it, a group of tests to each of the
 contract's numbered lines. Give it `makeDevices` -- devices over one backend, each round trip
@@ -142,26 +213,39 @@ through a turnstile -- and it races your writes from two devices, holding one be
 trip while the other moves ([Proving the races](VAULTDB.md#proving-the-races)). A backend with columns (Convex, SQL) keeps
 the applabel, user id, vaultlabel and boxlabel in columns of their own. A backend that holds rows
 under one string -- a key-value store, localStorage -- files them under `Ckeys`, as
-`localVaultDB` and `idbVaultDB` do:
+`localVaultDB` and `idbVaultDB` do, names joined on `^`:
 
 ```ts
 import { Ckeys } from 'safebyok'
 
-Ckeys.bundle(scope)            // '["vault","acme","u1","main"]'
-Ckeys.box(scope, 'anthropic')  // '["box","acme","u1","main","anthropic"]'
-Ckeys.boxPrefix(scope)         // '["box","acme","u1","main",' -- every lockbox of the vault, by prefix scan
+Ckeys.bundle(scope)            // 'vault^acme^u1^main'
+Ckeys.box(scope, 'anthropic')  // 'box^acme^u1^main^anthropic'
+Ckeys.boxPrefix(scope)         // 'box^acme^u1^main^' -- every lockbox of the vault, by prefix scan
 store.ckeys().filter(Ckeys.isBoxIn(scope))  // every lockbox of the vault, from a list of every ckey
 ```
 
-Each ckey is the JSON text of its kind and names, so a name may hold any text at all -- a colon, a
-quote, a bracket -- and no two vaults ever share a ckey or list each other's lockboxes. The ckeys
-are part of the stored format: use these, not a join of your own, and every version finds your
-rows.
+No name holds `^` (the floor refuses it), so no two vaults ever share a ckey or list each other's
+lockboxes. The ckeys are part of the stored format: use these, not a join of your own, and every
+device finds your rows.
 
-Your `do*` methods take any text as a name: the public verbs check every name and note, with the
-vault's `validators`, which each takes as its last argument. Handed none, a verb admits any
-well-formed text (`AnyTextValidators`), so an adapter that hands its calls on to another VaultDB's
-public verbs need pass nothing, its own having checked.
+Your `do*` methods take any name the base class passed: every public verb holds each name to the
+floor and to your adapter's declared `maxNameBytes`, and takes no
+validators of the host's, which are the vault's own. So an adapter that hands its calls on to
+another VaultDB's public verbs passes each call through as it came.
+
+A device store of your own (a `DeviceDB`, for a platform without IndexedDB) owes two things beyond
+keeping its records, each the compare and the write in one step: `writeUnlock(unlock, expected)`
+writes only while the scope's device mark stands at `expected.lock_generation` (0 with no mark),
+and otherwise writes nothing and refuses with `stale_write`; and `writeMark` keeps the higher
+`lock_generation` of the mark it writes and the one it replaces. That is how a lock in one tab
+stops an unlock under way in another. A mark may hold no vault (`seen: null`): a lock where no
+vault was seen, and `destroy()`, leave one, keeping the count. `describeDeviceDB` from
+`safebyok/testing` checks all of this.
+
+Every refresh -- after each of the vault's own writes, and at each change your adapter's
+`subscribe` reports -- lists every lockbox in the vault, one at a time per handle, so its cost
+grows with the vault. That is the trade for a listing every adapter can give; measure before
+doing better.
 
 ## Key derivation
 
@@ -179,7 +263,8 @@ vaults made on one device stop opening on another. There are three ways to choos
   ```
 
   Give it a label of your own, and never change its parameters once a vault is made under it.
-  It refuses (`bad_option`) what Argon2id cannot run -- a salt under 8 bytes or over 65536,
+  Labels beginning `argon2id_web_` are reserved for the specs we supply, now and later, and
+  refused. It refuses (`bad_option`) what Argon2id cannot run -- a salt under 8 bytes or over 65536,
   memory under 8 KiB a lane or over 1 GiB, no passes or lanes, a key other than 32 bytes -- and
   allows weak parameters that run: those are yours to judge.
 * **Another implementation of a spec**: `safebyok-fastkey` runs any of them through
@@ -190,40 +275,88 @@ vaults made on one device stop opening on another. There are three ways to choos
   without carrying exactly its parameters; it cannot check the bytes, so that test is yours.
 
 Any `keyDeriver` needs a `salt_bytes` from 1 to 65536 (the most `crypto.getRandomValues` hands out
-at once), and must hand back 32 bytes from `deriveKeyBytes`; `openVault` and `unlock()` refuse one
-that does not, with `bad_option`.
+at once), which `openVault` checks, and must hand back 32 bytes of memory of its own from
+`deriveKeyBytes`, derived afresh on every call -- a fresh `Uint8Array`, not a view over a
+`SharedArrayBuffer`, and not one it keeps: the vault zeroes the bytes once it has made the
+passphraseKey of them. `unlock()` and the calls that set a passphrase refuse anything else with
+`bad_option`, 32 zero bytes among it: a key anyone could rebuild, which a deriver handing back
+bytes it kept from an earlier call would. A deriver of ours refuses a salt of another length than
+its spec's.
+
+`KeyDeriver` is one of two types. An `Argon2idKeyDeriver` carries a whole keyDeriverSpec beside
+its function, as every deriver above does, and `openVault` checks the spec as `argon2idDeriver`
+would, so one Argon2id cannot run is refused at open, not at the first unlock. A
+`CustomKeyDeriver` carries only `key_deriver_label`, `salt_bytes` and `deriveKeyBytes`, and may
+name its `algorithm`; it may not declare `'argon2id'` without being a whole spec. `openVault` logs
+a warning (not a refusal) for a label beginning `test_`, the mark of a deriver made cheap for
+tests, such as `safebyok/testing`'s.
 
 ## Locking
 
-An unlocked vault stays unlocked until its remembered unlock expires
-(`forcePassphraseReentryHours`, seven days by default) or the host locks it. `Infinity` hours
-means never on this device, until a lock: `askPassphraseAt` then equals the exported `FarFuture`,
-the latest instant the package accepts (in 2255), so a host can show "until locked" by comparing
-against it. The vault reports the window it was opened with as `vault.reentryWindowMs`, in
-milliseconds, the default and `Infinity` resolved: `Infinity` hours (or any as long) reads as the
-exported `ForeverMs`, so a UI can say how long an unlock lasts without being told the option again.
+An unlocked vault stays unlocked until its window runs out (`forcePassphraseReentryHours`, seven
+days by default, at most 588 hours: 24.5 days) or the host locks it. `Infinity` hours means never
+on this device, until a lock: `askPassphraseAt` is then the exported `FarFuture`, the latest
+instant the package accepts (in 2255). A finite number past 588 is refused, since no timer
+reaches further. Show "until locked" for any `askPassphraseAt >= FarFuture - MinuteMillis`;
+never compare a time for equality. The vault reports the window it was opened with as
+`vault.reentryWindowMillis`, in milliseconds, the default and `Infinity` resolved (`Infinity`
+reads as the exported `ForeverMillis`), so a UI can say how long an unlock lasts without being
+told the option again.
+
+The deadline is the truth, and a timer enforces it. From `askPassphraseAt` the snapshot reads
+`locked` and every call that would start new work throws `vault_locked`; work already under way
+keeps the key for one more minute to finish, and then a timer drops it, with no call needed. A timer that runs late, as one may on a device that slept, is caught at the next
+call. The timer is `unref`'d, so it never holds a Node or Bun process open.
+
+**The window starts again whenever the user types a passphrase and it proves**: an `unlock()`, a
+`changePassphrase()`, and an `addPassphrase()`, `addPasskey()` or `removeUnlock()` with a
+passphrase as proof. An `unlock()` with a passkey sets it too. Nothing else moves it: not a read,
+a store or a refresh, nor a passkey proving a change on a vault already unlocked. The window
+running out while an `unlock()` or `changePassphrase()` is under way is no lock: the call ends
+unlocked, with a window of its own.
 
 Lowering the option later takes hold on each device at its next open: an unlock remembered under
 the longer setting, whose deadline lies past the new number of hours from then, is forgotten, and
-the user types their passphrase again. Raising it lengthens no unlock already remembered.
+the user types their passphrase again. Raising it lengthens no unlock already remembered. A
+device keeps one remembered unlock per vault, shared by its tabs, so open a vault with one
+setting on a device: two tabs opening it with different ones each forget what the other
+remembers (`notes/wontfix.md`). A device clock stepped backwards does the same to an unlock
+remembered just before: it seems to last past the window, and the user is asked again, the safe
+direction.
 
 Two calls lock, and each forgets the unlock in memory and on this device alike, so the user types
 their passphrase again afterwards:
 
-* **`vault.lock()`** locks at once. Use it for a real lock signal: a Lock button, or a locked
-  screen.
-* **`vault.lockSoon(graceSeconds = 5)`** locks gently. Use it when the user steps away: a hidden
-  tab, a sign-out. From the instant it is called the snapshot reads `locked`, every read, use,
-  store or erase called afterwards throws kind `vault_locked`, and this device forgets its
-  remembered unlock; but work already under way (a `store()` retrying after another device's
-  write, say) keeps the key to finish, until it is dropped `graceSeconds` later. An `unlock()`
-  (or a `changePassphrase()`, which proves the passphrase too) within the grace ends it. The
-  grace is at most 60 seconds; `lockSoon(0)` is `lock()`.
+* **`vault.lock()`** is the hard lock: the goons are at the door. Use it for a real lock signal: a
+  Lock button, or a locked screen. The key is dropped at once, and the lock wins over everything
+  under way, in this tab or in another on the same device: an `unlock()` or `changePassphrase()`
+  still under way remembers nothing and leaves the vault locked (the `unlock()` throws kind
+  `vault_locked`; a wrong passphrase is still told as `wrong_passphrase`, the more useful news),
+  and a `read()` or `use()` under way refuses with `vault_locked`, the whisper it had deciphered
+  dropped, never handed back. A write already sent to storage lands. Across tabs this rides on the
+  device mark's `lock_generation`, which every hard lock raises and an unlock's record write
+  compares. `destroy()` locks the same way, and so does storage the vault cannot trust (below).
+  A refresh that finds the vault's ways in changed on another device, or the vault gone, drops
+  the key the same way for this handle: a `read()` or `use()` under way refuses with
+  `vault_locked`.
+* **`vault.lockSoon(graceSeconds = 5)`** is the soft lock: the bartender's stinkeye. Use it when
+  the user steps away: a hidden tab, a sign-out. From the instant it is called the snapshot reads
+  `locked`, every read, use, store or erase called afterwards throws kind `vault_locked`, and this
+  device forgets its remembered unlock; but work already in hand finishes: a `read()` or a
+  `store()` under way, and an `unlock()` or `changePassphrase()` under way, here or in another tab,
+  which leaves the vault unlocked again. The key is dropped `graceSeconds` later, or sooner when
+  the window would drop it sooner. An `unlock()` (or a `changePassphrase()`, which proves the
+  passphrase too) within the grace ends it. The grace is at most 60 seconds; `lockSoon(0)` is
+  `lock()`.
 
-Either one wins over an unlock still under way: that `unlock()` throws kind `vault_locked` and
-remembers nothing, so a vault locked while the passphrase was being checked stays locked.
-`close()` is not a lock -- the remembered unlock stays, for the next open -- but it ends a
-`lockSoon()` grace at once, and an unlock under way on the closed handle takes nothing up.
+`close()` is not a lock: the remembered unlock stays, for the next open, along with any an unlock
+under way wrote before the close; it ends a `lockSoon()` grace at once, an unlock under way on
+the closed handle takes nothing up, and a `read()` or `use()` under way hands back nothing,
+refusing with `vault_closed`.
+
+A host clock that turns bad partway through a call (it throws, or reads outside 1981 to 2255)
+drops the key and fails the call with `bad_option`, even when the call's write had already
+landed: fix the clock, and look again.
 
 **Locking ends the remembered unlock.** A host that wants "stay unlocked on this device for a
 week" should not lock on tab-away: each time the user comes back to the tab, the vault would ask
@@ -239,21 +372,33 @@ gentle one:
 
 ```ts
 const lockWhenHidden = (vault: Vault) => {
-  const onChange = () => { if (document.hidden) { vault.lockSoon().catch(() => {}) } }
+  const onChange = () => {
+    if (! document.hidden) { return }
+    vault.lockSoon().catch((err: unknown) => {
+      // A lockSoon() racing a close() is the one refusal to expect; any other, such as a device
+      // store that would not forget the remembered unlock, is worth a word.
+      if (! isVaultError(err, 'vault_closed')) { console.warn('The vault did not lock cleanly', err) }
+    })
+  }
   document.addEventListener('visibilitychange', onChange)
   return () => { document.removeEventListener('visibilitychange', onChange) }
 }
 ```
 
-Call the function it returns when you close the vault; the `catch` covers a `lockSoon()` that
-races a `close()`. Chromium's Idle Detection API, behind a permission the user grants, is the
-only true screen-lock signal, and a locked screen is the user meaning it, so it calls `lock()`:
+Call the function it returns when you close the vault. The `catch` quiets only a `lockSoon()`
+that races a `close()`, and lets a failure to forget the remembered unlock be heard: that vault
+is locked in this tab, but the next open may unlock without the passphrase. Chromium's Idle
+Detection API, behind a permission the user grants, is the only true screen-lock signal, and a
+locked screen is the user meaning it, so it calls `lock()`, quieted the same way:
 
 ```ts
 const aborter = new AbortController()   // aborter.abort() when you close the vault
 if (await IdleDetector.requestPermission() === 'granted') {   // from a click: it needs a user gesture
   const idle = new IdleDetector()
-  idle.addEventListener('change', () => { if (idle.screenState === 'locked') { vault.lock().catch(() => {}) } })
+  idle.addEventListener('change', () => {
+    if (idle.screenState !== 'locked') { return }
+    vault.lock().catch((err: unknown) => { if (! isVaultError(err, 'vault_closed')) { console.warn('The vault did not lock cleanly', err) } })
+  })
   await idle.start({ threshold: 60_000, signal: aborter.signal })
 }
 ```
@@ -277,14 +422,18 @@ throws it, and the next unlock, once the user has signed in again, asks for the 
 background refresh that meets it has nobody to throw to: it locks all the same, and tells the
 logger.
 
-`openVault`'s `whenIdentityRevoked` chooses this: `'lock'`, the default, or `'stay'`, which only
-throws, leaving the vault as it was, for a host that locks or closes the vault on its own
-sign-out and would rather not lose the remembered unlock to a refusal it did not expect.
+The same rule holds for storage handing back an older copy of the vault than this device has seen
+(kind `rolled_back`, *A vault rolled back*, below): storage the vault cannot trust with an unlocked
+vault locks it, in the call that met it or in a background refresh alike. There is no option to
+stay unlocked: an adapter that refuses `identity_revoked` for a passing fault, rather than
+`storage_unavailable`, breaks its contract (VAULTDB.md, line 5.5), and is the bug to fix.
 
 Open the vault only once your backend knows who is signed in: a vault opened while its auth is
-still loading meets `identity_revoked` at once, and forgets the remembered unlock with it. A
-backend that tells "who are you?" from "you may not" refuses the second as `not_permitted`,
-which locks nothing.
+still loading meets `identity_revoked` at once, and forgets the remembered unlock with it (safe:
+the user types the passphrase again). A backend that tells "who are you?" from "you may not"
+refuses the second as `not_permitted`, which locks nothing. A call that meets the refusal in a tab
+closed meanwhile still forgets the remembered unlock; and the Convex adapter's watch refreshes on
+every error it hears, not only a sign-out. Both are the safe direction, and stay.
 
 ## Logging
 
@@ -316,15 +465,25 @@ option's value in any of the three, not even the `userId` or the labels: a host 
 vaults gives each its own logger, bound to whatever context it wants in its logs. An error of your
 own goes as your code made it, as itself or as a `VaultError`'s `cause`, so what it quotes (a
 storage client's error may quote the request it failed) is yours to keep clean. Today a vault
-says four things:
+says these things:
 
-* `warn`: `lockSoon()` could not read the clock, so it locked at once, without a grace.
+* `warn`: `lockSoon()` could not read the clock, so it locked at once, without a grace; or the
+  clock failed as an unlock's window ended (`{ call: 'expiry' }`), so the key went at once.
 * `warn`: this device's remembered unlock could not be read or would not open, so it was
   forgotten, and the vault opened locked. An unlock that simply ran out, or that a new
   passphrase outdated, is routine, and says nothing.
-* `warn`: a background refresh failed -- one rung by a change in storage, or the catch-up after a
-  write storage refused -- so the snapshot may lag behind storage until the next call, which
-  meets the same trouble and throws it.
+* `warn`: a refresh rung by a change in storage failed, so the snapshot may lag behind storage
+  (it reads `syncing: false`) until a read succeeds. Said once for a failing streak; then `log`,
+  once, when a read succeeds again.
+* `warn`: the catch-up after a write storage refused as stale failed. The call throws
+  `stale_write`, the catch-up's failure its `cause`, and the snapshot reads `syncing: false`.
+* `log`: storage the vault cannot trust -- its user signed out, or an older copy of the vault --
+  locked it (`{ call: 'untrustedStorage' }`); `warn` when this device's remembered unlock could
+  not then be forgotten.
+* `warn`: a change to the ways in landed in storage, but this device could not keep its mark of
+  the vault, or remember its unlock afresh. The change stands, and the call resolves.
+* `warn`: this device's mark of the vault could not be read, so its rollback check starts again
+  from what storage holds now.
 * `error`: a failed `openVault`, closing its storage watch, found the adapter's unsubscribe
   throwing. `openVault` still rejects with what stopped the open.
 
@@ -333,11 +492,12 @@ says four things:
 A vault may have up to `MaxUnlocks` (8) passphrases and passkeys together, each its own way in: a daily one, one
 written down at home, one a partner holds. Each wraps the same vaultKey under its own salt, no
 passphrase is ever stored, and adding or removing one rewrites no lockbox. The snapshot lists
-them, locked or not, as `unlocks`: each a `method` (`passphrase`), an `unlock_id`, and the
-`unlocklabel` the user chose.
+them, locked or not, as `unlocks`: each a `method` (`passphrase` or `passkey`), an `unlock_id`, the
+`unlocklabel` the user chose, and when it was added and by which device (`registered_at`,
+`device_id`).
 
 ```ts
-vault.getSnapshot().unlocks       // [{ method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase' }]
+vault.getSnapshot().unlocks       // [{ method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase', device_id: 'k3x9...', registered_at: 1760000000000 }]
 
 const spareId = await vault.addPassphrase(passphrase, spare, { unlocklabel: 'written_down' })
 await vault.changePassphrase(spare, renewedSpare)       // changes that one; the first still opens
@@ -345,9 +505,12 @@ await vault.removeUnlock(passphrase, spareId)           // never the last one: '
 await vault.unlock(passphrase, { unlockId })            // aimed at one: a single key derivation
 ```
 
-* **Every change asks for a passphrase**, even on an unlocked vault: the vault keeps no copy of
+* **Every change asks for proof**, even on an unlocked vault: the vault keeps no copy of
   its vaultKey it could wrap anew, and a walked-away unlocked screen should not be able to add a
-  way in. Any passphrase the vault opens with will do.
+  way in. Any way in the vault has will do: a passphrase, or a passkey's answer. That includes
+  `changePassphrase`, so a user who forgot their passphrase sets a new one with their
+  fingerprint: `vault.changePassphrase(passkey, newPassphrase)`, naming which passphrase with
+  `{ unlockId }` when the vault has several.
 * **Every change locks the other devices.** It moves the bundle's `unlock_epoch`, so each
   other device falls back to `locked` and must unlock with a passphrase still standing. This
   device stays unlocked.
@@ -358,6 +521,61 @@ await vault.unlock(passphrase, { unlockId })            // aimed at one: a singl
 * **Removal is not revocation.** A removed passphrase stops opening the vault from here on, but
   whoever knew it and kept a copy of the bundle from before can still open that copy, and the
   vaultKey inside is the one the vault still uses. There is no key rotation yet.
+
+## A new passphrase's strength
+
+Every passphrase about to become a way in -- the one the first `unlock()` creates the vault
+with, and each `addPassphrase()` or `changePassphrase()` sets -- is put to the vault's
+`passphraseStrengthTest` first, before any key derivation. One it finds weak is refused with kind
+`weak_passphrase`, the test's reason the message. An `unlock()` of a vault that stands is never
+refused for weakness: a passphrase already in use is the user's to change, not the vault's to
+lock them out with.
+
+```ts
+import { browserOpts, zxcvbnPassphraseTest } from 'safebyok/browser'
+
+const vault = await openVault({ ...opts, ...browserOpts() })   // brings zxcvbnPassphraseTest
+await zxcvbnPassphraseTest('password1234')
+// { strong: false, reason: 'That is very like a commonly used password: ...' }
+await zxcvbnPassphraseTest('skylarkpinecone', { applabel: 'skylark', user_id: 'u1', vaultlabel: 'pinecone' })
+// { strong: false, reason: 'That holds something about you or this site, ...' }
+```
+
+* **There is no default in the core.** `passphraseStrengthTest` is required, as `keyDeriver` and
+  `deviceDB` are: `openVault` refuses to open without one (`bad_option`), and `checkStrengthTest`
+  is the same check, for a wrapper that takes the options apart. A test of length alone is no
+  test -- 'a' and eleven spaces is twelve characters -- so the package offers none.
+* **In a browser, `browserOpts()` brings `zxcvbnPassphraseTest`.** It asks for at least
+  `MinPassphraseChars` (12) characters, each Unicode code point counting one, and then a zxcvbn
+  score of at least `MinZxcvbnScore` (3 of 4), through `@zxcvbn-ts/core` and its common-password
+  dictionary: it turns away common passwords and ones very like them, keyboard walks, repeats,
+  sequences, dates, and the vault's own names. No composition rules (a digit, a capital, a
+  symbol): NIST SP 800-63B advises against them, as they make a passphrase harder to remember and
+  no harder to guess. Its dictionary is about 214 kB (minified and brotlied), so the test loads it
+  with a dynamic `import()` at its first call, and a bundler splits it into a chunk of its own:
+  a page that never chooses a passphrase never fetches it. It answers through a promise, in a
+  few milliseconds after that first load. If the load fails (the network dropped), the call
+  rejects with kind `storage_unavailable`, a condition a retry may mend; the vault refuses the new
+  passphrase with that refusal, making nothing, and the next call tries again.
+* **The test hears the vault's scope.** It is called as `test(passphrase, scope)`, `scope` the
+  vault's `{ applabel, user_id, vaultlabel }`: words a guesser who knows the user tries first.
+  `zxcvbnPassphraseTest` hands each name, whole and split into its runs of letters and digits, to
+  zxcvbn as the user's own words.
+* **Your own test** replaces it: pass it after the spread. It is any function from the passphrase
+  (and the scope) to a verdict, `{ strong: true }` or `{ strong: false, reason }`, at once or as a
+  promise; the reason is shown to the user, so write it calmly, say what to do, and never quote the
+  passphrase. To ask for more, wrap ours:
+  `async (typed, scope) => (typed.includes('acme') ? { strong: false, reason: 'Leave out the name of the app.' } : await zxcvbnPassphraseTest(typed, scope))`.
+  `openVault` refuses anything but a function, and a test that answers anything but a verdict,
+  with `bad_option`; whatever a test throws, the call throws.
+* **Build it once.** The vault keeps the test it was opened with for its life. A binding that
+  reopens on a changed option (`safebyok-react`'s provider) reopens for a new test, so define it
+  at module level, or memoize it, rather than writing it inline.
+* **Call it from the field as well.** A strength test is a plain function of the passphrase and
+  the scope, with no vault behind it, so the field the user types into can call the very same one
+  on each keystroke, and show the reason before the user submits: `safebyok-react`'s dialog does
+  so by default. It hears the passphrase in plain text, so it must run on the device and keep
+  nothing: never send it to a server, log it, or let an error tracker capture it.
 
 ## Fingerprint unlock (passkeys)
 
@@ -372,7 +590,7 @@ framework's host can use them).
 const unlockId = await vault.addPasskey(passphrase, () => createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName } }), { unlocklabel: 'laptop' })
 // unlockId is null if the user dismissed the prompt
 
-vault.getSnapshot().unlocks       // [..., { method: 'passkey', unlock_id, unlocklabel: 'laptop', credential_id, prf_salt_b64 }]
+vault.getSnapshot().unlocks       // [..., { method: 'passkey', unlock_id, unlocklabel: 'laptop', device_id, registered_at, credential_id, prf_salt_b64 }]
 
 const answer = await askPasskey(vault.getSnapshot().unlocks)   // null if the user dismissed it
 if (answer !== null) { await vault.unlock(answer) }             // no key derivation to wait for
@@ -424,9 +642,10 @@ render for that, and hands a condition down as `openError`).
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
 | `bad_label`           | a label (or the `userId`) that fails the vault's check: `Label` (or `UserId`) by default, or the host's own in `validators`; or an `unlocklabel` the vault already has | Pass labels the app chose; check a user-typed one first with the same check, and against the snapshot's `unlocks` |
 | `bad_whisper`         | a whisper JSON cannot carry (`undefined`, a function, a class instance) | Store plain JSON; to empty a lockbox, `erase` it |
-| `bad_option`          | an option or argument out of its range: an `openVault` option, an `argon2idDeriver` spec, a `store()` note, a passphrase or callback of the wrong type, a record handed to a `VaultDB` write; a passkey's answer of the wrong shape, or one already a way in | Fix the call; the message names what it takes |
+| `bad_option`          | an option or argument out of its range: an `openVault` option, an `argon2idDeriver` spec, a `store()`'s public bag, a passphrase or callback of the wrong type, a record handed to a `VaultDB` write; a passkey's answer of the wrong shape, or one already a way in | Fix the call; the message names what it takes |
 | `vault_closed`        | the vault handle was closed                                      | Open the vault again; do not use a handle after `close()` |
 | `unknown_key_deriver` | the vault names a key deriver this handle was not built with     | Update safebyok, or open the vault with the deriver that made it |
+| `insecure_context`    | `openVault` in a page that is not a secure context: served over plain http from anywhere but localhost, where the browser withholds WebCrypto | Serve the app over https |
 
 ### Conditions: handle them at run time
 
@@ -436,29 +655,33 @@ Part of normal operation. Each can reach the user; the app decides how.
 | --------------------- | ---------------------------------------------------------------- | ------------------------------------------------------- |
 | `vault_locked`        | a whisper was asked for before the vault was unlocked            | Ask for the passphrase and `unlock()`, then retry (`safebyok-react`'s `withUnlockedVault` does) |
 | `wrong_passphrase`    | the passphrase did not unlock the vault, or was empty. A passphrase envelope altered in storage refuses its passphrase in just the same way, so the message says that the stored vault may be damaged | Ask again                                               |
+| `weak_passphrase`     | a new passphrase -- the one the first `unlock()` creates the vault with, or one `addPassphrase()` or `changePassphrase()` sets -- that the vault's `passphraseStrengthTest` finds too easy to guess. The message is the test's own reason. Never raised by an `unlock()` of a vault that stands | Show the message beside the field, and ask for another |
 | `wrong_passkey`       | the passkey's answer did not unlock the vault, or answered for another salt. An answer for the envelope's own salt that does not open it most likely means the envelope was altered in storage, and the message says so | Ask for a passphrase; if it works, the user may remove that passkey and add it again |
 | `passkey_unavailable` | this browser or authenticator cannot answer for a passkey unlock: no WebAuthn, or no PRF extension | Offer the passphrase instead; on `createPasskey`, tell the user this device cannot be a fingerprint unlock |
 | `absent_box`          | no lockbox under that label                                      | Offer to create it, or refresh the list: it may have been erased elsewhere |
 | `absent_vault`        | the vault has never been created, or was deleted elsewhere, and the call will not create it | Unlock with a new passphrase to create it |
 | `absent_unlock`       | no way into the vault has that `unlock_id`, or is the passkey that answered: it may have been removed on another device | Look again at the snapshot's `unlocks`, and ask the user which they mean |
 | `whisper_too_large`   | a whisper over the vault's `maxWhisperBytes`                     | Tell the user it is too large; a host that means to allow more passes a larger `maxWhisperBytes` |
-| `lockbox_too_large`   | a lockbox -- its whisper, boxlabel and note together, as the UTF-8 bytes of its JSON -- over its storage's `maxRecordBytes`; only a host whose validators admit long names or notes, or a backend with small records, meets it | Tell the user to store a smaller whisper or a shorter note |
-| `vault_full`          | a new lockbox in a vault already holding its `maxLockboxes`, a lockbox whose names and note would take the vault past its storage's `maxVaultBytes`, or a write the storage backend has no room for | Tell the user to erase a lockbox first; the host may raise `maxLockboxes` where the backend allows |
+| `lockbox_too_large`   | a lockbox -- its whisper, public bag and boxlabel together, as the UTF-8 bytes of its JSON -- over its storage's `maxRecordBytes`; only a host whose validators admit long names, or a backend with small records, meets it | Tell the user to store a smaller whisper or bag |
+| `vault_full`          | a new lockbox in a vault already holding its `maxLockboxes`, a new lockbox whose names would take the vault past its storage's `maxVaultBytes`, or a write the storage backend has no room for | Tell the user to erase a lockbox first; the host may raise `maxLockboxes` where the backend allows |
 | `too_many_unlocks`    | a passphrase or passkey added to a vault already holding `MaxUnlocks` (8) ways in | Tell the user to remove one first             |
 | `last_unlock`         | removing the vault's last passphrase: a vault always keeps one, since a passkey can be lost with its device | Add another passphrase first; to be rid of the vault, `destroy()` it |
 | `corrupt_record`      | a stored record failed validation as storage read it back: storage's own word, from a `VaultDB` called directly. A vault call says what it means for the vault instead, as one of the three below | Nothing was changed. Do not retry; see a developer: the record is damaged, was moved, or came from a newer safebyok |
 | `damaged_bundle`      | the vault's stored bundle failed its checks (not a shape this package writes, or naming another vault), so no way in can be tried: `openVault` refuses it | Nothing was changed, and a retry will not mend it. Tell the user the vault cannot be opened; restore its bundle from a backup, if there is one, or, if the user chooses to start over, `eraseDamagedVault()` (see *A vault that cannot be opened*) |
 | `damaged_unlock`      | a way in is stored in a form this package never writes (a salt of the wrong length, or not base64url), so it cannot be tried: the passkey asked for, the passphrase `unlockId` aims at, or every passphrase the vault has. Other ways in are still tried | Unlock another way, then `removeUnlock()` the damaged one and add it again |
-| `damaged_lockbox`     | a lockbox failed its checks as read, or would not open under the vault's own vaultKey, or opened to no whisper: altered in storage, or moved there from elsewhere | Nothing was changed. Offer `erase()`, or a fresh `store()` over it (see *Damaged lockboxes*) |
-| `stale_write`         | storage changed since this device read it, so the write was refused | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
-| `rolled_back`         | this device has already seen a newer copy of the vault's bundle than storage offers now (storage restored from a backup, or altered), so it won't use this one: nothing was unlocked or written | Tell the user this device has seen a newer copy of the vault than storage holds. If the storage was restored from an older copy on purpose, accept it on this device (see *A vault rolled back*, below); otherwise the app's support should look at its storage |
+| `damaged_lockbox`     | a lockbox failed its checks as read, or would not open under the vault's own vaultKey, or opened to no whisper: altered in storage, or moved there from elsewhere. A lockbox that will not open is named so only after the vault has caught up with storage once: one a vault made anew elsewhere wrote makes the call `vault_locked` instead | Nothing was changed. Offer `erase()`, or a fresh `store()` over it (see *Damaged lockboxes*) |
+| `newer_format`        | the vault's stored bundle is in a form this version does not know -- a `format`, unlock method or number of unlocks -- which a newer safebyok may have written: `openVault` and `eraseDamagedVault` refuse it | Nothing was changed. Tell the user to update the app; never offer to start over |
+| `stale_write`         | storage changed since this device read it, so the write was refused. Also an erase elsewhere winning over a `store()`; an `erase()` into a vault deleted or made anew elsewhere, its message saying the lockbox could not be erased because its vault is gone; and a write whose catch-up with storage then failed too (its `cause` says why; the snapshot reads `syncing: false`) -- unless the catch-up was refused as `identity_revoked`, `rolled_back` or `newer_format`, which the write throws as it came | The vault has caught up: read again and, if it still applies, repeat. A `store()` retries by itself first |
+| `rolled_back`         | this device has already seen a newer copy of the vault's bundle than storage offers now (storage restored from a backup, or altered), so it won't use this one, and the vault locked: nothing was unlocked or written | Tell the user this device has seen a newer copy of the vault than storage holds. If the storage was restored from an older copy on purpose, accept it on this device (see *A vault rolled back*, below); otherwise the app's support should look at its storage |
 | `not_permitted`       | the storage backend refused the signed-in user, still the vault's own, this one call | Tell the user they may not; signing in again will not help |
 | `identity_revoked`    | the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in. The vault has locked itself (see *When the user signs out*) | Have the user sign in again, then open the vault for whoever that is |
-| `storage_unavailable` | the storage backend could not be reached, or failed              | Try again shortly; the adapter's own error is the `cause`, unless it may quote the call (Convex's) |
+| `storage_unavailable` | the storage backend could not be reached, or failed; or this device's own store failed for a reason that may pass; or `zxcvbnPassphraseTest`'s word list could not be fetched | Try again shortly; the adapter's own error is the `cause`, unless it may quote the call (Convex's) |
+| `storage_blocked`     | this device's own store (its device store, or a vault kept on the device, as `safebyok-indexeddb`'s) refused for a reason that holds until something outside the app changes: the browser withholds storage from the page (site data blocked, a sandboxed frame), has no room for it (a quota of zero, as some private windows give, or a full disk), or offers no IndexedDB at all | Do not offer a retry: tell the user this browser is keeping the app from storing anything on this device. The app may open the vault again with `memoryDeviceDB()`, which remembers no unlock here; the browser's own error is the `cause` |
 
-`openVault` itself can refuse with `bad_option`, `bad_label`, and, as it reads the vault from
+`openVault` itself can refuse with `bad_option`, `bad_label`, `insecure_context`, and, as it reads the vault from
 storage, `storage_unavailable`, `not_permitted`, `identity_revoked` or `damaged_bundle` (a
 damaged lockbox never stops an open): the last four are conditions, though they surface at open.
+So is `storage_blocked`, from this device's own store or a vault store on it, which opening again will not mend.
 A refused open leaves nothing running behind it, so the host simply opens again.
 
 ### A vault that cannot be opened
@@ -484,28 +707,34 @@ It refuses a vault that is sound, with `bad_option` and nothing erased: a vault 
 deleted through its handle's `destroy()`. With no vault stored it erases only the device's
 remembered unlock, so a call cut short can be made again. It needs the stored record's `vault_id`
 to aim the erase, so a bundle too damaged to show one is refused as `damaged_bundle` still, with
-nothing erased: the backend's own tools can clear it. A record this version cannot read may
-instead have been written by a **newer** safebyok, which opens it; so one in a `format` this
-version does not know, with an unlock `method` it does not know, or with more unlocks than
-`MaxUnlocks`, is refused the same way, nothing erased, with a message telling the user to update
-the app. That is all this version can tell from damage, which rests on a rule: **any change to
+nothing erased: the backend's own tools can clear it (`localVaultDB`'s bundle that is not JSON at
+all is one). A record this version cannot read may instead have been written by a **newer**
+safebyok, which opens it; so one in a `format` this version does not know, with an unlock
+`method` it does not know, or with more unlocks than `MaxUnlocks`, is refused with a kind of its
+own, `newer_format`, by `openVault` and `eraseDamagedVault` alike, nothing erased, with a message
+telling the user to update the app: never offer to start over on it. That is all this version can tell from damage, which rests on a rule: **any change to
 what a stored record may hold -- a field, a shape, or a range a check accepts -- bumps
 `format`**, so an older build can tell "newer" from "damaged". Where it cannot
 tell, it refuses rather than erases. So is any backend that checks a record before
 it hands it over, as `safebyok-graphql`'s server does: there a damaged row is the backend's to
-clear. `safebyok-react` hands `eraseDamagedVault()` down beside `retryOpen`. A `VaultDB` that
-wraps another's public verbs hands `VaultDB.eraseDamagedVault` on too (`VAULTDB.md`, line 3.5).
+clear; so is a typed backend's (Convex's, Postgres's), whose rows a damaged bundle cannot be.
+`safebyok-react` hands `eraseDamagedVault()` down beside `retryOpen`. A `VaultDB` that wraps
+another's public verbs hands `VaultDB.eraseDamagedVault` on too (`VAULTDB.md`, line 3.5). The
+erase aims at the stored `vault_id` alone, so a bundle rewritten under that same `vault_id`
+between its read and the erase goes too: it is the same vault, the one the user asked to erase.
 
 ### A vault rolled back
 
 Each device keeps a mark of the newest copy of each vault's bundle it has seen (its device mark,
 in the `DeviceDB`), and refuses an older copy of that vault with `rolled_back`, taking nothing
-from it: storage handing back an older bundle could otherwise bring back a way in that was
-removed, or, once a vaultKey can be replaced, a vaultKey too. A device that never saw the newer
+from it, and locks, as for a user signed out (*When the user signs out*): storage handing back an
+older bundle could otherwise bring back a way in that was removed, or, once a vaultKey can be
+replaced, a vaultKey too. A device that never saw the newer
 copy, or whose site data was cleared, cannot tell, and takes the older copy as it stands.
 
 When the vault's storage was restored from an older copy on purpose, each device that saw a
-newer one accepts it by forgetting its mark of the vault, through the `DeviceDB` it opens the vault
+newer one accepts it by forgetting its mark of the vault -- the one way out, by design: no verb
+puts forgetting the newer copy one call away -- through the `DeviceDB` it opens the vault
 with, and opening it again. Whether the restore was on purpose is for the app to know, from its
 own backend or its operators, and not for the user to guess: storage that rolls a vault back on
 its own meets the user with the same refusal, so a prompt asking "was your vault restored?" turns
@@ -532,32 +761,44 @@ refusal on every device that saw a newer copy than the backup.
 
 ### Damaged lockboxes
 
-A lockbox whose stored record does not read back -- not JSON, a malformed note or time, a
-record naming another boxlabel than the one it is stored under, one from a newer safebyok, or
-one stored under a boxlabel or with a note the vault's `validators` now refuse -- is listed in the snapshot as damaged, `{ boxlabel, damaged: true }`, sorted among the sound
-ones, which carry `damaged: false`. The rest of the vault opens and works as ever. `read()` and
-`use()` refuse a damaged lockbox (`bad_label` for one under a name the checks refuse,
-`damaged_lockbox` otherwise); `erase()` removes it by the name it is listed under, whatever the
-boxlabel check now says, and `store()` writes a fresh lockbox over it -- except under a name the
-check refuses, which `store()` refuses with `bad_label`, writing nothing, since the lockbox it
-made would list as damaged still. A damaged lockbox's boxlabel is whatever text it is stored
-under, which your boxlabel check may refuse: show it as text, never as markup. Show it as
-removable:
+A lockbox whose stored record does not read back -- not JSON, a malformed time, a public bag
+that is not JSON, a record naming another boxlabel than the one it is stored under, one from a newer
+safebyok, or one sealed under a vaultKey the vault does not hold (its `vault_key_epoch` neither
+the bundle's nor the prior one's) -- is listed in the snapshot as damaged,
+`{ boxlabel, damaged: true, revision_id }`, sorted among the sound ones, which carry
+`damaged: false`. Its `revision_id` is the one its record holds, when it holds one as text, and
+null otherwise; nothing else of it is trusted. (One stored under a name your `validators` refuse
+is not damaged: it lists and reads as any other.) The rest of the vault opens and works
+as ever. `read()` and `use()` refuse a damaged lockbox with `damaged_lockbox`; `erase()` removes
+it by the name it is listed under, and `store()` writes a fresh lockbox over it -- except under a
+name your boxlabel check refuses, which `store()` refuses with `bad_label`, writing nothing. A
+damaged lockbox's boxlabel is the name it is stored under, above the floor but perhaps one your
+boxlabel check refuses: show it as text, never as markup. A row stored under a name below the
+floor, which no call could reach, is not listed. Show it as removable:
 
 ```ts
 for (const box of vault.getSnapshot().boxes) {
   if (box.damaged) { showDamaged(box.boxlabel) }   // offer erase(box.boxlabel), or a fresh store()
-  else { showSummary(box.boxlabel, box.note, box.changed_at) }
+  else { showSummary(box.boxlabel, box.public, box.written_at) }
 }
 ```
 
 Damage the listing cannot see -- altered ciphertext, a missing or malformed ciphered field --
-shows only when the lockbox is read: it lists as sound, `read()` refuses it with
-`damaged_lockbox`, and `erase()` removes it. `store()` starts afresh over any record it cannot
-read as a lockbox -- every one the snapshot lists as damaged, and one missing or mangling a
-ciphered field -- carrying nothing from it, neither its note nor when it was first stored. A
-record that reads but will not decipher, its ciphertext altered, is replaced as any other, its
-note and first-stored time kept. A storage adapter's `doListBoxes` hands up each lockbox as a
+shows only when the lockbox is read: the listing reads each record's shape and never opens its
+ciphertext, which would cost deciphering the whole vault at every refresh. Such a lockbox lists
+as sound, `read()` refuses it with `damaged_lockbox`, and `erase()` removes it. Before it says
+`damaged_lockbox` of a lockbox that will not open, the vault catches up with storage once: a
+lockbox written by a vault destroyed and made anew elsewhere relocks this device, and the read
+refuses with `vault_locked` instead. `store()` starts afresh over any record it cannot read as a
+lockbox -- every one the snapshot lists as damaged, and one missing or mangling a ciphered field --
+carrying nothing from it, neither its public bag nor when it was first stored. It writes over the
+revision the listing names, in one write that lands only while that record still stands, so a
+sound lockbox another device wrote there meanwhile is never erased: the store is refused, and
+tries again over it, as over any lockbox written meanwhile. Only a record that names no revision
+is erased first and then written, and should that write fail, nothing stands under the boxlabel.
+A record that reads but will not decipher -- its ciphertext, bag or times altered -- is written
+over its revision, and carries nothing forward either: nothing vouches for its public fields, so
+its bag becomes `{}` unless you give one, and its first-stored time is now. A storage adapter's `doListBoxes` hands up each lockbox as a
 `StoredLockbox`, the boxlabel it is stored under beside its record exactly as stored, so a record
 too damaged to name itself is still listed under the boxlabel that reaches it.
 

@@ -1,11 +1,13 @@
-import { createStore, del, delMany, entries, get, keys, set, clear, type UseStore } from 'idb-keyval'
+import { createStore, del, delMany, entries, get, keys, promisifyRequest, clear, update, type UseStore } from 'idb-keyval'
 import { DeviceMark, DeviceUnlock } from './types'
 import * as Ckeys from './ckeys'
-import type { DeviceDB } from './device-db'
+import { keepingLocks, lockGenerationOf, lockedMeanwhile, type DeviceDB } from './device-db'
 import { parseDbName, type IdbOpts } from './idb-opts'
 import { VaultError } from './errors'
+import * as ChangeBell from './change-bell'
 
 export type { IdbOpts } from './idb-opts'
+export * as ChangeBell from './change-bell'
 
 /**
  * The device store over this browser's IndexedDB (through `idb-keyval`), as an entry point of its
@@ -15,13 +17,19 @@ export type { IdbOpts } from './idb-opts'
  * `safebyok-indexeddb`.
  *
  * This entry point touches IndexedDB only when the store is used, so importing it is safe
- * anywhere; the store itself needs a browser (or anything else with `indexedDB`).
+ * anywhere; the store itself needs a browser (or anything else with `indexedDB`). It reaches
+ * IndexedDB through `idb-keyval`, a regular dependency of about 600 bytes that only this entry
+ * point loads. Beside the device store, it exports the change bell its writes ring,
+ * {@link ChangeBell}, which `safebyok-indexeddb` rings too.
  */
 
 // One UseStore per dbName, shared by stores and inspectors alike: idb-keyval opens the
-// underlying database lazily, so making these is free until something reads or writes.
+// underlying database lazily, so making these is free until something reads or writes. Each use
+// meets the guard first: a context with no IndexedDB at all (storage turned off, or a runtime
+// without it) is said as the browser says a storage it does not offer.
 const shelfStores = new Map<string, UseStore>()
 const shelfStore = (dbName: string): UseStore => {
+  if (typeof indexedDB === 'undefined' || (indexedDB as IDBFactory | null) === null) { throw noIndexedDB() }
   const kept = shelfStores.get(dbName)
   if (kept !== undefined) { return kept }
   const fresh = createStore(`${dbName}:device_db`, 'records')
@@ -29,31 +37,25 @@ const shelfStore = (dbName: string): UseStore => {
   return fresh
 }
 
-// Change bells, one per dbName: local listeners hear this tab's writes directly, and a
-// BroadcastChannel carries them to other tabs (the channel never echoes to its own sender).
-const bells = new Map<string, Set<() => void>>()
-const channels = new Map<string, BroadcastChannel>()
-const bellCkey = (dbName: string) => `safebyok-idb:${dbName}:device_db`
-
-const ringBell = (dbName: string) => {
-  bells.get(dbName)?.forEach((listener) => { listener() })
-  channels.get(dbName)?.postMessage('changed')
+/**
+ * The refusal of a context with no IndexedDB, named as a browser names a storage it does not
+ * offer: a `NotSupportedError` DOMException, or, in a runtime with no DOMException either (React
+ * Native's Hermes, say), a plain Error of that name.
+ */
+const noIndexedDB = (): Error => {
+  const message = 'This context offers no IndexedDB, so the device store has nowhere to keep its records.'
+  if (typeof DOMException === 'function') { return new DOMException(message, 'NotSupportedError') }
+  return new NotSupportedError(message)
 }
 
-const onBell = (dbName: string, listener: () => void): (() => void) => {
-  let ringers = bells.get(dbName)
-  if (ringers === undefined) {
-    ringers = new Set()
-    bells.set(dbName, ringers)
-    if (typeof BroadcastChannel !== 'undefined') {
-      const channel = new BroadcastChannel(bellCkey(dbName))
-      channel.addEventListener('message', () => { bells.get(dbName)?.forEach((ring) => { ring() }) })
-      channels.set(dbName, channel)
-    }
-  }
-  ringers.add(listener)
-  return () => { ringers.delete(listener) }
+/** A `NotSupportedError` for a runtime with no DOMException to make one. */
+class NotSupportedError extends Error {
+  override readonly name = 'NotSupportedError'
 }
+
+// The device shelf's change bell: every write rings it, here and in every other tab. Its name is
+// shared with every other tab, and with any other version of this package running in one.
+const bellnameOf = (dbName: string) => `safebyok-idb:${dbName}:device_db`
 
 /**
  * DeviceDB over this browser's IndexedDB: the real device storage. IndexedDB keeps the
@@ -63,7 +65,14 @@ const onBell = (dbName: string, listener: () => void): (() => void) => {
  * A record that will not read back (damaged, or written by another version) reads as "no
  * remembered unlock", or no device mark, and is dropped: losing the convenience is the safe
  * failure. A row filed under an earlier version's ckey is deleted unread at the next read or
- * erase of a remembered unlock. Kind 'bad_option' for a `dbName` that is not non-empty text.
+ * erase of a remembered unlock. Its rows are filed under `Ckeys`, names joined on `^`, and a
+ * scope with a name holding one is refused with kind 'bad_label'. Kind 'bad_option' for a
+ * `dbName` that is not non-empty text.
+ *
+ * Its failures are IndexedDB's own errors, which a vault says as conditions: one the browser gives
+ * for storage withheld or full (a `SecurityError`, a `QuotaExceededError`) as 'storage_blocked',
+ * and so a context with no IndexedDB at all, which this store refuses with a `NotSupportedError`
+ * at its first use; any other as 'storage_unavailable'.
  *
  * @example
  *   const deviceDB = idbDeviceDB()
@@ -74,12 +83,12 @@ const onBell = (dbName: string, listener: () => void): (() => void) => {
 export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
   const dbName = parseDbName(opts, 'idbDeviceDB')
   const shelf = () => shelfStore(dbName)
-  const ring = () => { ringBell(dbName) }
+  const ring = () => { ChangeBell.ring(bellnameOf(dbName)) }
 
   // A row under any ckey but an unlock's or a mark's is one an earlier version filed
-  // (`unlock:acme:u1:main` before the tuple ckeys), which nothing else would ever reach, expire or
-  // erase. It is deleted unread, so an old remembered unlock never outlives the lock that should
-  // forget it.
+  // (`["unlock","acme","u1","main"]` before the joined ckeys), which nothing else would ever
+  // reach, expire or erase. It is deleted unread, so an old remembered unlock never outlives the
+  // lock that should forget it.
   const sweepStrays = async () => {
     const ckeys = await keys(shelf())
     const strays = ckeys.filter((ckey) => ! Ckeys.isUnlock(ckey) && ! Ckeys.isMark(ckey))
@@ -102,8 +111,17 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
       return checked.data
     },
 
-    writeUnlock: async (unlock) => {
-      await set(Ckeys.unlock(unlock), unlock, shelf())
+    // The mark is read and the unlock written in one transaction: a lock's raise of the mark lands
+    // wholly before it or wholly after.
+    writeUnlock: async (unlock, expected) => {
+      const written = await shelf()('readwrite', async (records) => {
+        const kept: unknown = await promisifyRequest(records.get(Ckeys.mark(unlock)))
+        if (lockGenerationOf(kept) !== expected.lock_generation) { return false }
+        records.put(unlock, Ckeys.unlock(unlock))
+        await promisifyRequest(records.transaction)
+        return true
+      })
+      if (! written) { throw lockedMeanwhile() }
       ring()
     },
 
@@ -127,7 +145,7 @@ export const idbDeviceDB = (opts?: IdbOpts): DeviceDB => {
     },
 
     writeMark: async (mark) => {
-      await set(Ckeys.mark(mark), mark, shelf())
+      await update(Ckeys.mark(mark), (kept: unknown) => keepingLocks(mark, kept), shelf())
       ring()
     },
 
@@ -156,7 +174,8 @@ export type IdbRow = { ckey: string, row: unknown }
  *
  * @param opts - The database to look at: `dbName`, default 'safebyok'.
  * @returns The inspector. Kind 'bad_option' for a `dbName` that is not non-empty text, and from
- *   its `subscribe`, for a listener that is not a function.
+ *   its `subscribe`, for a listener that is not a function. Its `rows()` and `wipe()` reject in a
+ *   context with no IndexedDB, as the device store does, with a `NotSupportedError`.
  *
  * @example
  *   const inspector = inspectIdbDeviceDB({ dbName: 'acme' })
@@ -177,12 +196,12 @@ export const inspectIdbDeviceDB = (opts?: IdbOpts) => {
     /** Calls `listener` after any write to the shelf, this tab or another; returns the unsubscribe. */
     subscribe: (listener: () => void): (() => void) => {
       if (typeof listener !== 'function') { throw new VaultError('bad_option', 'subscribe needs a listener function to call after each write.') }
-      return onBell(dbName, listener)
+      return ChangeBell.listen(bellnameOf(dbName), listener)
     },
     /** Remove every row on the shelf: every remembered unlock and device mark in this database. */
     wipe: async (): Promise<void> => {
       await clear(shelfStore(dbName))
-      ringBell(dbName)
+      ChangeBell.ring(bellnameOf(dbName))
     },
   }
 }

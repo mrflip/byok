@@ -7,30 +7,31 @@ import * as TH from './test-helpers'
 const u1 = TH.scopeOf('u1')
 
 describe("Ckeys, the ckey of each row", () => {
-  it("files a bundle under its kind and scope, as JSON", () => {
-    expect(Ckeys.bundle(u1)).to.eq('["vault","acme","u1","main"]')
+  it("files a bundle under its kind and scope, joined on ^", () => {
+    expect(Ckeys.bundle(u1)).to.eq('vault^acme^u1^main')
   })
 
-  it("files a lockbox under its kind, scope and boxlabel, as JSON", () => {
-    expect(Ckeys.box(u1, 'anthropic')).to.eq('["box","acme","u1","main","anthropic"]')
+  it("files a lockbox under its kind, scope and boxlabel, joined on ^", () => {
+    expect(Ckeys.box(u1, 'anthropic')).to.eq('box^acme^u1^main^anthropic')
   })
 
-  it("files a remembered unlock under its kind and scope, as JSON", () => {
-    expect(Ckeys.unlock(u1)).to.eq('["unlock","acme","u1","main"]')
+  it("files a remembered unlock under its kind and scope, joined on ^", () => {
+    expect(Ckeys.unlock(u1)).to.eq('unlock^acme^u1^main')
   })
 
-  it("files a device mark under its kind and scope, as JSON", () => {
-    expect(Ckeys.mark(u1)).to.eq('["mark","acme","u1","main"]')
+  it("files a device mark under its kind and scope, joined on ^", () => {
+    expect(Ckeys.mark(u1)).to.eq('mark^acme^u1^main')
   })
 
-  it("begins every lockbox ckey of a scope with its box prefix", () => {
-    expect(Ckeys.boxPrefix(u1)).to.eq('["box","acme","u1","main",')
+  it("begins every lockbox ckey of a scope with its box prefix: the first four parts and a trailing ^", () => {
+    expect(Ckeys.boxPrefix(u1)).to.eq('box^acme^u1^main^')
     expect(Ckeys.box(u1, 'anthropic').startsWith(Ckeys.boxPrefix(u1))).to.be.true
   })
 
   it("picks a scope's lockbox ckeys out of a store, and nothing else", () => {
     const store = memoryStore()
-    for (const ckey of [Ckeys.bundle(u1), Ckeys.box(u1, 'anthropic'), Ckeys.box(u1, 'openai'), Ckeys.unlock(u1), Ckeys.box(TH.scopeOf('u2'), 'anthropic'), 'box:acme:u1:main:legacy']) {
+    const others = [Ckeys.bundle(u1), Ckeys.unlock(u1), Ckeys.box(TH.scopeOf('u2'), 'anthropic'), Ckeys.box(TH.scopeOf('u12'), 'anthropic'), '["box","acme","u1","main","legacy"]']
+    for (const ckey of [...others, Ckeys.box(u1, 'anthropic'), Ckeys.box(u1, 'openai')]) {
       store.write(ckey, '{}')
     }
     expect(store.ckeys().filter(Ckeys.isBoxIn(u1))).to.have.members([Ckeys.box(u1, 'anthropic'), Ckeys.box(u1, 'openai')])
@@ -43,9 +44,42 @@ describe("Ckeys, the ckey of each row", () => {
     expect(isBox(['box', 'acme', 'u1', 'main', 'anthropic'])).to.be.false
   })
 
-  it("decodes back to the tuple it encodes, whatever text the names hold", () => {
-    const scope = { applabel: 'a:"b"', user_id: '\\,[]\n\0', vaultlabel: 'עברית ไทย' }
-    expect(JSON.parse(Ckeys.box(scope, '\u{D800}')) as unknown).to.deep.equal(['box', 'a:"b"', '\\,[]\n\0', 'עברית ไทย', '\u{D800}'])
+  it("splits back into the names it joins, whatever text they hold but the delimiter", () => {
+    const scope = { applabel: 'a:"b"', user_id: String.raw`\,[]`, vaultlabel: 'עברית ไทย' }
+    expect(Ckeys.box(scope, 'x/y').split('^')).to.deep.equal(['box', 'a:"b"', String.raw`\,[]`, 'עברית ไทย', 'x/y'])
+  })
+
+  it("says the character it joins on", () => {
+    expect(Ckeys.Delimiter).to.eq('^')
+  })
+})
+
+const HoldingCaret = [
+  [{ ...u1, applabel: 'ac^me' },   'anthropic',  'applabel'],
+  [{ ...u1, user_id: 'u1^x' },     'anthropic',  'user_id'],
+  [{ ...u1, vaultlabel: '^main' }, 'anthropic',  'vaultlabel'],
+  [u1,                             'anthro^pic', 'boxlabel'],
+] as const
+
+describe("Ckeys, refusing a name that holds its delimiter", () => {
+  for (const [scope, boxlabel, part] of HoldingCaret) {
+    it(`refuses a ${part} holding ^ as bad_label, naming the part and quoting none of it`, () => {
+      const refusal = TH.expectSyncRefusal(() => Ckeys.box(scope, boxlabel), 'bad_label')
+      expect(TH.thrownText(refusal)).to.include(part)
+      expect(TH.thrownText(refusal)).to.not.include('anthro^pic')
+      expect(TH.thrownText(refusal)).to.not.include('u1^x')
+    })
+  }
+
+  it("refuses a scope holding ^ in every ckey it makes: bundle, unlock, mark and prefix", () => {
+    const scope = { ...u1, user_id: 'u1^x' }
+    for (const make of [Ckeys.bundle, Ckeys.unlock, Ckeys.mark, Ckeys.boxPrefix]) {
+      TH.expectSyncRefusal(() => make(scope), 'bad_label')
+    }
+  })
+
+  it("refuses as its last example shows", () => {
+    TH.expectSyncRefusal(() => Ckeys.box({ ...u1, user_id: 'a^b' }, 'x'), 'bad_label')
   })
 })
 
@@ -53,28 +87,21 @@ describe("Ckeys, the ckey of each row", () => {
 const scopeFrom = ([applabel = '', userId = '', vaultlabel = '']: readonly string[]): VaultScope => ({ applabel, user_id: userId, vaultlabel })
 
 /**
- * Pairs of addresses -- applabel, user_id, vaultlabel, boxlabel -- that a naive join would
- * confuse. Each must get two different ckeys, and neither's scope may list the other's lockbox.
+ * Pairs of addresses -- applabel, user_id, vaultlabel, boxlabel -- that a join on a separator
+ * other than ^ would confuse. Each must get two different ckeys, and neither's scope may list the
+ * other's lockbox.
  */
 const NearTwins = [
   // a separator, slid across a boundary:
   [["acme", "u1:x", "main", "box"],       ["acme", "u1", "x:main", "box"],         'a colon moved from the user_id into the vaultlabel'],
   [["acme", "u1", "main:x", "box"],       ["acme", "u1", "main", "x:box"],         'a colon moved from the vaultlabel into the boxlabel'],
-  [["acme", "u1,x", "main", "box"],       ["acme", "u1", "x,main", "box"],         'a comma moved across a boundary'],
-  [["acme", 'u1","x', "main", "box"],     ["acme", "u1", 'x","main', "box"],       'a quoted comma moved across a boundary'],
-  // a name spelling out the encoding of the names after it:
-  [["acme", 'u1","main', "x", "box"],     ["acme", "u1", "main", 'x","box'],       'a user_id holding what the vaultlabel would encode as'],
-  [["acme", 'u1","main","box', "x", "y"], ["acme", "u1", "main", "box"],           'a user_id holding a whole encoded tail'],
-  [["acme", "u1", 'main"]', "box"],       ["acme", "u1", "main", '"]box'],         'a closing bracket moved across a boundary'],
+  [["acme", "u1/x", "main", "box"],       ["acme", "u1", "x/main", "box"],         'a slash moved across a boundary'],
+  [["acme", "u1|x", "main", "box"],       ["acme", "u1", "x|main", "box"],         'a pipe moved across a boundary'],
   // names that differ only by one character a join or an escape might lose:
   [["acme", "u1", "main", "box"],         ["acme", "u1:", "main", "box"],          'a trailing colon'],
   [["acme", "u1", "main", "box"],         ["acme", 'u1"', "main", "box"],          'a trailing quote'],
   [["acme", "u1", "main", "box"],         ["acme", String.raw`u1\\`, "main", "box"],   'trailing backslashes'],
-  [["acme", String.raw`u1\"`, "main", "box"], ["acme", 'u1"', "main", "box"],     'a backslash before a quote'],
-  [["acme", "u1", "main", "box"],         ["acme", "u1,", "main", "box"],          'a trailing comma'],
   [["acme", "u1", "main", "box"],         ["acme", "[u1]", "main", "box"],         'brackets'],
-  [["acme", "u1", "main", "box"],         ["acme", "u1\n", "main", "box"],         'a newline'],
-  [["acme", "u1", "main", "box"],         ["acme", "u1\0", "main", "box"],         'a NUL'],
   [["acme", "é", "main", "box"],          ["acme", "e\u{301}", "main", "box"],     'two spellings of the same accented letter, kept apart as given'],
   [["", "u1", "main", "box"],             ["u1", "", "main", "box"],               'an empty name moved'],
 ] as const
@@ -93,8 +120,8 @@ describe("Ckeys, between near twins", () => {
 
 describe("Ckeys, over every split of one awkward string", () => {
   // Every way to cut this string into applabel, user_id, vaultlabel and boxlabel: 220 addresses
-  // made of the same characters in the same order, which any join by a separator would confuse.
-  const awkward = String.raw`a:"b\,[c]`
+  // made of the same characters in the same order, which a join on any of them would confuse.
+  const awkward = String.raw`a:"b\/[c]`
   const cuts = Array.from({ length: awkward.length + 1 }, (_unused, ii) => ii)
   const addresses = cuts.flatMap((one) => cuts.flatMap((two) => cuts.flatMap((three) => (
     one <= two && two <= three ? [[awkward.slice(0, one), awkward.slice(one, two), awkward.slice(two, three), awkward.slice(three)]] : []
@@ -120,21 +147,17 @@ describe("Ckeys, over every split of one awkward string", () => {
 })
 
 describe("Ckeys.boxlabelOf", () => {
-  it("reads the boxlabel back from a lockbox's ckey, whatever text it holds", () => {
+  it("reads the boxlabel back from a lockbox's ckey, whatever text it holds but the delimiter", () => {
     expect(Ckeys.boxlabelOf(Ckeys.box(u1, 'anthropic'))).to.eq('anthropic')
-    expect(Ckeys.boxlabelOf(Ckeys.box(u1, ''))).to.eq('')
-    expect(Ckeys.boxlabelOf(Ckeys.box(u1, 'OpenAI: "work", [1]\n\u{D800}'))).to.eq('OpenAI: "work", [1]\n\u{D800}')
+    expect(Ckeys.boxlabelOf('box^acme^u1^main^anthropic')).to.eq('anthropic')
+    expect(Ckeys.boxlabelOf(Ckeys.box(u1, 'OpenAI: "work", [1]'))).to.eq('OpenAI: "work", [1]')
   })
 
   const Unreachable = [
-    ['["box","acme","u1","main",',               'text that is not JSON'],
-    ['["box","acme","u1","main"]',               'a tuple too short'],
-    ['["box","acme","u1","main","x","y"]',       'a tuple too long'],
-    ['["box","acme","u1","main",42]',            'a boxlabel that is not text'],
-    ['["unlock","acme","u1","main","x"]',        'another kind'],
-    ['["box","acme","u1","main", "x"]',          'a space box() never writes'],
-    [String.raw`["box","acme","u1","main","\u0078"]`, 'an escape box() never writes'],
-    ['{"box":"x"}',                              'an object'],
+    ['box^acme^u1^main',                         'a ckey too short'],
+    ['box^acme^u1^main^x^y',                     'a ckey too long'],
+    ['unlock^acme^u1^main^x',                    'another kind'],
+    ['["box","acme","u1","main","anthropic"]',   "an earlier version's ckey"],
   ] as const
   for (const [ckey, blurb] of Unreachable) {
     it(`gives null, never throwing, for ${blurb}`, () => {
@@ -146,13 +169,14 @@ describe("Ckeys.boxlabelOf", () => {
 describe("Ckeys.isUnlock", () => {
   it("knows an unlock's ckey, for any scope", () => {
     expect(Ckeys.isUnlock(Ckeys.unlock(u1))).to.be.true
-    expect(Ckeys.isUnlock(Ckeys.unlock({ applabel: 'a:"b"', user_id: String.raw`\,[]`, vaultlabel: '' }))).to.be.true
+    expect(Ckeys.isUnlock(Ckeys.unlock({ applabel: 'a:"b"', user_id: String.raw`\,[]`, vaultlabel: 'x' }))).to.be.true
   })
 
   it("refuses an earlier version's ckey, another kind's, and anything that is not text", () => {
+    expect(Ckeys.isUnlock('["unlock","acme","u1","main"]')).to.be.false
     expect(Ckeys.isUnlock('unlock:acme:u1:main')).to.be.false
     expect(Ckeys.isUnlock(Ckeys.bundle(u1))).to.be.false
-    expect(Ckeys.isUnlock('["unlocked","acme","u1","main"]')).to.be.false
+    expect(Ckeys.isUnlock('unlocked^acme^u1^main')).to.be.false
     expect(Ckeys.isUnlock(['unlock', 'acme', 'u1', 'main'])).to.be.false
   })
 })
@@ -160,12 +184,11 @@ describe("Ckeys.isUnlock", () => {
 describe("Ckeys.isMark", () => {
   it("knows a mark's ckey, for any scope", () => {
     expect(Ckeys.isMark(Ckeys.mark(u1))).to.be.true
-    expect(Ckeys.isMark(Ckeys.mark({ applabel: 'a:"b"', user_id: String.raw`\,[]`, vaultlabel: '' }))).to.be.true
   })
 
   it("refuses an unlock's ckey, another kind's, and anything that is not text", () => {
     expect(Ckeys.isMark(Ckeys.unlock(u1))).to.be.false
-    expect(Ckeys.isMark('["marked","acme","u1","main"]')).to.be.false
+    expect(Ckeys.isMark('marked^acme^u1^main')).to.be.false
     expect(Ckeys.isMark(['mark', 'acme', 'u1', 'main'])).to.be.false
   })
 })

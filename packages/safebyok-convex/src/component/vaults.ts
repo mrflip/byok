@@ -54,8 +54,9 @@ export const createBundle = mutation({
 
 /**
  * Replace the bundle with `bundle`, only while the standing one has `expected.vault_id` and
- * `expected.unlock_epoch`. True when written; false, writing nothing, otherwise -- including
- * when no bundle stands.
+ * `expected.unlock_epoch`, and only when `bundle` names the same vault and moves its
+ * `unlock_epoch` forward. True when written; false, writing nothing, otherwise -- including when
+ * no bundle stands.
  */
 export const updateBundle = mutation({
   args:    { bundle: VaultBundle, expected: BundleExpectation },
@@ -65,7 +66,10 @@ export const updateBundle = mutation({
     const meetsExpectation = standing !== null
       && standing.vault_id === expected.vault_id
       && standing.unlock_epoch === expected.unlock_epoch
-    if (! meetsExpectation) { return false }
+    const movesForward = standing !== null
+      && bundle.vault_id === standing.vault_id
+      && bundle.unlock_epoch > standing.unlock_epoch
+    if (! (meetsExpectation && movesForward)) { return false }
     await ctx.db.replace('safebyok_bundles', standing._id, bundle)
     return true
   },
@@ -102,6 +106,7 @@ export const listBoxSummaries = query({
 
 /**
  * Write `lockbox` under its boxlabel, only while the scope's bundle has `expected.vault_id` and
+ * `expected.vault_key_epoch` -- it stands for the vaultKey the lockbox was sealed under -- and
  * the standing lockbox has `expected.revision_id` -- or, for null, there is none. True when
  * written; false, writing nothing, otherwise -- including when the scope holds no bundle.
  *
@@ -115,7 +120,7 @@ export const updateBox = mutation({
   returns: v.boolean(),
   handler: async (ctx, { scope, lockbox, expected }) => {
     const bundle = await findBundleRow(ctx.db, scope)
-    if (bundle?.vault_id !== expected.vault_id) { return false }
+    if (bundle?.vault_id !== expected.vault_id || bundle.vault_key_epoch !== expected.vault_key_epoch) { return false }
     const standing = await findBoxRow(ctx.db, scope, lockbox.boxlabel)
     const standingRevisionId = standing?.revision_id ?? null
     if (standingRevisionId !== expected.revision_id) { return false }
@@ -183,6 +188,9 @@ export const eraseVault = mutation({
 /**
  * The vault's change signature, for a client to subscribe to: it changes when, and only when, a
  * write lands in the vault -- the bundle replaced, a lockbox written or erased, the vault erased.
+ * It reads each lockbox document whole, ciphertext and all, for its revision: a Convex query
+ * cannot read some of a document's fields. So each run reads the vault, within the read limits a
+ * listing and an erase keep it to.
  */
 export const watchVault = query({
   args:    { scope: VaultScope },
@@ -244,7 +252,5 @@ const lockboxOfRow = (row: Doc<'safebyok_lockboxes'>): Lockbox => {
   return lockbox
 }
 
-/** The row a lockbox is stored as: its scope columns added, and `note` absent rather than undefined. */
-const boxRowOf = (scope: VaultScope, { note, ...lockbox }: Lockbox) => (
-  note === undefined ? { ...scope, ...lockbox } : { ...scope, ...lockbox, note }
-)
+/** The row a lockbox is stored as: its scope columns added. */
+const boxRowOf = (scope: VaultScope, lockbox: Lockbox) => ({ ...scope, ...lockbox })

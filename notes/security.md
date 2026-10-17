@@ -141,12 +141,6 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   old) and lowered the floor of nine direct dependencies' ranges to releases that had aged (the two hand
   pins on `graphql-yoga` and `@graphql-tools/schema` became ranges again: the rule now does what
   they did). Dependabot's `cooldown` is 7 days to match.
-* 2026-10-15, **exception, remove once past 2026-10-16T23:01Z**:
-  `minimumReleaseAgeExclude: convex-test@0.0.61` (`safebyok-convex`'s test dependency, pinned
-  exactly; published 2026-10-09T23:01Z, so it ages past seven days at 2026-10-16T23:01Z). Not a
-  security fix: 0.0.61 is the first release with `defineTestApp`, which the Convex tests already
-  use, and 0.0.60 fails them. Development-only, never shipped. Revisit: once it has aged, delete
-  the exclusion and make the pin a `^` range again.
 * 2026-10-15: `mask` (`safebyok/utils`) takes a whisper and returns text meant for display: its
   first and last few characters (two and four by default, at the caller's choice) and, up to
   `maxLen` (15 by default), its length. Beyond `maxLen` the result is fixed-width
@@ -270,7 +264,8 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   one vault may hold different windows. It is client-side politeness, not a vault-wide synced
   policy: nothing stored enforces it across devices, and a modified client could choose any window
   it likes. The real bounds stay the passphrase and the device-bound localUnlockKey.
-* 2026-10-15 (revised the same day by clean_times): a host may let a device stay unlocked
+* 2026-10-15 (revised the same day by clean_times; the cap and the timer since 2026-10-16, by
+  locks_and_expiry, below): a host may let a device stay unlocked
   indefinitely, by passing `forcePassphraseReentryHours: Infinity` (or any huge number); that is the
   host's choice, with no upper cap. `openVault` turns it, as it parses the option, into a finite
   window of `FarFuture - FarPast` ms, so the deadline it sets from any in-bounds clock reading is
@@ -482,7 +477,7 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   Every attempt reads the box afresh and seals the whisper anew, under its own lockboxKey and
   `revision_id`: a refused attempt's ciphertext is never reused, so no two ciphertexts share a
   binding. The retry's first act is to require unlocked, so a refusal that caught the device up
-  with a vault reborn elsewhere (or a changed passphrase) relocks it and ends the retry as
+  with a vault reborn elsewhere (or its ways in changed) relocks it and ends the retry as
   `vault_locked` before any whisper is sealed for the new vault. A retry overwrites what the
   other device wrote (last writer wins), as a host's own retry did, except that a box erased
   elsewhere is not brought back (an erase wins: `stale_write` at once); `erase()` is never retried.
@@ -496,7 +491,8 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   `src/`, for the workspace's own tooling; `pnpm pack` ships `publishConfig.exports` (dist only)
   instead. `scripts/release.ts` refuses a tarball that still carries the condition, and each
   public package's `prepublishOnly` refuses a publish not run by pnpm.
-* 2026-10-15: a `lock()` (or `destroy()`) called while an `unlock()` or `changePassphrase()` is
+* 2026-10-15 (across tabs and on `close()`, revised 2026-10-16 by locks_and_expiry, below): a
+  `lock()` (or `destroy()`) called while an `unlock()` or `changePassphrase()` is
   still under way wins. Each lock moves a per-handle counter; the unlock reads it at its start
   and again after each wait (the bundle read, the key derivation, the device record's write),
   and on finding it moved takes up no vaultKey, erases a device record it had already written,
@@ -511,7 +507,8 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   `unlock_epoch`: a vault destroyed, remade, or re-keyed elsewhere while the passphrase was
   being checked. Without that, the old vault's vaultKey was taken up against the new bundle, and a
   `store()` sealed boxes into the new vault that its owner could never open.
-* 2026-10-15: `lockSoon(graceSeconds = 5)`, at most 60 seconds, closes the entry gate at once
+* 2026-10-15 (`close()` and the timer revised 2026-10-16 by locks_and_expiry, below):
+  `lockSoon(graceSeconds = 5)`, at most 60 seconds, closes the entry gate at once
   (`askPassphraseAt` cleared, so the snapshot reads `locked` and every operation started
   afterwards throws `vault_locked`; cleared rather than set to now, which a wall clock stepped
   back would reopen), erases the device record at once, and moves the shut counter
@@ -776,7 +773,7 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   hands the very thrown value to the host root's `onCaughtError` (the console by default), as it
   would any error a boundary catches; before, it went to the host's boundary instead. The dialog's
   form, and the passphrase typed into its state, unmount with the failure.
-* 2026-10-16: **a sign-out locks the vault.** An adapter whose backend knows who is signed in
+* 2026-10-16 (revised the same day by refusals_and_catchup, below: `whenIdentityRevoked` is gone, and `rolled_back` locks too): **a sign-out locks the vault.** An adapter whose backend knows who is signed in
   refuses a vault whose `user_id` is not that user -- signed out, or another user signed in --
   with kind `identity_revoked`, distinct from `not_permitted` (the vault's own user refused one
   call). Convex, Postgres (and so GraphQL over it) refuse both of their old `not_permitted` cases
@@ -831,7 +828,7 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   The notify trigger is no longer installed by `VaultTablesSql`: a host opts in with
   `VaultNotifySql`, and without it nothing is pushed (the vault refreshes after its own writes).
   Not run against concurrent connections: the tests are on PGlite, one statement at a time.
-* 2026-10-16: **`eraseDamagedVault`, the one way to erase a vault without a handle** (the Coach:
+* 2026-10-16 (revised the same day by refusals_and_catchup, below: a vault that may be newer is `newer_format`): **`eraseDamagedVault`, the one way to erase a vault without a handle** (the Coach:
   "yes"). `destroy()` deliberately needs no unlock ("owning the account is enough"), but needs a
   handle the vault's own reading made; a bundle that fails its checks gave none. The new call
   erases a vault `openVault` refuses as `damaged_bundle` and no other: it refuses (`bad_option`,
@@ -889,3 +886,533 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   refuses still opens the vault and lists as it is. Refusing it on read would make the bundle
   `corrupt_record` and lock the user out of their own vault, or hide a way in they rely on. The
   first way in, named `passphrase` by the vault itself, is not checked.
+* 2026-10-16: **ckeys are joined on `^`, and a name holding it is refused** (push_to_100_a, thread
+  1). The key-value stores (`localVaultDB`, `idbVaultDB`, `idbDeviceDB`, `memoryDeviceDB`) file
+  rows under `kind^applabel^user_id^vaultlabel[^boxlabel]` (`Ckeys`), replacing the JSON-tuple
+  ckeys of the entry above. The join is injective only because no part holds `^`, so that is
+  enforced twice and cannot be turned off: `^` is in the name floor (`NameFloor`), which every
+  `VaultDB` verb, every record schema and the vault's entry hold every name to, whatever the
+  host's validators and whatever the store; and `Ckeys` itself refuses one as it composes, which
+  also guards the device shelves, which have no base class. Were either missing, `a^b` + `c` and
+  `a` + `b^c` would share a ckey: one user's lockbox under another's scope. The delimiter is fixed:
+  no host sets another (the Coach's ruling), and every store refuses `^` alike, so a host
+  never meets a refusal from one store (the browser's device shelf, say) that its vault store
+  never raised. A hash was not chosen:
+  it hides nothing (each name is plaintext in the row, and an indexed column in Convex and
+  Postgres) and loses the name of a damaged row, which the listing needs to offer `erase()`. Rows
+  under the JSON ckeys read as absent; the device shelf sweeps them as strays.
+* 2026-10-16: **a floor beneath every name and note, and the host's validators at entry only**
+  (thread 1). `NameFloor` and `NoteFloor` (well-formed Unicode, NFC, no control character but tab
+  and newline in a note, 1 KiB a name, 4 KiB a note) now run beneath whatever schema a host
+  passes, at the vault's entry, in every `VaultDB` verb, and in every record schema, so a stored
+  name or note below it reads back as damaged and never reaches `snapshot.boxes` unchecked (a row
+  stored under a name below it is not listed at all). This bounds what storage can put in front
+  of a host's UI whatever its validators: no control characters, no 1 MB label. The host's
+  `validators`, by contrast, now run only where a name enters the vault (`openVault`, `store`,
+  `addPassphrase`, `addPasskey`) and never on a record read back: a lockbox stored under a name or
+  note they refuse lists, reads and erases as sound, as an unlocklabel already did. They are an
+  alarm for the host's own use, not a promise about storage, which a server serving several
+  clients cannot keep. `VaultDB` verbs no longer take a validators bag at all, so no server or
+  wrapper can be handed the wrong one. Each adapter declares `maxNameBytes` (Postgres: 640, so a
+  lockbox's four-name primary key fits a btree entry) and the base class refuses a longer name.
+* 2026-10-16: **a lockbox's note becomes a public bag of any JSON, bound; its whisper's codec
+  and schema version are reserved, bound too** (push_to_100_a, thread 2; G023, G025, G040). The
+  lockbox (`safebyok-lockbox-v3`) holds `public_json`, the host's bag as stable-serialized JSON
+  text, always written (`{}` when the host gave none, so an absent bag and an empty one are one
+  record and one binding), and `whisper_codec` (`json_v1`) and `whisper_schema_version` (`1`).
+  All three join the header both of the lockbox's encryptions bind, so a bag swapped between
+  boxes, emptied, or merely respaced in storage makes `read()` refuse it (`damaged_lockbox`);
+  the bound value is the stored text itself, never a re-serialization, so a store must keep it
+  byte for byte (Postgres keeps it as `text`, never `jsonb`). The record's check also requires
+  that text to be its own stable re-serialization, inside a try: a bag respaced, reordered, or
+  nested too deep to serialize (which once overflowed the stack in the snapshot's comparison and
+  stopped the vault opening with a bare `RangeError`) lists as damaged and reads as
+  `damaged_lockbox`, so one bad record never hides the rest. A `store()` carries the standing
+  bag and `registered_at` forward only from a record that deciphers: over one that will not, its
+  bag becomes `{}` unless one is given, and its `registered_at` is now, so a bag planted in
+  storage is never sealed into a fresh revision that reads clean (found in review). What the bag reveals: everything in
+  it, in the clear, to anyone who reads storage, and its size; the vault never interprets it,
+  checks only that it is JSON, and the snapshot shows it unverified until the box is opened, as
+  every public field is. Its size is capped only with the whisper's (`maxWhisperBytes` counts
+  both), so a host cannot put a bag of megabytes in front of the listing through the vault.
+  Reserving the codec fields now means a later codec (padding, G026) or a whisper shape version
+  changes no bound field set and re-encrypts nothing. Two binding fixes ride along: the lockbox's
+  format is bound once, as the leading tag (it was also in the header), and `cipherBinding`
+  refuses a record part holding a field set to `undefined` (`bad_option`) instead of dropping it
+  as JSON would, so a field gone missing by mistake can never bind as if it were absent. The
+  note's control-character floor (G177) goes with the note: the bag is the host's, and a host
+  that shows it checks what it shows.
+* 2026-10-16 (locks_and_expiry): **the unlock window has a hard edge, and a timer.** The
+  threshold is the truth: every call that starts work checks `askPassphraseAt` against the host's
+  clock, and past it throws `vault_locked`. A `setTimeout` enforces it: armed at each take-up of a
+  key (an unlock, a remembered unlock at open, a change to the ways in), it rings at
+  `askPassphraseAt`, so the snapshot says `locked`, and 60 s later, the grace work in hand gets,
+  drops the vaultKey with no call made. Every look at the key
+  (`ensureUnlocked`, and the second look of work in hand) also drops it once that shut time has
+  passed by the clock, so a timer that runs late, on a device asleep, is not depended on. A shut
+  time only moves earlier: `lockSoon()` takes the lesser of its grace and what the window has
+  left, and on a key already past its shut time drops it at once. To make one timer always reach,
+  `forcePassphraseReentryHours` is now at most 588 hours (24.5 days; 588 h + 60 s is under
+  `setTimeout`'s 2^31 - 1 ms) or `Infinity`, which arms no timer; a finite number past 588 is
+  refused (`bad_option`), where it used to be clamped to "forever" -- a host that meant "very
+  long" now says `Infinity` and means it. The timer is `unref`'d where the platform has it
+  (Node, Bun), so an open vault never holds a process alive; that costs nothing, since a process
+  that exits drops the key with it. **The window renews only on a typed passphrase that proves**
+  (the Coach, 2026-10-16: "if I type in a password for any reason and prove I am mrflip, ... no
+  need to type that password again for seven days"): `unlock()`, `changePassphrase()`, and any
+  change to the ways in proved by a passphrase. An `unlock()` by passkey also sets it, as it did.
+  A passkey proving a change on an unlocked vault keeps the deadline standing (on a locked one it
+  sets one, as `unlock()` by passkey would). Reads, stores, erases and refreshes never move it.
+  One place decides (`deadlineFor` in `vault.ts`), so a new kind of proof cannot slip past it.
+  Expiry is a soft lock (the strawman's two locks): the window running out while an `unlock()` or
+  `changePassphrase()` is under way does not defeat it; only a lock the user (or a sign-out)
+  makes does. For review: a passkey's proof keeping, not renewing, the deadline is the weaker
+  reading of "proves I am mrflip" (G530 asks the deeper question, NOT YET).
+* 2026-10-16 (locks_and_expiry; revised the same day by refusals_and_catchup, below: `lockSoon()` raises nothing, and the generation outlives a destroy): **a lock reaches every tab's unlock under way: the versioned
+  erase.** The device mark gains `lock_generation` (format `safebyok-mark-v2`). Every lock that
+  forgets the remembered unlock -- `lock()`, `lockSoon()`, a sign-out's lock, `destroy()`'s --
+  raises it before erasing the record. An unlock (or a change to the ways in) reads it as it
+  starts, and `DeviceDB.writeUnlock(unlock, expected)` writes the remembered record only while
+  the mark still stands at that generation, comparing and writing in one step (one IndexedDB
+  transaction in `idbDeviceDB`), else refusing `stale_write`, which the vault takes as "a lock
+  won": it takes nothing up and throws `vault_locked`. A record written before the raise is
+  erased by the lock's own erase, which follows it. `writeMark` never lowers the generation (the
+  higher of the mark written and the mark replaced is kept, in the same step), so a mark written
+  from an older read -- a rollback mark raised by another tab -- cannot undo a lock. Limits: a
+  host's own `DeviceDB` that ignores the expectation is back to per-handle locking (the
+  `describeDeviceDB` battery checks it); a lock on a device with no mark for the vault (one that
+  never read it, or whose mark would not read) has nothing to raise; and `destroy()` erases the
+  mark, so its generation starts again from 0, and an unlock under way in another tab that began
+  at 0 may write a record of the destroyed vault, which opens nothing and is erased at the next
+  open of a vault under the scope. `close()` is no lock: it erases nothing, raises nothing, and a
+  record an unlock under way wrote before the close stays (G126). The undoing erase of a losing
+  unlock now runs only for a lock in its own handle (which may have erased before the record
+  landed); a record of a bundle no longer standing is left, since its wrap is bound to that
+  bundle's `vault_id` and `unlock_epoch` and opens nothing. **For review**: a mark written before
+  this reads as none (the format moved), so on its first open after upgrading a device restarts
+  its rollback check from the copy storage holds then, once; before 1.0 that is the stated cost
+  of a format change.
+* 2026-10-16 (refusals_and_catchup; the Coach: "lockSoon is a soft lock"): **two locks, hard and
+  soft.** `lock()`, `destroy()` and a lock for untrusted storage are hard: the key goes at once,
+  the device mark's lock generation rises, an unlock or change under way anywhere on the device
+  takes nothing up, and a `read()` or `use()` under way refuses `vault_locked` after its last
+  await, dropping the whisper it deciphered (one monotonic compare of the handle's shut count,
+  which can only turn a success into a refusal). `lockSoon()` and expiry are soft: the door closes
+  at once and the remembered unlock is forgotten, but work in hand finishes -- an unlock or change
+  under way, in any tab, completes and leaves the vault unlocked -- and the generation is not
+  raised. **For review**: a soft lock no longer stops another tab's unlock; a host wanting that
+  calls `lock()`.
+* 2026-10-16 (refusals_and_catchup; the Coach on G119 and G516): **one rule for storage the vault
+  cannot trust.** `identity_revoked` and `rolled_back` both lock the vault, hard, wherever they are
+  met -- a call, a catch-up, a background refresh, the open itself (which forgets the remembered
+  unlock) -- decided in `refusal-policy.ts`'s `decide`, with no host option: `whenIdentityRevoked`
+  and its `'stay'` are gone. An adapter that says `identity_revoked` for a passing fault breaks
+  VAULTDB.md 5.5. After a deliberate restore, the README's `eraseMark` recipe stays the only way
+  out (G513): no verb puts forgetting the newer copy one call away. **For review**: a storage
+  replica that briefly serves an older copy now makes every device that saw the newer one ask for
+  the passphrase again.
+* 2026-10-16 (refusals_and_catchup): **the lock generation outlives `destroy()`, and a lock with
+  no mark still counts.** The device mark (now `safebyok-mark-v3`) holds what it has `seen` of the
+  scope's vault, or null; `destroy()` writes it with nothing seen at its raised generation, rather
+  than erasing it, and a lock on a scope with no readable mark writes one at generation 1. So an
+  unlock under way elsewhere at generation 0 loses to a destroy, and a vault-creating first unlock
+  loses to another tab's lock. `eraseMark` (the restore recipe, `eraseDamagedVault`) still resets
+  the generation; neither runs with a handle that could be unlocking that vault.
+* 2026-10-16 (refusals_and_catchup): **one catch-up before a kind is named.** A write storage
+  refuses as stale, or a lockbox that will not open, gets one refresh before the vault names it: a
+  vault destroyed and made anew, or its ways in changed, elsewhere relocks the device (P4: never on
+  no evidence), so a successor vault's lockbox reads as `vault_locked`, not `damaged_lockbox`. A
+  catch-up that fails is thrown as `stale_write` with the failure as cause, never retried blind,
+  and the snapshot says `syncing: false`. Refreshes are serialized per handle (one in flight, one
+  queued), so two reads never interleave their snapshot updates. Only `store()` retries; a change
+  to the ways in, an erase and a destroy refuse once. There is no conflict hook: an erase wins.
+* 2026-10-16 (refusals_and_catchup, G498): **a damaged lockbox is replaced in one conditional
+  write.** The listing keeps a damaged record's `revision_id` when it holds one as text, and
+  `store()` writes over that revision under contract line 3.3, so a sound lockbox another device
+  wrote meanwhile refuses the write and is never erased; the store then retries over it, last
+  writer wins. The revision is untrusted text used only as an expectation storage compares. Only
+  a record naming no revision is erased first, which leaves a gap P6 accepts. A lockbox under a
+  vaultKey epoch neither the bundle's nor the prior's lists as damaged from its epoch alone (G063);
+  the listing still never opens ciphertext (G121).
+* 2026-10-16 (refusals_and_catchup): **`openVault` takes only a `VaultDB`** (G122): a duck-typed
+  object would skip the base class's checks of every record and expectation. `instanceof` holds
+  within one copy of the package, as `VaultError`'s does; the peer dependency keeps it one. And a
+  vault a newer safebyok may have written is `newer_format`, never `damaged_bundle`, so no UI
+  offers to erase it (G120).
+* 2026-10-16 (epoch_expectation, G065, G138): **every in-tree adapter now compares the
+  `vault_key_epoch` expectation** (line 3.8), and the battery holds every adapter to it, with no
+  opt-out (`describeVaultDB` no longer takes `comparesVaultKeyEpoch`). IndexedDB compares in the
+  write's transaction; the Convex component in `updateBox`'s mutation; Postgres in the write's one
+  statement, reading the bundle row `FOR SHARE` -- without the lock, READ COMMITTED would compare
+  the epoch in the statement's snapshot, and a rotation committed after it would go unseen; GraphQL
+  passes the expectation whole to the VaultDB it serves. So "no look before writing" (G138) holds:
+  storage alone refuses a stale vaultKey's write, atomically. The `FOR SHARE` lock is new: a bundle
+  update now waits for lockbox writes in flight, and the README's hard-cap trigger takes a
+  per-vault advisory lock rather than `FOR UPDATE` on the bundle, which would deadlock two writers
+  each holding the shared lock. The real-Postgres race that proves the lock waits on thread 11's
+  container suite. The 2026-10-16 entry above that says IndexedDB, Convex and Postgres "do not yet"
+  is superseded.
+* 2026-10-16 (epoch_expectation, the Coach's ruling on thread 4's review): **`close()` and a key
+  outlived by a refresh are hard locks for a read in flight.** A `read()` or `use()` notes a
+  per-handle count of hard locks when it starts (every shut, a `close()`, a refresh that drops the
+  key because the ways in changed or the vault went) and hands back nothing if it moved meanwhile:
+  the deciphered whisper is dropped, never returned. It is a separate count from the one unlocks
+  race against, so a refresh an `unlock()` makes for itself does not defeat that unlock. Not hard
+  locks, by design: a `lockSoon()` grace running out, and a clock that cannot be read.
+* 2026-10-16 (secure_floor, G032): **an all-zero passphraseKey is refused.** `passphraseKeyOf`
+  (`envelope.ts`), the one place the core receives any key deriver's output, refuses 32 zero
+  bytes as `bad_option`, at create, unlock and every change to the ways in alike. No derivation
+  makes them; a host deriver that kept its output and handed back bytes since wiped would, and
+  the vault would seal under a key anyone can rebuild. The check reads every byte, OR-ing them
+  together as libsodium's `sodium_is_zero` does, with no early exit; no JavaScript engine promises
+  constant time, but nothing in it branches on a byte: only the verdict steers what follows, and
+  the refusal of an all-zero output tells that anyway. No dependency offers the check, and `@noble/ciphers`' `equalBytes` would be a new one for one line.
+* 2026-10-16 (secure_floor): **`openVault` refuses an insecure context** (`isSecureContext ===
+  false`) first of all, as `insecure_context` (misuse): a browser withholds WebCrypto from plain
+  http, which otherwise failed later as a `TypeError` with no kind. A runtime with no notion of
+  one (Node, Bun, React Native: the global is absent) passes.
+* 2026-10-16 (secure_floor): **a new passphrase must pass `passphraseStrengthTest`** before any key
+  derivation: the one a vault is created with, and each one `addPassphrase` or `changePassphrase`
+  sets; never at `unlock`, so no user is locked out of a vault that stands by a test made
+  stricter later. The default is NIST SP 800-63B's length and no composition rules, at 12 code
+  points (the Coach's floor; SP 800-63B rev. 4 asks 15 of a password that is the only factor,
+  which a vault passphrase is). The refusal's message is the host test's own reason, a host
+  string: the doc tells hosts never to quote the passphrase in it, and the core cannot check.
+  `safebyok/browser` offers `zxcvbnPassphraseTest` on `@zxcvbn-ts/core` and
+  `@zxcvbn-ts/language-common` (runtime dependencies at the Coach's yes): the length floor, then a
+  zxcvbn score of at least 3, which is its blocklist of common passwords (NIST's other ask) and its
+  pattern matchers. It keeps nothing of a passphrase between calls.
+* 2026-10-16: **a key deriver's bytes are zeroed once imported.** `passphraseKeyOf`
+  (`src/envelope.ts`) `fill(0)`s the 32 bytes a `KeyDeriver` hands back as soon as
+  `importWrappingKeyBytes` has made the non-extractable passphraseKey of them, whether or not the
+  import succeeded, on every path that derives (sealing, and each envelope tried in an unlock);
+  a result of another length than 32, refused (`bad_option`), is zeroed likewise.
+  Best effort, as it is in any JavaScript crypto: the deriver's own working memory (hash-wasm's
+  and `@noble/hashes`' internals), the engine's copies and the passphrase string are not reached.
+  The bytes are the vault's the moment they are returned, so a deriver that returns a buffer it
+  keeps (a cache, a constant) would see it zeroed under it; the `KeyDeriver` doc and the README
+  say to hand back a fresh array. A result over a `SharedArrayBuffer` is refused (`bad_option`)
+  before it is touched: another thread could read it, and WebCrypto will not import it.
+* 2026-10-16: **the deriver's label is checked three ways before a vault trusts it.** `openVault`
+  refuses a label beginning `argon2id_web_` (any case) that is not a spec safebyok supplies,
+  or is one without exactly its parameters, so a spec added later (`argon2id_web_v2`) cannot
+  collide with a label a host stored vaults under. It runs the Argon2id spec check
+  (`parseKeyDeriverSpec`) on any deriver declaring `algorithm: 'argon2id'`, so a spec Argon2id
+  cannot run fails at open with a kind, not at the first unlock as a library's plain Error. The
+  supplied derivers (the core's and `safebyok-fastkey`'s) refuse a salt of another length than the
+  spec's before deriving (`bad_option`, never quoting the salt): the stored-vault half of that
+  was already so, an envelope with a salt of the wrong length being passed over as damaged.
+* 2026-10-16: **a `test_` label is warned of, never refused.** `openVault` says through the
+  logger, once per open, that a key deriver whose label begins `test_` (the published
+  `safebyok/testing` deriver is `test_digest_v0`: one SHA-256 of passphrase and salt) gives a
+  passphrase next to no protection against guessing. It does not refuse: no option, no flag, so a
+  host that meant it reads one line and one that did not has a chance to see it. The warning is a
+  best-effort signal, not a gate: a host that passes a `logger` doing nothing hears nothing, and a
+  deriver as weak under another label is not noticed. The vault's records still name the label
+  that sealed them.
+* 2026-10-16: **any way in proves `changePassphrase`**, a passkey's answer included, as it
+  already proved `addPassphrase`, `addPasskey` and `removeUnlock`. A passkey's answer is as good
+  as a passphrase for its vault (VOCABULARY.md), so this opens nothing new: whoever holds the
+  authenticator and passes its user verification could already add a passphrase and remove the
+  old one in two calls, and now does it in one, as one write at one unlockEpoch. With several
+  passphrases the caller names which to replace (`unlockId`); the vault does not guess. The
+  vaultKey is untouched, so what the replaced passphrase's holder kept of an earlier bundle still
+  opens that copy, as for any removal.
+* 2026-10-16: **`removeUnlock` and a vaultKey rotation stay separate verbs**, as the rotation
+  design (`whiteboard/20261016-rotation/rotation-design.md`) has them: `removeUnlock` is the
+  cheap removal and is not revocation, and `rotateVaultKey` is its own call. Removing a way in
+  stops it opening the vault from here on and cannot take back what it opened; folding a rotation
+  into every removal would rewrite every lockbox for what is usually housekeeping, and make the
+  common call the slow one. A host that removes a way in because it was compromised rotates too.
+* 2026-10-16: **`UnlockSummary` shows `device_id` and `registered_at`.** The snapshot of a locked
+  vault already listed each way in; it now says too when it was added and by which device, so a
+  user can spot a way in they did not make. Both are public fields of the envelope, bound into its
+  wrap, and `device_id` is one random id per device per vault (the mark's `device_id`), so it
+  links nothing the vault does not already link: not across vaults, not to the hardware.
+
+
+* 2026-10-16: **The whisper field** (`WhisperFieldAttributes` in `safebyok/utils`, spread by
+  `safebyok-react`'s `WhisperField`) asks each major password manager to ignore the field, sets
+  `autocomplete="off"` (since 2026-10-16, thread 14; it was `new-password`, which invites Chrome's
+  password generator), and turns off capitalizing, autocorrect and spell-check: a
+  browser's enhanced spell-check sends the field's text to its maker's servers, and with the
+  whisper shown (`type="text"`) nothing else stops it. The field is named `whisper_text`, never
+  `key`, `password` or `token`. Each manager honors only its own flag; a browser's built-in
+  manager may honor none, and Chrome ignores `off` on a `type="password"` field, so it may still
+  offer a saved password there.
+* 2026-10-16: **Starting over from the passphrase dialog** (`allowStartOver` on `VaultProvider`
+  and `PassphraseModal`, off by default) erases the vault on every device through
+  `vault.destroy()`, which by design needs no passphrase. It asks first, in the dialog, and focus
+  lands on "Keep it". Anyone at an unlocked session could already do the same through the handle;
+  the option only puts it in the user's reach.
+* 2026-10-16: **`withUnlockedVault` answers a refusal only over the vault the action ran
+  against**: an action whose `vault_locked` lands after its vault was closed (another user, a
+  reopen) resolves null, so a passphrase is never asked over, nor an action rerun against, a
+  vault the action did not touch. `PassphraseModal` and `PasskeyUnlockButton` start afresh when
+  handed another vault, so nothing typed for one vault is submitted to the next.
+* 2026-10-16: **A whisper typed into `WhisperField` is in the page's markup.** The field is a
+  controlled input, and React 19 copies a controlled input's value into its `value` attribute,
+  so what the user typed sits in `outerHTML` -- readable by a CSS attribute selector
+  (`input[value^="sk-"]`, an old exfiltration trick), a browser extension, or a session-replay
+  tool that records the DOM -- whether the field shows it or hides it. The README's *Revealing a
+  whisper* says so. Since 2026-10-16 (thread 14) the field is uncontrolled, and the entry below
+  says what holds now.
+* 2026-10-16: **`WhisperField` and the passphrase dialog's field are uncontrolled.** The browser
+  holds what is typed; React writes neither a whisper nor a passphrase into a `value` attribute,
+  so neither is in `outerHTML` for a CSS attribute selector, an extension or a session recorder
+  to read. `WhisperField` takes no `value` or `defaultValue`, and sets both undefined after the
+  host's props, so a value slipped past the types cannot make it controlled. The reveal toggle
+  flips only the input's `type`. What a host keeps from `onChange` is in its own state, in memory,
+  as before.
+* 2026-10-16: **The passphrase field invites password managers** (`PassphraseModal`, thread 14):
+  `autocomplete="new-password"` while creating, `current-password` while unlocking, in a real
+  form, beside a hidden `autocomplete="username"` field (`passphraseUsername`, default
+  `<user_id> (<vaultlabel> vault)`). A manager then holds the vault passphrase, which is the
+  point: a long, generated passphrase the user need not remember beats one they can. The
+  username defaults to something no sign-in form uses, so a manager never takes the passphrase
+  for the user's sign-in password (and offers to overwrite it); a host naming its own is told not
+  to use the sign-in name alone. `passphraseAdvice`, the host's advice shown beside the field, is
+  only advice: nothing refuses a passphrase in the dialog, and composition rules are discouraged
+  (NIST SP 800-63B). It is also host code that hears the passphrase in plain text at every change
+  while the user chooses one; its doc block and the README tell the host to keep it on the device
+  (no server, no log, no error tracker), which nothing here can enforce.
+* 2026-10-16: **a workflow with the release App's key runs on Dependabot's pull requests**
+  (`.github/workflows/dependabot-changeset.yml`). It writes the changeset a Dependabot branch
+  needs and pushes it as the App, so CI runs again (a GITHUB_TOKEN push would not). It runs on
+  `pull_request_target`, so it is main's copy of the file, with the `releasing` environment's
+  secrets, whatever the pull request holds; what keeps that safe is that it never runs anything the
+  pull request wrote: no install, no package script, only main's `scripts/dependabot.ts` reading the
+  branch's `package.json` files out of git as data, and writing names and ranges into the changeset
+  only after replacing everything but plain text. It writes only when every commit on the branch is
+  Dependabot's, by its author email, and its own commit then ends that. The App's token is cut to
+  `contents: write`. Unproven until the first Dependabot runtime-dependency pull request after
+  merge: whether the environment's secret reaches a run Dependabot started (if not, the key is
+  added as a Dependabot secret too), and that the push re-runs CI.
+* 2026-10-16: **the Version PR is no longer put back in draft** (`pr-draft: create`, the Coach's
+  ruling). A push to main rebuilds a Version PR the Coach has marked ready and leaves it ready, so
+  new changesets can join a PR already read: the Coach rereads it before merging
+  (PROCESS.md, *Releases*).
+* 2026-10-16: **the changeset skip trusts the release App by login.** CI skips *Require a
+  changeset* only for a pull request on a `changeset-release/` branch opened by `safebyok[bot]`;
+  the same branch name from anyone else is asked for a changeset like any other. The login is the
+  App's today (read from the Version PR's author); renaming the App would have CI ask the Version PR
+  for a changeset until the workflow names the new login.
+* 2026-10-16: **actionlint runs in CI from a release tarball checked against its recorded sha256**
+  (v1.7.12, over seven days old), the way `release.yml` checks npm: fetched, compared to the
+  hash written in `ci.yml`, and only then unpacked and run. A new version is a deliberate edit of
+  both the version and the hash.
+* 2026-10-16: **The e2e Postgres container runs with no password** (`POSTGRES_HOST_AUTH_METHOD:
+  trust`, `e2e/compose.yaml` and the `postgres` job of `ci.yml`). It holds only ciphertext the
+  tests make, in databases the tests create and drop, and is reachable on the contributor's
+  loopback (`127.0.0.1`) or the CI runner alone; so there is no credential in the repository to
+  leak or rotate, and none to mistake for a pattern to copy into a deployment. The image is
+  pinned by digest (`postgres:17@sha256:...`), the digest written in both files; Dependabot
+  moves the compose file's, and the workflow's is moved by hand with it. `pg` (8.23) is a
+  dev dependency of the private `safebyok-e2e` package, never a dependency of what we publish.
+* 2026-10-17 (thread 5b, store_base, [PR #139](https://github.com/mrflip/safebyok/pull/139)):
+  **host listener errors go to the platform's `reportError` as they are.** The `VaultDB` base
+  class (`vault-db.ts`, `subscribe`) and `ChangeBell` (`change-bell.ts`) call each host listener
+  so that what it throws, or a promise it returns that rejects, never escapes: it goes to the
+  logger as an error (the VaultDB) and to `globalThis.reportError` where the platform has one
+  (`report-error.ts`, looked up at call time). The error is the host's own and passed unredacted:
+  safebyok put nothing secret in it, and a host listener that puts a secret in its own error has
+  chosen to. In a browser such an error is reported twice, to the logger and to `reportError`, as
+  designed.
+* 2026-10-17 (thread 5b, store_base): **an adapter keeps its own logger over `openVault`'s.**
+  `openVault` hands its logger to the VaultDB through the public `VaultDB.adoptLogger`, and only
+  when the host passed a logger; a VaultDB made with its own `logger` keeps it, and one shared
+  between vaults keeps the latest logger handed it. A host that wants an adapter's messages kept
+  apart (a server-side redacting logger, say) passes that logger to the adapter directly. Every
+  logger call is guarded, so a throwing logger never breaks a verb.
+* 2026-10-17 (thread 5b, store_base): **Convex carries no cause on any refusal.** `convexVaultDB`
+  (`safebyok-convex/src/convex-vault-db.ts`) refuses with no `cause` at all -- `identity_revoked`,
+  `vault_full` and `storage_unavailable` alike -- because a Convex error on a dev deployment may
+  quote the call's arguments (names, public bags, ciphertext). Its refusals are made through
+  `Sanitizer.refusalFor`, and the message points the developer to the deployment's logs and the
+  browser console instead.
+* 2026-10-17 (thread 5b, store_base, G304): **GraphQL errors cross with no server text where they
+  might quote.** In the browser, `graphqlVaultDB` (`safebyok-graphql/src/graphql-vault-db.ts`)
+  refuses a server's `BAD_USER_INPUT` or `GRAPHQL_VALIDATION_FAILED` as `bad_option` with a fixed
+  message and no cause, since such errors may quote the variables, which are records. On the
+  server, `vaultResolvers` (`vault-resolvers.ts`) sends a `vaultDBFor` that throws as `bad_option`
+  with a generic "the server's setup is wrong" message; its own message, which may name the host's
+  setup or the env var names of secrets, is kept only server-side, as the non-enumerable `cause`
+  of the GraphQL error.
+* 2026-10-17 (thread 5b, store_base, G247): **the Convex component checks a bundle update's
+  `vault_id` and epoch.** The component's `updateBundle` (`safebyok-convex/src/component/vaults.ts`)
+  writes only when the new bundle keeps the standing `vault_id` and its `unlock_epoch` is greater
+  than the standing one; otherwise it resolves `false`, which the client reads as `stale_write`.
+  This now holds even against a modified client; the core client already never sends otherwise.
+* 2026-10-17 (thread 5b, store_base): **a null IndexedDB failure becomes an Error at the base
+  class.** `safebyok-indexeddb`'s `settle` (`shelf.ts`) no longer replaces a null rejection
+  itself; the base class's `Refusals.storageUnavailable` (`refusals.ts`) turns a null or
+  undefined cause into an Error saying the backend gave none, so no refusal ever carries a null
+  cause.
+* 2026-10-17 (thread 5b, store_base, G285): **Postgres sets no lockbox limit unless told.**
+  `postgresVaultDB`'s `maxLockboxes` (`safebyok-postgres/src/postgres-vault-db.ts`) defaults to
+  `Infinity`, where it was 1000: it is sent as SQL null, and the insert counts nothing. A host
+  that passes no limit lets one signed-in user, through a modified browser, grow their own vault
+  without bound, and Postgres sets no limit on a vault's bytes either; bounding that is the host's,
+  by `maxLockboxes` or its own quotas. `graphqlVaultDB` declares `Infinity` to match, so a browser
+  learns a server's limit only when the host declares it there too.
+* 2026-10-17 (thread 16, strength_principles, [PR #142](https://github.com/mrflip/safebyok/pull/142)):
+  **the core has no strength test of its own, and refuses to open without one.** `openVault`'s
+  `passphraseStrengthTest` is required: a missing one, or one that is not a function, is refused
+  as `bad_option` before the vault opens (`checkStrengthTest`, `passphrase-strength.ts`, called
+  from `vault.ts`, and exported from `safebyok` beside `checkValidators`). The length-only
+  `passphraseLengthTest` is no longer exported; it passed `'a'` plus eleven spaces.
+* 2026-10-17 (thread 16, strength_principles): **the browser default is zxcvbn, loaded on
+  demand.** `browserOpts()` (`browser.ts`) supplies `zxcvbnPassphraseTest`
+  (`zxcvbn-passphrase-test.ts`): at least 12 code points, then a zxcvbn score of at least 3 of
+  4. zxcvbn and its dictionary come in by a dynamic `import()` at the test's first call, which a
+  bundler splits into a chunk served from the host's own origin and bundle; no third-party fetch
+  is made. If that load fails the call rejects, so the vault refuses the new passphrase (no
+  passphrase is admitted untested); the failed load is forgotten and the next call tries again.
+  `@zxcvbn-ts/core` and `@zxcvbn-ts/language-common` are ordinary dependencies, not optional
+  peers, because `browserOpts()` imports them: about 1.3 MB installed, about 214 kB shipped on
+  demand.
+* 2026-10-17 (thread 16, strength_principles): **the strength test is handed the passphrase and
+  the vault's scope.** It is called as `test(passphrase, scope)`, `scope` being `{ applabel,
+  user_id, vaultlabel }`. `zxcvbnPassphraseTest` passes each of the three, whole and split into
+  runs of letters and digits, to zxcvbn as user inputs (`check(passphrase, userInputs)`). It
+  keeps nothing between calls and sends nothing anywhere. The `user_id` is the host's opaque id,
+  already in every stored record.
+* 2026-10-17 (thread 16, strength_principles): **in the dialog, the strength test runs on every
+  keystroke by default.** In `VaultProvider` (`safebyok-react/src/vault-provider.tsx`), with no
+  host `passphraseAdvice`, the passphrase dialog's advice is the strength test's reason, so the
+  host's `passphraseStrengthTest` is called with each partial passphrase as the user types while
+  creating a vault, never while unlocking. A host test that does anything off the device (a
+  breach-check API call, logging) does it per keystroke, on prefixes of the passphrase in plain
+  text. The doc blocks and READMEs say the test hears the passphrase in plain text, must stay on
+  the device, keep nothing and send nothing. A host's own `passphraseAdvice` replaces this
+  default, and the test is then asked only at submit.
+* 2026-10-17 (thread 16, strength_principles): **the vault holds its strength test for its whole
+  life.** Thread 10's ref wrapper is gone: the vault keeps the test it was opened with, unchanged.
+  `VaultProvider` checks the test at render with `checkStrengthTest` (missing, or not a function,
+  goes to the error boundary as `bad_option`), and a test with a new identity reopens the vault,
+  warned of once. The test that gates a passphrase is the one validated at open; none is swapped
+  in later through a ref.
+* 2026-10-17 (thread 16, strength_principles): **`withUnlockedVault` resolves null when the
+  provider's own close cuts an action short.** An action, or its run again after an unlock, still
+  under way when the provider closes the handle (unmount, sign-out, user switch, reopen) used to
+  reject `vault_closed` to a fire-and-forget caller; it now resolves null, as a dialog the
+  provider ends does. A `vault_closed` on a handle the provider still holds still rejects. Null
+  from `withUnlockedVault` now also means that the vault went away under the action; the vault
+  was already closed and its key dropped.
+* 2026-10-17 (thread 17, written_at, [#141](https://github.com/mrflip/safebyok/pull/141)): **`store()`
+  no longer deciphers the old lockbox to compare whispers; `changed_at` is now `written_at`.**
+  `store()` (`packages/safebyok/src/vault.ts`) used to open the lockbox it replaced and compare the
+  stable-serialized whispers, so storing the same whisper again left `changed_at` standing. Every
+  store now stamps `written_at` with the time of the write and the field claims nothing about
+  whether the whisper changed, so storage can no longer tell from a standing timestamp that the
+  same whisper was stored again. The field is bound into both of the lockbox's encryptions with the
+  rest of its header, and the stored format moves from `safebyok-lockbox-v3` to `-v4`
+  (`Lockbox` and `LockboxSummary`, `types.ts`); v3 records fail validation and list as damaged,
+  with no migration.
+* 2026-10-17 (thread 17, written_at, [#141](https://github.com/mrflip/safebyok/pull/141)): **`store()`
+  still deciphers the old record before carrying its public fields forward.** A store that leaves
+  out the public bag carries the old record's `public_json` and `registered_at` forward only from
+  a record that opens under the vault's key (`recordOpens`, `vault.ts`, formerly
+  `openedWhisperOf`), so a bag or time planted in storage is not sealed into a fresh revision that
+  reads clean; the function returns only a boolean and the deciphered whisper is dropped unread.
+  Not taken: unwrapping only the old lockboxKey, whose AES-GCM additional data binds the whole
+  header, would vouch for the header without deciphering the whisper, but a record with only its
+  whisper ciphertext altered would then carry its bag forward.
+* 2026-10-17 (thread 17, written_at, [#141](https://github.com/mrflip/safebyok/pull/141)): **a write's
+  catch-up passes `identity_revoked`, `rolled_back` and `newer_format` through unchanged.** When
+  storage refuses a write as stale, the vault refreshes once; if that refresh fails with one of
+  these three kinds, the same error object is now thrown as it came, where it was wrapped as
+  `stale_write` with the failure as `cause` (`catchUp`, `CatchUpPassesThrough`, `vault.ts`). The
+  vault's locking on `identity_revoked` and `rolled_back` still happens in the refresh; other
+  catch-up failures are still wrapped.
+* 2026-10-17 (thread 17, written_at, [#141](https://github.com/mrflip/safebyok/pull/141)): **`erase()`
+  into a vault reborn elsewhere keeps kind `stale_write` and says why, quoting no boxlabel.** The
+  message says the lockbox's contents could not be erased because the vault it was in is gone
+  (deleted, or deleted and made anew, on another device), and the adapter's refusal is its
+  `cause`. It names no boxlabel, since a host's boxlabel check may admit any text. It is said only
+  after a successful catch-up; a failed catch-up keeps its own message.
+* 2026-10-17 (thread 17, written_at, [#141](https://github.com/mrflip/safebyok/pull/141)): **new
+  kind `storage_blocked`, told from `storage_unavailable` by the browser error's `name`.** The
+  device-store wrapper (`deviceTroubleAsConditions` / `asCondition`, `vault.ts`) says a failure
+  named `SecurityError`, `QuotaExceededError` or `NotSupportedError` as `storage_blocked` (no
+  retry mends it) and every other non-VaultError failure as `storage_unavailable`. The check is
+  duck-typed on `name`, not `instanceof`, so a DOMException from another frame is told alike; it
+  decides only the kind and the retry advice, never whether anything is written or unlocked. The
+  messages name the verb that failed and quote no scope, record or key, and the browser's error
+  is the `cause`. `InvalidStateError` stays `storage_unavailable`. `idbDeviceDB` (`idb.ts`) now
+  throws a `NotSupportedError` DOMException at first use where the context has no `indexedDB`.
+* 2026-10-17 (thread 9b, core_tidy, [#144](https://github.com/mrflip/safebyok/pull/144)):
+  **`cipherBinding` refuses a top-level `undefined` or `null` part.** `cipherBinding` and its guard
+  `isUnbound` (`packages/safebyok/src/crypto.ts`) refuse both as `bad_option`, before anything is
+  encrypted or opened. Before, a record part holding an `undefined` field was refused, but a
+  top-level `undefined` part bound as `null` (safe-stable-stringify writes it so) and a `null`
+  part threw a bare `TypeError`. The types already excluded both and every caller is internal, so
+  no stored vault or ciphertext changes. Left as it was: a non-finite number part (`NaN`,
+  `Infinity`), which the JSON encoding also writes as `null`; every caller passes validated
+  integers (epochs, `EpochMillis`), so it is noted, not guarded.
+* 2026-10-17 (thread 9b, core_tidy, [#144](https://github.com/mrflip/safebyok/pull/144)):
+  **Postgres refuses a bundle update that does not move `unlock_epoch` forward.**
+  `UpdateBundleSql` (`packages/safebyok-postgres/src/postgres-vault-db.ts`) now carries `AND
+  unlock_epoch < $new::bigint`; a bundle update at the same or a lower epoch is refused as
+  `stale_write` and writes nothing, as the Convex component's `updateBundle` already did (G247).
+  Before, a modified or older client reaching the server could write a bundle (its ways in) back
+  over the one it read at the same or a lower epoch. The core always sends the standing epoch plus
+  one. VAULTDB.md line 3.2 now says a server-side adapter enforces it; client-side adapters
+  (`localVaultDB`, `idbVaultDB`) are not required to.
+* 2026-10-17 (thread 9b, core_tidy, [#144](https://github.com/mrflip/safebyok/pull/144)):
+  **`zxcvbnPassphraseTest`'s failed load is a `VaultError` of kind `storage_unavailable`.**
+  `loadEstimator` (`packages/safebyok/src/zxcvbn-passphrase-test.ts`) keeps the dynamic import's
+  own error as `cause`; that import never saw the passphrase, and the message names none. No new
+  error kind was added; `storage_unavailable` is the nearest existing kind meaning a retry may
+  mend it. A failed load never admits a passphrase untested: the vault still refuses to create,
+  add or change a passphrase it could not test. Also, `VaultProvider`'s default passphrase advice
+  (`adviceFrom`, `packages/safebyok-react/src/vault-provider.tsx`) now treats a strength test that
+  rejects as nothing to say (no advice shown) rather than ending the dialog at the error
+  boundary; the gate at Create is unchanged, since the vault runs the test again there.
+* 2026-10-17 (thread 9b, core_tidy, [#144](https://github.com/mrflip/safebyok/pull/144)):
+  **the vault-size allowance per lockbox is 1 KiB, down from 2 KiB.** `LockboxFieldsBytes`
+  (`packages/safebyok/src/vault.ts`) is the allowance for the fields beside the whisper and bag.
+  `openVault` refuses a `maxLockboxes` whose lockboxes, each counted at twice `maxWhisperBytes`
+  plus this allowance, might not fit the adapter's `maxVaultBytes` (the bound that keeps a vault
+  erasable whole in one Convex transaction). Those fields measure under 1,000 bytes at the default
+  validators' longest names (a test proves it), and each `store()` still weighs its lockbox's real
+  names against the limit. On Convex's 8 MiB: 102 lockboxes of the default 40,444-byte whisper fit
+  (was 101), 1,638 of 2 KiB whispers (was 1,365). The Convex component's own server-side limits
+  (8,000 lockboxes, 7 MiB less 1 KiB) are unchanged. This supersedes the 2 KiB allowance named in
+  earlier entries.
+* 2026-10-17 (thread 9b, core_tidy, [#144](https://github.com/mrflip/safebyok/pull/144)):
+  **the vault's checked scope is frozen.** `checkScope` (`packages/safebyok/src/names.ts`) returns
+  `Object.freeze(...)`. The same object is handed to the host's `passphraseStrengthTest` and held
+  in `getSnapshot().scope`, and the vault keys storage and the cipher binding by it; frozen, none
+  of the three can change it for the others.
+* 2026-10-17 (thread 9b, core_tidy, [#144](https://github.com/mrflip/safebyok/pull/144)):
+  **`store()` refuses unknown option keys with `bad_option`.** `optionsCheck`
+  (`packages/safebyok/src/options.ts`, shared with the strict check of `openVault`'s `validators`)
+  refuses a key it does not know. A caller still passing the retired `{ note }`, beside or instead
+  of `{ public }`, is told at once rather than silently storing no public bag. The refusal never
+  quotes the options.
+* 2026-10-17 (PR [#6](https://github.com/mrflip/safebyok/pull/6)): **the non-extractable vaultKey
+  is not a defence against code running in the page while the vault is unlocked.** The session's
+  vaultKey handle is a non-extractable WebCrypto `CryptoKey`, so page code cannot export its raw
+  bytes. That keeps a passing compromise (an XSS, a malicious extension, a stolen unlocked device)
+  from carrying the key away for use after `lock()`. It does not stop injected code, while the
+  vault is unlocked, from calling WebCrypto with the handle to decrypt every lockbox, or from
+  reading whispers through the vault's own API (`read()`, `use()`), which no design prevents. The
+  `addPasskey` entry of 2026-10-15 mentions this in passing; this entry states it on its own. A
+  host can keep the unlock window short, call `lock()` on sign-out and on screen lock, serve the
+  page under a strict Content-Security-Policy, and never load third-party script into a page that
+  holds an unlocked vault.
+* 2026-10-17 (thread sweep_small, [#143](https://github.com/mrflip/safebyok/pull/143)): **the Postgres README no longer ships a hard-cap trigger
+  recipe.** The `safebyok-postgres` README used to carry SQL for a `BEFORE INSERT` trigger on
+  `safebyok_lockboxes` that refused a lockbox past a hard limit, taking a transaction-scoped
+  advisory lock per vault; under REPEATABLE READ it counts from its snapshot, so racers may
+  overshoot. The repository ran that SQL against a real Postgres in
+  `e2e/tests/postgres/hard-cap.test.ts`. The recipe, that test, and the PGlite test that read the
+  README's SQL are deleted; the README now gives a short prompt a host pastes to its coding agent,
+  which reads the library and writes the trigger, explaining the trade-offs. The package's own
+  lockbox limit (`maxLockboxes`, one counting insert) remains a best effort that racing writers
+  may overshoot by up to N-1 places, and is documented as such. A host that needs a hard cap now
+  owns a trigger the package no longer tests, so its isolation level, its lock and its refusal
+  (surfaced as `storage_unavailable`, not `vault_full`) are the host's to verify. The limit exists
+  to stop a runaway loop and keep a vault listable and erasable; it is not a quota against a
+  determined client.

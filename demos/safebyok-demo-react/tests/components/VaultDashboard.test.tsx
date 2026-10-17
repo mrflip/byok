@@ -34,12 +34,20 @@ describe("VaultDashboard, opening", () => {
   it("shows storage it cannot reach in place, and opens once Retry finds it back", async () => {
     const outage = makeOutage()
     outage.setDown(true)
-    const vaultDB = new OutageVaultDB(localVaultDB(memoryStore()), outage)
+    const vaultDB = new OutageVaultDB(localVaultDB({ store: memoryStore() }), outage)
     TH.makeWorld({ vaultDB }).renderInVault(<VaultDashboard />)
     await screen.findByText(/Can't reach your vault/)
     outage.setDown(false)
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(await screen.findByText(/No lockboxes yet/)).to.not.be.null
+  })
+
+  it("says a browser that withholds storage won't keep the vault, and offers no Retry", async () => {
+    const world = TH.makeWorld()
+    vi.spyOn(world.deviceDB, 'readMark').mockRejectedValue(new DOMException('The operation is insecure.', 'SecurityError'))
+    world.renderInVault(<VaultDashboard />)
+    await screen.findByText(/won't let the app keep your vault/)
+    expect(screen.queryByRole('button', { name: 'Retry' })).to.be.null
   })
 
   it("says a damaged vault record can't be opened, and offers no Retry", async () => {
@@ -54,7 +62,7 @@ describe("VaultDashboard, opening", () => {
 /** A world whose `u1` vault has had its stored bundle spoiled, over a store the test can read. */
 const damagedWorld = async () => {
   const store = memoryStore()
-  const world = TH.makeWorld({ vaultDB: localVaultDB(store) })
+  const world = TH.makeWorld({ vaultDB: localVaultDB({ store }) })
   await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
   const bundleCkey = Ckeys.bundle(TH.scopeOf('u1'))
   const bundle = JSON.parse(store.read(bundleCkey) ?? 'null') as object
@@ -172,6 +180,24 @@ describe("VaultDashboard, its lockboxes", () => {
     await waitFor(() => { expect(within(rowOf('anthropic_api_key')).queryByText('rotated')).to.not.be.null })
     const vault = await world.openUnlocked()
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-replaced')
+    expect(vault.getSnapshot().boxes[0]).to.deep.include({ public: { note: 'rotated' } })
+  })
+
+  it("keeps a lockbox's note when a new whisper is stored over it with the note left blank", async () => {
+    const world = TH.makeWorld()
+    world.renderInVault(<VaultDashboard />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Add a lockbox' }))
+    fillForm({ boxlabel: 'anthropic_api_key', whisper: 'sk-ant-test-not-a-real-key', note: 'work account' })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await TH.answerPassphraseDialog()
+    await screen.findByText('anthropic_api_key')
+    fireEvent.click(screen.getByRole('button', { name: 'Add a lockbox' }))
+    fillForm({ boxlabel: 'anthropic_api_key', whisper: 'sk-ant-test-replaced', note: ' '.repeat(3) })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() => { expect(screen.queryByRole('button', { name: 'Save' })).to.be.null })
+    expect(within(rowOf('anthropic_api_key')).getByText('work account')).to.not.be.null
+    const vault = await world.openUnlocked()
+    expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-replaced')
   })
 
   it("deletes a lockbox once the user confirms, and keeps it when they don't", async () => {
@@ -191,7 +217,7 @@ describe("VaultDashboard, its lockboxes", () => {
 
   it("marks a damaged lockbox as such, offering only to delete it", async () => {
     const store = memoryStore()
-    const world = TH.makeWorld({ vaultDB: localVaultDB(store) })
+    const world = TH.makeWorld({ vaultDB: localVaultDB({ store }) })
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key', openai_api_key: 'sk-test-not-a-real-key' })
     store.write(openaiCkey, '{"not": json')
     world.renderInVault(<VaultDashboard />)
@@ -209,7 +235,7 @@ describe("VaultDashboard, its lockboxes", () => {
 
   it("replaces a damaged lockbox with a fresh whisper", async () => {
     const store = memoryStore()
-    const world = TH.makeWorld({ vaultDB: localVaultDB(store) })
+    const world = TH.makeWorld({ vaultDB: localVaultDB({ store }) })
     await world.seed({ openai_api_key: 'sk-test-not-a-real-key' })
     store.write(openaiCkey, '{"not": json')
     world.renderInVault(<VaultDashboard />)
@@ -246,6 +272,8 @@ describe("VaultDashboard, its lock", () => {
     await TH.answerPassphraseDialog()
     const chip = await screen.findByText(/unlocked until/)
     expect(chip.textContent).to.match(/^🔓 unlocked until /)
+    // The read finishes first: a lock landing while it is under way would refuse it, as it should.
+    await screen.findByText('sk-ant-test-not-a-real-key')
     fireEvent.click(screen.getByRole('button', { name: 'lock now' }))
     await screen.findByText('🔒 locked')
   })

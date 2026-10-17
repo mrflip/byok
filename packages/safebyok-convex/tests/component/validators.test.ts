@@ -74,7 +74,7 @@ const ShapeCases = [
   [Records.Ciphered,     Ciphered,      'Ciphered: the shared encrypted-value shape'],
   [Records.VaultScope,   VaultScope,    'VaultScope: what names one vault'],
   [Records.VaultBundle,  VaultBundle,   'VaultBundle: every field, each unlock envelope and its ciphered wrap nested'],
-  [Records.Lockbox,      Lockbox,       'Lockbox: every field, note optional, both ciphered fields nested'],
+  [Records.Lockbox,      Lockbox,       'Lockbox: every field, the public bag as JSON text, both ciphered fields nested'],
   [listedZod,            ListedLockbox, 'a listed lockbox: the record without its ciphered fields, format kept'],
 ] as const
 
@@ -88,12 +88,10 @@ describe("the Convex validators, field for field with the core's Zod records", (
   it("type the same records, expectations and summaries as the core", () => {
     expectTypeOf<Infer<typeof VaultBundle>>().toEqualTypeOf<Records.VaultBundle>()
     expectTypeOf<Infer<typeof VaultScope>>().toEqualTypeOf<Records.VaultScope>()
-    // Convex's takes a note or none, every lockbox the core writes; the core's also reads an
-    // undefined note, as earlier versions stored it.
-    expectTypeOf<Infer<typeof Lockbox>>().toExtend<Records.Lockbox>()
-    // A listing is the stored record less its ciphered fields; the core's summary of it nulls a
-    // missing note, so it is the stored record's shape a listing must meet.
-    expectTypeOf<Omit<Infer<typeof ListedLockbox>, 'format'>>().toExtend<Omit<Records.Lockbox, 'format' | 'lockbox_key_wrapped' | 'whisper_ciphered'>>()
+    expectTypeOf<Infer<typeof Lockbox>>().toEqualTypeOf<Records.Lockbox>()
+    // A listing is the stored record less its ciphered fields; the core's summary of it parses
+    // the public bag's JSON, so it is the stored record's shape a listing must meet.
+    expectTypeOf<Infer<typeof ListedLockbox>>().toEqualTypeOf<Omit<Records.Lockbox, 'lockbox_key_wrapped' | 'whisper_ciphered'>>()
     expectTypeOf<Infer<typeof BundleExpectation>>().toEqualTypeOf<CoreBundleExpectation>()
     expectTypeOf<Infer<typeof LockboxExpectation>>().toEqualTypeOf<CoreLockboxExpectation>()
     expectTypeOf<Infer<typeof EraseExpectation>>().toEqualTypeOf<CoreEraseExpectation>()
@@ -120,7 +118,7 @@ const convexAccepts = async (call: Promise<unknown>): Promise<boolean> => {
 }
 
 const { vault_id: _vaultId, ...bundleWithoutVaultId } = TH.bundleOf('u1')
-const { note: _note, ...boxWithoutNote } = TH.boxOf('anthropic_api_key', 'a1')
+const { public_json: _publicJson, ...boxWithoutBag } = TH.boxOf('anthropic_api_key', 'a1')
 const { registered_at: _bundleTime, ...bundleWithoutTime } = TH.bundleOf('u1')
 const { unlocks: _unlocks, ...bundleWithoutUnlocks } = TH.bundleOf('u1')
 /** The three fields a bundle held its one passphrase in, before `unlocks`. */
@@ -130,7 +128,8 @@ const OldEnvelopeFields = {
   passphrase_salt_b64:          'c2FsdA',
   vault_key_passphrase_wrapped: TH.fakeCiphered('old'),
 }
-const { registered_at: _boxRegistered, changed_at: _boxChanged, ...boxWithoutTimes } = TH.boxOf('anthropic_api_key', 'a1')
+const { registered_at: _boxRegistered, written_at: _boxWritten, ...boxWithoutTimes } = TH.boxOf('anthropic_api_key', 'a1')
+const lockboxV3 = { ...boxWithoutTimes, format: 'safebyok-lockbox-v3', registered_at: Date.UTC(2026, 9, 14), changed_at: Date.UTC(2026, 9, 14) }
 /** An ISO time, as records stored them before every time became epoch milliseconds. */
 const OldIso = '2026-10-14T00:00:00.000Z'
 
@@ -166,18 +165,23 @@ const BundleCases = [
 const LockboxCases = [
   // both accept:
   [TH.boxOf('anthropic_api_key', 'a1'),                                      true,   true,   'a whole lockbox'],
-  [boxWithoutNote,                                                           true,   true,   'a lockbox with no note'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), public_json: '{}' },           true,   true,   'a lockbox with an empty public bag'],
   [{ ...TH.boxOf('مفتاح العمل', 'a1') },                                    true,   true,   'a boxlabel of any text'],
-  [{ ...TH.boxOf('anthropic_api_key', 'a1'), note: 'n'.repeat(5000) },       true,   true,   'a note of any length'],
   // both refuse:
-  [{ ...TH.boxOf('anthropic_api_key', 'a1'), note: null },                   false,  false,  'a null note'],
+  [boxWithoutBag,                                                            false,  false,  'a lockbox with no public bag: one is always written'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), public_json: { note: 'x' } },   false,  false,  'a public bag stored as an object, not its JSON'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), whisper_codec: 'json_v2' },     false,  false,  'a whisper codec neither knows'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), whisper_schema_version: 2 },    false,  false,  'a whisper schema version neither knows'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), format: 'safebyok-lockbox-v2' }, false, false,  'a lockbox from before the public bag'],
+  [lockboxV3,                                                                false,  false,  'a lockbox from before written_at, holding changed_at'],
   [{ ...TH.boxOf('anthropic_api_key', 'a1'), format: 'safebyok-vault-v1' },  false,  false,  "another record's format"],
   [{ ...TH.boxOf('anthropic_api_key', 'a1'), whisper_ciphered: 'ct-flat' },  false,  false,  'a whisper ciphered as bare text, not an envelope'],
-  [{ ...TH.boxOf('anthropic_api_key', 'a1'), changed_at: '1792022400000' },  false,  false,  'a changed_at written as text'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), written_at: '1792022400000' },  false,  false,  'a written_at written as text'],
   [{ ...boxWithoutTimes, created_at: OldIso, updated_at: OldIso },           false,  false,  'a lockbox from before its times were named registered_at and changed_at'],
   // Zod refuses, Convex accepts:
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), public_json: '{"note":' },      false,  true,   'a public bag that is not JSON'],
   [{ ...TH.boxOf('anthropic_api_key', 'a1'), revision_id: '' },              false,  true,   'an empty revision_id'],
-  [{ ...TH.boxOf('anthropic_api_key', 'a1'), changed_at: Infinity },         false,  true,   'a changed_at that never comes'],
+  [{ ...TH.boxOf('anthropic_api_key', 'a1'), written_at: Infinity },         false,  true,   'a written_at that never comes'],
 ] as const
 
 describe("the Convex validators, against the core's Zod records, record by record", () => {

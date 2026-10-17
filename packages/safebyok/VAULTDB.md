@@ -23,15 +23,44 @@ Three layers share the work, and each guarantee below belongs to one of them.
 * **The base class** (`VaultDB`'s public verbs) checks every name, record and expectation on the
   way in and every record on the way out, refuses what is malformed before your code sees it,
   turns a `false` from you into `stale_write`, and turns anything you throw that is not a
-  `VaultError` into `storage_unavailable`, your error as its cause.
+  `VaultError` into `storage_unavailable`, your error as its cause. It holds every name to the
+  floor and to what your adapter declares (*Names*, below), never to a host's own validators.
+  It guards `subscribe`: each listener is called so that nothing it throws, and no promise it
+  hands back that rejects, escapes -- each goes to the logger as an error -- and your unsubscribe
+  runs once, however often the host calls it. It lists a vault's records whole for a server to
+  serve (`listBoxRecords`), from your `doListBoxes`. It keeps the `logger`, as `this.logger`:
+  your adapter's own, else the one `openVault` hands it, else the console; and
+  `this.watchTrouble(message)` warns once for each failing streak of a live watch.
 * **Your adapter** (the `do*` methods) stores and returns records, and makes each write
   conditional: it checks the expectation and writes in one atomic step. It never resolves a
   conflict itself, never merges two writes, and never retries one: a write whose expectation
   failed resolves `false`, and the vault decides what happens next.
 
+A server that serves these verbs to browsers -- the Convex component, the Postgres route recipe,
+the GraphQL resolvers -- checks who may reach which vault (line 5.4), makes each write atomic, and
+holds each record to its shape and each name to the floor and its storage's limits, through these
+same verbs. Nothing more: what text a name may be beyond that is each browser vault's own
+`validators`, checked where a name enters the vault, and a host whose clients run different
+validators has chosen that. A record a client's validators would refuse reads back as any other
+(the vault never takes a name it would not have written for damage); one below the floor is
+damage.
+
 So the versioned update is split: the adapter owns the atomic compare-and-write (lines 3.1 to
 3.5, and 3.8), and the vault owns the read before it and the retry after it. "Last write wins" is the
 vault's policy over the adapter's guarantee, not something an adapter implements.
+
+Only a lockbox write is retried. A change to the ways in, a `destroy()` or an erase that meets
+someone else's is news the user must hear, refused once as `stale_write`. Before it names any
+refusal -- a stale write, or a lockbox that will not open -- the vault catches up with storage
+once, so a vault destroyed and made anew elsewhere relocks the device rather than reading as
+damage. There is no conflict handler beyond this, and no hook for one: an erase wins, the last
+writer wins, and a host that disagrees calls `store()` or `erase()` again. The vault never clears
+a damaged record on its own; the user's `erase()` or `store()` on its boxlabel does.
+
+The base class turns anything your code throws that is not a `VaultError` into
+`storage_unavailable` -- a bug in your adapter among it, which it cannot tell from a driver's
+failure: the `cause` carries your error, and an adapter that means a kind throws a `VaultError` of
+it.
 
 ## The baseline
 
@@ -68,17 +97,34 @@ Every adapter in this repository has an atomic step that spans a vault: a statem
 (Postgres), a transaction (Convex, IndexedDB), or one synchronous turn of a single tab
 (`localVaultDB`).
 
+## Names
+
+A vault is named by its scope -- applabel, user id and vaultlabel -- and a lockbox by its boxlabel
+within it. Every name a verb is handed passes, before the adapter sees it:
+
+* **The floor** (`NameFloor`): one character to 1 KiB of UTF-8, well-formed Unicode, in its
+  composed form (NFC), with no control character and no `^`. Nothing turns it off, and no host's
+  validators widen it. A stored record holding a name below it reads back as damaged.
+  `^` is there because a key-value store joins a row's names into one ckey on it (`Ckeys`): a
+  name holding it could make two rows' ckeys one, another user's lockbox under this one's name.
+  Every store refuses it alike, whether it joins names or keeps each in a column of its own, so a
+  name that one store holds every other does too.
+* **What the adapter declares** (line 7.3): no more bytes than `maxNameBytes`.
+
+Each refusal is `bad_label`, naming which name and which rule, and quoting none of it.
+
 ## 1. Records
 
 **1.1. What is stored reads back whole.** A record reads back exactly as it was written, field
-for field: a field left out stays out (a lockbox with no note has no `note` field, not a null
-one), and nothing is added. Before anything is written, a read finds nothing: `null`, never a
+for field: a field left out stays out (a bundle with no prior vaultKey has no `prior_vault_key`
+field, not a null one), and nothing is added. Text comes back as the exact text written: a
+lockbox's `public_json` is bound into its encryption as written, so a store that rewrites JSON
+it holds (Postgres's `jsonb`, say) keeps that field as plain text. Before anything is written, a read finds nothing: `null`, never a
 default.
 
-**1.2. Each vault keeps to itself.** A vault is named by its scope -- applabel, user id and
-vaultlabel -- and a lockbox by its boxlabel within it. Two scopes that differ anywhere, by
-however little (a colon, a quote, a bracket, a script), never share a record, a listing or an
-erase, whatever text a host's validators let a name hold.
+**1.2. Each vault keeps to itself.** Two scopes that differ anywhere, by however little (a
+colon, a quote, a bracket, a script), never share a record, a listing or an erase, whatever names
+above the floor and within the adapter's declared limits they hold (*Names*, above).
 
 **1.3. Nothing is repaired, and nothing is dropped.** An adapter hands up every record as it is
 stored, damaged or not; the base class decides what is damaged, and the vault lists a damaged
@@ -113,7 +159,11 @@ first. Two devices creating at once settle on one bundle.
 
 **3.2. A bundle update lands only over the bundle it read.** `updateBundle` writes only while the
 standing bundle has the expected `vault_id` and `unlock_epoch`, and refuses as `stale_write`
-otherwise, including where no bundle stands: an update never creates.
+otherwise, including where no bundle stands: an update never creates. A server-side adapter,
+which a client of another version's may reach, also enforces what every update carries: it lands
+only a bundle that keeps the standing `vault_id` and moves `unlock_epoch` forward, and refuses any
+other as `stale_write` (Convex's component and Postgres do). The core always sends the standing
+`unlock_epoch` plus one, so none of its own writes meets this refusal.
 
 **3.3. A lockbox write lands only over the lockbox it read, in the vault it was sealed for.**
 `updateBox` writes only while the scope's standing bundle has the expected `vault_id` and the
@@ -134,7 +184,9 @@ otherwise it refuses as `stale_write` and erases nothing, so a vault made anew s
 that missed its predecessor's end.
 
 It compares the `vault_id` and nothing else, so a vault whose bundle is damaged in any other field
-is still erased: the vault's `eraseDamagedVault`, the one way to clear a vault `openVault` refuses
+is still erased, and a bundle rewritten under the same `vault_id` between a read and the erase is
+erased with it: it is the same vault. A typed backend (Convex, Postgres) cannot hold a damaged
+bundle, so there the hatch below has nothing to do: the vault's `eraseDamagedVault`, the one way to clear a vault `openVault` refuses
 as `damaged_bundle`, reads the bundle through `doReadBundle` as stored, takes its `vault_id`, and
 aims this erase at it. An adapter that hands each call on to another VaultDB's public verbs hands
 `eraseDamagedVault` on too. Proven by the base class's own tests for a damaged record, which the
@@ -218,7 +270,7 @@ one: a lock timeout or a serialization failure is `storage_unavailable`, and und
 at the backend's default settings, there is none to report. Its test is line 3.7's.
 
 **5.3. A refusal quotes nothing it was handed.** No refusal's message or properties carry a
-record's ciphertext, a boxlabel or a note: the base class never quotes what it refuses, and an
+record's ciphertext, a boxlabel or a public bag: the base class never quotes what it refuses, and an
 adapter's own messages name the vault's limits, never its contents. A `storage_unavailable`
 refusal's `cause` is the backend's own error, passed up as it came for debugging; it holds only
 what the backend holds, which is ciphertext and public fields.
@@ -229,10 +281,13 @@ signed-in user's -- including every scope while no one is signed in -- with kind
 `identity_revoked`, before the backend is asked anything: it reads nothing of that scope and
 writes nothing to it. A server cannot tell "the user changed" from "the host opened another
 user's vault", and to the vault both mean the same: its user is not the one signed in.
+Who is signed in is the backend's own seam, never the core's: the Convex component asks the
+host's `getUserId(ctx)`, Postgres and the GraphQL resolvers take the user from the host's request
+context, and every adapter compares it with the scope's `user_id`, which the vault already carries.
 
 **5.5. identity_revoked means the user is gone.** The vault locks itself on `identity_revoked`,
-dropping its key, so an adapter says it only when the signed-in identity really is gone or
-changed. A passing fault -- a token expired mid-refresh, a network error, a backend that could
+dropping its key, always -- no host option turns it off -- so an adapter says it only when the
+signed-in identity really is gone or changed. A passing fault -- a token expired mid-refresh, a network error, a backend that could
 not say who is signed in -- is `storage_unavailable`, which locks nothing. *Tested per adapter*:
 the battery cannot make a fault.
 
@@ -276,6 +331,11 @@ refuses to open with a `maxWhisperBytes` over half of it.
 what the backend can still list and erase whole. A vault refuses to open when its `maxLockboxes`
 lockboxes might not fit in it.
 
+**7.3. The most it holds in one name.** `maxNameBytes`, a whole number above zero, or `Infinity`
+for a backend that holds any name the floor admits: the bytes of UTF-8 its keys and indexes hold
+of one name. Postgres, whose lockbox key is a btree entry of four names together, declares 640.
+The base class refuses a longer name (`bad_label`) before the adapter sees it, in every verb.
+
 A backend that does not hold to the limits it declares, or a vault opened with limits that
 disagree with its backend's, is outside this contract: not a bug we will fix, and not one whose
 outcome we promise.
@@ -316,10 +376,16 @@ one mutation is atomic is the backend's to keep, and every backend in this repos
 one call at a time. Of Convex and IndexedDB, that is what the real backend promises too -- Convex's
 mutations are serializable, and IndexedDB runs transactions that write one store one after
 another, across tabs and connections. Of Postgres it is not: under READ COMMITTED, statements run at
-once, each over its own snapshot, and PGlite cannot show that. That the adapter's one-statement
-writes still hold -- a conditional `UPDATE` re-checking the row it waited on, `INSERT ... ON CONFLICT`,
-the foreign key read against the bundle that stands -- rests on Postgres's documented behaviour, not
-on a test here; only a run against a real server, with a connection to each device, would show it.
+once, each over its own snapshot, and PGlite cannot show that. So `safebyok-postgres` is also run
+against a real server: `e2e/tests/postgres/` runs this battery, with a pool and a listening
+connection to each device, against `postgres:17` (a CI job, and `e2e/compose.yaml` on a contributor's
+machine; `pnpm justify` needs neither and skips those tests where `SAFEBYOK_PG_URL` is unset). Its
+other files race what the battery's turnstile cannot hold: writers for a vault's last places, with no
+turnstile and no PGlite to take turns; a foreign key violation (`23503`) from a vault erased while
+an insert waited on the foreign key. Of the one-statement writes -- a conditional `UPDATE`
+re-checking the row it waited on, `INSERT ... ON CONFLICT`, the foreign key read against the bundle
+that stands -- the races and that run show how they came out on that server and no other; which
+suites run there is one list in `e2e/tests/postgres/test-helpers.ts`.
 Nor can the battery see a lock shared by devices whose turnstile is left unwired; and the devices of
 `localVaultDB` and `idbVaultDB`, in one page, share what two tabs would not (the store, the bell, a
 connection), so their races show one tab's devices, and IndexedDB's own rule shows the rest.

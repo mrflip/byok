@@ -14,6 +14,9 @@ pnpm add safebyok safebyok-convex convex
 `safebyok` and `convex` are peer dependencies: your app installs them itself, so the adapter and
 your app share one copy of each, and a `VaultError` from one is a `VaultError` to the other.
 
+Platform: Node 22 and up, and evergreen browsers for the client; the floor is stated in the core's
+*Where it runs*.
+
 ## What your app adds to its `convex/` directory
 
 Install the component, in `convex/convex.config.ts`:
@@ -56,9 +59,12 @@ mistake for the first request.
   name, on which a vault locks itself. The message names no user and quotes no record.
 * **Writes that come too late.** An update (`updateBundle`, `updateBox`) or an erase
   (`eraseBox`, `eraseVault`) carries what its writer expects to stand -- the vault's `vault_id`,
-  and the bundle's `unlock_epoch` or the lockbox's `revision_id` -- and checks it in the same
+  and the bundle's `unlock_epoch`, or the lockbox's `revision_id` and the bundle's
+  `vault_key_epoch` (the vaultKey the lockbox was sealed under) -- and checks it in the same
   transaction it writes in. When that no longer stands, it writes nothing and resolves `false`,
   which the client turns into a `stale_write`. Not an error: no `ConvexError`, nothing in your logs.
+  A bundle update lands, too, only when the new bundle keeps the vault's `vault_id` and moves its
+  `unlock_epoch` forward, as every safebyok client's does.
 * **A vault the component has no room for.** `updateBox` refuses, writing nothing, a lockbox
   that would take its vault past the component's own limits (see *How big a vault can be*), with
   a `ConvexError` whose `data` is `{ kind: 'vault_full', message }`, which the client turns into
@@ -67,7 +73,7 @@ mistake for the first request.
 
 ## What your app does on the client
 
-`convexVaultDB(client, api.safebyok)`, from `safebyok-convex`, is a vault's storage: a `VaultDB`
+`convexVaultDB({ client, api: api.safebyok })`, from `safebyok-convex`, is a vault's storage: a `VaultDB`
 whose every call is one call to the functions above, through the Convex client your app already
 has. Hand it to `openVault`:
 
@@ -83,13 +89,16 @@ convex.setAuth(fetchToken) // your auth provider's token, as for any Convex call
 
 const vault = await openVault({
   applabel: 'acme', userId, vaultlabel: 'main',
-  vaultDB:  convexVaultDB(convex, api.safebyok),
+  vaultDB:  convexVaultDB({ client: convex, api: api.safebyok }),
   ...browserOpts(), // the key deriver and device store a browser wants
 })
 ```
 
 In a React app, pass the `ConvexReactClient` you give `ConvexProvider`, so the vault shares its
-socket and its signed-in user. `safebyok-convex` itself imports nothing of React's.
+socket and its signed-in user. `safebyok-convex` itself imports nothing of React's. A `logger`,
+when given (`convexVaultDB({ client, api, logger })`), hears what the VaultDB has to say -- a
+`ConvexClient` watch that failed, once for each failing streak -- and left out, it is the one
+`openVault` is given, else the console.
 
 * **Sign in first.** `userId` is the id your `getUserId` answers for the signed-in user. Open
   the vault once the Convex client is authenticated (in React, once `useConvexAuth()` says so):
@@ -99,20 +108,21 @@ socket and its signed-in user. `safebyok-convex` itself imports nothing of React
 * **Signing out locks the vault.** Once the Convex client signs out (or signs in as someone
   else), the vault's live `watchVault` query is refused, the vault looks again, meets
   `identity_revoked`, and locks itself, as `lock()` does: an idle vault in another tab included.
-  (`openVault`'s `whenIdentityRevoked: 'stay'` turns this off.) Close the vault when your user
-  signs out all the same: in React, pass `userId={null}` to the provider.
+  Close the vault when your user signs out all the same: in React, pass `userId={null}` to the provider.
 * **Other devices' writes arrive live.** The vault watches `watchVault` and refreshes whenever
   it changes, so its snapshot (and a React render) follows writes from anywhere.
 * **Refusals** are `VaultError`s, of the kinds in the *Errors* tables of the
   [`safebyok` README](../safebyok/README.md), which say what each means and what a host does.
   The Convex functions throw two, `identity_revoked` and `vault_full`; a write that came too late is
   a `stale_write`; and `storage_unavailable` is anything else Convex reported. It carries nothing
-  of Convex's own error, which on a dev deployment may quote the call's arguments (names, notes,
-  ciphertext): your deployment's logs have it, or, for trouble before the call left, the browser
+  of Convex's own error, which on a dev deployment may quote the call's arguments (names, public
+  bags, ciphertext): your deployment's logs have it, or, for trouble before the call left, the browser
   console, where the Convex client reports its connection.
 * **Offline, a call waits** for the connection, as every Convex call does, rather than failing.
   Convex resends a mutation when it reconnects, so a write may land after any timeout you set:
-  show progress, but don't report it failed.
+  show progress, but don't report it failed. The adapter sets no timeout of its own: a write that
+  lands late lands only over what its writer read, in the vault it was sealed for, so the only
+  cost of waiting is the wait.
 * A record holds at most 1 MiB, Convex's document limit; `openVault` keeps `maxWhisperBytes`
   under half of it. A vault holds at most 8 MiB in all (`maxVaultBytes`; see *How big a vault
   can be*).
@@ -130,32 +140,34 @@ Three tables, inside the component, beside nothing of your app's:
 * **Encrypted**, as `{ cipher_iv_b64, ciphertext_b64 }`: each whisper (`whisper_ciphered`), each
   lockbox's lockboxKey (`lockbox_key_wrapped`), and the vaultKey once for each of the vault's
   ways in (each envelope's `vault_key_wrapped`, in the bundle's `unlocks`).
-* **In the open**: the scope (`applabel`, `user_id`, `vaultlabel`), each `boxlabel` and `note`,
+* **In the open**: the scope (`applabel`, `user_id`, `vaultlabel`), each `boxlabel` and public bag (`public_json`),
   the `vault_id`, `unlock_epoch`, `revision_id`s, each way in's `method`, `unlock_id`,
   `unlocklabel`, passphraseSalt (`salt_b64`) and key deriver's label, how many ways in there are,
-  when each vault and lockbox was first stored and each whisper last changed (`registered_at`,
-  `changed_at`, epoch milliseconds), and the length of every ciphertext.
+  when each vault and lockbox was first stored and each lockbox last written (`registered_at`,
+  `written_at`, epoch milliseconds), and the length of every ciphertext.
 * **Never**: a whisper, a passphrase, any key in usable form, or the device-local remembered
-  unlock. No history: an update replaces its row. (Convex's own backups and exports keep what
-  they keep.)
+  unlock. No history: an update replaces its row, and the last writer winning is the vault's
+  policy ([`VAULTDB.md`](../safebyok/VAULTDB.md), *Who does what*). An app that wants history
+  keeps it in its own backups; Convex's backups and exports keep what they keep.
 * `user_id` leads the bundle and lockbox indexes, so one user's rows are one range of each.
 * **Any text is a name** to the component: it never sees the vault's `validators`, which check
-  every name and note on the client. Convex's documentation requires every string to be valid
-  Unicode, so safebyok's checks, `AnyTextValidators` among them, refuse a lone surrogate (half of a
-  character) before it is sent. A host's own schema that admits one sends it as written: what the
-  Convex server then says is its own, and reaches you as `storage_unavailable`.
+  each name where it enters the vault, on the client. The floor beneath them, which the
+  client's VaultDB holds every name to whatever the validators say, refuses what Convex could
+  not store: a lone surrogate (half of a character, which Convex's documentation forbids in a
+  string), a control character, text not in NFC, a name over 1 KiB.
 * **A vault's tally** counts its lockboxes and their bytes as Convex weighs them, kept in step
   by every lockbox write and erase in the same transaction. A vault written before tallies
   were kept has none, and reads as ever: its next lockbox write counts it, reading the vault
   once (and no further than its limits). An erase never counts a vault.
 
 **How big a vault can be.** Listing a vault, watching it and erasing it each read the whole vault
-in one Convex transaction, which may read 16 MiB and 32,000 documents, and write 16,000 documents;
+in one Convex transaction -- watching reads each lockbox whole, ciphertext and all, to sign it by
+its revision, since a Convex query cannot read some of a document's fields -- which may read 16 MiB and 32,000 documents, and write 16,000 documents;
 erasing reads it twice, so `convexVaultDB` declares a `maxVaultBytes` of 8 MiB. A vault holds 100 lockboxes by default, raised with
 `maxLockboxes` as far as `maxVaultBytes` allows: `openVault` refuses, with kind `bad_option`, a
 `maxLockboxes` whose lockboxes at `maxWhisperBytes` each might not fit, and its message says how
-many would. At the default `maxWhisperBytes` (40444) that is at most 101; at a `maxWhisperBytes`
-of 2048, ample for API keys, it is 1365. A store past the limit is refused with kind
+many would. At the default `maxWhisperBytes` (40444) that is at most 102; at a `maxWhisperBytes`
+of 2048, ample for API keys, it is 1638. A store past the limit is refused with kind
 `vault_full`, until a lockbox is erased. Each record must also fit Convex's 1 MiB document limit,
 which the core's `maxWhisperBytes` keeps well inside. `convexVaultDB` declares the component's own
 8,000 as its `maxLockboxes`, so `openVault` also refuses a `maxLockboxes` above that.
@@ -164,7 +176,10 @@ The component holds every vault to limits of its own, whatever its client asks, 
 modified client cannot grow a vault past what erasing can reach: **8,000 lockboxes**, and
 **7 MiB less 1 KiB** of them as Convex weighs a document (half the read budget, less a whole
 document for the bundle and room for the tally). A client within its own `maxLockboxes` stays
-well inside both. A write that would take a vault past either, and leave it larger than it was
+well inside both, at the defaults far inside; at extreme settings (a small `maxWhisperBytes`,
+thousands of lockboxes, every public bag full) a client can meet the component's `vault_full`
+just short of its own `maxLockboxes`. That is the design working: the component's limit is the
+authority beneath the client's estimate. A write that would take a vault past either, and leave it larger than it was
 -- a new lockbox, or a heavier replacement -- is refused with kind `vault_full`; a replacement no
 heavier, and every erase, always lands, so a vault over its limits (written before they were
 kept) can always shrink, and be erased a lockbox at a time even when it is too large to erase
@@ -186,7 +201,7 @@ the core's own records, scopes and expectations.
 | `updateBundle`     | mutation | `{ bundle, expected: { vault_id, unlock_epoch } }` | `true` if written, `false` if not           |
 | `getBox`           | query    | `{ scope, boxlabel }`                       | the `Lockbox`, or null                                |
 | `listBoxSummaries` | query    | `{ scope }`                                 | each lockbox without its ciphered fields, `format` kept, in boxlabel order |
-| `updateBox`        | mutation | `{ scope, lockbox, expected: { vault_id, revision_id } }` | `true` if written, `false` if not; refuses `vault_full` past the vault's limits |
+| `updateBox`        | mutation | `{ scope, lockbox, expected: { vault_id, revision_id, vault_key_epoch } }` | `true` if written, `false` if not; refuses `vault_full` past the vault's limits |
 | `eraseBox`         | mutation | `{ scope, boxlabel, expected: { vault_id } }` | `true` if the vault still stands (box or none), `false` if not |
 | `eraseVault`       | mutation | `{ scope, expected: { vault_id } }`         | `true` if erased, `false` if not                      |
 | `watchVault`       | query    | `{ scope }`                                 | `{ vault_id, unlock_epoch, boxes: [[boxlabel, revision_id]] }`, changing with every write |
@@ -232,7 +247,7 @@ const host = app.defineModules({ safebyok: new SafebyokComponent(app.components.
 }) })
 
 const deployment = fakeDeployment(host)
-const vaultDB = convexVaultDB(deployment.client('u1'), deployment.api.safebyok)
+const vaultDB = convexVaultDB({ client: deployment.client('u1'), api: deployment.api.safebyok })
 // ... and after the test:
 await deployment.close()
 ```

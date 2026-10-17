@@ -1,4 +1,5 @@
 import { createStore, promisifyRequest, type UseStore } from 'idb-keyval'
+import { Refusals } from 'safebyok'
 
 /**
  * The shelf: the one IndexedDB object store this package keeps its rows in, `records` in the
@@ -25,11 +26,31 @@ export const shelfOf = (dbName: string): UseStore => {
 }
 
 /**
+ * The shelf of the database `dbName` as a VaultDB reaches it: a call's failure that the browser
+ * gives for storage it withholds (`Refusals.isStorageBlocked`: site data blocked, no room left)
+ * refuses as `storage_blocked`, the browser's own error its cause, and so does a call in a context
+ * with no IndexedDB at all. Any other failure comes as it came, which the VaultDB base class says
+ * as `storage_unavailable`.
+ *
+ * @example await withheldShelfOf('acme')('readonly', (store) => settle(store.get(ckey)))
+ */
+export const withheldShelfOf = (dbName: string): UseStore => async <ValT>(txMode: IDBTransactionMode, callback: (store: IDBObjectStore) => ValT | PromiseLike<ValT>): Promise<ValT> => {
+  if (typeof indexedDB === 'undefined' || (indexedDB as IDBFactory | null) === null) {
+    throw Refusals.storageBlocked('This context offers no IndexedDB, so the vault has nowhere to keep its records. Trying again will not help until that changes.')
+  }
+  try {
+    return await shelfOf(dbName)(txMode, callback)
+  } catch (err) {
+    throw Refusals.isStorageBlocked(err) ? Refusals.storageBlocked(undefined, { cause: err }) : err
+  }
+}
+
+/**
  * The result of an IndexedDB request, or the outcome of a transaction, as a promise: `idb-keyval`'s
- * `promisifyRequest`, except that it never rejects with null, which would reach a caller as an
- * error with a null cause. A transaction one of whose requests failed rejects with that request's
- * error (the transaction's own is still null when the failure reaches it); a failure the browser
- * gives no error for at all (a transaction aborted from outside) rejects with an Error saying so.
+ * `promisifyRequest`, except that a transaction one of whose requests failed rejects with that
+ * request's error, where the transaction's own is still null when the failure reaches it. A
+ * failure the browser gives no error for at all (a transaction aborted from outside) rejects with
+ * that null, which the VaultDB base class says as `storage_unavailable` with an Error for a cause.
  *
  * @example const standing = await settle<unknown>(store.get(ckey))
  */
@@ -42,11 +63,9 @@ export const settle = async <ValT = undefined>(request: IDBRequest<ValT> | IDBTr
   try {
     return await promisifyRequest<ValT>(request)
   } catch (err) {
-    throw [err, failedRequestError].find((candidate) => candidate instanceof Error) ?? new Error(UnknownFailure)
+    throw err ?? failedRequestError
   }
 }
-
-const UnknownFailure = 'The IndexedDB request failed for an unknown reason: the browser gave no error. Try again shortly.'
 
 /**
  * `work`, run in one readwrite IndexedDB transaction over the shelf: what it reads and what it

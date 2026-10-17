@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { DeviceMark, DeviceUnlock, EpochMillis, FarFuture, FarPast, ForeverMs, Lockbox, LockboxSummary, MaxUnlocks, VaultBundle, VaultScope, Whisper } from '../src/types'
+import * as Z from 'zod/mini'
+import { Lockbox } from '../src/lockbox'
+import { DeviceMark, DeviceUnlock, EpochMillis, FarFuture, FarPast, ForeverMillis, LockboxSummary, MaxUnlocks, PublicBag, VaultBundle, VaultScope, Whisper } from '../src/types'
 import * as TH from './test-helpers'
 
 const WhisperCases = [
@@ -36,9 +38,13 @@ const ScopeCases = [
   // regular usage:
   [TH.scopeOf('u1'),                                  true,   'an applabel, a user_id and a vaultlabel'],
   [TH.scopeOf('user|2fJ8:google'),                    true,   'a user_id in whatever form the host app issues'],
-  [TH.scopeOf('u'.repeat(101)),                       true,   'a user_id of any length: what a name may be is the validators\' to say'],
-  [{ ...TH.scopeOf('u1'), applabel: 'Acme: Ünïcode' },  true,   'an applabel of any text'],
-  [{ ...TH.scopeOf('u1'), user_id: '' },              true,   'even empty text, which the default UserId refuses'],
+  [TH.scopeOf('u'.repeat(101)),                       true,   'a user_id longer than the default check admits: past the floor, what a name may be is the validators\' to say'],
+  [{ ...TH.scopeOf('u1'), applabel: 'Acme: Ünïcode' },  true,   'an applabel of any script'],
+  // refused, below the floor every name is held to:
+  [{ ...TH.scopeOf('u1'), user_id: '' },              false,  'an empty user_id'],
+  [{ ...TH.scopeOf('u1'), vaultlabel: 'tab\there' },  false,  'a vaultlabel holding a control character'],
+  [{ ...TH.scopeOf('u1'), applabel: 'cafe\u{301}' },  false,  'an applabel not in NFC'],
+  [TH.scopeOf('u'.repeat(1025)),                      false,  'a user_id over a kibibyte'],
   // refused:
   [{ ...TH.scopeOf('u1'), applabel: 42 },             false,  'an applabel that is not text'],
   [{ applabel: 'acme', user_id: 'u1' },              false,  'a scope missing its vaultlabel'],
@@ -135,61 +141,48 @@ describe("VaultBundle", () => {
   }
 })
 
-const { note: _note, ...notelessBox } = TH.boxOf('anthropic_api_key', 'a1')
-const { registered_at: _boxRegistered, changed_at: _boxChanged, ...boxWithoutTimes } = notelessBox
-const LockboxCases = [
-  // regular usage:
-  [TH.boxOf('anthropic_api_key', 'a1'),                   true,   'a whole lockbox, with its note'],
-  [notelessBox,                                            true,   'a lockbox with no note field at all'],
-  // a stored vault is a contract: earlier versions wrote a lockbox with no note as `note:
-  // undefined`, which IndexedDB's structured clone keeps, so it still reads as no note
-  [{ ...notelessBox, note: undefined },                    true,   'a lockbox an earlier version stored with an undefined note'],
-  // refused, as a damaged or foreign record:
-  [{ ...notelessBox, note: null },                         false,  'a null note'],
-  [{ ...notelessBox, note: 'n'.repeat(257) },              true,   'a note of any length: the validators check notes, not the record'],
-  [{ ...notelessBox, boxlabel: 'Ключ API: מפתח' },        true,   'a boxlabel of any text'],
-  [{ ...notelessBox, note: 42 },                           false,  'a note that is not text'],
-  [{ ...notelessBox, format: 'safebyok-lockbox-v3' },      false,  'a format this version does not know'],
-  [{ ...notelessBox, format: 'safebyok-lockbox-v1' },      false,  'a lockbox from before vaultKey epochs'],
-  [{ ...notelessBox, vault_key_epoch: 1.5 },               false,  'a vaultKey epoch that is not a whole number'],
-  [{ ...notelessBox, changed_at: FarFuture + 1 },          false,  'a changed_at past FarFuture'],
-  [{ ...notelessBox, registered_at: Infinity },            false,  'a registered_at that never comes'],
-  [{ ...notelessBox, changed_at: null },                   false,  'a null changed_at'],
-  [{ ...notelessBox, registered_at: Date.UTC(2026, 9, 14) + 0.5 }, false, 'a registered_at with a fraction of a millisecond'],
-  [boxWithoutTimes,                                        false,  'a lockbox missing its times'],
-  [{ ...boxWithoutTimes, created_at: OldIso, updated_at: OldIso }, false, 'a lockbox from before its times were named registered_at and changed_at'],
+const PublicBagCases = [
+  // any JSON value:
+  [{ note: "work account" },          true,   'a plain object, the common case'],
+  [{},                                true,   'an empty bag'],
+  ["work account",                    true,   'a string'],
+  [null,                              true,   'null, a JSON value'],
+  [[1, "two", { three: 3 }],          true,   'an array, nested as deep as it likes'],
+  // what JSON cannot carry is refused, not mangled:
+  [undefined,                         false,  'undefined is not a JSON value'],
+  [{ when: new Date() },              false,  'a Date would silently flatten to {}'],
+  [{ count: NaN },             false,  'NaN would silently become null'],
+  [() => 'nope',                      false,  'a function is not data'],
 ] as const
 
-describe("Lockbox", () => {
-  for (const [candidate, expected, blurb] of LockboxCases) {
-    it(blurb, () => { expect(Lockbox.safeParse(candidate).success).to.eq(expected) })
+describe("PublicBag", () => {
+  for (const [candidate, expected, blurb] of PublicBagCases) {
+    it(blurb, () => { expect(PublicBag.safeParse(candidate).success).to.eq(expected) })
   }
+
+  it("passes the examples its doc block shows", () => {
+    expect(PublicBag.parse({ note: 'work account', project: 'atlas' })).to.deep.equal({ note: 'work account', project: 'atlas' })
+    expect(PublicBag.safeParse({ when: new Date() }).success).to.be.false
+    expect(PublicBag.safeParse(undefined).success).to.be.false
+  })
 })
 
-const { format: _format, lockbox_key_wrapped: _wrapped, whisper_ciphered: _ciphered, ...notelessSummary } = notelessBox
-const SummaryNoteCases = [
-  // however a lockbox's lack of a note was stored, its summary says null:
-  [notelessSummary,                                  null,            'a lockbox stored with no note field, as one is today'],
-  [{ ...notelessSummary, note: undefined },          null,            'a lockbox an earlier version stored with an undefined note'],
-  [{ ...notelessSummary, note: null },               null,            'a summary already null, parsed again'],
-  // and a note is kept as it is:
-  [{ ...notelessSummary, note: 'work account' },     "work account",  'a lockbox with a note'],
-] as const
+const wholeSummary = { boxlabel: 'anthropic', revision_id: 'r1', vault_key_epoch: 1, public: {}, registered_at: Date.UTC(2026, 9, 14), written_at: Date.UTC(2026, 9, 14) }
 
 describe("LockboxSummary", () => {
-  for (const [candidate, expected, blurb] of SummaryNoteCases) {
-    it(blurb, () => { expect(LockboxSummary.parse(candidate).note).to.eq(expected) })
-  }
-
-  it("takes a note of any length, as a stored lockbox does, and refuses one that is not text", () => {
-    expect(LockboxSummary.safeParse({ ...notelessSummary, note: 'n'.repeat(257) }).success).to.be.true
-    expect(LockboxSummary.safeParse({ ...notelessSummary, note: 42 }).success).to.be.false
+  it("marks a summary undamaged, as its example shows", () => {
+    expect(LockboxSummary.parse(wholeSummary).damaged).to.be.false
   })
 
-  it("strips the two ciphered fields and the format from a whole lockbox, and marks it undamaged", () => {
-    const summary = LockboxSummary.parse(TH.boxOf('anthropic_api_key', 'a1'))
-    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'vault_key_epoch', 'note', 'registered_at', 'changed_at', 'damaged'])
-    expect(summary.damaged).to.be.false
+  it("takes a public bag of any JSON, and refuses a summary without one", () => {
+    expect(LockboxSummary.safeParse({ ...wholeSummary, public: { note: 'work account' } }).success).to.be.true
+    expect(LockboxSummary.safeParse({ ...wholeSummary, public: [1, 2] }).success).to.be.true
+    expect(LockboxSummary.safeParse(TH.omitting(wholeSummary, 'public')).success).to.be.false
+  })
+
+  it("holds neither ciphered field, the format nor the codec: a whole lockbox is not a summary", () => {
+    const summary = LockboxSummary.parse({ ...TH.boxOf('anthropic_api_key', 'a1'), public: {} })
+    expect(Object.keys(summary)).to.have.members(['boxlabel', 'revision_id', 'vault_key_epoch', 'public', 'registered_at', 'written_at', 'damaged'])
   })
 })
 
@@ -211,10 +204,10 @@ describe("FarFuture", () => {
   })
 })
 
-describe("ForeverMs", () => {
+describe("ForeverMillis", () => {
   it("runs from FarPast to FarFuture, as its examples show", () => {
-    expect(ForeverMs).to.eq(FarFuture - FarPast)
-    expect(FarPast + ForeverMs).to.eq(FarFuture)
+    expect(ForeverMillis).to.eq(FarFuture - FarPast)
+    expect(FarPast + ForeverMillis).to.eq(FarFuture)
   })
 })
 
@@ -233,22 +226,22 @@ describe("FarPast", () => {
   })
 })
 
-const NowMs = Date.UTC(2026, 9, 15)
+const NowMillis = Date.UTC(2026, 9, 15)
 
 const EpochMillisCases = [
   // regular usage:
-  [NowMs,                     true,   'today, in epoch milliseconds'],
+  [NowMillis,                     true,   'today, in epoch milliseconds'],
   [FarPast,                   true,   'the floor itself'],
   [FarFuture,                 true,   'the ceiling itself'],
   // unit mistakes:
-  [NowMs / 1000,              false,  'epoch seconds, which land in January 1970'],
-  [NowMs * 1000,              false,  'epoch microseconds, which land tens of thousands of years out'],
+  [NowMillis / 1000,              false,  'epoch seconds, which land in January 1970'],
+  [NowMillis * 1000,              false,  'epoch microseconds, which land tens of thousands of years out'],
   // edge cases:
   [FarPast - 1,               false,  'one millisecond before 1981'],
   [FarFuture + 1,             false,  'one millisecond past the ceiling'],
   [8.64e15,                   false,  'the last instant a Date holds, far past the ceiling'],
   [0,                         false,  'the epoch itself'],
-  [NowMs + 0.5,               false,  'a fraction of a millisecond'],
+  [NowMillis + 0.5,               false,  'a fraction of a millisecond'],
   [Infinity,                  false,  'a time that never comes'],
   [NaN,                       false,  'not a number'],
   ["1792022400000",           false,  'a time written as text'],
@@ -263,12 +256,12 @@ describe("EpochMillis", () => {
   }
 
   it("says which unit a refused number likely was", () => {
-    const tooSmall = EpochMillis.safeParse(NowMs / 1000)
-    const tooLarge = EpochMillis.safeParse(NowMs * 1000)
+    const tooSmall = EpochMillis.safeParse(NowMillis / 1000)
+    const tooLarge = EpochMillis.safeParse(NowMillis * 1000)
     expect(tooSmall.error?.issues[0]?.message).to.match(/epoch seconds/)
     expect(tooLarge.error?.issues[0]?.message).to.match(/epoch microseconds/)
     expect(EpochMillis.safeParse(1e300).error?.issues[0]?.message).to.match(/epoch microseconds/)
-    expect(EpochMillis.safeParse(NowMs + 0.5).error?.issues[0]?.message).to.match(/whole epoch milliseconds/)
+    expect(EpochMillis.safeParse(NowMillis + 0.5).error?.issues[0]?.message).to.match(/whole epoch milliseconds/)
   })
 
   it("passes a time through unchanged, as its examples show", () => {
@@ -282,19 +275,45 @@ describe("EpochMillis", () => {
 
 const MarkCases = [
   // regular usage:
-  [TH.markOf('u1'),                                     true,   'a whole mark'],
-  [TH.markOf('u1', { unlock_epoch: 40 }),                true,   'a mark of a vault seen at a later epoch'],
+  [TH.markOf('u1'),                                               true,   'a whole mark'],
+  [TH.markOf('u1', { seen: { unlock_epoch: 40 } }),               true,   'a mark of a vault seen at a later epoch'],
+  [TH.markOf('u1', { lock_generation: 7 }),                       true,   'a mark of a device that has locked the vault seven times'],
+  [TH.markOf('u1', { seen: null, lock_generation: 2 }),           true,   'a mark that has seen no vault, kept for its lock generation'],
   // refused, as a damaged or foreign record:
-  [TH.markOf('u1', { format: 'safebyok-mark-v2' as never }), false, 'a format this version does not know'],
-  [TH.markOf('u1', { device_id: '' }),                  false,  'an empty device_id'],
-  [TH.markOf('u1', { vault_id: '' }),                   false,  'an empty vault_id'],
-  [TH.markOf('u1', { unlock_epoch: 0 }),                false,  'an epoch starts at one'],
-  [TH.markOf('u1', { vault_key_epoch: 0 }),             false,  'a vaultKey epoch starts at one'],
-  [TH.omitting(TH.markOf('u1'), 'vault_key_epoch'),     false,  'a mark missing the vaultKey epoch it has seen'],
+  [TH.markOf('u1', { format: 'safebyok-mark-v4' as never }),      false,  'a format this version does not know'],
+  [TH.markOf('u1', { format: 'safebyok-mark-v2' as never }),      false,  'a mark from before a mark could see no vault, which reads as none'],
+  [TH.omitting(TH.markOf('u1'), 'lock_generation'),               false,  'a mark missing its lock generation'],
+  [TH.omitting(TH.markOf('u1'), 'seen'),                          false,  'a mark missing what it has seen, even as null'],
+  [TH.markOf('u1', { lock_generation: -1 }),                      false,  'a lock generation below zero'],
+  [TH.markOf('u1', { lock_generation: 1.5 }),                     false,  'a lock generation that is no whole number'],
+  [TH.markOf('u1', { seen: { device_id: '' } }),                  false,  'an empty device_id'],
+  [TH.markOf('u1', { seen: { vault_id: '' } }),                   false,  'an empty vault_id'],
+  [TH.markOf('u1', { seen: { unlock_epoch: 0 } }),                false,  'an epoch starts at one'],
+  [TH.markOf('u1', { seen: { vault_key_epoch: 0 } }),             false,  'a vaultKey epoch starts at one'],
+  [{ ...TH.markOf('u1', { seen: null }), seen: { device_id: 'device-one', vault_id: 'vault-id-u1', unlock_epoch: 1 } }, false, 'a mark missing the vaultKey epoch it has seen'],
 ] as const
 
 describe("DeviceMark", () => {
   for (const [candidate, expected, blurb] of MarkCases) {
     it(blurb, () => { expect(DeviceMark.safeParse(candidate).success).to.eq(expected) })
+  }
+})
+
+// Every record the package writes to storage, by the schema that checks it. A record whose shape
+// changes moves its `format` on (VOCABULARY.md, *format*): each schema is rendered as JSON Schema
+// and kept as a snapshot under its own format literal, so a change made without a bump fails here.
+// After a bump, the new format's snapshot is written once (`vitest -u`), and the old one goes as
+// obsolete: never update the snapshot of a format that stands. A refinement (a `Z.refine`, such
+// as the floor's character rules) renders as nothing, so this sees fields, types, optionality and
+// the ranges a check states, not every rule.
+const StoredRecords = [VaultBundle, Lockbox, DeviceUnlock, DeviceMark] as const
+
+describe("Stored record formats", () => {
+  for (const schema of StoredRecords) {
+    const format = schema.shape.format.def.values.join(' | ')
+    it(format, () => {
+      const rendered = Z.toJSONSchema(schema, { unrepresentable: 'any' })
+      expect(rendered, `The ${format} record's schema is not the one on record: if its shape changed, bump format, then write the new format's snapshot (vitest -u)`).toMatchSnapshot()
+    })
   }
 })

@@ -1,8 +1,7 @@
-import { clear, entries } from 'idb-keyval'
 import { VaultError } from 'safebyok'
-import { onBell, ringBell } from './bell'
-import { parseDbName, type IdbVaultDBOpts } from './idb-opts'
-import { shelfOf } from './shelf'
+import { ChangeBell } from 'safebyok/idb'
+import { bellnameOf, parseDbName, type IdbVaultDBOpts } from './idb-opts'
+import { inOneTransaction, settle, shelfOf } from './shelf'
 
 /** One stored row, as {@link inspectIdbVaultDB} reports it: its ckey and the raw stored record. */
 export type IdbRow = { ckey: string, row: unknown }
@@ -35,19 +34,20 @@ export const inspectIdbVaultDB = (opts?: IdbVaultDBOpts): IdbVaultInspector => {
   const dbName = parseDbName(opts, 'inspectIdbVaultDB')
   return {
     rows: async () => {
-      const stored = await entries(shelfOf(dbName))
-      return stored
-        .filter((pair): pair is [string, unknown] => typeof pair[0] === 'string')
-        .map(([ckey, row]) => ({ ckey, row }))
+      // Both reads in one transaction, so a ckey and its row are the same moment's.
+      const [ckeys, stored] = await shelfOf(dbName)('readonly', (store) => Promise.all([settle<IDBValidKey[]>(store.getAllKeys()), settle<unknown[]>(store.getAll())]))
+      return ckeys
+        .map((ckey, idx): IdbRow => ({ ckey: ckey as string, row: stored[idx] }))
+        .filter((row) => typeof row.ckey === 'string')
         .toSorted((one, two) => one.ckey.localeCompare(two.ckey))
     },
     subscribe: (listener) => {
       if (typeof listener !== 'function') { throw new VaultError('bad_option', 'subscribe needs a listener function to call after each write.') }
-      return onBell(dbName, listener)
+      return ChangeBell.listen(bellnameOf(dbName), listener)
     },
     wipe: async () => {
-      await clear(shelfOf(dbName))
-      ringBell(dbName)
+      await inOneTransaction(shelfOf(dbName), async (store) => { await settle(store.clear()) })
+      ChangeBell.ring(bellnameOf(dbName))
     },
   }
 }

@@ -19,39 +19,16 @@ const allRows = (t: ReturnType<typeof TH.componentTest>) => t.run(async (ctx) =>
   lockboxes: await ctx.db.query('safebyok_lockboxes').collect(),
 }))
 
+// The verbs' contract -- lines 1.1 to 3.8 of VAULTDB.md -- is the battery's, run over this
+// component through convexVaultDB and a fake deployment. What is left here is the component's
+// own: what it strips, what its validators refuse, and the checks a client never lets reach it.
+
 describe("getBundle and createBundle", () => {
   it("has no bundle until one is created, then reads it back exactly, with no Convex fields", async () => {
     const t = TH.componentTest()
     expect(await t.query(TH.vaults.getBundle, { scope: u1 })).to.be.null
     expect(await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1') })).to.deep.equal(TH.bundleOf('u1'))
     expect(await t.query(TH.vaults.getBundle, { scope: u1 })).to.deep.equal(TH.bundleOf('u1'))
-  })
-
-  it("keeps the bundle that got in first when a second device creates, and returns it", async () => {
-    const t = TH.componentTest()
-    await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1') })
-    const latecomer = TH.bundleOf('u1', { vault_id: 'vault-id-latecomer' })
-    expect(await t.mutation(TH.vaults.createBundle, { bundle: latecomer })).to.deep.equal(TH.bundleOf('u1'))
-    const { bundles } = await allRows(t)
-    expect(bundles).to.have.lengthOf(1)
-  })
-
-  it("settles two creations racing on one bundle: the creation race is closed", async () => {
-    const t = TH.componentTest()
-    const [first, second] = await Promise.all([
-      t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1', { vault_id: 'vault-id-one' }) }),
-      t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1', { vault_id: 'vault-id-two' }) }),
-    ])
-    expect(first.vault_id).to.eq(second.vault_id)
-    const { bundles } = await allRows(t)
-    expect(bundles).to.have.lengthOf(1)
-  })
-
-  it("keeps each user's and each vault's bundle apart", async () => {
-    const t = TH.componentTest()
-    await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1') })
-    expect(await t.query(TH.vaults.getBundle, { scope: TH.scopeOf('u2') })).to.be.null
-    expect(await t.query(TH.vaults.getBundle, { scope: TH.scopeOf('u1', 'spare') })).to.be.null
   })
 
   it("refuses a bundle Convex's validators do not accept, writing nothing", async () => {
@@ -64,29 +41,29 @@ describe("getBundle and createBundle", () => {
 })
 
 describe("updateBundle", () => {
+  const ThisVaultAtOne = { vault_id: 'vault-id-u1', unlock_epoch: 1 }
   const rewrapped = TH.bundleOf('u1', { unlock_epoch: 2, unlocks: [TH.envelopeOf('passphrase', { vault_key_wrapped: { cipher_iv_b64: 'iv-new', ciphertext_b64: 'ct-new' } })] })
 
-  const UpdateCases = [
-    // the expectation holds:
-    [{ vault_id: 'vault-id-u1', unlock_epoch: 1 },  true,   'lands while the standing bundle has the expected vault_id and epoch'],
-    // it fails:
-    [{ vault_id: 'vault-id-u1', unlock_epoch: 2 },  false,  'refuses when the unlocks changed since it was read'],
-    [{ vault_id: 'vault-id-gone', unlock_epoch: 1 }, false, 'refuses when the vault was made anew since it was read'],
+  it("lands a bundle that keeps the vault_id and moves unlock_epoch forward", async () => {
+    const t = await withBundle()
+    expect(await t.mutation(TH.vaults.updateBundle, { bundle: rewrapped, expected: ThisVaultAtOne })).to.be.true
+    expect(await t.query(TH.vaults.getBundle, { scope: u1 })).to.deep.equal(rewrapped)
+  })
+
+  // The core never sends either -- its VaultDB refuses the first, and its vault moves the epoch on
+  // with every update -- so each is a client of another version's, or of none.
+  const UnmovedCases = [
+    [{ ...rewrapped, vault_id: 'vault-id-other' }, 'refuses a bundle naming another vault than the one it replaces'],
+    [{ ...rewrapped, unlock_epoch: 1 },             'refuses a bundle that keeps the standing unlock_epoch'],
   ] as const
 
-  for (const [expected, landed, blurb] of UpdateCases) {
-    it(blurb, async () => {
+  for (const [bundle, blurb] of UnmovedCases) {
+    it(`${blurb}, writing nothing`, async () => {
       const t = await withBundle()
-      expect(await t.mutation(TH.vaults.updateBundle, { bundle: rewrapped, expected })).to.eq(landed)
-      expect(await t.query(TH.vaults.getBundle, { scope: u1 })).to.deep.equal(landed ? rewrapped : TH.bundleOf('u1'))
+      expect(await t.mutation(TH.vaults.updateBundle, { bundle, expected: ThisVaultAtOne })).to.be.false
+      expect(await t.query(TH.vaults.getBundle, { scope: u1 })).to.deep.equal(TH.bundleOf('u1'))
     })
   }
-
-  it("refuses when the scope holds no bundle at all, and creates none", async () => {
-    const t = TH.componentTest()
-    expect(await t.mutation(TH.vaults.updateBundle, { bundle: rewrapped, expected: { vault_id: 'vault-id-u1', unlock_epoch: 1 } })).to.be.false
-    expect(await t.query(TH.vaults.getBundle, { scope: u1 })).to.be.null
-  })
 })
 
 describe("getBox and updateBox", () => {
@@ -97,63 +74,14 @@ describe("getBox and updateBox", () => {
     expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a1'))
   })
 
-  it("stores a lockbox without a note with no note field at all, and reads it back so", async () => {
+  it("stores a lockbox's public bag as the JSON text it was handed, and reads it back so", async () => {
     const t = await withBundle()
-    const { note: _note, ...noteless } = TH.boxOf('anthropic_api_key', 'a1')
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: noteless, expected: TH.noBoxYet })
+    const bagged = TH.boxOf('anthropic_api_key', 'a1', { public_json: TH.publicJsonOf({ note: 'caf\u{E9} "quoted"', tags: [null] }) })
+    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: bagged, expected: TH.noBoxYet })
     const { lockboxes } = await allRows(t)
     const [row] = lockboxes
-    expect(row).not.to.have.property('note')
-    expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(noteless)
-  })
-
-  it("replaces a box whose standing revision is the one expected", async () => {
-    const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
-    const landed = await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1', vault_key_epoch: 1 } })
-    expect(landed).to.be.true
-    expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a2'))
-    const { lockboxes } = await allRows(t)
-    expect(lockboxes).to.have.lengthOf(1)
-  })
-
-  const StaleCases = [
-    [{ vault_id: 'vault-id-u1', revision_id: 'rev-a0', vault_key_epoch: 1 },   'refuses a write from a stale read: another revision stands'],
-    [{ vault_id: 'vault-id-u1', revision_id: null, vault_key_epoch: 1 },       'refuses a "new box" write when a box already stands'],
-    [{ vault_id: 'vault-id-gone', revision_id: 'rev-a1', vault_key_epoch: 1 }, 'refuses a box sealed for a vault since made anew'],
-  ] as const
-
-  for (const [expected, blurb] of StaleCases) {
-    it(blurb, async () => {
-      const t = await withBundle()
-      await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
-      expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected })).to.be.false
-      expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a1'))
-    })
-  }
-
-  it("refuses to rewrite a box erased since it was read", async () => {
-    const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
-    await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })
-    const landed = await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1', vault_key_epoch: 1 } })
-    expect(landed).to.be.false
-    expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.be.null
-  })
-
-  it("refuses any box in a scope that holds no bundle, writing nothing", async () => {
-    const t = TH.componentTest()
-    expect(await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })).to.be.false
-    const { lockboxes } = await allRows(t)
-    expect(lockboxes).to.have.lengthOf(0)
-  })
-
-  it("keeps the same boxlabel in two users' vaults apart", async () => {
-    const t = await withBundle()
-    await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u2') })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'mine'), expected: TH.noBoxYet })
-    await t.mutation(TH.vaults.updateBox, { scope: TH.scopeOf('u2'), lockbox: TH.boxOf('anthropic_api_key', 'theirs'), expected: { vault_id: 'vault-id-u2', revision_id: null, vault_key_epoch: 1 } })
-    expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'mine'))
+    expect(row).to.include({ public_json: bagged.public_json })
+    expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(bagged)
   })
 })
 
@@ -167,81 +95,6 @@ describe("listBoxSummaries", () => {
     expect(listed.map((summary) => summary.boxlabel)).to.deep.equal(['anthropic_api_key', 'openai_api_key'])
     const { lockbox_key_wrapped: _wrapped, whisper_ciphered: _ciphered, ...shell } = TH.boxOf('anthropic_api_key', 'anthropic_api_key')
     expect(listed[0]).to.deep.equal(shell)
-  })
-
-  it("lists only this vault's boxes: not another vault's of the same user, nor another user's", async () => {
-    const t = await withBundle()
-    await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u2') })
-    await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1', { vaultlabel: 'spare', vault_id: 'vault-id-spare' }) })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'mine'), expected: TH.noBoxYet })
-    await t.mutation(TH.vaults.updateBox, { scope: TH.scopeOf('u2'), lockbox: TH.boxOf('openai_api_key', 'theirs'), expected: { vault_id: 'vault-id-u2', revision_id: null, vault_key_epoch: 1 } })
-    await t.mutation(TH.vaults.updateBox, { scope: TH.scopeOf('u1', 'spare'), lockbox: TH.boxOf('github_token', 'spare'), expected: { vault_id: 'vault-id-spare', revision_id: null, vault_key_epoch: 1 } })
-    const listed = await t.query(TH.vaults.listBoxSummaries, { scope: u1 })
-    expect(listed.map((summary) => summary.boxlabel)).to.deep.equal(['anthropic_api_key'])
-  })
-
-  it("keeps a user_id holding a colon from reaching another user's rows", async () => {
-    const t = TH.componentTest()
-    const colonScope = TH.scopeOf('u1:main')
-    await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1') })
-    await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u1:main') })
-    await t.mutation(TH.vaults.updateBox, { scope: colonScope, lockbox: TH.boxOf('anthropic_api_key', 'colon'), expected: { vault_id: 'vault-id-u1:main', revision_id: null, vault_key_epoch: 1 } })
-    expect(await t.query(TH.vaults.listBoxSummaries, { scope: u1 })).to.deep.equal([])
-  })
-})
-
-describe("eraseBox", () => {
-  it("removes the box whatever revision stands: erase wins over a newer write", async () => {
-    const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a2'), expected: { vault_id: 'vault-id-u1', revision_id: 'rev-a1', vault_key_epoch: 1 } })
-    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })).to.be.true
-    expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.be.null
-  })
-
-  it("is quiet, and lands, when there is no box to remove", async () => {
-    const t = await withBundle()
-    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })).to.be.true
-  })
-
-  it("refuses to erase from a vault made anew since it was read, removing nothing", async () => {
-    const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
-    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: { vault_id: 'vault-id-gone' } })).to.be.false
-    expect(await t.query(TH.vaults.getBox, { scope: u1, boxlabel: 'anthropic_api_key' })).to.deep.equal(TH.boxOf('anthropic_api_key', 'a1'))
-  })
-
-  it("refuses when the scope holds no bundle", async () => {
-    const t = TH.componentTest()
-    expect(await t.mutation(TH.vaults.eraseBox, { scope: u1, boxlabel: 'anthropic_api_key', expected: TH.thisVault })).to.be.false
-  })
-})
-
-describe("eraseVault", () => {
-  it("removes the bundle and every box of the vault, and nothing of any other", async () => {
-    const t = await withBundle()
-    await t.mutation(TH.vaults.createBundle, { bundle: TH.bundleOf('u2') })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('openai_api_key', 'o1'), expected: TH.noBoxYet })
-    await t.mutation(TH.vaults.updateBox, { scope: TH.scopeOf('u2'), lockbox: TH.boxOf('anthropic_api_key', 'theirs'), expected: { vault_id: 'vault-id-u2', revision_id: null, vault_key_epoch: 1 } })
-    expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: TH.thisVault })).to.be.true
-    const rows = await allRows(t)
-    expect(rows.bundles.map((row) => row.user_id)).to.deep.equal(['u2'])
-    expect(rows.lockboxes.map((row) => row.user_id)).to.deep.equal(['u2'])
-  })
-
-  it("refuses to erase a vault made anew since it was read, removing nothing", async () => {
-    const t = await withBundle()
-    await t.mutation(TH.vaults.updateBox, { scope: u1, lockbox: TH.boxOf('anthropic_api_key', 'a1'), expected: TH.noBoxYet })
-    expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: { vault_id: 'vault-id-gone' } })).to.be.false
-    const rows = await allRows(t)
-    expect(rows.bundles).to.have.lengthOf(1)
-    expect(rows.lockboxes).to.have.lengthOf(1)
-  })
-
-  it("refuses when the scope holds no bundle", async () => {
-    const t = TH.componentTest()
-    expect(await t.mutation(TH.vaults.eraseVault, { scope: u1, expected: TH.thisVault })).to.be.false
   })
 })
 
@@ -321,8 +174,12 @@ describe("a real vault's records", () => {
     }
     const vault = await TH.openOver(memoryStoreHolding(real))
     const listed = await t.query(TH.vaults.listBoxSummaries, { scope: u1 })
-    // The core's summary strips `format` and nulls a missing note; the listing itself holds neither.
-    expect(listed.map((row) => LockboxSummary.parse(row))).to.deep.equal(vault.getSnapshot().boxes)
+    // The core's summary drops `format` and the codec, and parses the public bag's JSON; the
+    // listing holds the record's fields as stored.
+    const summaries = listed.map(({ format: _format, whisper_codec: _codec, whisper_schema_version: _version, public_json: publicJson, ...shell }) => (
+      LockboxSummary.parse({ ...shell, public: JSON.parse(publicJson) as unknown })
+    ))
+    expect(summaries).to.deep.equal(vault.getSnapshot().boxes)
     vault.close()
   })
 })
@@ -523,10 +380,10 @@ describe("a vault's weight limit", () => {
 // again). So the component holds every vault to MaxVaultLockboxes lockboxes and
 // MaxVaultLockboxBytes bytes of them, whatever its client asks, and convexVaultDB declares half the
 // read budget, 8 MiB, as its maxVaultBytes. openVault admits a maxLockboxes only while that many
-// lockboxes, each counted at twice maxWhisperBytes plus 2 KiB for its other fields, fit in the
-// 8 MiB: at most 101 of the largest default whisper (40444 bytes of JSON, about 54 KB stored),
-// and at most 1365 of 2 KiB whispers. The tests below fill a vault to each of those, and to each
-// of the component's own limits, with the longest labels and notes, and erase it.
+// lockboxes, each counted at twice maxWhisperBytes plus 1 KiB for its other fields, fit in the
+// 8 MiB: at most 102 of the largest default whisper (40444 bytes of JSON, about 54 KB stored),
+// and at most 1638 of 2 KiB whispers. The tests below fill a vault to each of those, and to each
+// of the component's own limits, with the longest labels, and erase it.
 
 /** A bundle as heavy as a Convex document may be, near enough: the most an erase reads beside the lockboxes. */
 const wholeDocumentBundle = () => {
@@ -545,11 +402,9 @@ const fillVault = async (count: number, whisperBytes: number, bundle = TH.bundle
   await t.mutation(TH.vaults.createBundle, { bundle })
   const whisperCiphered = { cipher_iv_b64: 'i'.repeat(16), ciphertext_b64: 'c'.repeat(Math.ceil((whisperBytes + 16) * 4 / 3)) }
   const lockboxKeyWrapped = { cipher_iv_b64: 'i'.repeat(16), ciphertext_b64: 'k'.repeat(64) }
-  // 256 characters of four UTF-8 bytes each: the most a note can weigh.
-  const note = '\u{1F512}'.repeat(256)
   for (let ii = 0; ii < count; ii++) {
     const boxlabel = `b${String(ii).padStart(39, '0')}`
-    const lockbox = TH.boxOf(boxlabel, crypto.randomUUID(), { whisper_ciphered: whisperCiphered, lockbox_key_wrapped: lockboxKeyWrapped, note })
+    const lockbox = TH.boxOf(boxlabel, crypto.randomUUID(), { whisper_ciphered: whisperCiphered, lockbox_key_wrapped: lockboxKeyWrapped })
     if (! await landsOrIsFull(t, lockbox)) { return { t, filledCount: ii } }
   }
   return { t, filledCount: count }
@@ -575,17 +430,17 @@ const listWatchErase = async (t: ReturnType<typeof TH.componentTest>) => {
 }
 
 describe("a large vault, within Convex's per-transaction limits", () => {
-  it("lists, signs and erases the 101 of the largest lockboxes the core admits", async () => {
-    const { t, filledCount } = await fillVault(101, 40_444)
-    expect(filledCount).to.eq(101)
-    expect(await listWatchErase(t)).to.deep.equal({ listedCount: 101, watchedCount: 101, erased: true, leftCount: 0 })
+  it("lists, signs and erases the 102 of the largest lockboxes the core admits", async () => {
+    const { t, filledCount } = await fillVault(102, 40_444)
+    expect(filledCount).to.eq(102)
+    expect(await listWatchErase(t)).to.deep.equal({ listedCount: 102, watchedCount: 102, erased: true, leftCount: 0 })
   })
 
-  it("lists, signs and erases the 1365 lockboxes of 2 KiB whispers the core admits", async () => {
-    const { t, filledCount } = await fillVault(1365, 2048)
-    expect(filledCount).to.eq(1365)
-    expect(await listWatchErase(t)).to.deep.equal({ listedCount: 1365, watchedCount: 1365, erased: true, leftCount: 0 })
-  }, 120_000) // landing 1365 lockboxes, a mutation each, is the work, past vitest's 30 s default under CI's coverage
+  it("lists, signs and erases the 1638 lockboxes of 2 KiB whispers the core admits", async () => {
+    const { t, filledCount } = await fillVault(1638, 2048)
+    expect(filledCount).to.eq(1638)
+    expect(await listWatchErase(t)).to.deep.equal({ listedCount: 1638, watchedCount: 1638, erased: true, leftCount: 0 })
+  }, 120_000) // landing 1638 lockboxes, a mutation each, is the work, past vitest's 30 s default under CI's coverage
 
   it("refuses the largest lockboxes past its weight limit, and erases the vault so filled beside a bundle of a whole document", async () => {
     const { t, filledCount } = await fillVault(200, 40_444, wholeDocumentBundle())

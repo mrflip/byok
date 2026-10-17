@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useVault, useVaultSnapshot } from 'safebyok-react'
+import { WhisperFieldAttributes } from 'safebyok/utils'
+import { asksAgain } from '../lib/asks-again'
 import { editableWhisper, parseWhisperText, showWhisper } from '../lib/whisper-text'
 import { PsstModal } from './PsstModal'
-import type { Whisper } from 'safebyok'
+import type { PublicBag, Whisper } from 'safebyok'
 
 /**
  * Direct manipulation of the vault's lockboxes: add, view, edit, delete, use. The lines that
@@ -13,6 +15,16 @@ import type { Whisper } from 'safebyok'
 
 type FormState = { editing: string | null, boxlabelText: string, whisperText: string, noteText: string }
 const blankForm: FormState = { editing: null, boxlabelText: '', whisperText: '', noteText: '' }
+
+/**
+ * The note this demo keeps in a lockbox's public bag, as `{ note }`: the vault never looks inside
+ * the bag, so the app reads its own shape back out of it, and finds no note in any other.
+ */
+const noteOf = (bag: PublicBag): string => {
+  if (typeof bag !== 'object' || bag === null || Array.isArray(bag)) { return '' }
+  const { note } = bag
+  return typeof note === 'string' ? note : ''
+}
 
 export const VaultDashboard = () => {
   const { vault, openError, retryOpen, eraseDamagedVault, withUnlockedVault } = useVault()
@@ -43,6 +55,11 @@ export const VaultDashboard = () => {
         {gripe !== null && <p className="gripe">{gripe}</p>}
       </>
     )
+  }
+  // A browser that will not let the app keep anything here holds to that until the user changes
+  // it, so it gets no Retry button either: only what to change.
+  if (openError?.kind === 'storage_blocked') {
+    return <p className="gripe">{"This browser won't let the app keep your vault on this device. "}{openError.message}</p>
   }
   if (openError !== null) {
     return (
@@ -83,8 +100,10 @@ export const VaultDashboard = () => {
     try {
       const saved = await withUnlockedVault(async () => {
         // The cast hands validation to the vault: typing "null" in the box parses to a bare
-        // null, and the store's refusal lands in the gripe below.
-        await vault.store(form.boxlabelText.trim(), parseWhisperText(form.whisperText)!, { note: form.noteText.trim() || null })
+        // null, and the store's refusal lands in the gripe below. A blank note leaves the public
+        // bag out, so the lockbox keeps the one it has.
+        const note = form.noteText.trim()
+        await vault.store(form.boxlabelText.trim(), parseWhisperText(form.whisperText)!, note === '' ? {} : { public: { note } })
         return true
       })
       if (saved !== null) { setForm(null) }
@@ -100,12 +119,17 @@ export const VaultDashboard = () => {
         <LockChip state={snapshot.state} askPassphraseAt={snapshot.askPassphraseAt} onLock={() => { void vault.lock() }} />
       </div>
 
+      <p className="quiet">
+        This vault lives only in this browser: another browser, or another device, signed in as you
+        sees none of it, and clearing this site&apos;s data erases it.
+      </p>
+
       {snapshot.boxes.length === 0 && <p className="quiet">No lockboxes yet. Whispers you add live encrypted in the database (watch the inspector below) and open only on your device.</p>}
 
       {snapshot.boxes.length > 0 && (
         <table>
           <thead>
-            <tr><th>label</th><th>whisper</th><th>note</th><th>changed</th><th></th></tr>
+            <tr><th>label</th><th>whisper</th><th>note</th><th>written</th><th></th></tr>
           </thead>
           <tbody>
             {snapshot.boxes.map((box) => {
@@ -131,11 +155,11 @@ export const VaultDashboard = () => {
                       ? <><span className="quiet">••••••••</span> <button className="mini" onClick={() => { void view(box.boxlabel) }}>view</button></>
                       : <><code>{showWhisper(viewed)}</code> <button className="mini" onClick={() => { hide(box.boxlabel) }}>hide</button></>}
                   </td>
-                  <td className="quiet">{box.note}</td>
-                  <td className="quiet">{new Date(box.changed_at).toLocaleString()}</td>
+                  <td className="quiet">{noteOf(box.public)}</td>
+                  <td className="quiet">{new Date(box.written_at).toLocaleString()}</td>
                   <td className="row">
                     <button className="mini" onClick={() => { void applyWhisper(box.boxlabel) }}>use</button>
-                    <button className="mini" onClick={() => { void edit(box.boxlabel, box.note ?? '') }}>edit</button>
+                    <button className="mini" onClick={() => { void edit(box.boxlabel, noteOf(box.public)) }}>edit</button>
                     <button className="mini danger" onClick={() => { void erase(box.boxlabel) }}>delete</button>
                   </td>
                 </tr>
@@ -162,13 +186,15 @@ export const VaultDashboard = () => {
             <label>
               whisper <span className="quiet">(valid JSON keeps its type; anything else is stored as a string)</span>
               <textarea
+                name="whisper_text"
+                {...WhisperFieldAttributes}
                 placeholder="sk-ant-..."
                 value={form.whisperText}
                 onChange={(evt) => { setForm({ ...form, whisperText: evt.target.value }) }}
               />
             </label>
             <label>
-              note <span className="quiet">(public: visible without the passphrase)</span>
+              note <span className="quiet">(public: visible without the passphrase; left blank, the note stands)</span>
               <input
                 placeholder="personal account"
                 value={form.noteText}
@@ -192,7 +218,7 @@ const LockChip = ({ state, askPassphraseAt, onLock }: { state: string, askPassph
   if (state === 'unlocked') {
     return (
       <span className="row">
-        <span className="chip unlocked">🔓 unlocked{askPassphraseAt !== null && ` until ${new Date(askPassphraseAt).toLocaleString()}`}</span>
+        <span className="chip unlocked">🔓 unlocked{asksAgain(askPassphraseAt)}</span>
         <button className="mini" onClick={onLock}>lock now</button>
       </span>
     )

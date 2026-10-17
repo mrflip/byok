@@ -3,11 +3,12 @@ import { v } from 'convex/values'
 /**
  * Convex validators for safebyok's stored records, field for field with the core's Zod records
  * (`Lockbox`, `VaultBundle`, `Ciphered`, `VaultScope` in `safebyok`). They check what Convex can:
- * which fields, their types, which are optional, and each record's `format`. Every name and note
- * is any text here, as in the core's records: what text each may be is the vault's validators' to
- * say, and the server never sees them. The finer rules -- non-empty strings, a positive whole
- * `unlock_epoch`, each time's bounds as epoch milliseconds -- are the client's, checked by the
- * core's Zod records on every write and every read.
+ * which fields, their types, which are optional, and each record's `format`. Every name, and a
+ * lockbox's public bag, is any text here: the floor beneath every name (well-formed, NFC, no
+ * control characters, 1 KiB) and that the bag is JSON are the core's records' to hold, and what text each may be beyond it
+ * the vault's validators', which the server never sees. The finer rules -- the floor, non-empty
+ * strings, a positive whole `unlock_epoch`, each time's bounds as epoch milliseconds -- are the
+ * client's, checked by the core's Zod records on every write and every read.
  *
  * A new record format widens its `format` union: an additive deploy, shipped with this package.
  */
@@ -38,7 +39,7 @@ export const VaultScope = v.object({
 export const VaultBundleFormat = v.union(v.literal('safebyok-vault-v2'))
 
 /** The formats of a Lockbox this package stores. */
-export const LockboxFormat = v.union(v.literal('safebyok-lockbox-v2'))
+export const LockboxFormat = v.union(v.literal('safebyok-lockbox-v4'))
 
 /**
  * A passphrase's way into a vault: its `unlock_id` and `unlocklabel`, how its passphraseKey is
@@ -117,21 +118,23 @@ export const VaultBundle = v.object({
 
 /**
  * One lockbox: its whisper ciphered under its own lockboxKey, that lockboxKey wrapped under the
- * vaultKey, and the public shell -- boxlabel, revision, which vaultKey (`vault_key_epoch`), note,
- * and the epoch-millisecond times it
- * was first stored (`registered_at`) and its whisper last changed (`changed_at`). `note` is absent
- * when there is none, never `undefined`.
+ * vaultKey, and the public shell -- boxlabel, revision, which vaultKey (`vault_key_epoch`), the
+ * whisper's codec and schema version, the public bag as JSON text (`public_json`, always
+ * written), and the epoch-millisecond times it was first stored (`registered_at`) and this
+ * revision written (`written_at`).
  */
 export const Lockbox = v.object({
-  format:              LockboxFormat,
-  boxlabel:            v.string(),
-  revision_id:         v.string(),
-  vault_key_epoch:     v.number(),
-  lockbox_key_wrapped: Ciphered,
-  whisper_ciphered:    Ciphered,
-  note:                v.optional(v.string()),
-  registered_at:       v.number(),
-  changed_at:          v.number(),
+  format:                 LockboxFormat,
+  boxlabel:               v.string(),
+  revision_id:            v.string(),
+  vault_key_epoch:        v.number(),
+  lockbox_key_wrapped:    Ciphered,
+  whisper_ciphered:       Ciphered,
+  whisper_codec:          v.literal('json_v1'),
+  whisper_schema_version: v.literal(1),
+  public_json:            v.string(),
+  registered_at:          v.number(),
+  written_at:             v.number(),
 })
 
 /**
@@ -175,7 +178,11 @@ export const EraseExpectation = v.object({
   vault_id: v.string(),
 })
 
-/** One lockbox's place in a {@link VaultSignature}: `[boxlabel, revision_id]`. */
+/**
+ * One lockbox's place in a {@link VaultSignature}: `[boxlabel, revision_id]`. Convex has no
+ * fixed-length tuple validator, so any list of strings passes: the component makes these, and a
+ * client only compares one signature with the next.
+ */
 const BoxRevision = v.array(v.string())
 
 /**

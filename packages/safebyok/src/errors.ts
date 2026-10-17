@@ -4,27 +4,27 @@
  * families, told apart by who must act:
  *
  * - **Misuse**: a programming error, the host developer's to fix, and loud. `bad_label`,
- *   `bad_whisper`, `bad_option`, `vault_closed`, `unknown_key_deriver`. Let it reach an error
+ *   `bad_whisper`, `bad_option`, `vault_closed`, `unknown_key_deriver`, `insecure_context`. Let it reach an error
  *   boundary or the dev overlay; do not show it to the user, and do not retry.
  * - **Condition**: something the app handles at run time, which may reach the user: ask again,
  *   show a message, retry, or tell them to free room. `vault_locked`, `wrong_passphrase`,
- *   `wrong_passkey`, `passkey_unavailable`, `absent_box`, `absent_vault`, `absent_unlock`,
+ *   `weak_passphrase`, `wrong_passkey`, `passkey_unavailable`, `absent_box`, `absent_vault`, `absent_unlock`,
  *   `whisper_too_large`, `lockbox_too_large`, `vault_full`, `too_many_unlocks`, `last_unlock`,
- *   `corrupt_record`, `damaged_bundle`, `damaged_unlock`, `damaged_lockbox`, `stale_write`,
- *   `rolled_back`, `not_permitted`, `identity_revoked`, `storage_unavailable`.
+ *   `corrupt_record`, `damaged_bundle`, `damaged_unlock`, `damaged_lockbox`, `newer_format`, `stale_write`,
+ *   `rolled_back`, `not_permitted`, `identity_revoked`, `storage_unavailable`, `storage_blocked`.
  *
  * `vault_full` means a new lockbox in a vault already holding its `maxLockboxes` (a limit the
  * client keeps), and also that storage has no room for the write (a limit of the backend's own,
  * such as the Convex component's or the Postgres server's). Either way the user erases a lockbox,
- * or the host raises `maxLockboxes` where the backend allows. `whisper_too_large` is the user's value over
- * `maxWhisperBytes`, so a condition, and `lockbox_too_large` the user's whisper and note together
- * over what storage holds in one record. `bad_label` is a label the app passed that fails the
+ * or the host raises `maxLockboxes` where the backend allows. `whisper_too_large` is the user's value, with its
+ * lockbox's public bag, over `maxWhisperBytes`, so a condition, and `lockbox_too_large` the
+ * user's whisper and bag together over what storage holds in one record. `bad_label` is a label the app passed that fails the
  * vault's check, a misuse -- a label the user types is checked first, with `Label` or with the
  * host's own `validators.boxlabel`.
  *
  * `identity_revoked` is storage saying that the user this vault was opened for is no longer the
  * one signed in -- signed out, or another user signed in -- and the vault locks itself as it
- * throws it (openVault's `whenIdentityRevoked`): the user signs in again, and the host opens the
+ * throws it: the user signs in again, and the host opens the
  * vault for whoever that is. `not_permitted` is the signed-in user, still the vault's own, refused
  * one call: signing in again will not help.
  *
@@ -34,16 +34,45 @@
  * `wrong_passphrase` or `wrong_passkey` even when the stored vault was altered, because the
  * decryption fails alike either way. Their messages say so.
  *
+ * `weak_passphrase` is a new passphrase -- the one a vault is created with, one added, or one
+ * changed to -- that the vault's `passphraseStrengthTest` finds too easy to guess; its message is
+ * the test's own reason, which a field can show beside the passphrase. Never raised by `unlock()`
+ * of a vault that stands: a passphrase already in use is the user's to replace, not to be refused.
+ *
+ * `insecure_context` is a page served over plain http (anywhere but localhost), where the browser
+ * withholds WebCrypto: the host serves it over https.
+ *
+ * `newer_format` is a stored vault in a form this version does not know, which a newer version of
+ * safebyok may have written: the user's next move is to update the app, never to start over, so
+ * it is told apart from `damaged_bundle`, and nothing erases it.
+ *
  * `rolled_back` is storage handing back an older copy of a vault's bundle than this device has
  * already seen -- a backup restored over it, or storage tampered with -- which the vault refuses to
- * use: nothing is unlocked from it and nothing written over it. Only a device that saw the newer
+ * use, and locks, as for `identity_revoked`: nothing is unlocked from it and nothing written over it. Only a device that saw the newer
  * copy can tell, and only while its own storage keeps the mark of it.
+ *
+ * `storage_unavailable` and `storage_blocked` are both storage that failed, told apart by whether
+ * trying again may help. `storage_unavailable` is a failure a retry may mend: a backend that could
+ * not be reached, or an error from storage that names no lasting cause -- a device store's
+ * transaction aborted, its connection closed under it, a failure the browser gives no reason
+ * for -- or, as the nearest kind, `zxcvbnPassphraseTest`'s word list that could not be fetched. `storage_blocked` is this device's own store -- its device store, or a vault kept on the
+ * device, as `safebyok-indexeddb`'s -- refusing for a reason that holds until
+ * something outside the app changes, so that trying again cannot help until then: the browser
+ * withholding storage from the page (site data blocked, a sandboxed frame, cookies turned off:
+ * a `SecurityError`), storage it has no room in (a quota of zero, as some private windows give,
+ * or a full disk: a `QuotaExceededError`), or no IndexedDB at all (`NotSupportedError`). A
+ * private window that offers IndexedDB with room in it is no block, and a refusal the browser
+ * names otherwise -- an `InvalidStateError`, an `UnknownError` -- is `storage_unavailable`, as
+ * it may pass. A host meeting `storage_blocked` stops offering a retry: it tells the user why, and
+ * may open the vault again with a device store that keeps nothing (`memoryDeviceDB`), which
+ * remembers no unlock on this device.
  *
  * The package README's *Errors* section lists what each kind means and what to do about it.
  */
 export const VaultErrorKindVals = [
   'vault_locked',        // a whisper was asked for before the vault was unlocked
   'wrong_passphrase',    // the passphrase given did not unlock the vault
+  'weak_passphrase',     // a new passphrase the vault's passphraseStrengthTest finds too easy to guess
   'wrong_passkey',       // the passkey's answer did not unlock the vault, or was for another salt
   'passkey_unavailable', // this browser or authenticator cannot answer for a passkey unlock (no WebAuthn, or no PRF)
   'absent_box',          // no lockbox under that label
@@ -51,23 +80,26 @@ export const VaultErrorKindVals = [
   'absent_unlock',       // no unlock envelope of that unlock_id, or none of the method asked for
   'bad_label',           // a label, or the userId, that fails the vault's check for it
   'bad_whisper',         // a whisper JSON cannot carry (undefined, a function, a class), or a non-string
-  'whisper_too_large',   // a whisper over the vault's maxWhisperBytes
-  'lockbox_too_large',   // a lockbox -- whisper, names and note together -- over what storage holds in one record
+  'whisper_too_large',   // a whisper, with its lockbox's public bag, over the vault's maxWhisperBytes
+  'lockbox_too_large',   // a lockbox -- whisper, names and public bag together -- over what storage holds in one record
   'vault_full',          // a new lockbox in a vault already holding its maxLockboxes, or a write storage has no room for
   'too_many_unlocks',    // a new unlock envelope in a vault already holding MaxUnlocks
   'last_unlock',         // removing the vault's last passphrase, which would leave no sure way in
-  'bad_option',          // an option or argument out of its range: openVault's, mask's, argon2idDeriver's, a store()'s note, a VaultDB write's record
+  'bad_option',          // an option or argument out of its range: openVault's, mask's, argon2idDeriver's, a store()'s public bag, a VaultDB write's record
   'vault_closed',        // the vault handle was closed and cannot be used again
   'corrupt_record',      // a stored record failed validation as storage read it back
   'damaged_bundle',      // the vault's stored bundle failed its checks, so no way in can be tried
   'damaged_unlock',      // a way in is stored in a form this package never writes, so it cannot be tried
   'damaged_lockbox',     // a lockbox failed its checks, or would not open under the vault's own vaultKey
+  'newer_format',        // a stored vault in a form this version does not know, which a newer one may have written
   'unknown_key_deriver', // the vault names a key deriver this handle was not built with
+  'insecure_context',    // the page is not a secure context (plain http), where the browser withholds WebCrypto
   'stale_write',         // storage changed since this device read it, so the write was refused
   'rolled_back',         // storage handed back an older copy of the vault than this device has seen, which it refuses to use
   'not_permitted',       // the storage backend refused the signed-in user this call: not theirs to make
   'identity_revoked',    // the storage backend no longer serves the user this vault was opened for: signed out, or another user signed in
-  'storage_unavailable', // the storage backend could not be reached, or failed
+  'storage_unavailable', // the storage backend could not be reached, or failed: a retry may mend it
+  'storage_blocked',     // this device's own store refuses until something outside the app changes: storage blocked, or no room
 ] as const
 export type VaultErrorKind = typeof VaultErrorKindVals[number]
 
@@ -120,6 +152,7 @@ export type VaultErrorFamily = typeof VaultErrorFamilyVals[number]
 export const VaultErrorFamilyForKind = {
   vault_locked:        'condition',
   wrong_passphrase:    'condition',
+  weak_passphrase:     'condition',
   wrong_passkey:       'condition',
   passkey_unavailable: 'condition',
   absent_box:          'condition',
@@ -138,12 +171,15 @@ export const VaultErrorFamilyForKind = {
   damaged_bundle:      'condition',
   damaged_unlock:      'condition',
   damaged_lockbox:     'condition',
+  newer_format:        'condition',
   unknown_key_deriver: 'misuse',
+  insecure_context:    'misuse',
   stale_write:         'condition',
   rolled_back:         'condition',
   not_permitted:       'condition',
   identity_revoked:    'condition',
   storage_unavailable: 'condition',
+  storage_blocked:     'condition',
 } as const satisfies Readonly<Record<VaultErrorKind, VaultErrorFamily>>
 
 /**

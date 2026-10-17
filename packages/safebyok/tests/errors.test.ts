@@ -82,9 +82,11 @@ const FamilyCases = [
   ["bad_option",          "misuse",    'an openVault option out of range is a bug'],
   ["vault_closed",        "misuse",    'using a handle after close() is a bug'],
   ["unknown_key_deriver", "misuse",    'opening with the wrong key deriver is a bug'],
+  ["insecure_context",    "misuse",    'serving the app over plain http is a deployment bug'],
   // conditions: normal operation, which may reach the user
   ["vault_locked",        "condition", 'a locked vault asks for the passphrase'],
   ["wrong_passphrase",    "condition", 'a mistyped passphrase asks again'],
+  ["weak_passphrase",     "condition", 'a passphrase too easy to guess asks the user for another'],
   ["wrong_passkey",       "condition", 'a passkey that does not open the vault asks again, or for a passphrase'],
   ["passkey_unavailable", "condition", 'a browser or authenticator without PRF falls back to the passphrase'],
   ["absent_box",          "condition", 'a lockbox erased elsewhere is a fact of syncing'],
@@ -99,11 +101,13 @@ const FamilyCases = [
   ["damaged_bundle",      "condition", 'a vault stored damaged is told to the user, who cannot open it'],
   ["damaged_unlock",      "condition", 'a way in stored damaged sends the user to another way in'],
   ["damaged_lockbox",     "condition", 'a lockbox stored damaged is told to the user, who may erase it'],
+  ["newer_format",        "condition", 'a vault a newer version wrote is told to the user, who updates the app'],
   ["stale_write",         "condition", 'another device writing first is a fact of syncing'],
   ["rolled_back",         "condition", 'storage handing back an older copy of the vault is a fact a user can be told'],
   ["not_permitted",       "condition", 'a call refused to the signed-in owner is told to them'],
   ["identity_revoked",    "condition", 'a signed-out user signs in again'],
   ["storage_unavailable", "condition", 'unreachable storage is tried again shortly'],
+  ["storage_blocked",     "condition", 'a browser withholding its storage is told to the user, without a retry'],
 ] as const
 
 describe("each kind's family", () => {

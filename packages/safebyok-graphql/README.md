@@ -6,7 +6,7 @@ safebyok's storage over [GraphQL](https://graphql.org), in two halves:
   **`vaultResolvers`**, its resolvers, each root field one verb of a VaultDB made per request for
   the signed-in user -- [`safebyok-postgres`](../safebyok-postgres)'s, or one of your own. They
   drop into any GraphQL server beside your own schema.
-* **In the browser**, `safebyok-graphql`: **`graphqlVaultDB(client)`**, the VaultDB over your
+* **In the browser**, `safebyok-graphql`: **`graphqlVaultDB({ client })`**, the VaultDB over your
   app's [urql](https://commerce.nearform.com/open-source/urql/) Client, to hand `openVault`.
 
 Your server and your database hold ciphertext and a few public fields; neither ever sees a
@@ -29,6 +29,9 @@ other's.
 second version installed beside your server's), every refusal is a GraphQLError your server does
 not recognize: Yoga masks it as "Unexpected error", and its kind is lost. `pnpm why graphql`
 shows how many you have.
+
+Platform: Node 22 and up on the server, evergreen browsers on the client; the floor is stated in the
+core's *Where it runs*.
 
 ## The recipe: Yoga on Next.js, Postgres behind
 
@@ -74,7 +77,7 @@ import { Client, fetchExchange } from '@urql/core'
 import { graphqlVaultDB } from 'safebyok-graphql'
 
 const client = new Client({ url: '/api/graphql', exchanges: [fetchExchange], fetchSubscriptions: true })
-const vault = await openVault({ ...browserOpts(), applabel: 'acme', userId, vaultlabel: 'main', vaultDB: graphqlVaultDB(client) })
+const vault = await openVault({ ...browserOpts(), applabel: 'acme', userId, vaultlabel: 'main', vaultDB: graphqlVaultDB({ client }) })
 ```
 
 Your app's own Client serves, cache exchange and all: every query the vault sends is
@@ -98,7 +101,9 @@ vaultResolvers({ vaultDBFor: (context) => postgresVaultDB({ client: pool, userId
 * **`vaultDBFor(context)`** makes the VaultDB for one request, from your server's context for it.
   It is called for every vault field resolved, so keep it cheap: `postgresVaultDB` connects to
   nothing. Over a websocket, the context is the connection's, so its user is the one signed in
-  when it opened.
+  when it opened. Whatever it throws is your server's setup gone wrong, and crosses as
+  `bad_option` saying only that: its own message stays on your server, as the cause. Let the
+  VaultDB, not `vaultDBFor`, refuse a request signed out.
 * **Who may reach a vault** is the VaultDB's to say. `postgresVaultDB`, made for the signed-in
   user, refuses every other user's vault, and any while signed out, before asking the database
   anything.
@@ -133,22 +138,53 @@ fields left out. A VaultDB's own `listBoxes` gives summaries instead -- the shap
 without `format` -- which the browser's VaultDB may not hand back from its own listing.
 `safebyok-postgres`'s VaultDB is a ServedVaultDB as it stands; nothing here is tied to Postgres.
 
+Every stored field is non-null in the schema. A listing of yours that hands back a record missing
+one fails in GraphQL itself, before any VaultError is made, and reaches the browser as
+`storage_unavailable`, not `corrupt_record`: Postgres's `NOT NULL` columns rule it out, and a
+store of your own keeps every field it was handed.
+
+The resolvers decide nothing: every expectation crosses whole, and the VaultDB you serve keeps
+[the VaultDB contract](https://github.com/mrflip/safebyok/blob/main/packages/safebyok/VAULTDB.md)
+for the browser. Its line 3.8 in particular: a lockbox write's expectation names the
+`vault_key_epoch` the lockbox was sealed under, and your VaultDB lands it only while the vault's
+bundle stands at that epoch, compared in the same atomic step as the write. One that skips the
+comparison lets a device still holding a replaced vaultKey seal a whisper under it.
+`tests/yoga-recipe.test.ts` runs the shared suite through the recipe, that line included.
+
 ## The browser half
 
-`graphqlVaultDB(client)` is a VaultDB, each verb one operation through `client`.
+`graphqlVaultDB({ client })` is a VaultDB, each verb one operation through `client`.
 
 * **A refusal crosses**: the server's VaultError comes back as the same VaultError, kind and
-  message. Anything else -- the network down, a server not serving this schema -- refuses with
-  kind `storage_unavailable`, urql's own error as its `cause`.
-* **It holds a record to 1 MiB**, as the Postgres VaultDB behind it does, and a vault to no size
-  of its own.
-* **It declares the lockbox limit your server holds a vault to**: 1000, the Postgres VaultDB's
-  own unless told otherwise, or the `maxLockboxes` you pass (`graphqlVaultDB(client, {
-  maxLockboxes: 250 })`; `Infinity` for a server that sets none). Pass the number your server's
+  message. A server that refuses the operation's shape or variables (`extensions.code`
+  `BAD_USER_INPUT` or `GRAPHQL_VALIDATION_FAILED`, a schema of another version) refuses with kind
+  `bad_option`, quoting nothing of it, since such an error may quote the variables. Anything else
+  -- the network down, a server not serving this schema -- refuses with kind
+  `storage_unavailable`, urql's own error as its `cause`.
+* **It holds a record to 1 MiB**, and a name to 640 bytes of UTF-8, as the Postgres VaultDB
+  behind it does, and a vault to no size of its own.
+* **The server checks** who may reach which vault, that each write is atomic, and that each
+  record has its shape and each name is above the floor and within its storage's limits (the
+  VaultDB verbs' own checks, `VAULTDB.md`, *Names*); never a label grammar, which is each browser
+  vault's own `validators`, nor what a lockbox's public bag holds.
+* **It declares the lockbox limit your server holds a vault to**: none (`Infinity`), as the
+  Postgres VaultDB sets none unless told, or the `maxLockboxes` you pass
+  (`graphqlVaultDB({ client, maxLockboxes: 250 })`). Pass the number your server's
   VaultDB enforces, so `openVault` refuses a vault asking for more up front; the server refuses a
   new lockbox past its own with kind `vault_full` either way, and the refusal crosses.
-* **A subscription that fails** (the server refusing it, the socket dropping) is not retried, and
-  nothing is told: the vault goes on refreshing after its own writes.
+* **A subscription that fails** (the server refusing it, the socket dropping) is not retried. It
+  is warned of through the `logger`, once, and calls the vault's listener, so the vault reads
+  again and meets the trouble itself: a server's `identity_revoked` locks it. After that, the
+  vault goes on refreshing after its own writes.
+* **`logger`**, when given, hears what the VaultDB has to say (`graphqlVaultDB({ client, logger
+  })`); left out, it is the one `openVault` is given, else the console.
+* **Client and server move in step.** The browser half and `safebyok-graphql/server` are one
+  version of one package: a client of one version against a server of another can fail every
+  call on a field one of them does not know, and the user sees `storage_unavailable`, which
+  reads like a passing outage. Deploy them together, and do not retry your way past it.
+* **For a server that accepts only persisted operations**, `VaultOperations` holds every
+  document the client sends, by the root field it asks for, to register in your allowlist
+  (`import { VaultOperations } from 'safebyok-graphql'`). They change only as the SDL does.
 
 ## What crosses the wire
 
@@ -158,7 +194,7 @@ by, exactly as safebyok wrote it:
 | Type                    | Carries                                                                     |
 | ----------------------- | --------------------------------------------------------------------------- |
 | `SafebyokVaultBundle`   | every field of the `VaultBundle`                                            |
-| `SafebyokLockbox`       | every field of the `Lockbox`; a lockbox with no note, a null `note`         |
+| `SafebyokLockbox`       | every field of the `Lockbox`; its public bag as JSON text, as written       |
 | `SafebyokListedLockbox` | a lockbox as a listing has it: every field but the two encrypted ones       |
 | `SafebyokCiphered`      | an encrypted value: its `cipher_iv_b64` and its `ciphertext_b64`            |
 | `SafebyokVaultScope`    | which vault: `applabel`, `user_id`, `vaultlabel`                            |
@@ -168,10 +204,15 @@ of its own.
 
 * **Text is a `String`**, a count (`unlock_epoch`) an `Int`, and a time a `Float` -- epoch
   milliseconds, a whole number past what GraphQL's 32-bit `Int` holds.
+* **A count is held to GraphQL's 32-bit `Int`**: `unlock_epoch`, which goes up by one on each
+  change to a vault's ways in, and `vault_key_epoch`. Past 2,147,483,647 the field fails on the
+  wire and the browser sees `storage_unavailable`. That is accepted: two billion changes to
+  the ways in is not a vault anyone keeps.
 * **The bundle's `unlocks`** is a list of `SafebyokUnlockEnvelope`, each one opaque JSON, its
   `method` saying its shape: the adapter carries an envelope as it is, never looking inside, as
   the Postgres table stores the list as one `jsonb`. A new way to unlock reaches the browser with
-  no change here.
+  no change here. That is by choice, not for want of a typed union: GraphQL has no input unions
+  before graphql 17's `@oneOf`, and the adapter is a shelf.
 * **Encrypted**: each whisper (`whisper_ciphered`), each lockboxKey (`lockbox_key_wrapped`), and
   the vaultKey under each way in (inside each envelope). **In the open**: everything else, as
   [`safebyok-postgres`](../safebyok-postgres#what-is-stored) lists it.

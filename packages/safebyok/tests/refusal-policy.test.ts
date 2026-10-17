@@ -1,64 +1,29 @@
 import { describe, expect, it, vi } from 'vitest'
 import { VaultError } from '../src/errors'
-import { AnyTextValidators } from '../src/validators'
 import { localVaultDB } from '../src/vault-db'
 import { memoryStore } from '../src/string-store'
 import * as RefusalPolicy from '../src/refusal-policy'
-import type { IdentityRevokedResponse } from '../src/refusal-policy'
 import * as TH from './test-helpers'
 
 const signedOut = () => new VaultError('identity_revoked', 'No one is signed in, so this vault cannot be reached: sign in, then try again.')
 
-describe("RefusalPolicy.parse", () => {
-  const TakenCases = [
-    [undefined,  "lock",  'locks when the host leaves it out'],
-    ["lock",     "lock",  'takes lock'],
-    ["stay",     "stay",  'takes stay'],
-  ] as const
-
-  for (const [candidate, expected, blurb] of TakenCases) {
-    it(blurb, () => { expect(RefusalPolicy.parse(candidate)).to.eq(expected) })
-  }
-
-  const RefusedCases = [
-    ["erase",    'refuses erase: a revocation never erases anything'],
-    ["Lock",     'refuses a capitalised choice'],
-    [null,       'refuses null, which is not leaving it out'],
-    [true,       'refuses a boolean'],
-  ] as const
-
-  for (const [candidate, blurb] of RefusedCases) {
-    it(blurb, () => {
-      expect(() => RefusalPolicy.parse(candidate as unknown as IdentityRevokedResponse)).to.throw(VaultError, /whenIdentityRevoked is 'lock'/).with.property('kind', 'bad_option')
-    })
-  }
-
-  it("leaves it out as the default, lock", () => {
-    expect(RefusalPolicy.DefaultIdentityRevokedResponse).to.eq('lock')
-  })
-
-  it("names every choice in IdentityRevokedResponseVals", () => {
-    expect(RefusalPolicy.IdentityRevokedResponseVals).to.deep.equal(['lock', 'stay'])
-  })
-})
-
 describe("RefusalPolicy.decide", () => {
   const DecideCases = [
     // the examples:
-    [signedOut(),                                                       "lock",  "lock",  'locks for identity_revoked'],
-    [signedOut(),                                                       "stay",  "none",  'does nothing more for identity_revoked when the host chose stay'],
-    [new VaultError('not_permitted', 'Not yours.'),                     "lock",  "none",  'does nothing more for not_permitted: the vault\'s own user, refused one call'],
+    [signedOut(),                                                       "lock",  'locks for identity_revoked'],
+    [new VaultError('rolled_back', 'An older copy.'),                   "lock",  'locks for rolled_back: storage handing back an older copy is as little to be trusted'],
+    [new VaultError('not_permitted', 'Not yours.'),                     "none",  'does nothing more for not_permitted: the vault\'s own user, refused one call'],
     // what says nothing about who is signed in:
-    [new VaultError('stale_write', 'Another device wrote first.'),      "lock",  "none",  'does nothing more for a stale write'],
-    [new VaultError('storage_unavailable', 'Down.'),                    "lock",  "none",  'does nothing more for storage that could not be reached'],
-    [new VaultError('vault_full', 'Full.'),                             "lock",  "none",  'does nothing more for a full vault'],
+    [new VaultError('stale_write', 'Another device wrote first.'),      "none",  'does nothing more for a stale write'],
+    [new VaultError('storage_unavailable', 'Down.'),                    "none",  'does nothing more for storage that could not be reached'],
+    [new VaultError('vault_full', 'Full.'),                             "none",  'does nothing more for a full vault'],
     // what is no refusal of storage's:
-    [new Error('identity_revoked'),                                     "lock",  "none",  'does nothing for a plain Error naming the kind'],
-    [{ kind: 'identity_revoked', message: 'Signed out.' },              "lock",  "none",  'does nothing for an object shaped like the refusal'],
+    [new Error('identity_revoked'),                                     "none",  'does nothing for a plain Error naming the kind'],
+    [{ kind: 'identity_revoked', message: 'Signed out.' },              "none",  'does nothing for an object shaped like the refusal'],
   ] as const
 
-  for (const [refusal, whenRevoked, expected, blurb] of DecideCases) {
-    it(blurb, () => { expect(RefusalPolicy.decide(refusal, whenRevoked)).to.eq(expected) })
+  for (const [refusal, expected, blurb] of DecideCases) {
+    it(blurb, () => { expect(RefusalPolicy.decide(refusal)).to.eq(expected) })
   }
 })
 
@@ -66,32 +31,32 @@ describe("RefusalPolicy.heed", () => {
   const scope = TH.scopeOf('u1')
 
   it("answers each verb as the VaultDB does, passing on every argument", async () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     const heeded = RefusalPolicy.heed(vaultDB, () => Promise.resolve())
     const readBundle = vi.spyOn(vaultDB, 'readBundle')
     const listBoxes = vi.spyOn(vaultDB, 'listBoxes')
-    await heeded.createBundle(TH.bundleOf('u1'), AnyTextValidators)
-    expect(await heeded.readBundle(scope, AnyTextValidators)).to.deep.equal(TH.bundleOf('u1'))
-    expect(readBundle).toHaveBeenCalledWith(scope, AnyTextValidators)
+    await heeded.createBundle(TH.bundleOf('u1'))
+    expect(await heeded.readBundle(scope)).to.deep.equal(TH.bundleOf('u1'))
+    expect(readBundle).toHaveBeenCalledWith(scope)
     expect(await heeded.listBoxes(scope)).to.deep.equal([])
     expect(listBoxes).toHaveBeenCalledWith(scope)
   })
 
-  /** Each heeded verb, and the arguments a vault hands it, validators last. */
+  /** Each heeded verb, and the arguments a vault hands it. */
   const VerbArgsCases = [
-    ['readBundle',   [scope, AnyTextValidators]],
-    ['createBundle', [TH.bundleOf('u1'), AnyTextValidators]],
-    ['updateBundle', [TH.bundleOf('u1'), TH.thisVault, AnyTextValidators]],
-    ['readBox',      [scope, 'anthropic', AnyTextValidators]],
-    ['listBoxes',    [scope, AnyTextValidators]],
-    ['updateBox',    [scope, 'anthropic', TH.thisVault, AnyTextValidators]],
-    ['eraseBox',     [scope, 'anthropic', TH.thisVault, AnyTextValidators]],
-    ['eraseVault',   [scope, TH.thisVault, AnyTextValidators]],
+    ['readBundle',   [scope]],
+    ['createBundle', [TH.bundleOf('u1')]],
+    ['updateBundle', [TH.bundleOf('u1'), TH.thisVault]],
+    ['readBox',      [scope, 'anthropic']],
+    ['listBoxes',    [scope]],
+    ['updateBox',    [scope, 'anthropic', TH.thisVault]],
+    ['eraseBox',     [scope, 'anthropic', TH.thisVault]],
+    ['eraseVault',   [scope, TH.thisVault]],
   ] as const
 
   for (const [verb, args] of VerbArgsCases) {
-    it(`passes ${verb} every argument it is given, validators included`, async () => {
-      const vaultDB = localVaultDB(memoryStore())
+    it(`passes ${verb} every argument it is given`, async () => {
+      const vaultDB = localVaultDB({ store: memoryStore() })
       const spied = vi.spyOn(vaultDB, verb).mockResolvedValue(undefined)
       const heeded = RefusalPolicy.heed(vaultDB, () => Promise.resolve())
       await (heeded[verb] as (...given: readonly unknown[]) => Promise<unknown>)(...args)
@@ -100,7 +65,7 @@ describe("RefusalPolicy.heed", () => {
   }
 
   it("hands a refusal to onRefusal, waits for it, then rejects with that very refusal", async () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     const refusal = signedOut()
     vi.spyOn(vaultDB, 'readBox').mockRejectedValueOnce(refusal)
     const heard: string[] = []
@@ -113,7 +78,7 @@ describe("RefusalPolicy.heed", () => {
   })
 
   it("hands on every VaultError, so the policy alone decides what each means", async () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     const onRefusal = vi.fn(() => Promise.resolve())
     const heeded = RefusalPolicy.heed(vaultDB, onRefusal)
     await TH.expectRefusal(heeded.updateBundle(TH.bundleOf('u1'), { vault_id: 'vault-id-u1', unlock_epoch: 1 }), 'stale_write')
@@ -121,7 +86,7 @@ describe("RefusalPolicy.heed", () => {
   })
 
   it("hands on nothing that is not a VaultError, and rejects with it as it came", async () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     const odd = new Error('not a refusal')
     vi.spyOn(vaultDB, 'eraseVault').mockRejectedValueOnce(odd)
     const onRefusal = vi.fn(() => Promise.resolve())
@@ -131,7 +96,7 @@ describe("RefusalPolicy.heed", () => {
   })
 
   it("rejects with the refusal even when onRefusal throws", async () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     const refusal = signedOut()
     vi.spyOn(vaultDB, 'readBundle').mockRejectedValueOnce(refusal)
     const heeded = RefusalPolicy.heed(vaultDB, () => Promise.reject(new Error('the device store is broken')))
@@ -139,7 +104,7 @@ describe("RefusalPolicy.heed", () => {
   })
 
   it("passes subscribe through, its unsubscribe the VaultDB's own", () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     const unsubscribe = vi.fn()
     const subscribe = vi.spyOn(vaultDB, 'subscribe').mockReturnValue(unsubscribe)
     const onChange = vi.fn()

@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { Ckeys, localVaultDB, memoryStore } from 'safebyok'
-import { KnockKnock } from '../../src/components/KnockKnock'
+import { KnockKnock, SavedFlashMillis } from '../../src/components/KnockKnock'
 import * as TH from '../test-helpers'
 
 /** Anthropic, faked at the global `fetch` the SDK calls: see TH.fakeAnthropic. */
@@ -32,9 +32,39 @@ describe("KnockKnock", () => {
     fireEvent.change(screen.getByPlaceholderText('sk-ant-…'), { target: { value: ' sk-ant-test-not-a-real-key ' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
     await TH.answerPassphraseDialog()
-    await screen.findByText(/Anthropic key in the vault/)
+    await screen.findByText(/Anthropic key saved/)
     const vault = await world.openUnlocked()
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-not-a-real-key')
+  })
+
+  it("flashes 'saved' after a save, then relaxes to when the key was last saved", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const world = TH.makeWorld()
+      await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
+      await world.openUnlocked()
+      world.renderInVault(<KnockKnock />)
+      fireEvent.click(await screen.findByRole('button', { name: 'replace it' }))
+      fireEvent.change(screen.getByLabelText('Anthropic API key'), { target: { value: 'sk-ant-test-not-a-real-key' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
+      const said = await screen.findByText(/Anthropic key saved/)
+      expect(said.textContent).to.not.match(/\(saved/)
+      await act(async () => { await vi.advanceTimersByTimeAsync(SavedFlashMillis) })
+      expect(screen.getByText(/Anthropic key in the vault/).textContent).to.match(/\(saved .+\)/)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("takes the key in a whisper field, hidden, named for a whisper, its password managers asked away", async () => {
+    TH.makeWorld().renderInVault(<KnockKnock />)
+    fireEvent.click(await screen.findByRole('button', { name: 'add your key' }))
+    const field = screen.getByLabelText<HTMLInputElement>('Anthropic API key')
+    expect(field.type).to.eq('password')
+    expect(field.name).to.eq('whisper_text')
+    expect(field.dataset['1pIgnore']).to.eq('true')
+    fireEvent.click(screen.getByRole('button', { name: 'Show' }))
+    expect(field.type).to.eq('text')
   })
 
   it("puts the key form away on Cancel, saving nothing, even with the vault unlocked", async () => {
@@ -126,14 +156,14 @@ describe("KnockKnock", () => {
     fireEvent.change(screen.getByPlaceholderText('sk-ant-…'), { target: { value: 'sk-ant-test-replaced' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
     await TH.answerPassphraseDialog()
-    await screen.findByText(/Anthropic key in the vault/)
+    await screen.findByText(/Anthropic key saved/)
     const vault = await world.openUnlocked()
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-replaced')
   })
 
   it("won't knock with a damaged key, and replaces it afresh", async () => {
     const store = memoryStore()
-    const world = TH.makeWorld({ vaultDB: localVaultDB(store) })
+    const world = TH.makeWorld({ vaultDB: localVaultDB({ store }) })
     await world.seed({ anthropic_api_key: 'sk-ant-test-not-a-real-key' })
     store.write(Ckeys.box(TH.scopeOf('u1'), 'anthropic_api_key'), '{"not": json')
     world.renderInVault(<KnockKnock />)
@@ -146,7 +176,7 @@ describe("KnockKnock", () => {
     fireEvent.change(screen.getByPlaceholderText('sk-ant-…'), { target: { value: 'sk-ant-test-replaced' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save key' }))
     await TH.answerPassphraseDialog()
-    await screen.findByText(/Anthropic key in the vault/)
+    await screen.findByText(/Anthropic key saved/)
     const vault = await world.openUnlocked()
     expect(await vault.read('anthropic_api_key')).to.eq('sk-ant-test-replaced')
   })

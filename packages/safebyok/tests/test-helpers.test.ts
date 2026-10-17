@@ -3,10 +3,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { localVaultDB, memoryStore, openVault, type StringStore } from '../src/index'
 import { Ciphered, fromB64, toB64 } from '../src/crypto'
 import { VaultError } from '../src/errors'
-import { Lockbox, PasskeySaltBytes, VaultBundle, VaultScope, type DeviceMark, type DeviceUnlock } from '../src/types'
+import { Lockbox } from '../src/lockbox'
+import { PasskeySaltBytes, VaultBundle, VaultScope, type DeviceMark, type DeviceUnlock } from '../src/types'
 import * as Ckeys from '../src/ckeys'
-import { VaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation, type StoredLockbox } from '../src/vault-db'
+import { VaultDB, type BundleExpectation, type EraseExpectation, type LockboxExpectation, type StoredLockbox, type VaultDBOpts } from '../src/vault-db'
 import * as TH from './test-helpers'
+
 
 const TweakCases = [
   // regular usage:
@@ -51,6 +53,93 @@ describe("wakeupAtNextTick", () => {
   })
 })
 
+describe("aWhile", () => {
+  it("takes about fifty milliseconds", async () => {
+    const began = Date.now()
+    await TH.aWhile()
+    expect(Date.now() - began).to.be.at.least(40)
+  })
+})
+
+describe("eventually", () => {
+  it("resolves once the check holds, though it did not at first", async () => {
+    let ready = false
+    setTimeout(() => { ready = true }, 20)
+    await TH.eventually(() => ready)
+    expect(ready).to.be.true
+  })
+
+  it("resolves at once for a check that holds already", async () => {
+    let looks = 0
+    await TH.eventually(() => { looks += 1; return true })
+    expect(looks).to.eq(1)
+  })
+
+  it("rejects when the thing never comes to pass", async () => {
+    vi.useFakeTimers()
+    try {
+      const waiting = TH.eventually(() => false)
+      const outcome = expect(waiting).rejects.toThrow('never came to pass')
+      await vi.advanceTimersByTimeAsync(3000)
+      await outcome
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe("changeCounter", () => {
+  it("counts each call of its listener", () => {
+    const { heard, onChange } = TH.changeCounter()
+    expect(heard.count).to.eq(0)
+    onChange()
+    onChange()
+    expect(heard.count).to.eq(2)
+  })
+
+  it("keeps one count per counter", () => {
+    const first = TH.changeCounter()
+    const second = TH.changeCounter()
+    first.onChange()
+    expect(second.heard.count).to.eq(0)
+  })
+})
+
+/** What a stub's subscribe hands back: an unsubscribe that does nothing. */
+const unsubscribeFromNothing = () => undefined
+
+describe("liveWatch", () => {
+  it("resolves once the server's opening call has come, the count back at zero, then counts changes", async () => {
+    const subscribed: (() => void)[] = []
+    const watched = {
+      subscribe: (_scope: VaultScope, onChange: () => void) => {
+        subscribed.push(onChange)
+        queueMicrotask(onChange)
+        return unsubscribeFromNothing
+      },
+    }
+    const { heard, unsubscribe } = await TH.liveWatch(watched, TH.scopeOf('u1'))
+    expect(heard.count).to.eq(0)
+    subscribed[0]?.()
+    expect(heard.count).to.eq(1)
+    unsubscribe()
+  })
+
+  it("unsubscribes before it rejects, when the opening call never comes", async () => {
+    const unsubscribe = vi.fn()
+    const silent = { subscribe: () => unsubscribe }
+    vi.useFakeTimers()
+    try {
+      const outcome = expect(TH.liveWatch(silent, TH.scopeOf('u1'))).rejects.toThrow('never came to pass')
+      await vi.advanceTimersByTimeAsync(3000)
+      await outcome
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(unsubscribe.mock.calls).to.have.lengthOf(1)
+  })
+})
+
 describe("makeGate", () => {
   it("holds a pass until released, and says when something reached it", async () => {
     const gate = TH.makeGate()
@@ -92,7 +181,7 @@ describe("beforeNextCall", () => {
   })
 
   it("slips another device's write in between a look at storage and the write", async () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     await vaultDB.createBundle(TH.bundleOf('u1'))
     TH.beforeNextCall(vaultDB, 'updateBox', async () => {
       await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'theirs'), TH.noBoxYet)
@@ -123,6 +212,26 @@ describe("beforeNextCall on a method already spied on", () => {
     expect(await target.fetchRow('three')).to.eq(5)
     expect(target.fetchRow).to.have.callCount(2)
     expect(heard).to.deep.equal(['errand'])
+  })
+
+  it("leaves a spy on the prototype showing through afterwards, with no own property in its way", async () => {
+    class Shelf { fetchRow(ckey: string) { return Promise.resolve(ckey.length) } }
+    const spy = vi.spyOn(Shelf.prototype, 'fetchRow')
+    const target = new Shelf()
+    TH.beforeNextCall(target, 'fetchRow', () => Promise.resolve())
+    expect(await target.fetchRow('one')).to.eq(3)
+    expect(Object.hasOwn(target, 'fetchRow')).to.be.false
+    spy.mockImplementation(() => Promise.resolve(-1))
+    expect(await target.fetchRow('one')).to.eq(-1)
+    spy.mockRestore()
+  })
+
+  it("puts back an own property of the target's, spy and all", async () => {
+    const target = { fetchRow: (ckey: string) => Promise.resolve(ckey.length) }
+    const spy = vi.spyOn(target, 'fetchRow')
+    TH.beforeNextCall(target, 'fetchRow', () => Promise.resolve())
+    await target.fetchRow('one')
+    expect(Object.getOwnPropertyDescriptor(target, 'fetchRow')?.value).to.eq(spy)
   })
 
   it("can be armed again once its call has gone through", async () => {
@@ -203,7 +312,7 @@ describe("holdNextCall", () => {
 
 describe("tallyWatches", () => {
   it("counts the watches opened and closed, each still reaching the adapter", async () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     const tally = TH.tallyWatches(vaultDB)
     const vault = await openVault(TH.memoryVaultOpts({ vaultDB }))
     expect(tally).to.deep.equal({ opened: 1, closed: 0 })
@@ -212,7 +321,7 @@ describe("tallyWatches", () => {
   })
 
   it("counts a watch closed once, so a double close cannot hide another watch's leak", () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     const tally = TH.tallyWatches(vaultDB)
     const first = vaultDB.subscribe(TH.scopeOf('u1'), () => undefined)
     vaultDB.subscribe(TH.scopeOf('u1'), () => undefined)
@@ -222,7 +331,7 @@ describe("tallyWatches", () => {
   })
 
   it("shows no leak after a refused open, as its @example has it", async () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     vi.spyOn(vaultDB, 'readBundle').mockRejectedValue(new VaultError('not_permitted', "That vault belongs to someone else."))
     const tally = TH.tallyWatches(vaultDB)
     await TH.expectRefusal(openVault(TH.memoryVaultOpts({ vaultDB })), 'not_permitted')
@@ -282,6 +391,15 @@ describe("raceEveryWay", () => {
       'two held before its round trip 1 while one moved', 'two held before its round trip 2 while one moved', 'two held before its round trip 3 while one moved',
     ])
   })
+
+  it("fails a move that never finishes under the schedule it hung in, not at the test's own timeout", async () => {
+    const hung = TH.raceEveryWay({
+      makeDevices: (turnstile) => () => loggingDevice(turnstile, [], 2),
+      moves:       [(move) => move('one'), () => new Promise<never>(() => undefined)],
+      verdict:     () => undefined,
+    })
+    await expect(hung).rejects.toThrow(/^Under the schedule "made together": the moves did not finish within 10000 ms/)
+  }, 20_000)
 
   it("holds a move just before its round trip while the other moves to its end, then lets it go", async () => {
     const logs: string[][] = []
@@ -395,7 +513,7 @@ describe("memoryVaultOpts", () => {
   })
 
   it("makes new stores for each call, and takes any option in place of its own", () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     expect(TH.memoryVaultOpts().vaultDB).to.not.eq(TH.memoryVaultOpts().vaultDB)
     expect(TH.memoryVaultOpts({ userId: 'u2', vaultDB })).to.include({ userId: 'u2', vaultDB })
   })
@@ -445,7 +563,7 @@ describe("the fixtures", () => {
   })
 
   it("noBoxYet and thisVault: the expectations u1's vault meets, before its first box and for an erase", async () => {
-    const vaultDB = localVaultDB(memoryStore())
+    const vaultDB = localVaultDB({ store: memoryStore() })
     await vaultDB.createBundle(TH.bundleOf('u1'))
     await vaultDB.updateBox(TH.scopeOf('u1'), TH.boxOf('anthropic', 'one'), TH.noBoxYet)
     await vaultDB.eraseVault(TH.scopeOf('u1'), TH.thisVault)
@@ -477,7 +595,12 @@ describe("the fixtures", () => {
   it("boxOf: a shape-valid Lockbox, with any field overridden", () => {
     expect(Lockbox.safeParse(TH.boxOf('anthropic_api_key', 'a1')).success).to.be.true
     expect(TH.boxOf('anthropic_api_key', 'a1').revision_id).to.eq('rev-a1')
-    expect(TH.boxOf('anthropic_api_key', 'a1', { note: 'work account' }).note).to.eq('work account')
+    expect(TH.boxOf('anthropic_api_key', 'a1', { public_json: '{}' }).public_json).to.eq('{}')
+  })
+
+  it("publicJsonOf: a public bag as a lockbox holds it, its keys sorted, as the example shows", () => {
+    expect(TH.publicJsonOf({ note: 'work account' })).to.eq('{"note":"work account"}')
+    expect(TH.publicJsonOf({ tier: 2, note: 'work' })).to.eq('{"note":"work","tier":2}')
   })
 })
 
@@ -615,7 +738,7 @@ describe("omitting", () => {
   it("leaves out the one field named, and keeps the rest", () => {
     const without = TH.omitting(opts, 'keyDeriver')
     expect(without).to.not.have.property('keyDeriver')
-    expect(Object.keys(without)).to.have.members(['applabel', 'userId', 'vaultlabel', 'vaultDB', 'deviceDB'])
+    expect(Object.keys(without)).to.have.members(['applabel', 'userId', 'vaultlabel', 'vaultDB', 'deviceDB', 'passphraseStrengthTest'])
     expect(opts.keyDeriver).to.eq(TH.testDeriver)
   })
 
@@ -630,12 +753,20 @@ const ckeyOf = (scope: VaultScope) => `${scope.applabel}:${scope.user_id}:${scop
 TH.describeDeviceDB('describeDeviceDB, over the smallest honest DeviceDB', () => {
   const rows = new Map<string, DeviceUnlock>()
   const marks = new Map<string, DeviceMark>()
+  const lockGenerationOf = (scope: VaultScope) => marks.get(ckeyOf(scope))?.lock_generation ?? 0
   return {
     readUnlock:  (scope) => Promise.resolve(rows.get(ckeyOf(scope)) ?? null),
-    writeUnlock: (unlock) => { rows.set(ckeyOf(unlock), unlock); return Promise.resolve() },
+    writeUnlock: (unlock, expected) => {
+      if (lockGenerationOf(unlock) !== expected.lock_generation) { return Promise.reject(new VaultError('stale_write', 'A lock came first.')) }
+      rows.set(ckeyOf(unlock), unlock)
+      return Promise.resolve()
+    },
     eraseUnlock: (scope) => { rows.delete(ckeyOf(scope)); return Promise.resolve() },
     readMark:    (scope) => Promise.resolve(marks.get(ckeyOf(scope)) ?? null),
-    writeMark:   (mark) => { marks.set(ckeyOf(mark), mark); return Promise.resolve() },
+    writeMark:   (mark) => {
+      marks.set(ckeyOf(mark), { ...mark, lock_generation: Math.max(mark.lock_generation, lockGenerationOf(mark)) })
+      return Promise.resolve()
+    },
     eraseMark:   (scope) => { marks.delete(ckeyOf(scope)); return Promise.resolve() },
     eraseAll:    () => { rows.clear(); marks.clear(); return Promise.resolve() },
   }
@@ -644,27 +775,30 @@ TH.describeDeviceDB('describeDeviceDB, over the smallest honest DeviceDB', () =>
 /**
  * A server's VaultDB for one signed-in user, over a store every user's vaults share: it refuses
  * any scope naming someone else, as a server's must, so the VaultDB suite reaches it only through
- * `perUser`.
+ * `perUser`. A blank or missing `userId` is no one signed in, as a real server reads it: it
+ * refuses everything.
  */
 const servingOnly = (userId: string | null, store: StringStore): TH.VaultDBVerbs => {
-  const shared = localVaultDB(store)
+  const shared = localVaultDB({ store })
   const permitted = ({ user_id }: { user_id: string }): void => {
-    if (user_id !== userId) { throw new VaultError('identity_revoked', "That vault belongs to someone other than the user signed in.") }
+    if (userId === null || userId === '' || user_id !== userId) { throw new VaultError('identity_revoked', "That vault belongs to someone other than the user signed in.") }
   }
   return {
     maxRecordBytes: shared.maxRecordBytes,
     maxVaultBytes:  shared.maxVaultBytes,
     maxLockboxes:   shared.maxLockboxes,
-    readBundle:     async (scope, validators) => { permitted(scope); return await shared.readBundle(scope, validators) },
-    createBundle:   async (bundle, validators) => { permitted(bundle); return await shared.createBundle(bundle, validators) },
-    updateBundle:   async (bundle, expected, validators) => { permitted(bundle); await shared.updateBundle(bundle, expected, validators) },
-    readBox:        async (scope, boxlabel, validators) => { permitted(scope); return await shared.readBox(scope, boxlabel, validators) },
-    listBoxes:      async (scope, validators) => { permitted(scope); return await shared.listBoxes(scope, validators) },
-    updateBox:      async (scope, lockbox, expected, validators) => { permitted(scope); await shared.updateBox(scope, lockbox, expected, validators) },
-    eraseBox:       async (scope, boxlabel, expected, validators) => { permitted(scope); await shared.eraseBox(scope, boxlabel, expected, validators) },
-    eraseVault:     async (scope, expected, validators) => { permitted(scope); await shared.eraseVault(scope, expected, validators) },
-    eraseDamagedVault: async (scope, validators) => { permitted(scope); await shared.eraseDamagedVault(scope, validators) },
-    subscribe:      (scope, onChange, validators) => { permitted(scope); return shared.subscribe(scope, onChange, validators) },
+    maxNameBytes:   shared.maxNameBytes,
+    readBundle:     async (scope) => { permitted(scope); return await shared.readBundle(scope) },
+    createBundle:   async (bundle) => { permitted(bundle); return await shared.createBundle(bundle) },
+    updateBundle:   async (bundle, expected) => { permitted(bundle); await shared.updateBundle(bundle, expected) },
+    readBox:        async (scope, boxlabel) => { permitted(scope); return await shared.readBox(scope, boxlabel) },
+    listBoxes:      async (scope) => { permitted(scope); return await shared.listBoxes(scope) },
+    listBoxRecords: async (scope) => { permitted(scope); return await shared.listBoxRecords(scope) },
+    updateBox:      async (scope, lockbox, expected) => { permitted(scope); await shared.updateBox(scope, lockbox, expected) },
+    eraseBox:       async (scope, boxlabel, expected) => { permitted(scope); await shared.eraseBox(scope, boxlabel, expected) },
+    eraseVault:     async (scope, expected) => { permitted(scope); await shared.eraseVault(scope, expected) },
+    eraseDamagedVault: async (scope) => { permitted(scope); await shared.eraseDamagedVault(scope) },
+    subscribe:      (scope, onChange) => { permitted(scope); return shared.subscribe(scope, onChange) },
   }
 }
 
@@ -708,6 +842,12 @@ describe("perUser", () => {
     await vaultDB.eraseVault(TH.scopeOf('u2'), { vault_id: 'vault-id-u2' })
     expect(await servingOnly('u2', store).readBundle(TH.scopeOf('u2'))).to.be.null
     expect(await servingOnly('u1', store).readBundle(TH.scopeOf('u1'))).to.deep.equal(TH.bundleOf('u1'))
+  })
+
+  it("refuses a blank user_id as a server does for no one signed in, never as a bad label", async () => {
+    const { vaultDB } = counted()
+    await TH.expectRefusal(vaultDB.readBundle(TH.scopeOf('')), 'identity_revoked')
+    await TH.expectRefusal(vaultDB.createBundle(TH.bundleOf('')), 'identity_revoked')
   })
 
   it("makes each user's VaultDB once, and keeps it", async () => {
@@ -811,7 +951,7 @@ const endOf = async (promise: Promise<unknown>) => {
 const checkThenWriteUnder = (lock: ReturnType<typeof sharedLock>): Stepping => (backend, plan) => lock(() => checkThenWrite(backend, plan))
 
 /** How a {@link RoundTripVaultDB} is made: its stepping, and the ways it may be wrong beside that. */
-type RoundTripOpts = {
+type RoundTripOpts = VaultDBOpts & {
   stepping:         Stepping
   maxLockboxes?:    number | undefined
   /** Counts the vault in a round trip of its own, before a new lockbox's write: honest, and best effort. */
@@ -837,12 +977,13 @@ class RoundTripVaultDB extends VaultDB {
   readonly maxRecordBytes = Infinity
   readonly maxVaultBytes = Infinity
   readonly maxLockboxes: number
+  readonly maxNameBytes = Infinity
   private readonly backend: RoundTripBackend
   private readonly opts: RoundTripOpts
   private readonly ownListeners = new Set<() => void>()
 
   constructor(backend: RoundTripBackend, opts: RoundTripOpts) {
-    super()
+    super(opts)
     this.backend = backend
     this.opts = opts
     this.maxLockboxes = opts.maxLockboxes ?? Infinity
@@ -968,15 +1109,16 @@ const unheldTurnstile: TH.Turnstile = { pass: () => Promise.resolve() }
 /** The battery's options for a RoundTripVaultDB with `opts`: a fresh adapter, a capped one, its devices, and its push. */
 const roundTripBattery = (opts: RoundTripOpts & { overTheWire?: boolean, unwired?: boolean, slowSecond?: boolean }) => {
   const makeDevices = roundTripDevices(opts)
-  const oneDevice = async (maxLockboxes?: number) => (await makeDevices(unheldTurnstile))({ maxLockboxes })
-  return [() => oneDevice(), { makeCappedVaultDB: oneDevice, makeDevices, pushes: true }] as const
+  const oneDevice = async (maxLockboxes?: number, vaultDBOpts: VaultDBOpts = {}) => (await roundTripDevices({ ...opts, ...vaultDBOpts })(unheldTurnstile))({ maxLockboxes })
+  const fresh: TH.MakeVaultDB = (vaultDBOpts) => oneDevice(undefined, vaultDBOpts)
+  return [fresh, { makeCappedVaultDB: oneDevice, makeDevices, pushes: true }] as const
 }
 
 TH.describeVaultDB('an honest adapter making round trips through the turnstile', ...roundTripBattery({ stepping: inOneStep }))
 TH.describeVaultDB('an honest adapter that counts a vault apart from its write, as a best effort', ...roundTripBattery({ stepping: inOneStep, countsApart: true }))
 
 /** The races a write whose check and write are apart loses, in some interleaving. */
-const SplitLosses = ['rival_creates', 'rival_bundle_updates', 'rival_first_writes', 'rival_replacements', 'erase_beats_replacement', 'vault_erase_beats_write'] as const
+const SplitLosses = ['rivalCreates', 'rivalBundleUpdates', 'rivalFirstWrites', 'rivalReplacements', 'eraseBeatsReplacement', 'vaultEraseBeatsWrite'] as const
 
 /** The battery's checks over a check-then-write adapter whose devices share one lock, a fresh one for each call. */
 const lockedChecks = () => checksOver({ stepping: checkThenWriteUnder(sharedLock()), overTheWire: true })
@@ -1021,20 +1163,20 @@ describe("vaultDBTimingChecks, against adapters that do not guard", () => {
 
   it("lets the writes of different lockboxes through a check-then-write adapter land, as they should", async () => {
     const checks = checksOver({ stepping: checkThenWrite, overTheWire: true })
-    await expectToHold(checks.apart_new_lockboxes)
-    await expectToHold(checks.apart_replace_and_erase)
+    await expectToHold(checks.apartNewLockboxes)
+    await expectToHold(checks.apartReplaceAndErase)
   })
 
   it("fails a check-then-write hidden behind a lock its devices share, once the turnstile holds one inside it", async () => {
     await Promise.all([
-      expect(lockedChecks().rival_first_writes.check()).rejects.toThrow(/held before its round trip 1 while two moved": a device's move did not finish .* share something/),
-      expect(lockedChecks().apart_new_lockboxes.check()).rejects.toThrow(/held before its round trip 1 while two moved": a device's move did not finish/),
+      expect(lockedChecks().rivalFirstWrites.check()).rejects.toThrow(/held before its round trip 1 while two moved": a device's move did not finish .* share something/),
+      expect(lockedChecks().apartNewLockboxes.check()).rejects.toThrow(/held before its round trip 1 while two moved": a device's move did not finish/),
     ])
   }, 10_000)
 
   it("is fooled by that lock where nothing holds a round trip: why makeDevices wires the turnstile", async () => {
     const unwiredUnderLock = checksOver({ stepping: checkThenWriteUnder(sharedLock()), overTheWire: true, unwired: true })
-    await expectToHold(unwiredUnderLock.rival_first_writes)
+    await expectToHold(unwiredUnderLock.rivalFirstWrites)
   })
 
   it("fails a makeDevices that hands one adapter to both devices, or a backend to each", async () => {
@@ -1042,19 +1184,19 @@ describe("vaultDBTimingChecks, against adapters that do not guard", () => {
     const oneAdapter = new RoundTripVaultDB(backend, { stepping: inOneStep })
     const theOne = () => oneAdapter
     const shared = TH.vaultDBTimingChecks(theOne, { makeDevices: () => theOne })
-    await expect(shared.seen_across_devices.check()).rejects.toThrow(/makeDevices made one adapter for both devices/)
+    await expect(shared.seenAcrossDevices.check()).rejects.toThrow(/makeDevices made one adapter for both devices/)
     const overItsOwn = () => new RoundTripVaultDB(new RoundTripBackend(false), { stepping: inOneStep })
     const apart = TH.vaultDBTimingChecks(theOne, { makeDevices: () => overItsOwn })
-    await expect(apart.seen_across_devices.check()).rejects.toThrow()
-    await expect(apart.rival_creates.check()).rejects.toThrow(/^Under the schedule "made together"/)
+    await expect(apart.seenAcrossDevices.check()).rejects.toThrow()
+    await expect(apart.rivalCreates.check()).rejects.toThrow(/^Under the schedule "made together"/)
   })
 
   it("fails a listing cut short at the limit, once a roomier device has taken the vault past it", async () => {
-    await expect(checksOver({ stepping: inOneStep, listsToLimit: true }).past_limit_from_roomier_device.check()).rejects.toThrow(/to have the same members/)
+    await expect(checksOver({ stepping: inOneStep, listsToLimit: true }).pastLimitFromRoomierDevice.check()).rejects.toThrow(/to have the same members/)
   })
 
   it("fails a crowd for the last place whose refused racers leave their lockboxes behind", async () => {
-    await expect(checksOver({ stepping: inOneStep, keepsRefused: true }).crowd_for_last_place.check()).rejects.toThrow(/^Under the schedule "made together": expected /)
+    await expect(checksOver({ stepping: inOneStep, keepsRefused: true }).crowdForLastPlace.check()).rejects.toThrow(/^Under the schedule "made together": expected /)
   })
 
   it("takes a vault past its limit, for real, when racers' counts are apart from their writes", async () => {
@@ -1083,29 +1225,34 @@ describe("vaultDBTimingChecks, against adapters that do not guard", () => {
       erase:     (ckey) => { ringNow(); store.erase(ckey) },
       subscribe: (listener) => { listeners.add(listener); return () => { listeners.delete(listener) } },
     }
-    const checks = TH.vaultDBTimingChecks(() => localVaultDB(earlyStore), { pushes: true })
-    await expect(checks.push_each_write.check()).rejects.toThrow(/no call to onChange read the vault as the write left it/)
+    const checks = TH.vaultDBTimingChecks(() => localVaultDB({ store: earlyStore }), { pushes: true })
+    await expect(checks.pushEachWrite.check()).rejects.toThrow(/no call to onChange read the vault as the write left it/)
   }, 10_000)
 
-  it("fails an unsubscribe that leaves its listener listening", async () => {
-    const store = memoryStore()
-    const leaky: StringStore = { ...store, subscribe: (listener) => { store.subscribe(listener); return noDevice } }
-    const checks = TH.vaultDBTimingChecks(() => localVaultDB(leaky), { pushes: true })
-    await expect(checks.push_ends_on_unsubscribe.check()).rejects.toThrow(/an unsubscribed onChange was called/)
+  it("fails an unsubscribe that leaves its listener listening, as an adapter overriding subscribe could", async () => {
+    // The base class's subscribe ends a watch whatever the adapter's unsubscribe does, so only a
+    // VaultDB that replaces it can leak.
+    const leaky = () => {
+      const vaultDB = localVaultDB({ store: memoryStore() })
+      const subscribe: TH.VaultDBVerbs['subscribe'] = (scope, onChange) => { vaultDB.subscribe(scope, onChange); return noDevice }
+      return new Proxy(vaultDB, { get: (target, prop): unknown => (prop === 'subscribe' ? subscribe : Reflect.get(target, prop)) })
+    }
+    const checks = TH.vaultDBTimingChecks(leaky, { pushes: true })
+    await expect(checks.pushEndsOnUnsubscribe.check()).rejects.toThrow(/an unsubscribed onChange was called/)
   })
 
   it("fails a watch that starts on its own time and never calls once it is live, missing a write made meanwhile", async () => {
-    await expect(checksOver({ stepping: inOneStep, watchStarts: 'late' }).push_from_the_start.check()).rejects.toThrow(/no call to onChange read the vault as the write left it/)
+    await expect(checksOver({ stepping: inOneStep, watchStarts: 'late' }).pushFromTheStart.check()).rejects.toThrow(/no call to onChange read the vault as the write left it/)
   })
 
   it("passes that watch once it calls as it goes live", async () => {
-    await expectToHold(checksOver({ stepping: inOneStep, watchStarts: 'late, calling once live' }).push_from_the_start)
+    await expectToHold(checksOver({ stepping: inOneStep, watchStarts: 'late, calling once live' }).pushFromTheStart)
   })
 
   it("fails a device that never hears another device's writes", async () => {
     const checks = checksOver({ stepping: inOneStep, ringsOnlyItself: true })
-    await expectToHold(checks.push_each_write)
-    await expect(checks.push_from_another_device.check()).rejects.toThrow(/a watch heard none of 20 writes/)
+    await expectToHold(checks.pushEachWrite)
+    await expect(checks.pushFromAnotherDevice.check()).rejects.toThrow(/a watch heard none of 20 writes/)
   }, 10_000)
 })
 

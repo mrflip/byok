@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { useVault, useVaultSnapshot } from 'safebyok-react'
+import { useEffect, useState } from 'react'
+import { WhisperField, useVault, useVaultSnapshot } from 'safebyok-react'
 import { gripeForJokeErr, tellKnockKnockJoke } from '../lib/anthropic'
 
 /**
@@ -67,20 +67,32 @@ export const KnockKnock = () => {
       {telling && <p className="quiet">Claude is clearing its throat…</p>}
       {joke !== null && <blockquote className="joke">{joke}</blockquote>}
       {gripe !== null && <p className="gripe">{gripe}</p>}
-      <ApiKeySlot haveKeyBox={keyBox !== undefined} damaged={keyBox?.damaged === true} changedAt={keyBox?.damaged === false ? keyBox.changed_at : undefined} />
+      <ApiKeySlot haveKeyBox={keyBox !== undefined} damaged={keyBox?.damaged === true} savedAt={keyBox?.damaged === false ? keyBox.written_at : undefined} />
     </section>
   )
 }
 
+/** How long the slot says "saved" after a save, before it relaxes to when the key was last saved. */
+export const SavedFlashMillis = 2000
+
 /**
  * The facility for entering (or replacing) the Anthropic API key, stored as a lockbox. A damaged
  * key lockbox -- its stored record unreadable -- is offered for replacing: storing over it writes it afresh.
+ * A save flashes "saved" a moment, then relaxes to when the key was last saved -- any save, the
+ * same key saved again included.
  */
-const ApiKeySlot = ({ haveKeyBox, damaged, changedAt }: { haveKeyBox: boolean, damaged: boolean, changedAt?: number | undefined }) => {
+const ApiKeySlot = ({ haveKeyBox, damaged, savedAt }: { haveKeyBox: boolean, damaged: boolean, savedAt?: number | undefined }) => {
   const { vault, withUnlockedVault } = useVault()
   const [editing, setEditing] = useState(false)
   const [keyText, setKeyText] = useState('')
   const [gripe, setGripe] = useState<string | null>(null)
+  const [justSaved, setJustSaved] = useState(false)
+
+  useEffect(() => {
+    if (! justSaved) { return }
+    const relax = setTimeout(() => { setJustSaved(false) }, SavedFlashMillis)
+    return () => { clearTimeout(relax) }
+  }, [justSaved])
 
   if (vault === null) { return null }
 
@@ -103,7 +115,7 @@ const ApiKeySlot = ({ haveKeyBox, damaged, changedAt }: { haveKeyBox: boolean, d
   if (! editing) {
     return (
       <p className="api-key-slot quiet">
-        ✓ Anthropic key in the vault{changedAt !== undefined && ` (changed ${new Date(changedAt).toLocaleString()})`}.{' '}
+        ✓ Anthropic key {justSaved ? 'saved' : 'in the vault'}{! justSaved && savedAt !== undefined && ` (saved ${new Date(savedAt).toLocaleString()})`}.{' '}
         <button className="mini" onClick={() => { setEditing(true) }}>replace it</button>
       </p>
     )
@@ -113,12 +125,13 @@ const ApiKeySlot = ({ haveKeyBox, damaged, changedAt }: { haveKeyBox: boolean, d
     setGripe(null)
     try {
       const saved = await withUnlockedVault(async () => {
-        await vault.store(ApiKeyBoxlabel, keyText.trim(), { note: 'feeds the knock-knock machine' })
+        await vault.store(ApiKeyBoxlabel, keyText.trim(), { public: { note: 'feeds the knock-knock machine' } })
         return true
       })
       if (saved !== null) {
         setEditing(false)
         setKeyText('')
+        setJustSaved(true)
       }
     } catch (err) {
       setGripe(err instanceof Error ? err.message : 'Could not save that key.')
@@ -127,12 +140,7 @@ const ApiKeySlot = ({ haveKeyBox, damaged, changedAt }: { haveKeyBox: boolean, d
 
   return (
     <div className="api-key-slot">
-      <input
-        type="password"
-        placeholder="sk-ant-…"
-        value={keyText}
-        onChange={(evt) => { setKeyText(evt.target.value) }}
-      />
+      <WhisperField onChange={setKeyText} placeholder="sk-ant-…" aria-label="Anthropic API key" />
       <button disabled={! keyText.trim()} onClick={() => { void save() }}>Save key</button>
       <button onClick={() => { setEditing(false); setKeyText(''); setGripe(null) }}>Cancel</button>
       {gripe !== null && <span className="gripe">{gripe}</span>}

@@ -4,38 +4,33 @@
 // and the README changes with it.
 import { describe, expect, it } from 'vitest'
 import type { Client } from 'pg'
-import { AnyTextValidators, VaultDB, VaultError, VaultErrorKindVals, memoryDeviceDB, openVault } from 'safebyok'
+import { VaultDB, VaultError, VaultErrorKindVals, memoryDeviceDB, openVault } from 'safebyok'
 import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultErrorKind, VaultScope } from 'safebyok'
 import * as TH from './test-helpers'
 import { VaultChangeChannel, postgresVaultDB } from '../src/index'
-import type { PostgresClient, PostgresListen, PostgresVaultDB } from '../src/index'
+import type { PostgresClient, PostgresListen } from '../src/index'
 
 // ------------------------------------------------------------------------- the server half
 
 /** One verb a browser's vault may call, as the route serves it from the arguments the browser sent. */
-type Served = (vaultDB: PostgresVaultDB, args: unknown[]) => Promise<unknown>
-
-/**
- * What the server takes a name to be: any text. The browser's vault checks names with whichever
- * validators it was opened with, and reads a row they refuse back as damaged; this server's job
- * is to keep each user to their own vault, whatever the names.
- */
-const validators = AnyTextValidators
+type Served = (vaultDB: VaultDB, args: unknown[]) => Promise<unknown>
 
 /**
  * The verbs a browser's vault may call -- VaultDB's own, and nothing else -- each passed to the
- * VaultDB, which refuses another user's vault. A listing
- * goes as the stored records, which the browser's VaultDB validates.
+ * VaultDB, which refuses another user's vault, and holds each record to its shape and each name
+ * to the floor and the table's limits; what text a name may be beyond that is each browser
+ * vault's own validators' to say. A listing goes as the stored records, which the browser's
+ * VaultDB validates.
  */
 const served = new Map<string, Served>([
-  ['readBundle',   (vaultDB, [scope]) => vaultDB.readBundle(scope as VaultScope, validators)],
-  ['createBundle', (vaultDB, [bundle]) => vaultDB.createBundle(bundle as VaultBundle, validators)],
-  ['updateBundle', (vaultDB, [bundle, expected]) => vaultDB.updateBundle(bundle as VaultBundle, expected as BundleExpectation, validators)],
-  ['readBox',      (vaultDB, [scope, boxlabel]) => vaultDB.readBox(scope as VaultScope, boxlabel as string, validators)],
+  ['readBundle',   (vaultDB, [scope]) => vaultDB.readBundle(scope as VaultScope)],
+  ['createBundle', (vaultDB, [bundle]) => vaultDB.createBundle(bundle as VaultBundle)],
+  ['updateBundle', (vaultDB, [bundle, expected]) => vaultDB.updateBundle(bundle as VaultBundle, expected as BundleExpectation)],
+  ['readBox',      (vaultDB, [scope, boxlabel]) => vaultDB.readBox(scope as VaultScope, boxlabel as string)],
   ['listBoxes',    (vaultDB, [scope]) => vaultDB.listBoxRecords(scope as VaultScope)],
-  ['updateBox',    (vaultDB, [scope, lockbox, expected]) => vaultDB.updateBox(scope as VaultScope, lockbox as Lockbox, expected as LockboxExpectation, validators)],
-  ['eraseBox',     (vaultDB, [scope, boxlabel, expected]) => vaultDB.eraseBox(scope as VaultScope, boxlabel as string, expected as EraseExpectation, validators)],
-  ['eraseVault',   (vaultDB, [scope, expected]) => vaultDB.eraseVault(scope as VaultScope, expected as EraseExpectation, validators)],
+  ['updateBox',    (vaultDB, [scope, lockbox, expected]) => vaultDB.updateBox(scope as VaultScope, lockbox as Lockbox, expected as LockboxExpectation)],
+  ['eraseBox',     (vaultDB, [scope, boxlabel, expected]) => vaultDB.eraseBox(scope as VaultScope, boxlabel as string, expected as EraseExpectation)],
+  ['eraseVault',   (vaultDB, [scope, expected]) => vaultDB.eraseVault(scope as VaultScope, expected as EraseExpectation)],
 ])
 
 /** What a request posts: its verb and arguments, or nothing when its body is not a JSON object. */
@@ -79,7 +74,8 @@ const VaultRouteUrl = '/api/safebyok'
 class RouteVaultDB extends VaultDB {
   readonly maxRecordBytes = 1024 * 1024
   readonly maxVaultBytes = Infinity
-  readonly maxLockboxes = 1000 // the server's postgresVaultDB maxLockboxes
+  readonly maxLockboxes = Infinity // the server's postgresVaultDB maxLockboxes
+  readonly maxNameBytes = 640  // the server's postgresVaultDB maxNameBytes
 
   private readonly fetcher: Fetch
 
@@ -178,7 +174,6 @@ TH.describeVaultDB('the README route recipe, over postgresVaultDB', async () => 
   const route = await routeOver()
   return TH.perUser((userId) => browserFor(route, userId))
 }, {
-  comparesVaultKeyEpoch: false,
   makeVaultDBFor: async () => {
     const route = await routeOver()
     return (userId) => browserFor(route, userId)
@@ -189,7 +184,7 @@ describe("the README route recipe", () => {
   it("carries a real vault, made and opened by the core in the browser", async () => {
     const route = await routeOver()
     const vault = await openVault({
-      applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: browserFor(route, 'u1'), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver,
+      applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: browserFor(route, 'u1'), deviceDB: memoryDeviceDB(), keyDeriver: TH.testDeriver, passphraseStrengthTest: TH.anyPassphraseTest,
     })
     await vault.unlock('correct horse battery staple')
     await vault.store('anthropic_api_key', 'sk-ant-test-not-a-real-key')
@@ -201,7 +196,7 @@ describe("the README route recipe", () => {
     const route = await routeOver()
     const session: { userId: string | null } = { userId: 'u1' }
     const deviceDB = memoryDeviceDB()
-    const opts = { applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: sessionedBrowser(route, session), deviceDB, keyDeriver: TH.testDeriver, logger: TH.spyLogger().logger }
+    const opts = { applabel: 'acme', userId: 'u1', vaultlabel: 'main', vaultDB: sessionedBrowser(route, session), deviceDB, keyDeriver: TH.testDeriver, passphraseStrengthTest: TH.anyPassphraseTest, logger: TH.spyLogger().logger }
     const vault = await openVault(opts)
     await vault.unlock('correct horse battery staple')
     await vault.store('anthropic_api_key', 'sk-ant-test-not-a-real-key')
@@ -225,8 +220,7 @@ describe("the README route recipe", () => {
     const notJson = await route(new Request(`https://app.example.test${VaultRouteUrl}`, { method: 'POST', body: '{"verb": "readBundle", ' }))
     expect(notJson.status).to.eq(400)
     const broken = new RouteVaultDB(() => Promise.resolve(Response.json({}, { status: 502 })))
-    const refusal = await TH.refusalOf(broken.readBundle(TH.scopeOf('u1')))
-    expect(refusal.kind).to.eq('storage_unavailable')
+    await TH.expectRefusal(broken.readBundle(TH.scopeOf('u1')), 'storage_unavailable')
   })
 
   it("never sends the driver's own error to the browser", async () => {

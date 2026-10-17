@@ -17,6 +17,9 @@ pnpm add safebyok safebyok-postgres
 `safebyok` is a peer dependency: your app installs it, so the adapter and your app share one
 copy, and a `VaultError` from one is a `VaultError` to the other.
 
+Platform: Node 22 and up, wherever your server runs it; the floor is stated in the core's *Where it
+runs*.
+
 ## Make the tables
 
 `VaultTablesSql` is the SQL, for Postgres 14 or later in a UTF8 database. The package also ships
@@ -32,6 +35,10 @@ await pglite.exec(VaultTablesSql)   // PGlite
 
 That is tables, columns, keys and row-level security, and nothing more: no trigger, no function, no
 extra table, nothing to keep in step. Push between devices is opt-in; see *Hearing other writes*.
+
+For your app's own tests, the same SQL on [PGlite](https://pglite.dev), in-process, is the whole
+backend: a PGlite is a `client` as it stands, so there is no fake to install, as there is for
+Convex (`safebyok-convex/testing`). This package's own tests run that way.
 
 ## Where it runs
 
@@ -56,15 +63,32 @@ const vaultDB = postgresVaultDB({ client: pool, userId: session.userId })
   Client or PoolClient, or a PGlite, as they stand. postgres.js takes a wrapper:
   `{ query: async (text, params) => ({ rows: await sql.unsafe(text, params) }) }`.
 * **Every write is one statement**, atomic as Postgres makes every statement, so it asks no
-  transaction of your driver, no lock and no retry: a write lands only while what it expects
-  still stands, and refuses with kind `stale_write` otherwise.
+  transaction of your driver and no retry: a write lands only while what it expects still
+  stands, and refuses with kind `stale_write` otherwise. A lockbox write reads its vault's bundle
+  row `FOR SHARE`, a shared lock: lockbox writes never wait for each other on the bundle (two
+  writes to one boxlabel still meet at that lockbox's row), and a bundle update waits for the
+  lockbox writes under way (or they for it), so a lockbox lands only under the vaultKey that
+  stands.
 * **Isolation**: every guarantee here holds under READ COMMITTED, Postgres's default. Above it --
   a session default of REPEATABLE READ or SERIALIZABLE, or your own transaction around a call --
   some races fail with a serialization error (`40001`) instead, which refuses as
   `storage_unavailable` and may simply be tried again. Leave the isolation level alone, and no
   verb needs a retry.
-* **`maxLockboxes`**, 1000 unless you say otherwise, is the most lockboxes one vault holds, as a
-  best effort: see *A limit of the server's own*, below.
+* **`maxLockboxes`**, none (`Infinity`) unless you say otherwise, is the most lockboxes one vault
+  holds, as a best effort: see *A limit of the server's own*, below. Quotas are yours to set.
+* **`logger`**, when given, hears what the VaultDB has to say: a `listen` that failed to start, an
+  unlisten that failed, a subscriber that threw. Left out, it is the console's.
+* **Names of up to 640 bytes** of UTF-8 each (`maxNameBytes`): a lockbox's primary key is its
+  four names together, and Postgres holds a btree entry of at most 2704 bytes. A longer name is
+  refused with kind `bad_label` before a statement runs. No character is reserved: each name is
+  a column of its own.
+* **What the server checks** is who may reach which vault, that each write is atomic, and that
+  each record has its shape and each name is above the floor (`VAULTDB.md`, *Names*) and within
+  the limit above: the same checks every VaultDB's verbs make, on the server side of the wire.
+  It never holds a name to a label grammar, nor looks inside a lockbox's public bag: the one is
+  each browser vault's own `validators`, checked where a name enters it, the other the host's.
+  A host whose clients run different validators has chosen that, and a client reads a record
+  another's validators let through as any other, never as damage.
 * **Trouble** refuses with kind `storage_unavailable`, your driver's own error as its `cause`.
   Every refusal is a `VaultError`, and its `kind` and message are safe to send to the browser;
   its `cause` is not, being your driver's, and may name your database.
@@ -80,32 +104,29 @@ The server half, `app/api/safebyok/route.ts`:
 
 ```ts
 import { Pool } from 'pg'
-import { AnyTextValidators, VaultError } from 'safebyok'
+import { VaultError } from 'safebyok'
 import type { BundleExpectation, EraseExpectation, Lockbox, LockboxExpectation, VaultBundle, VaultScope } from 'safebyok'
 import { postgresVaultDB } from 'safebyok-postgres'
-import type { PostgresVaultDB } from 'safebyok-postgres'
+import type { VaultDB } from 'safebyok'
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL })
 
-type Served = (vaultDB: PostgresVaultDB, args: unknown[]) => Promise<unknown>
-
-// What the server takes a name to be: any text. The browser's vault checks names with whichever
-// validators it was opened with, and reads a row they refuse back as damaged; this server's job
-// is to keep each user to their own vault, whatever the names.
-const validators = AnyTextValidators
+type Served = (vaultDB: VaultDB, args: unknown[]) => Promise<unknown>
 
 // The verbs a browser's vault may call -- VaultDB's own, and nothing else -- each passed to the
-// VaultDB, which refuses another user's vault. A listing
-// goes as the stored records, which the browser's VaultDB validates.
+// VaultDB, which refuses another user's vault, and holds each record to its shape and each name
+// to the floor and the table's limits; what text a name may be beyond that is each browser
+// vault's own validators' to say. A listing goes as the stored records, which the browser's
+// VaultDB validates.
 const served = new Map<string, Served>([
-  ['readBundle',   (vaultDB, [scope]) => vaultDB.readBundle(scope as VaultScope, validators)],
-  ['createBundle', (vaultDB, [bundle]) => vaultDB.createBundle(bundle as VaultBundle, validators)],
-  ['updateBundle', (vaultDB, [bundle, expected]) => vaultDB.updateBundle(bundle as VaultBundle, expected as BundleExpectation, validators)],
-  ['readBox',      (vaultDB, [scope, boxlabel]) => vaultDB.readBox(scope as VaultScope, boxlabel as string, validators)],
+  ['readBundle',   (vaultDB, [scope]) => vaultDB.readBundle(scope as VaultScope)],
+  ['createBundle', (vaultDB, [bundle]) => vaultDB.createBundle(bundle as VaultBundle)],
+  ['updateBundle', (vaultDB, [bundle, expected]) => vaultDB.updateBundle(bundle as VaultBundle, expected as BundleExpectation)],
+  ['readBox',      (vaultDB, [scope, boxlabel]) => vaultDB.readBox(scope as VaultScope, boxlabel as string)],
   ['listBoxes',    (vaultDB, [scope]) => vaultDB.listBoxRecords(scope as VaultScope)],
-  ['updateBox',    (vaultDB, [scope, lockbox, expected]) => vaultDB.updateBox(scope as VaultScope, lockbox as Lockbox, expected as LockboxExpectation, validators)],
-  ['eraseBox',     (vaultDB, [scope, boxlabel, expected]) => vaultDB.eraseBox(scope as VaultScope, boxlabel as string, expected as EraseExpectation, validators)],
-  ['eraseVault',   (vaultDB, [scope, expected]) => vaultDB.eraseVault(scope as VaultScope, expected as EraseExpectation, validators)],
+  ['updateBox',    (vaultDB, [scope, lockbox, expected]) => vaultDB.updateBox(scope as VaultScope, lockbox as Lockbox, expected as LockboxExpectation)],
+  ['eraseBox',     (vaultDB, [scope, boxlabel, expected]) => vaultDB.eraseBox(scope as VaultScope, boxlabel as string, expected as EraseExpectation)],
+  ['eraseVault',   (vaultDB, [scope, expected]) => vaultDB.eraseVault(scope as VaultScope, expected as EraseExpectation)],
 ])
 
 /** What a request posts: its verb and arguments, or nothing when its body is not a JSON object. */
@@ -151,7 +172,8 @@ const VaultRouteUrl = '/api/safebyok'
 export class RouteVaultDB extends VaultDB {
   readonly maxRecordBytes = 1024 * 1024
   readonly maxVaultBytes = Infinity
-  readonly maxLockboxes = 1000 // the server's postgresVaultDB maxLockboxes
+  readonly maxLockboxes = Infinity // the server's postgresVaultDB maxLockboxes
+  readonly maxNameBytes = 640  // the server's postgresVaultDB maxNameBytes
 
   protected doReadBundle(scope: VaultScope) { return this.call('readBundle', scope) }
   protected doCreateBundle(bundle: VaultBundle) { return this.call('createBundle', bundle) }
@@ -202,13 +224,13 @@ const isKind = (kind: unknown): kind is VaultErrorKind => (VaultErrorKindVals as
 * **No push over a plain route**: the browser's vault refreshes after its own writes, and learns
   of other devices' writes when it next reads. For live updates, carry `subscribe` over a
   socket, server-sent events, or a GraphQL subscription (`safebyok-graphql`), fed by `listen`.
-* **A limit of the server's own.** As the Convex component does, this VaultDB holds every vault
-  to a number of lockboxes, `maxLockboxes` (1000 unless you pass another), whatever the browser
-  asks: a new lockbox past it refuses with kind `vault_full`, and a lockbox replacing one already
-  there never does. Declare the same number as the browser VaultDB's `maxLockboxes`, so that
-  `openVault` refuses a larger one up front. For no practical limit, pass both a large number,
-  such as `1_200_300_400_500_600`: the server's goes to Postgres as a bigint, where `Infinity`
-  cannot. Nothing bounds a vault's bytes beyond that: your framework's request-size limit bounds
+* **A limit of the server's own, if you give one.** Pass `maxLockboxes` and this VaultDB holds
+  every vault to that many lockboxes, whatever the browser asks: a new lockbox past it refuses
+  with kind `vault_full`, and a lockbox replacing one already there never does. Declare the same
+  number as the browser VaultDB's `maxLockboxes`, so that `openVault` refuses a larger one up
+  front. A limit costs the statement that inserts a new lockbox one count of its vault; with
+  none (`Infinity`, the default), nothing is counted, and how large a vault grows is yours to
+  bound, by your own quotas. Nothing bounds a vault's bytes beyond that: your framework's request-size limit bounds
   each record. What the limit guarantees is
   [the VaultDB contract's](https://github.com/mrflip/safebyok/blob/main/packages/safebyok/VAULTDB.md) (lines 4.2 to 4.5), and no more:
   * **It is a best effort.** The check is a `count(*)` of the vault's lockboxes in the statement
@@ -224,41 +246,19 @@ const isKind = (kind: unknown): kind is VaultErrorKind => (VaultErrorKindVals as
     lands again.
   * **The count a write checks is the vault's, as of the start of its statement.** A write reports
     no count; the vault learns it from the listing it reads after every write.
-  * **It costs the host nothing**: no column, trigger, lock or retry, and one `count(*)` over the
-    vault's primary-key prefix, at most about `maxLockboxes` index entries, since the limit stops
-    growth near it.
+  * **It costs the host nothing** but the count: no column, trigger, lock or retry, and one
+    `count(*)` over the vault's primary-key prefix, at most about `maxLockboxes` index entries,
+    since the limit stops growth near it. With no limit, there is no count either.
 
-  **For a hard cap**, *vaya con dios*: this is unsupported, and it costs what the package does not
-  ask of you -- a trigger of your own, and a row lock that makes lockbox inserts into one vault
-  take turns, so that racing writers can no longer overshoot under READ COMMITTED. (Under
-  REPEATABLE READ the trigger counts from its transaction's snapshot, which misses a racer's
-  lockbox committed meanwhile, and racers may still overshoot.) Put your number where `1000` is,
-  and pass the same as `maxLockboxes`: the adapter's own count still refuses a write to a full
-  vault first, as `vault_full`, and a first write under a boxlabel already taken as `stale_write`,
-  so the trigger meets only the racers that count let through. Its refusal is a database error,
-  so the adapter reports it as `storage_unavailable` rather than `vault_full`; with the trigger's
-  number below `maxLockboxes`, every first write it meets in a vault at that number refuses that
-  way, one under a boxlabel already taken included, since a `BEFORE` trigger fires ahead of
-  `ON CONFLICT`. The package's tests run this on PGlite, one statement at a time, and cannot race it.
+  **For a hard cap**, which this package does not ship (a trigger is yours to own, and its
+  trade-offs depend on your isolation level and your tables), paste this to your coding agent:
 
-  ```sql
-  CREATE OR REPLACE FUNCTION safebyok_lockboxes_capped() RETURNS trigger LANGUAGE plpgsql AS $$
-  BEGIN
-    PERFORM 1 FROM safebyok_bundles
-      WHERE (applabel, user_id, vaultlabel, vault_id) = (NEW.applabel, NEW.user_id, NEW.vaultlabel, NEW.vault_id)
-      FOR UPDATE;
-    IF (SELECT count(*) FROM safebyok_lockboxes
-          WHERE (applabel, user_id, vaultlabel) = (NEW.applabel, NEW.user_id, NEW.vaultlabel)) >= 1000 THEN
-      RAISE EXCEPTION 'This vault holds its limit of lockboxes' USING ERRCODE = 'check_violation';
-    END IF;
-    RETURN NEW;
-  END
-  $$;
-
-  CREATE OR REPLACE TRIGGER safebyok_lockboxes_capped
-    BEFORE INSERT ON safebyok_lockboxes
-    FOR EACH ROW EXECUTE FUNCTION safebyok_lockboxes_capped();
-  ```
+  > Read the "A limit of the server's own" bullet of the `safebyok-postgres` README and `VAULTDB.md` (lines
+  > 4.2 to 4.5), and the SQL in `vault-tables.sql`. Write me a `BEFORE INSERT` trigger on
+  > `safebyok_lockboxes` that refuses a vault's lockbox past a hard limit, and explain its
+  > trade-offs: the lock it takes, what my connections' isolation level does to it, and that its
+  > refusal surfaces as `storage_unavailable` rather than `vault_full`. Then write the test that
+  > proves it against a real Postgres, not PGlite.
 
 ## Hearing other writes
 
@@ -280,8 +280,10 @@ await pool.query(VaultNotifySql)    // once, as a migration: safe to run again
 
 Its trigger sends a notification on the channel `VaultChangeChannel` (`safebyok_vault_changes`)
 after every write that changes a vault, its payload the vault's scope as JSON: no record, nothing
-ciphered. A `listen` without the trigger hears nothing; the trigger without a `listen` costs a
-notification nobody hears.
+ciphered. A `listen` without the trigger hears nothing, by design, and says nothing of it; the
+trigger without a `listen` costs a notification nobody hears. A `listen` that throws as it is
+called refuses `subscribe` as `storage_unavailable`; one that rejects later is warned of through
+the `logger`, once, and its subscriber hears nothing more, as without a `listen`.
 
 `listen(channel, onNotify)` calls `onNotify` with each notification's payload and returns the
 unlisten (or a promise for it). A PGlite's own `listen` is one, called on its PGlite -- passed
@@ -324,22 +326,23 @@ subscriber: at worst, a refresh that finds nothing new.
 Two tables, each record **a column to a field**, exactly as safebyok wrote it: text as text, a
 time or a count as a `bigint`, and each structured value as one opaque `jsonb` -- an encrypted
 value (a cipherIv and its ciphertext, `{ cipher_iv_b64, ciphertext_b64 }`), or the bundle's
-`unlocks`, its list of unlock envelopes. Nothing is normalized: a note or a
-user id reads back byte for byte, as it must, since every field a record holds is bound into its
-encryption (all but the bundle's `unlock_epoch` and which envelopes its `unlocks` holds).
+`unlocks`, its list of unlock envelopes. A lockbox's public bag is `text`, never `jsonb`, which
+would rewrite it. Nothing is normalized: a public bag or a user id reads back byte for byte, as it
+must, since every field a record holds is bound into its encryption (all but the bundle's
+`unlock_epoch` and which envelopes its `unlocks` holds).
 
 | Table                | One row per | Primary key                                     | Columns                                                                                                |
 | -------------------- | ----------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | `safebyok_bundles`   | vault       | `applabel`, `user_id`, `vaultlabel`             | every field of the `VaultBundle`                                                                       |
-| `safebyok_lockboxes` | lockbox     | `applabel`, `user_id`, `vaultlabel`, `boxlabel` | the vault's scope and `vault_id`, then every field of the `Lockbox`; a lockbox with no note, null      |
+| `safebyok_lockboxes` | lockbox     | `applabel`, `user_id`, `vaultlabel`, `boxlabel` | the vault's scope and `vault_id`, then every field of the `Lockbox`; its public bag as `text`          |
 
 * **Encrypted**: each whisper (`whisper_ciphered`), each lockbox's lockboxKey
   (`lockbox_key_wrapped`), and the vaultKey, once under each way into the vault (each unlock
   envelope's `vault_key_wrapped`, inside the bundle's `unlocks`).
-* **In the open**: the scope, each `boxlabel` and `note`, the `vault_id`, `unlock_epoch`,
-  `revision_id`s, each unlock envelope's method, id, label, salt and key deriver's label, when
-  each vault and lockbox was first stored and each whisper last changed (`registered_at`,
-  `changed_at`, epoch milliseconds), and the length of every ciphertext.
+* **In the open**: the scope, each `boxlabel` and public bag (`public_json`), each whisper's codec
+  and schema version, the `vault_id`, `unlock_epoch`, `revision_id`s, each unlock envelope's method, id, label, salt and key deriver's label, when
+  each vault and lockbox was first stored and each lockbox last written (`registered_at`,
+  `written_at`, epoch milliseconds), and the length of every ciphertext.
 * **Never**: a whisper, a passphrase, any key in usable form, or the device-local remembered
   unlock. No history: an update replaces its row (your database's backups and WAL keep what
   they keep).
@@ -385,7 +388,7 @@ shape of table, copy it, and keep to what makes it right:
   the `vault_id`, so a lockbox cannot outlive its vault or land in one made anew, and erasing a
   vault is one `DELETE` of its bundle.
 * **Store each record a column to a field**, and compare only the scope, `boxlabel`, `vault_id`,
-  `unlock_epoch` and `revision_id`. `src/columns.ts` names each record's columns once, the
+  `unlock_epoch`, `vault_key_epoch` and `revision_id`. `src/columns.ts` names each record's columns once, the
   compiler holding the list to the record's fields both ways, and builds every statement from it.
 * **Authorize in the adapter**: made per request for one user, it refuses every other user's
   scope with `identity_revoked`.
@@ -397,10 +400,15 @@ shape of table, copy it, and keep to what makes it right:
   was full -- so that no second read is needed to tell a full vault from a stale writer. And
   map a foreign key violation (`23503`) on the insert to `stale_write`: a vault erased after the
   statement's snapshot, before its foreign key check, is only a stale writer.
-* **Read the bundle without a lock, and know what that sees.** The insert takes the bundle from
-  its snapshot, and the foreign key re-checks only `vault_id` against the bundle that stands now.
-  A write that must compare any other column of the bundle atomically with a lockbox write
-  would need that row read `FOR SHARE` in the same statement; none does today.
+* **Read the bundle `FOR SHARE` in a lockbox write, and know why.** A lockbox write compares the
+  bundle's `vault_key_epoch` (contract line 3.8), a column no foreign key covers, and a plain
+  read would take it from the statement's snapshot: a bundle update committed after the snapshot
+  -- a rotation of the vaultKey -- would go unseen, and a device still holding the replaced
+  vaultKey could seal a whisper under it. `FOR SHARE` makes the update wait for the write, or the
+  write for the update and then re-read the bundle as it stands. It is a shared lock, so lockbox
+  writes never wait for each other on the bundle. A trigger of your own that locks the bundle row anew -- `FOR
+  UPDATE`, say -- turns two such writers into a deadlock: serialize on something else (the hard
+  cap above takes an advisory lock).
 * **Prove it with the shared suite**: `describeVaultDB` from `safebyok/testing` runs every verb,
   expectation and refusal against a fresh adapter. Its two users' vaults go through one adapter,
   so a per-request adapter answers it with one VaultDB per user, through `perUser` from

@@ -1,5 +1,6 @@
 import * as Z from 'zod/mini'
 import { Ciphered } from './crypto'
+import { NameFloor } from './validators'
 
 /**
  * The JSON a whisper is made of. `null` is legal here -- inside an array or object -- because
@@ -62,11 +63,12 @@ export const Whisper: Z.ZodMiniType<Whisper> = Z.union([
  * time the vault keeps lies past it, and a stored record holding a later one fails validation;
  * see {@link EpochMillis}.
  *
- * `askPassphraseAt` equals it when the vault never asks for the passphrase again on this device
- * until `lock()`: `forcePassphraseReentryHours: Infinity`, or a window so large its deadline
- * would pass it. A host compares against it to show "until locked" rather than a date in 2255.
+ * `askPassphraseAt` is at or near it when the vault never asks for the passphrase again on this
+ * device until `lock()`: `forcePassphraseReentryHours: Infinity`. A host shows "until locked"
+ * rather than a date in 2255 for any instant within a minute of it, never only for one equal to
+ * it: `at >= FarFuture - MinuteMillis`.
  *
- * @example askPassphraseAt === FarFuture ? 'until locked' : new Date(askPassphraseAt).toLocaleString()
+ * @example askPassphraseAt >= FarFuture - MinuteMillis ? 'until locked' : new Date(askPassphraseAt).toLocaleString()
  * @example new Date(FarFuture).toISOString()   // '2255-06-05T23:47:34.740Z'
  */
 export const FarFuture = 9_007_199_254_740 // Math.floor(Number.MAX_SAFE_INTEGER / 1000)
@@ -80,21 +82,28 @@ export const FarFuture = 9_007_199_254_740 // Math.floor(Number.MAX_SAFE_INTEGER
 export const FarPast = 347_155_200_000 // Date.UTC(1981, 0, 1)
 
 /**
- * The longest unlock window a vault keeps, in milliseconds: from {@link FarPast} to
- * {@link FarFuture}, so a deadline it sets from any instant the clock may read is
- * {@link FarFuture}. `forcePassphraseReentryHours: Infinity`, or any number of hours as long or
- * longer, becomes this window as `openVault` parses it, and a vault's `reentryWindowMs` reads as
- * exactly this when it stays unlocked until `lock()`.
+ * One minute, in milliseconds: the margin a host leaves when it asks whether an instant is
+ * {@link FarFuture}, the vault's "never".
  *
- * @example vault.reentryWindowMs === ForeverMs   // true when opened with forcePassphraseReentryHours: Infinity
- * @example FarPast + ForeverMs === FarFuture        // true: a window from the earliest instant ends at the last
+ * @example askPassphraseAt >= FarFuture - MinuteMillis   // true while the vault stays unlocked until lock()
  */
-export const ForeverMs = FarFuture - FarPast
+export const MinuteMillis = 60_000
+
+/**
+ * The unlock window a vault keeps for "until `lock()`", in milliseconds: from {@link FarPast} to
+ * {@link FarFuture}, so a deadline it sets from any instant the clock may read is
+ * {@link FarFuture}. `forcePassphraseReentryHours: Infinity` becomes this window as `openVault`
+ * parses it, and a vault's `reentryWindowMillis` reads as it then.
+ *
+ * @example vault.reentryWindowMillis >= ForeverMillis - MinuteMillis   // true when opened with forcePassphraseReentryHours: Infinity
+ * @example FarPast + ForeverMillis === FarFuture                       // true: a window from the earliest instant ends at the last
+ */
+export const ForeverMillis = FarFuture - FarPast
 
 /**
  * Validator for an instant as whole UTC epoch milliseconds, from {@link FarPast} (1981) to
  * {@link FarFuture} (2255), both included. Every time the package keeps is one -- a lockbox's
- * `registered_at` and `changed_at`, a vault bundle's `registered_at`, a remembered unlock's
+ * `registered_at` and `written_at`, a vault bundle's `registered_at`, a remembered unlock's
  * `ask_passphrase_at` -- and a stored record holding anything else fails validation. A host can
  * check its own times with it.
  *
@@ -118,14 +127,14 @@ export const EpochMillis = Z.number().check(
 /**
  * What names one vault: the host application's label, the authenticated user, and the vault's own
  * label. Two users may each have a vault labelled `main` without collision; so may two apps
- * sharing a backend. This checks only that each is text: what text a name may be is the vault's
- * validators' to say (`Label` and `UserId` by default, from `safebyok/validators`), and every
- * VaultDB verb checks a scope with them.
+ * sharing a backend. This checks each name against the floor every name is held to
+ * (`NameFloor`); what text a name may be beyond that is the vault's validators' to say, at its
+ * entry (`Label` and `UserId` by default, from `safebyok/validators`).
  */
 export const VaultScope = Z.object({
-  applabel:   Z.string(),
-  user_id:    Z.string(),
-  vaultlabel: Z.string(),
+  applabel:   NameFloor,
+  user_id:    NameFloor,
+  vaultlabel: NameFloor,
 })
 export type VaultScope = Z.infer<typeof VaultScope>
 
@@ -134,84 +143,60 @@ export type VaultScope = Z.infer<typeof VaultScope>
  * replaces the one before. A bundle's `vault_key_epoch` is its envelopes' vaultKey; a lockbox's,
  * the vaultKey its lockboxKey is wrapped under.
  */
-const vaultKeyEpoch = Z.int().check(Z.positive())
+export const vaultKeyEpoch = Z.int().check(Z.positive())
 
 /** A WebCrypto key handle, as a record holds one. Never bytes: a handle, and nothing but. */
 const cryptoKeyHandle = Z.custom<CryptoKey>((val) => val instanceof CryptoKey, 'a CryptoKey handle')
 
 /**
- * One lockbox as the storage layer holds it: the whisper ciphered under its own lockboxKey, that
- * lockboxKey wrapped under the vaultKey, and the public shell -- boxlabel, note, the times it
- * was first stored and last changed -- a locked vault may show. Nothing in this record opens without the vaultKey.
+ * A lockbox's public bag: any JSON value the host keeps beside the whisper -- what the user calls
+ * the account, which project a key belongs to -- shown while the vault is locked, and never
+ * interpreted by safebyok. It is stored in the clear, as its JSON (`public_json`), and bound into
+ * the lockbox's encryption, so a bag altered or swapped in storage makes the lockbox refuse to
+ * open. A host checks its own bag's shape before `store()`. Never put secret material in it.
  *
- * `revision_id` is minted fresh on every write and bound into both encryptions, so ciphertext
- * moved between revisions (or boxes, or vaults) refuses to open.
- *
- * Stored fields are underbar_case: this record is written to the storage layer as-is, and it is
- * plain JSON -- any backend that can hold text can hold it. Its boxlabel and note are checked here
- * only as text; every VaultDB verb checks them with the vault's validators.
+ * @example PublicBag.parse({ note: 'work account', project: 'atlas' })
+ * @example PublicBag.safeParse({ when: new Date() }).success   // false: JSON would flatten it to {}
+ * @example PublicBag.safeParse(undefined).success              // false: undefined is not JSON
  */
-export const Lockbox = Z.object({
-  format:              Z.literal('safebyok-lockbox-v2'),
-  boxlabel:            Z.string(),
-  revision_id:         Z.string().check(Z.minLength(1)),
-  /**
-   * Which vaultKey this lockbox's lockboxKey is wrapped under: the bundle's `vault_key_epoch` when
-   * it was written. Public, so a locked vault's listing shows which lockboxes stand under which.
-   */
-  vault_key_epoch:     vaultKeyEpoch,
-  /** This lockbox's lockboxKey, wrapped under the vaultKey. */
-  lockbox_key_wrapped: Ciphered,
-  /** The whisper, ciphered under this lockbox's lockboxKey. */
-  whisper_ciphered:    Ciphered,
-  /**
-   * The lockbox's public note, as the vault's note check passed it (`LockboxNote` by default).
-   * Written only when there is one; read as absent when undefined too, as IndexedDB keeps it.
-   */
-  note:                Z.optional(Z.string()),
-  /** When this boxlabel was first stored, an {@link EpochMillis}: every later store carries it forward. */
-  registered_at:       EpochMillis,
-  /**
-   * When the whisper last changed, an {@link EpochMillis}: a store whose whisper serializes the
-   * same as the one it replaces writes a new revision and leaves this standing.
-   */
-  changed_at:          EpochMillis,
-})
-export type Lockbox = Z.infer<typeof Lockbox>
-
-/** A summary's note: null where the lockbox has none, however that was stored. */
-const summaryNote = Z._default(Z.nullable(Z.string()), null)
+export const PublicBag: Z.ZodMiniType<WhisperJson> = whisperJson
+export type PublicBag = Z.infer<typeof PublicBag>
 
 /**
- * The public face of a lockbox: everything but its two encrypted fields, with `note` null when
- * the lockbox has none -- never absent, never undefined, however the record was stored -- and
- * `damaged` false. This, or a {@link DamagedLockbox}, is what a VaultDB's `listBoxes` returns
- * and a vault's snapshot holds, readable while locked.
+ * The public face of a lockbox: its boxlabel, revision, vaultKey epoch and times, its public bag
+ * as the JSON value the host stored (`{}` when it gave none), and `damaged` false. This, or a
+ * {@link DamagedLockbox}, is what a VaultDB's `listBoxes` returns and a vault's snapshot holds,
+ * readable while locked. The bag is shown as storage holds it: only `read()` opens the lockbox
+ * and so proves it unaltered.
  *
- * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', vault_key_epoch: 1, registered_at, changed_at }).note  // null
+ * @example LockboxSummary.parse({ boxlabel: 'anthropic', revision_id: 'r1', vault_key_epoch: 1, public: {}, registered_at, written_at }).damaged  // false
  */
-export const LockboxSummary = Z.extend(
-  Z.omit(Lockbox, { format: true, lockbox_key_wrapped: true, whisper_ciphered: true }),
-  {
-    note:    summaryNote,
-    damaged: Z._default(Z.literal(false), false),
-  },
-)
+export const LockboxSummary = Z.object({
+  boxlabel:        NameFloor,
+  revision_id:     Z.string().check(Z.minLength(1)),
+  vault_key_epoch: vaultKeyEpoch,
+  public:          PublicBag,
+  registered_at:   EpochMillis,
+  written_at:      EpochMillis,
+  damaged:         Z._default(Z.literal(false), false),
+})
 export type LockboxSummary = Z.infer<typeof LockboxSummary>
 
 /**
- * A lockbox whose stored record does not read back as one -- damaged, tampered with, or written by
- * another version of safebyok -- listed under the boxlabel it is stored under, with nothing else
- * from it trusted. It sits in a vault's snapshot beside the {@link LockboxSummary}s, sorted among
- * them, so a UI can offer to remove it: `erase()` removes it and `store()` writes a fresh lockbox
- * over it, while `read()` and `use()` refuse it with kind 'damaged_lockbox'.
+ * A lockbox whose stored record does not read back as one -- damaged, tampered with, written by
+ * another version of safebyok, or sealed under a vaultKey the vault does not hold -- listed under
+ * the boxlabel it is stored under, with nothing else from it trusted but its `revision_id`, when
+ * it holds one as text (null otherwise), which only names the record for a write over it. It
+ * sits in a vault's snapshot beside the {@link LockboxSummary}s, sorted among them, so a UI can
+ * offer to remove it: `erase()` removes it and `store()` writes a fresh lockbox over it, while
+ * `read()` and `use()` refuse it with kind 'damaged_lockbox'.
  *
  * @example
  *   for (const box of snapshot.boxes) {
- *     if (box.damaged) { showRemovable(box.boxlabel) } else { showSummary(box.boxlabel, box.note) }
+ *     if (box.damaged) { showRemovable(box.boxlabel) } else { showSummary(box.boxlabel, box.public) }
  *   }
  */
-export type DamagedLockbox = { boxlabel: string, damaged: true }
+export type DamagedLockbox = { boxlabel: string, damaged: true, revision_id: string | null }
 
 /**
  * The ways into a vault, each an {@link UnlockEnvelope}'s `method`: a `passphrase` the user types,
@@ -241,7 +226,7 @@ export const PassphraseEnvelope = Z.object({
   /** Random id minted when the envelope is added, and kept when its passphrase changes. */
   unlock_id:         Z.string().check(Z.minLength(1)),
   /** What the user calls this way in, so they can tell one from another: `home_phrase`, say. */
-  unlocklabel:       Z.string().check(Z.minLength(1)),
+  unlocklabel:       NameFloor,
   /** Which keyDeriverSpec made the passphraseKey: `argon2id_web_v1`, or a host's own label. */
   key_deriver_label: Z.string().check(Z.minLength(1)),
   /** This envelope's passphraseSalt: fresh for every envelope, and for every change of its passphrase. */
@@ -279,7 +264,7 @@ export const PasskeyEnvelope = Z.object({
   /** Random id minted when the envelope is added. */
   unlock_id:         Z.string().check(Z.minLength(1)),
   /** What the user calls this way in, so they can tell one from another: `laptop_fingerprint`, say. */
-  unlocklabel:       Z.string().check(Z.minLength(1)),
+  unlocklabel:       NameFloor,
   /** The WebAuthn credential's id, base64url, as `PublicKeyCredential.id` gives it: which passkey to ask. */
   credential_id:     Z.string().check(Z.minLength(1)),
   /** The salt the passkey's PRF is evaluated over: {@link PasskeySaltBytes} random bytes, fresh for every envelope. */
@@ -331,17 +316,20 @@ const unlockList = Z.array(UnlockEnvelope).check(
 /**
  * The public face of one way into a vault, as a vault's snapshot lists it even while locked:
  * what a host shows the user, and what it names when it aims `unlock()` or `removeUnlock()` at
- * one. Every way in shows its `method`, `unlock_id` and `unlocklabel`; a passkey also shows its
+ * one. Every way in shows its `method`, `unlock_id` and `unlocklabel`, and when it was added
+ * (`registered_at`) and by which device (`device_id`, this vault's id for that device: one per
+ * device per vault, so it links nothing the vault does not already link), so the user can tell
+ * the way in they made last week from one made on a phone they do not recognise; a passkey also shows its
  * `credential_id` and `prf_salt_b64`, which a host needs before unlocking, to ask the
  * authenticator (`safebyok-react`'s `askPasskey` takes the list whole). Never a salt of a
  * passphrase, never a wrap.
  *
- * @example vault.getSnapshot().unlocks  // [{ method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase' }]
- * @example vault.getSnapshot().unlocks.filter((unlock) => unlock.method === 'passkey')  // [{ method: 'passkey', unlock_id, unlocklabel: 'laptop', credential_id: 'AXk3...', prf_salt_b64: 'q83v...' }]
+ * @example vault.getSnapshot().unlocks  // [{ method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase', device_id: 'k3x9...', registered_at: 1760000000000 }]
+ * @example vault.getSnapshot().unlocks.filter((unlock) => unlock.method === 'passkey')  // [{ method: 'passkey', unlock_id, unlocklabel: 'laptop', device_id, registered_at, credential_id: 'AXk3...', prf_salt_b64: 'q83v...' }]
  */
 export type UnlockSummary =
-  | Pick<PassphraseEnvelope, 'method' | 'unlock_id' | 'unlocklabel'>
-  | Pick<PasskeyEnvelope, 'method' | 'unlock_id' | 'unlocklabel' | 'credential_id' | 'prf_salt_b64'>
+  | Pick<PassphraseEnvelope, 'method' | 'unlock_id' | 'unlocklabel' | 'device_id' | 'registered_at'>
+  | Pick<PasskeyEnvelope, 'method' | 'unlock_id' | 'unlocklabel' | 'device_id' | 'registered_at' | 'credential_id' | 'prf_salt_b64'>
 
 /**
  * What a passkey answers when asked for a vault's PRF, as a host hands it to the vault: which
@@ -388,9 +376,9 @@ const priorFits = (bundle: { vault_key_epoch: number, prior_vault_key?: { vault_
  */
 export const VaultBundle = Z.object({
   format:              Z.literal('safebyok-vault-v2'),
-  applabel:            Z.string(),
-  user_id:             Z.string(),
-  vaultlabel:          Z.string(),
+  applabel:            NameFloor,
+  user_id:             NameFloor,
+  vaultlabel:          NameFloor,
   /** Random id minted when the vault is made, and never changed; bound into every encryption. */
   vault_id:            Z.string().check(Z.minLength(1)),
   unlock_epoch:        Z.int().check(Z.positive()),
@@ -416,9 +404,9 @@ export type VaultBundle = Z.infer<typeof VaultBundle>
  */
 export const DeviceUnlock = Z.object({
   format:           Z.literal('safebyok-unlock-v1'),
-  applabel:         Z.string(),
-  user_id:          Z.string(),
-  vaultlabel:       Z.string(),
+  applabel:         NameFloor,
+  user_id:          NameFloor,
+  vaultlabel:       NameFloor,
   vault_id:         Z.string().check(Z.minLength(1)),
   /** The bundle's unlock_epoch when this unlock was remembered; a mismatch voids it. */
   unlock_epoch:     Z.int().check(Z.positive()),
@@ -432,18 +420,12 @@ export const DeviceUnlock = Z.object({
 export type DeviceUnlock = Z.infer<typeof DeviceUnlock>
 
 /**
- * What a device keeps of a vault, locked or not, on its own storage: its own random `device_id`
- * for the vault, which every way in it adds carries, and the highest `unlock_epoch` and
+ * What a device mark holds of the vault it has seen under its scope: the device's own random
+ * `device_id` for the vault, which every way in it adds carries, and the highest `unlock_epoch` and
  * `vault_key_epoch` it has seen the vault's bundle at, so that an older copy of the bundle storage
- * hands back later is refused (kind 'rolled_back'). Nothing in it is secret. One per scope: a vault made anew under the scope,
- * with another `vault_id`, starts a mark of its own, under a new `device_id`. `lock()` leaves it;
- * `destroy()` erases it.
+ * hands back later is refused (kind 'rolled_back').
  */
-export const DeviceMark = Z.object({
-  format:          Z.literal('safebyok-mark-v1'),
-  applabel:        Z.string(),
-  user_id:         Z.string(),
-  vaultlabel:      Z.string(),
+export const SeenVault = Z.object({
   /** This device's id for the vault: random, minted the first time it reads or makes the vault. */
   device_id:       Z.string().check(Z.minLength(1)),
   /** The vault this mark is of. */
@@ -452,6 +434,34 @@ export const DeviceMark = Z.object({
   unlock_epoch:    Z.int().check(Z.positive()),
   /** The highest `vault_key_epoch` this device has seen the vault's bundle at. */
   vault_key_epoch: vaultKeyEpoch,
+})
+export type SeenVault = Z.infer<typeof SeenVault>
+
+/**
+ * What a device keeps of a vault's scope, locked or not, on its own storage: its `lock_generation`,
+ * how many times a lock on this device has forgotten the remembered unlock, so that an unlock under
+ * way in another tab when the lock lands remembers nothing; and what it has `seen` of the vault
+ * standing under the scope (a {@link SeenVault}), or null when it has seen none. Nothing in it is
+ * secret. One per scope: a vault made anew under the scope, with another `vault_id`, is seen
+ * afresh, under a new `device_id`, and the lock generation counts on. `lock()` leaves the mark,
+ * raising its lock generation; `destroy()` raises it too, and forgets what was seen.
+ *
+ * @example { format: 'safebyok-mark-v3', ...scope, lock_generation: 0, seen: { device_id, vault_id, unlock_epoch: 1, vault_key_epoch: 1 } }
+ * @example { format: 'safebyok-mark-v3', ...scope, lock_generation: 2, seen: null }  // locked twice, the vault since destroyed
+ */
+export const DeviceMark = Z.object({
+  format:          Z.literal('safebyok-mark-v3'),
+  applabel:        NameFloor,
+  user_id:         NameFloor,
+  vaultlabel:      NameFloor,
+  /**
+   * How many locks on this device have forgotten the scope's remembered unlock: 0 at first, one
+   * more at each. A remembered unlock is written only while the mark stands at the generation its
+   * unlock began under; see `DeviceDB.writeUnlock`.
+   */
+  lock_generation: Z.int().check(Z.gte(0)),
+  /** The vault this device has seen under the scope, or null for none. */
+  seen:            Z.nullable(SeenVault),
 })
 export type DeviceMark = Z.infer<typeof DeviceMark>
 
@@ -462,8 +472,18 @@ export type DeviceMark = Z.infer<typeof DeviceMark>
 export const ForcePassphraseReentryHours = 168 // seven days
 
 /**
- * The largest whisper a vault stores unless the caller says otherwise, in bytes of its JSON:
- * several times the beefiest credential (an RSA-8192 private key as PEM is about 6.4 KB), and
+ * The longest finite `forcePassphraseReentryHours` a vault takes: 588 hours, 24.5 days. The vault
+ * drops its key with a timer when the window ends, and one timer reaches no further than
+ * 2^31 - 1 milliseconds, about 24.8 days. A longer window is `Infinity`, until `lock()`; anything
+ * between is refused.
+ *
+ * @example openVault({ ...opts, forcePassphraseReentryHours: MaxReentryHours })   // the longest that ends by itself
+ */
+export const MaxReentryHours = 588
+
+/**
+ * The largest whisper a vault stores unless the caller says otherwise, in bytes of its JSON and
+ * its lockbox's public bag's together: several times the beefiest credential (an RSA-8192 private key as PEM is about 6.4 KB), and
  * well inside what every storage backend can hold. A larger whisper is usually a sign that the
  * wrong value is being stored.
  */
