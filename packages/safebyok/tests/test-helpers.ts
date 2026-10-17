@@ -12,10 +12,11 @@ import { describe, expect, it, vi } from 'vitest'
 import { toB64, type Ciphered } from '../src/crypto'
 import { memoryDeviceDB, type DeviceDB } from '../src/device-db'
 import { VaultError, type VaultErrorKind } from '../src/errors'
-import type { KeyDeriver } from '../src/key-deriver'
+import { KeyDeriver } from '../src/key-deriver'
 import type { VaultLogger } from '../src/logger'
 import { memoryStore } from '../src/string-store'
 import type { DamagedLockbox, DeviceMark, DeviceUnlock, Lockbox, LockboxSummary, PasskeyEnvelope, PasskeyProof, PassphraseEnvelope, VaultBundle, VaultScope } from '../src/types'
+import { TestDeriverNotice, type KeyDeriverSpec } from '../src/key-deriver-spec'
 import type { OpenVaultOpts } from '../src/vault'
 import { localVaultDB, type VaultDB } from '../src/vault-db'
 import { AnyTextValidators, DefaultValidators } from '../src/validators'
@@ -23,25 +24,64 @@ import { AnyTextValidators, DefaultValidators } from '../src/validators'
 /** A Lockbox as the core writes one: a note, or no note field at all, never an undefined one. */
 type WrittenLockbox = Omit<Lockbox, 'note'> & { note?: string }
 
+/** How a {@link TestDeriver} derives: a passphrase and its salt in, key bytes out. */
+export type Derivation = (passphrase: string, saltBytes: Uint8Array) => Promise<Uint8Array>
+
 /**
- * A cheap KeyDeriver for tests: one SHA-256 instead of 64 MiB of Argon2id, so a suite full of
- * unlocks runs in milliseconds. Deterministic in passphrase and salt, like the real one; unlike
- * the real one, worthless against a brute-forcer -- which is why its label says `test`. Never
- * hand it to a vault that holds a real secret.
+ * The test deriver's own derivation: one SHA-256 of the passphrase's UTF-8 and the salt.
+ * Deterministic in both, and worthless against a brute-forcer.
+ *
+ * @example const keyBytes = await TH.digestDerivation('pw', new Uint8Array(16))  // 32 bytes
+ */
+export const digestDerivation: Derivation = async (passphrase, saltBytes) => {
+  const passphraseBytes = new TextEncoder().encode(passphrase)
+  const joined = new Uint8Array(passphraseBytes.length + saltBytes.length)
+  joined.set(passphraseBytes)
+  joined.set(saltBytes, passphraseBytes.length)
+  return new Uint8Array(await crypto.subtle.digest('SHA-256', joined))
+}
+
+/** The spec every {@link TestDeriver} starts from: a one-digest algorithm under a `test_` label, with a 16-byte salt. */
+export const TestDeriverSpec: KeyDeriverSpec = Object.freeze({ algorithm: 'sha256', key_deriver_label: 'test_digest_v0', salt_bytes: 16 })
+
+/**
+ * A cheap KeyDeriver for tests: one SHA-256 ({@link digestDerivation}) instead of 64 MiB of
+ * Argon2id, so a suite full of unlocks runs in milliseconds. `spec` changes any of
+ * {@link TestDeriverSpec}, and `derivation` stands in for the digest -- to count derivations, to
+ * hold one at a gate, or to hand back something a real deriver never would. Like any KeyDeriver, it
+ * checks its spec as it is made and what its derivation hands back. Never hand one to a vault
+ * that holds a real secret: its label says `test` for that reason.
+ *
+ * @param spec - What to change of TestDeriverSpec: a label, a salt length, an algorithm.
+ * @param derivation - What derives in its place; the digest by default.
+ *
+ * @example const alienDeriver = new TH.TestDeriver({ key_deriver_label: 'someone_elses_deriver_v9' })
+ * @example const counting = new TH.TestDeriver({}, vi.fn(TH.digestDerivation))
+ */
+export class TestDeriver extends KeyDeriver {
+  readonly #derivation: Derivation
+
+  constructor(spec: Partial<KeyDeriverSpec> = {}, derivation: Derivation = digestDerivation) {
+    super({ ...TestDeriverSpec, ...spec })
+    this.#derivation = derivation
+  }
+
+  protected doDeriveKeyBytes(passphrase: string, saltBytes: Uint8Array): Promise<Uint8Array> {
+    return this.#derivation(passphrase, saltBytes)
+  }
+}
+
+/**
+ * The cheap KeyDeriver every test opens with, frozen so no test's spy lands on another's: a
+ * {@link TestDeriver} at {@link TestDeriverSpec}. Spy on a `new TH.TestDeriver()` of your own.
  *
  * @example openVault({ ...opts, keyDeriver: testDeriver })
  */
-export const testDeriver: KeyDeriver = {
-  key_deriver_label: 'test_digest_v0',
-  salt_bytes:        16,
-  deriveKeyBytes: async (passphrase, saltBytes) => {
-    const passphraseBytes = new TextEncoder().encode(passphrase)
-    const joined = new Uint8Array(passphraseBytes.length + saltBytes.length)
-    joined.set(passphraseBytes)
-    joined.set(saltBytes, passphraseBytes.length)
-    return new Uint8Array(await crypto.subtle.digest('SHA-256', joined))
-  },
-}
+export const testDeriver: TestDeriver = (() => {
+  const deriver = new TestDeriver()
+  Object.freeze(deriver)
+  return deriver
+})()
 
 /**
  * Everything openVault needs, over stores in memory made fresh for each call: `u1`'s `main` vault
@@ -316,7 +356,7 @@ export const wakeupAtNextTick = (): Promise<void> => new Promise((resolve) => { 
  *
  * @example
  *   const gate = TH.makeGate()
- *   const slowDeriver = { ...TH.testDeriver, deriveKeyBytes: async (passphrase, saltBytes) => { await gate.pass(); return await TH.testDeriver.deriveKeyBytes(passphrase, saltBytes) } }
+ *   const slowDeriver = new TH.TestDeriver({}, async (passphrase, saltBytes) => { await gate.pass(); return await TH.digestDerivation(passphrase, saltBytes) })
  *   const unlocking = vault.unlock('pw')   // now waiting at the gate
  *   await gate.reached
  *   await vault.lock()                     // lands mid-unlock
@@ -747,7 +787,9 @@ export type LoggedCall = {
 }
 
 /**
- * A VaultLogger that logs nowhere and keeps every call it hears, in order, for a test to look at.
+ * A VaultLogger that logs nowhere and keeps every call it hears, in order, for a test to look at
+ * -- bar the one notice `openVault` gives of a `test_` key deriver's label ({@link TestDeriverNotice}),
+ * which every vault opened through {@link testDeriver} would otherwise add to every count.
  *
  * @returns The `logger` to hand openVault, and the `calls` it has heard so far.
  *
@@ -759,6 +801,7 @@ export type LoggedCall = {
 export const spyLogger = () => {
   const calls: LoggedCall[] = []
   const hear = (level: keyof VaultLogger): VaultLogger[typeof level] => (message, story, err) => {
+    if (message === TestDeriverNotice) { return }
     calls.push({ level, message, story, err })
   }
   const logger: VaultLogger = { log: hear('log'), warn: hear('warn'), error: hear('error') }

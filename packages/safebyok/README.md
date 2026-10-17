@@ -165,9 +165,9 @@ public verbs need pass nothing, its own having checked.
 
 ## Key derivation
 
-The passphraseKey is made by Argon2id at a keyDeriverSpec: its parameters under a
-`key_deriver_label`, which every vault stores. A label must always mean the same parameters, or
-vaults made on one device stop opening on another. There are three ways to choose:
+The passphraseKey is made by Argon2id at a keyDeriverSpec (an `Argon2idSpec`): its parameters
+under a `key_deriver_label`, which every vault stores. A label must always mean the same
+parameters, or vaults made on one device stop opening on another. There are three ways to choose:
 
 * **The supplied spec**, `Argon2idWebV1`: 64 MiB, 3 passes, 1 lane, a 16-byte salt and a 32-byte
   key. Its deriver, `argon2idWebV1Deriver`, is what `browserOpts()` hands over. Use it unless you
@@ -179,19 +179,57 @@ vaults made on one device stop opening on another. There are three ways to choos
   ```
 
   Give it a label of your own, and never change its parameters once a vault is made under it.
-  It refuses (`bad_option`) what Argon2id cannot run -- a salt under 8 bytes or over 65536,
+  Labels beginning `argon2id_web_` are reserved for the specs we supply, now and later, and
+  refused. It refuses (`bad_option`) what Argon2id cannot run -- a salt under 8 bytes or over 65536,
   memory under 8 KiB a lane or over 1 GiB, no passes or lanes, a key other than 32 bytes -- and
   allows weak parameters that run: those are yours to judge.
 * **Another implementation of a spec**: `safebyok-fastkey` runs any of them through
   WebAssembly, several times faster, deriving the same bytes. For one native to your platform,
-  spread the spec into your deriver, `{ ...Argon2idWebV1, deriveKeyBytes }`, keeping its label,
-  and test that it derives the same bytes as ours; `parseKeyDeriverSpec(spec)` checks a host's
-  spec exactly as `argon2idDeriver` does. `openVault` refuses a deriver that wears a supplied spec's label
-  without carrying exactly its parameters; it cannot check the bytes, so that test is yours.
+  extend `Argon2idKeyDeriver` and make it with the spec, keeping its label; then test that it
+  derives the same bytes as ours (`deriveKeyBytes`, on each):
 
-Any `keyDeriver` needs a `salt_bytes` from 1 to 65536 (the most `crypto.getRandomValues` hands out
-at once), and must hand back 32 bytes from `deriveKeyBytes`; `openVault` and `unlock()` refuse one
-that does not, with `bad_option`.
+  ```ts
+  class NativeArgon2idDeriver extends Argon2idKeyDeriver {
+    protected doDeriveKeyBytes(passphrase: string, saltBytes: Uint8Array) {
+      const { memory_kib, iterations, parallelism, output_bytes } = this.spec
+      return nativeArgon2id({ passphrase, saltBytes, memory_kib, iterations, parallelism, output_bytes })
+    }
+  }
+  const keyDeriver = new NativeArgon2idDeriver(Argon2idWebV1)
+  ```
+
+  It checks the spec exactly as `argon2idDeriver` does, and refuses one wearing a supplied spec's
+  label without carrying exactly its parameters; it cannot check the bytes, so that test is yours.
+
+Every key deriver is a `KeyDeriver`, an abstract class: `openVault` takes nothing else (a plain
+object with a `deriveKeyBytes`, as a deriver was before, is refused with `bad_option`). The vault
+calls one method on it, `passphraseKeyOf`, and the class does the work every deriver shares, so a
+subclass supplies only its runner, `doDeriveKeyBytes`:
+
+* **As it is made**, it checks its spec: an `algorithm`, a `key_deriver_label` and a `salt_bytes`
+  from 1 to 65536 (the most `crypto.getRandomValues` hands out at once), a label safebyok does not
+  reserve, and Argon2id's floors for an `Argon2idKeyDeriver`. Only that family may say
+  `algorithm: 'argon2id'`. So a spec that cannot run is refused (`bad_option`) where the deriver is
+  made, before any vault is opened with it.
+* **At each derivation**, it refuses a salt of another length than its spec's, and anything the
+  runner hands back but 32 bytes of memory of their own: a fresh `Uint8Array`, not a view over a
+  `SharedArrayBuffer`, and not one the runner keeps, since the class zeroes the bytes once it has
+  made the passphraseKey of them (`bad_option`).
+
+A deriver of another algorithm is another subclass, with its own spec and its own check:
+
+```ts
+class ScryptDeriver extends KeyDeriver {
+  constructor() { super({ algorithm: 'scrypt', key_deriver_label: 'acme_scrypt_v1', salt_bytes: 16 }) }
+  protected doDeriveKeyBytes(passphrase: string, saltBytes: Uint8Array) {
+    return scryptAsync(passphrase, saltBytes, { N: 2 ** 17, r: 8, p: 1, dkLen: 32 })
+  }
+}
+```
+
+Run a vetted implementation, never a derivation of your own. `openVault` logs a warning (not a
+refusal) for a label beginning `test_`, the mark of a deriver made cheap for tests, such as
+`safebyok/testing`'s `TestDeriver`.
 
 ## Locking
 
@@ -333,11 +371,12 @@ says four things:
 A vault may have up to `MaxUnlocks` (8) passphrases and passkeys together, each its own way in: a daily one, one
 written down at home, one a partner holds. Each wraps the same vaultKey under its own salt, no
 passphrase is ever stored, and adding or removing one rewrites no lockbox. The snapshot lists
-them, locked or not, as `unlocks`: each a `method` (`passphrase`), an `unlock_id`, and the
-`unlocklabel` the user chose.
+them, locked or not, as `unlocks`: each a `method` (`passphrase` or `passkey`), an `unlock_id`, the
+`unlocklabel` the user chose, and when it was added and by which device (`registered_at`,
+`device_id`).
 
 ```ts
-vault.getSnapshot().unlocks       // [{ method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase' }]
+vault.getSnapshot().unlocks       // [{ method: 'passphrase', unlock_id: '1b9d...', unlocklabel: 'passphrase', device_id: 'k3x9...', registered_at: 1760000000000 }]
 
 const spareId = await vault.addPassphrase(passphrase, spare, { unlocklabel: 'written_down' })
 await vault.changePassphrase(spare, renewedSpare)       // changes that one; the first still opens
@@ -345,9 +384,12 @@ await vault.removeUnlock(passphrase, spareId)           // never the last one: '
 await vault.unlock(passphrase, { unlockId })            // aimed at one: a single key derivation
 ```
 
-* **Every change asks for a passphrase**, even on an unlocked vault: the vault keeps no copy of
+* **Every change asks for proof**, even on an unlocked vault: the vault keeps no copy of
   its vaultKey it could wrap anew, and a walked-away unlocked screen should not be able to add a
-  way in. Any passphrase the vault opens with will do.
+  way in. Any way in the vault has will do: a passphrase, or a passkey's answer. That includes
+  `changePassphrase`, so a user who forgot their passphrase sets a new one with their
+  fingerprint: `vault.changePassphrase(passkey, newPassphrase)`, naming which passphrase with
+  `{ unlockId }` when the vault has several.
 * **Every change locks the other devices.** It moves the bundle's `unlock_epoch`, so each
   other device falls back to `locked` and must unlock with a passphrase still standing. This
   device stays unlocked.
@@ -372,7 +414,7 @@ framework's host can use them).
 const unlockId = await vault.addPasskey(passphrase, () => createPasskey({ rp: { name: 'Acme' }, user: { name: email, displayName } }), { unlocklabel: 'laptop' })
 // unlockId is null if the user dismissed the prompt
 
-vault.getSnapshot().unlocks       // [..., { method: 'passkey', unlock_id, unlocklabel: 'laptop', credential_id, prf_salt_b64 }]
+vault.getSnapshot().unlocks       // [..., { method: 'passkey', unlock_id, unlocklabel: 'laptop', device_id, registered_at, credential_id, prf_salt_b64 }]
 
 const answer = await askPasskey(vault.getSnapshot().unlocks)   // null if the user dismissed it
 if (answer !== null) { await vault.unlock(answer) }             // no key derivation to wait for

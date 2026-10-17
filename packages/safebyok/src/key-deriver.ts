@@ -1,45 +1,213 @@
-import * as Z from 'zod/mini'
 import { argon2idAsync } from '@noble/hashes/argon2.js'
-import { Argon2idWebV1, MaxSaltBytes, PassphraseKeyBytes, ensureSuppliedSpecKept, type KeyDeriverSpec } from './key-deriver-spec'
+import { importWrappingKeyBytes } from './crypto'
 import { VaultError } from './errors'
+import { Argon2idWebV1, PassphraseKeyBytes, ensureKeyDeriverSpec, ensureSaltFits, parseArgon2idSpec, type Argon2idSpec, type KeyDeriverSpec } from './key-deriver-spec'
 
 /**
- * What turns a passphrase into passphraseKey bytes. The one to use is
- * {@link argon2idWebV1Deriver}; {@link argon2idDeriver} makes one for a spec of your own. The
- * seam exists so tests can substitute a cheap deriver, and so a host on a platform with a faster
- * implementation of the same Argon2id spec (WebAssembly, native) can plug it in.
+ * What turns a passphrase into the passphraseKey that wraps a vault's vaultKey: what `openVault`
+ * asks for as `keyDeriver`, whatever algorithm it runs. Use {@link argon2idWebV1Deriver} (which
+ * `browserOpts()` from `safebyok/browser` hands over), or {@link argon2idDeriver} for an Argon2id
+ * spec of your own; safebyok-fastkey runs either through WebAssembly.
  *
- * A vault stores its deriver's `key_deriver_label`, and unlocks only through a deriver carrying
- * that same label: plugging in your own commits every one of your users' vaults to it. An
- * Argon2id deriver carries its whole keyDeriverSpec beside its function, and one that wears the
- * label of a spec safebyok supplies must carry exactly that spec's parameters, or openVault
- * refuses it (kind 'bad_option'). Do not write your own derivation; if you must substitute, use a
- * vetted Argon2id implementation, spread the spec into it, keep the label, and test that it
- * derives the same bytes as the deriver it stands in for.
+ * To derive another way, extend this class -- or {@link Argon2idKeyDeriver}, for another
+ * implementation of Argon2id -- and implement `doDeriveKeyBytes`, the runner: the key bytes of a
+ * passphrase and its salt, deterministic, and slow by design. That is the whole job. The class does
+ * the rest, for every deriver alike:
  *
- * @example const wasmDeriver: KeyDeriver = { ...Argon2idWebV1, deriveKeyBytes: deriveWithWasm }
+ *  * **As it is made**, it checks its spec: an `algorithm` and a `key_deriver_label` of non-empty
+ *    text, a `salt_bytes` from 1 to 65536, and a label safebyok does not reserve (those beginning
+ *    `argon2id_web_`, in any case, but a supplied spec's own label carrying that spec whole). Only
+ *    an Argon2idKeyDeriver, which checks Argon2id's own floors, may say `algorithm: 'argon2id'`.
+ *    Kind 'bad_option' otherwise.
+ *  * **At each derivation**, `passphraseKeyOf` -- the one method the vault calls -- refuses a salt
+ *    of another length than the spec's before the runner sees it, refuses what the runner hands
+ *    back unless it is 32 bytes in memory of their own (not a `SharedArrayBuffer`), makes the
+ *    passphraseKey of them, and zeroes them. So the runner hands back fresh bytes each call, never
+ *    bytes it keeps.
+ *
+ * Implement `doDeriveKeyBytes`; never override the public methods. A vault stores its deriver's
+ * `key_deriver_label`, and unlocks only through a deriver carrying that same label: plugging in
+ * your own commits every one of your users' vaults to it, so never change what a label derives.
+ * Do not write your own derivation; run a vetted implementation, and test that it derives what the
+ * deriver it stands in for does (`deriveKeyBytes`, on each). openVault logs a warning for a label
+ * beginning `test_`, the mark of a deriver made cheap for tests.
+ *
+ * @example
+ *   class ScryptDeriver extends KeyDeriver {
+ *     constructor() { super({ algorithm: 'scrypt', key_deriver_label: 'acme_scrypt_v1', salt_bytes: 16 }) }
+ *     protected doDeriveKeyBytes(passphrase: string, saltBytes: Uint8Array) {
+ *       return scryptAsync(passphrase, saltBytes, { N: 2 ** 17, r: 8, p: 1, dkLen: 32 })
+ *     }
+ *   }
+ *   const vault = await openVault({ ...browserOpts(), keyDeriver: new ScryptDeriver(), applabel: 'acme', userId, vaultlabel: 'main', vaultDB })
+ * @example
+ *   new ScryptDeriver().key_deriver_label  // 'acme_scrypt_v1'
  */
-export type KeyDeriver = Partial<KeyDeriverSpec> & {
-  /** Stored beside each vault, so the stored format says how it was made. */
-  key_deriver_label: string
-  /** How long a passphraseSalt this deriver expects, in bytes: from 1 to 65536. */
-  salt_bytes:        number
-  /** 32 key bytes from the passphrase and its salt: deterministic, and slow by design. */
-  deriveKeyBytes(passphrase: string, saltBytes: Uint8Array): Promise<Uint8Array>
+export abstract class KeyDeriver<Spec extends KeyDeriverSpec = KeyDeriverSpec> {
+  /** The spec this deriver was made with, checked and frozen. */
+  readonly spec: Spec
+
+  /** Stored beside each vault, so the stored format says how it was made: the spec's. */
+  readonly key_deriver_label: string
+
+  /** How long a passphraseSalt this deriver takes, in bytes: the spec's. */
+  readonly salt_bytes: number
+
+  /** What this deriver runs, as its spec names it. */
+  readonly algorithm: string
+
+  /**
+   * A deriver of `spec`, once the spec passes the floor every deriver keeps (kind 'bad_option'
+   * otherwise). A subclass checks its own spec first, and hands on what passes.
+   *
+   * @param spec - What the deriver runs, under which label, with what length of salt.
+   */
+  constructor(spec: Spec) {
+    ensureKeyDeriverSpec(spec)
+    // Argon2id's floors are checked in the Argon2id family: a deriver outside it may not claim it.
+    if (spec.algorithm.toLowerCase() === 'argon2id' && ! (this instanceof Argon2idKeyDeriver)) {
+      throw new VaultError('bad_option', 'A key deriver running Argon2id extends Argon2idKeyDeriver, which checks its parameters, rather than KeyDeriver itself.')
+    }
+    this.spec = Object.freeze({ ...spec })
+    this.key_deriver_label = spec.key_deriver_label
+    this.salt_bytes = spec.salt_bytes
+    this.algorithm = spec.algorithm
+  }
+
+  /**
+   * The passphraseKey `passphrase` and its salt make: the one method the vault calls. It runs
+   * {@link KeyDeriver.deriveKeyBytes}, imports the 32 bytes as a non-extractable wrapping key, and
+   * zeroes them, whether or not the import succeeds.
+   *
+   * @param passphrase - What the user typed.
+   * @param saltBytes - The passphraseSalt of the envelope being sealed or opened.
+   * @returns The passphraseKey, which only wraps and unwraps a vaultKey.
+   *
+   * @example const passphraseKey = await keyDeriver.passphraseKeyOf('correct horse battery staple', saltBytes)
+   */
+  async passphraseKeyOf(passphrase: string, saltBytes: Uint8Array): Promise<CryptoKey> {
+    const keyBytes = await this.deriveKeyBytes(passphrase, saltBytes)
+    try {
+      return await importWrappingKeyBytes(keyBytes)
+    } finally {
+      keyBytes.fill(0)
+    }
+  }
+
+  /**
+   * 32 key bytes from the passphrase and its salt, through this deriver's runner, checked: a salt
+   * of another length than the spec's is refused before the runner sees it, and what the runner
+   * hands back is refused unless it is 32 bytes in memory of their own -- WebCrypto would take 16
+   * or 24 as a weaker AES key, and refuses shared memory with no kind. Each refusal is kind
+   * 'bad_option', and bytes refused for their length are zeroed first; shared memory is refused
+   * untouched. The vault reaches it through {@link KeyDeriver.passphraseKeyOf}; call it yourself to
+   * test that a deriver derives what another does. The bytes it returns are yours to zero.
+   *
+   * @param passphrase - What the user typed.
+   * @param saltBytes - A passphraseSalt of the spec's `salt_bytes`.
+   * @returns The 32 key bytes.
+   *
+   * @example
+   *   const keyBytes = await argon2idWebV1Deriver.deriveKeyBytes('correct horse battery staple', passphraseSalt)
+   *   keyBytes.length  // 32
+   */
+  async deriveKeyBytes(passphrase: string, saltBytes: Uint8Array): Promise<Uint8Array> {
+    ensureSaltFits(this.spec, saltBytes)
+    const handed: unknown = await this.doDeriveKeyBytes(passphrase, saltBytes)
+    if (! ArrayBuffer.isView(handed)) { throw notKeyBytes() }
+    if (isSharedMemory(handed)) {
+      throw new VaultError('bad_option', 'keyDeriver handed back key bytes in shared memory (a SharedArrayBuffer), which WebCrypto will not import and other threads could read: hand back a fresh Uint8Array.')
+    }
+    const keyBytes = new Uint8Array(handed.buffer, handed.byteOffset, handed.byteLength)
+    if (keyBytes.byteLength !== PassphraseKeyBytes) {
+      keyBytes.fill(0)
+      throw notKeyBytes()
+    }
+    return keyBytes
+  }
+
+  /**
+   * The runner, and all a subclass supplies: the key bytes of `passphrase` under `saltBytes`, at
+   * this deriver's spec, fresh each call. The salt is already the spec's length.
+   *
+   * @param passphrase - What the user typed.
+   * @param saltBytes - A passphraseSalt of the spec's `salt_bytes`.
+   * @returns 32 key bytes, in memory of their own.
+   */
+  protected abstract doDeriveKeyBytes(passphrase: string, saltBytes: Uint8Array): Promise<Uint8Array>
+}
+
+/** The refusal for a key deriver's result that is not 32 bytes of a view. */
+const notKeyBytes = () => new VaultError('bad_option', 'keyDeriver handed back something other than 32 key bytes: a passphraseKey is a 256-bit key.')
+
+/** The memory a key deriver's bytes sit in, as the platform names it: told apart even across realms, and where `SharedArrayBuffer` is absent. */
+const isSharedMemory = (view: ArrayBufferView): boolean => Object.prototype.toString.call(view.buffer) === '[object SharedArrayBuffer]'
+
+/**
+ * A KeyDeriver running Argon2id: the family every implementation of Argon2id joins, so that
+ * Argon2id's floors are checked once, here, for all of them. As it is made it checks its
+ * {@link Argon2idSpec} -- refusing (kind 'bad_option') a salt under 8 bytes or over 65536, memory
+ * under 8 KiB a lane or over 1 GiB, no passes, no lanes, a key other than 32 bytes, a label safebyok
+ * reserves, or a supplied spec's label on other parameters -- and keeps nothing but the spec's
+ * fields. A weak spec that runs is allowed: choosing it is the host's call.
+ *
+ * {@link argon2idDeriver} (`@noble/hashes`) and safebyok-fastkey's `argon2idWasmDeriver`
+ * (WebAssembly) are two. For a third, extend it and implement `doDeriveKeyBytes` at `this.spec`'s
+ * parameters, then test that it derives what argon2idDeriver does at the same spec.
+ *
+ * @example
+ *   class NativeArgon2idDeriver extends Argon2idKeyDeriver {
+ *     protected doDeriveKeyBytes(passphrase: string, saltBytes: Uint8Array) {
+ *       const { memory_kib, iterations, parallelism, output_bytes } = this.spec
+ *       return nativeArgon2id({ passphrase, saltBytes, memory_kib, iterations, parallelism, output_bytes })
+ *     }
+ *   }
+ *   const keyDeriver = new NativeArgon2idDeriver(Argon2idWebV1)  // stands in for argon2idWebV1Deriver
+ * @example
+ *   new NativeArgon2idDeriver({ ...Argon2idWebV1, iterations: 4 })
+ *   // throws 'bad_option': argon2id_web_v1 always means 3 passes
+ */
+export abstract class Argon2idKeyDeriver extends KeyDeriver<Argon2idSpec> {
+  /**
+   * An Argon2id deriver of `spec`, checked and stripped to its fields.
+   *
+   * @param spec - The whole Argon2id parameter set, and the label vaults made under it record.
+   */
+  constructor(spec: Argon2idSpec) {
+    super(parseArgon2idSpec(spec))
+  }
 }
 
 /**
- * A KeyDeriver running Argon2id at `spec`, through `@noble/hashes` (audited, pure JS, runs
- * wherever the host app does), carrying the spec beside its function. The async form yields to
- * the event loop as it works, so a browser unlock does not freeze the page. Choose a label of
- * your own (naming your app, say), and never change its parameters once a vault is made under it.
+ * Argon2id through `@noble/hashes`: audited, pure JavaScript, running wherever the host app does.
+ * Its async form yields to the event loop as it works, so a browser unlock does not freeze the page.
+ */
+class NobleArgon2idDeriver extends Argon2idKeyDeriver {
+  protected doDeriveKeyBytes(passphrase: string, saltBytes: Uint8Array): Promise<Uint8Array> {
+    const { memory_kib, iterations, parallelism, output_bytes } = this.spec
+    return argon2idAsync(passphrase, saltBytes, { m: memory_kib, t: iterations, p: parallelism, dkLen: output_bytes })
+  }
+}
+
+/** A frozen NobleArgon2idDeriver of `spec`, once it passes. */
+const nobleDeriverOf = (spec: Argon2idSpec): Argon2idKeyDeriver => {
+  const deriver = new NobleArgon2idDeriver(spec)
+  Object.freeze(deriver)
+  return deriver
+}
+
+/**
+ * A KeyDeriver running Argon2id at `spec` through `@noble/hashes` (audited, pure JS, runs wherever
+ * the host app does). Choose a label of your own (naming your app, say), and never change its
+ * parameters once a vault is made under it.
  *
- * Refuses (kind 'bad_option') a spec Argon2id cannot run -- a salt under 8 bytes or over 65536,
- * memory under 8 KiB a lane or over 1 GiB, no passes, no lanes, a key other than 32 bytes -- and
- * one wearing a supplied spec's label without its parameters. A weak spec that runs is allowed.
+ * Refuses (kind 'bad_option') what every {@link Argon2idKeyDeriver} refuses: a spec Argon2id
+ * cannot run -- a salt under 8 bytes or over 65536, memory under 8 KiB a lane or over 1 GiB, no
+ * passes, no lanes, a key other than 32 bytes -- a label safebyok reserves, and a supplied spec's
+ * label without its parameters. A weak spec that runs is allowed.
  *
  * @param spec - The whole Argon2id parameter set, and the label vaults made under it record.
- * @returns A frozen KeyDeriver: the spec's fields and `deriveKeyBytes`.
+ * @returns A frozen Argon2idKeyDeriver of the spec.
  *
  * @example
  *   const keyDeriver = argon2idDeriver({
@@ -52,90 +220,15 @@ export type KeyDeriver = Partial<KeyDeriverSpec> & {
  *   argon2idDeriver({ ...Argon2idWebV1, iterations: 4 })
  *   // throws 'bad_option': argon2id_web_v1 always means 3 passes
  */
-export const argon2idDeriver = (spec: KeyDeriverSpec): KeyDeriver & KeyDeriverSpec => deriverOf(parseKeyDeriverSpec(spec))
-
-/** A frozen deriver of a spec already checked: Argon2idWebV1, or one argon2idDeriver parsed. */
-const deriverOf = (spec: KeyDeriverSpec): KeyDeriver & KeyDeriverSpec => {
-  const argonOpts = { m: spec.memory_kib, t: spec.iterations, p: spec.parallelism, dkLen: spec.output_bytes }
-  return Object.freeze({
-    ...spec,
-    deriveKeyBytes: (passphrase: string, saltBytes: Uint8Array) => argon2idAsync(passphrase, saltBytes, argonOpts),
-  })
-}
+export const argon2idDeriver = (spec: Argon2idSpec): Argon2idKeyDeriver => nobleDeriverOf(spec)
 
 /**
- * The KeyDeriver to use: Argon2id at the supplied {@link Argon2idWebV1} spec. `browserOpts()`,
- * from `safebyok/browser`, hands it to openVault; outside a browser, pass it as `keyDeriver`
- * yourself.
+ * The KeyDeriver to use: Argon2id at the supplied {@link Argon2idWebV1} spec, through
+ * `@noble/hashes`. `browserOpts()`, from `safebyok/browser`, hands it to openVault; outside a
+ * browser, pass it as `keyDeriver` yourself.
  *
  * @example
  *   const keyBytes = await argon2idWebV1Deriver.deriveKeyBytes('correct horse battery staple', passphraseSalt)
  *   keyBytes.length  // 32
  */
-export const argon2idWebV1Deriver = /* @__PURE__ */ deriverOf(Argon2idWebV1)
-
-/** The fewest salt bytes Argon2id takes: its reference code and `@noble/hashes` refuse fewer. */
-const MinArgon2SaltBytes = 8
-
-/** The most memory `@noble/hashes` allocates for one Argon2 derivation, in KiB: 1 GiB. */
-const MaxMemoryKib = 1_048_576
-
-/** Argon2's least memory per lane, in KiB. */
-const MinMemoryKibPerLane = 8
-
-/** One past the largest 32-bit unsigned integer, Argon2's bound on its counts. */
-const Uint32Bound = 2 ** 32
-
-// Marked pure, so a bundler drops it from an app that imports only argon2idWebV1Deriver.
-const keyDeriverSpec = /* @__PURE__ */ Z.object({
-  algorithm:         Z.literal('argon2id'),
-  key_deriver_label: Z.string().check(Z.minLength(1)),
-  memory_kib:        Z.int().check(Z.gte(MinMemoryKibPerLane), Z.lte(MaxMemoryKib)),
-  iterations:        Z.int().check(Z.gte(1), Z.lt(Uint32Bound)),
-  parallelism:       Z.int().check(Z.gte(1)),
-  salt_bytes:        Z.int().check(Z.gte(MinArgon2SaltBytes), Z.lte(MaxSaltBytes)),
-  output_bytes:      Z.literal(PassphraseKeyBytes),
-}).check(Z.refine((spec) => spec.memory_kib >= MinMemoryKibPerLane * spec.parallelism, { path: ['memory_kib'] }))
-
-/** What each of a spec's fields must be, as a refusal says it: never quoting what was handed in. */
-const SpecLimitForField: Readonly<Record<keyof KeyDeriverSpec, string>> = {
-  algorithm:         "algorithm is 'argon2id', the one key derivation function safebyok runs.",
-  key_deriver_label: 'key_deriver_label is a non-empty string of your own choosing, stored beside every vault made under the spec.',
-  memory_kib:        'memory_kib is a whole number of KiB, at least 8 for each lane (parallelism) and at most 1048576 (1 GiB), the most @noble/hashes allocates.',
-  iterations:        'iterations is a whole number of passes, at least 1 and below 2^32, the most Argon2 counts.',
-  parallelism:       'parallelism is a whole number of lanes, at least 1.',
-  salt_bytes:        "salt_bytes is a whole number of bytes, at least 8 (Argon2id's least) and at most 65536 (the most the platform's random source hands out at once).",
-  output_bytes:      'output_bytes is 32: the passphraseKey is a 256-bit key.',
-}
-
-/**
- * `candidate` as a KeyDeriverSpec Argon2id can run, holding only a spec's fields: the check
- * {@link argon2idDeriver} makes, for a deriver of another Argon2id implementation to make the
- * same. Refuses (kind 'bad_option') a spec Argon2id cannot run -- a salt under 8 bytes or over
- * 65536, memory under 8 KiB a lane or over 1 GiB, no passes, no lanes, a key other than 32
- * bytes -- and one wearing a supplied spec's label without its parameters, naming the field and
- * never quoting what was handed in. Weak parameters that run are allowed: choosing them is the
- * host's call.
- *
- * @param candidate - A host's keyDeriverSpec, as handed to a deriver factory.
- * @returns The spec, checked, with nothing but its fields.
- *
- * @example
- *   const spec = parseKeyDeriverSpec({ ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', memory_kib: 131_072 })
- *   // spec.memory_kib === 131_072
- * @example
- *   parseKeyDeriverSpec({ ...Argon2idWebV1, key_deriver_label: 'acme_argon2id_v1', salt_bytes: 4 })
- *   // throws 'bad_option': Argon2id takes no salt under 8 bytes
- */
-export const parseKeyDeriverSpec = (candidate: KeyDeriverSpec): KeyDeriverSpec => {
-  const checked = keyDeriverSpec.safeParse(candidate)
-  if (! checked.success) {
-    const field = checked.error.issues[0]?.path[0]
-    const limit = (typeof field === 'string' && Object.hasOwn(SpecLimitForField, field))
-      ? SpecLimitForField[field as keyof KeyDeriverSpec]
-      : 'It needs every field of a KeyDeriverSpec: algorithm, key_deriver_label, memory_kib, iterations, parallelism, salt_bytes and output_bytes.'
-    throw new VaultError('bad_option', `Argon2id cannot run that keyDeriverSpec. ${limit}`)
-  }
-  ensureSuppliedSpecKept(checked.data)
-  return checked.data
-}
+export const argon2idWebV1Deriver = /* @__PURE__ */ nobleDeriverOf(Argon2idWebV1)

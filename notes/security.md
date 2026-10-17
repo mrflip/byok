@@ -701,8 +701,9 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   `x/crypto/argon2`, compiled to WebAssembly and embedded in its JavaScript; widely used, but
   with no published audit, as the core's `@noble/hashes` Argon2id has none: its README says its
   one audit left `argon2` out of scope), under the same specs and
-  labels as the core's `@noble/hashes` deriver, `argon2id_web_v1` included. It checks a spec with
-  the core's own `parseKeyDeriverSpec`, so its bounds are the core's by construction; hash-wasm's
+  labels as the core's `@noble/hashes` deriver, `argon2id_web_v1` included. It is an
+  `Argon2idKeyDeriver` (at first, it called the core's spec check itself), so its bounds are the
+  core's by construction; hash-wasm's
   own limits (a salt of at least 8 bytes, memory of at least 8 KiB a lane, below 4 GiB) are no
   narrower. That the two derive the same bytes is a test, not a claim: both are held to Argon2id's
   reference test vector, and to each other byte for byte across the supplied spec and cheap specs
@@ -889,3 +890,67 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   refuses still opens the vault and lists as it is. Refusing it on read would make the bundle
   `corrupt_record` and lock the user out of their own vault, or hide a way in they rely on. The
   first way in, named `passphrase` by the vault itself, is not checked.
+* 2026-10-16: **a key deriver's bytes are zeroed once imported.** `passphraseKeyOf`
+  (`KeyDeriver`, `src/key-deriver.ts`, since the entry below on the class; first in
+  `src/envelope.ts`) `fill(0)`s the 32 bytes a deriver's runner hands back as soon as
+  `importWrappingKeyBytes` has made the non-extractable passphraseKey of them, whether or not the
+  import succeeded, on every path that derives (sealing, and each envelope tried in an unlock);
+  a result of another length than 32, refused (`bad_option`), is zeroed likewise.
+  Best effort, as it is in any JavaScript crypto: the deriver's own working memory (hash-wasm's
+  and `@noble/hashes`' internals), the engine's copies and the passphrase string are not reached.
+  The bytes are the vault's the moment they are returned, so a deriver that returns a buffer it
+  keeps (a cache, a constant) would see it zeroed under it; the `KeyDeriver` doc and the README
+  say to hand back a fresh array. A result over a `SharedArrayBuffer` is refused (`bad_option`)
+  before it is touched: another thread could read it, and WebCrypto will not import it.
+* 2026-10-16: **the deriver's label is checked three ways before a vault trusts it.** Every
+  `KeyDeriver`, as it is made (`openVault`, until the entry below on the class), refuses a label
+  beginning `argon2id_web_` (any case) that is not a spec safebyok supplies,
+  or is one without exactly its parameters, so a spec added later (`argon2id_web_v2`) cannot
+  collide with a label a host stored vaults under. Every `Argon2idKeyDeriver` runs the Argon2id
+  spec check (`parseArgon2idSpec`) as it is made, so a spec Argon2id cannot run fails with a
+  kind before any vault is opened with it, not at the first unlock as a library's plain Error. The
+  supplied derivers (the core's and `safebyok-fastkey`'s) refuse a salt of another length than the
+  spec's before deriving (`bad_option`, never quoting the salt): the stored-vault half of that
+  was already so, an envelope with a salt of the wrong length being passed over as damaged.
+* 2026-10-16: **a `test_` label is warned of, never refused.** `openVault` says through the
+  logger, once per open, that a key deriver whose label begins `test_` (the published
+  `safebyok/testing` deriver is `test_digest_v0`: one SHA-256 of passphrase and salt) gives a
+  passphrase next to no protection against guessing. It does not refuse: no option, no flag, so a
+  host that meant it reads one line and one that did not has a chance to see it. The warning is a
+  best-effort signal, not a gate: a host that passes a `logger` doing nothing hears nothing, and a
+  deriver as weak under another label is not noticed. The vault's records still name the label
+  that sealed them.
+* 2026-10-16: **any way in proves `changePassphrase`**, a passkey's answer included, as it
+  already proved `addPassphrase`, `addPasskey` and `removeUnlock`. A passkey's answer is as good
+  as a passphrase for its vault (VOCABULARY.md), so this opens nothing new: whoever holds the
+  authenticator and passes its user verification could already add a passphrase and remove the
+  old one in two calls, and now does it in one, as one write at one unlockEpoch. With several
+  passphrases the caller names which to replace (`unlockId`); the vault does not guess. The
+  vaultKey is untouched, so what the replaced passphrase's holder kept of an earlier bundle still
+  opens that copy, as for any removal.
+* 2026-10-16: **`removeUnlock` and a vaultKey rotation stay separate verbs**, as the rotation
+  design (`whiteboard/20261016-rotation/rotation-design.md`) has them: `removeUnlock` is the
+  cheap removal and is not revocation, and `rotateVaultKey` is its own call. Removing a way in
+  stops it opening the vault from here on and cannot take back what it opened; folding a rotation
+  into every removal would rewrite every lockbox for what is usually housekeeping, and make the
+  common call the slow one. A host that removes a way in because it was compromised rotates too.
+* 2026-10-16: **`UnlockSummary` shows `device_id` and `registered_at`.** The snapshot of a locked
+  vault already listed each way in; it now says too when it was added and by which device, so a
+  user can spot a way in they did not make. Both are public fields of the envelope, bound into its
+  wrap, and `device_id` is one random id per device per vault (the mark's `device_id`), so it
+  links nothing the vault does not already link: not across vaults, not to the hardware.
+* 2026-10-16: **every key deriver is a `KeyDeriver`, and the class, not the host, does the
+  checking** (`src/key-deriver.ts`; the Coach's ruling on the union #126 had made). `openVault`
+  takes only an instance of the abstract class, and calls one method on it, `passphraseKeyOf`.
+  The class checks the spec as a deriver is made (a label, a salt length from 1 to 65536, the
+  reserved `argon2id_web_` labels, and Argon2id's floors in `Argon2idKeyDeriver`, the one family
+  allowed to say `algorithm: 'argon2id'`), and at each derivation refuses a salt of another
+  length, refuses anything but 32 bytes of unshared memory from the runner, makes the
+  passphraseKey and zeroes the bytes. A subclass supplies only `doDeriveKeyBytes`, so a host's
+  deriver of any algorithm, and both of ours, pass through the same checks and the same wipe; a
+  deriver can no longer misreport its parameters beside a function that ignores them, since the
+  Argon2id runners read `this.spec`. What it cannot stop: a subclass that overrides the public
+  methods (the doc block says never to, as `VaultDB`'s does), or a runner that ignores its spec;
+  a stand-in is still the host's to test against the deriver it replaces. `openVault` checks
+  with `instanceof`, so a host that loads two copies of safebyok (an ESM and a CommonJS build side
+  by side) has its deriver refused as `bad_option` rather than trusted unchecked.
