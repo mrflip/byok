@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status** (2026-10-17): the line through 17 is filed (main → 1 → 2 → 3 → 4 → 13 → 10 → 6 → 7 → 14 → 8 → 11 → 5 → 16 → 17); 9a and 9b underway from 17's tip; 12 ready, its tsdown half after 16:00Z; 15 waits on the Coach; 9c last.
+**Status** (2026-10-17): the line through 9a is filed; the final restack onto today's main (YOLO 30) underway; then 12 onto 9a, 9c, the sprint PR; 15 waits on the Coach; 12's tsdown half after 16:00Z.
 
 ## Status
 
@@ -15,7 +15,7 @@
 | 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3) | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | on 6 (83ed9ce3), chained | filed (tip 9169da4d) | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | on 14 (e2711c21), chained | filed (tip 8eb453fd) | [#130](https://github.com/mrflip/safebyok/pull/130) |
-| 9a | sweep_small | on 9b (6795a1d9), YOLO 28 | reviewed `fixed`; filing onto 9b | [#143](https://github.com/mrflip/safebyok/pull/143) |
+| 9a | sweep_small | on 9b (6795a1d9), YOLO 28 | filed (tip 72a3a52a) | [#143](https://github.com/mrflip/safebyok/pull/143) |
 | 9b | core_tidy | on 17 (e8141917), YOLO 28 | filed (tip 6795a1d9) | [#144](https://github.com/mrflip/safebyok/pull/144) |
 | 9c | budgets | the line's top, last | pending | |
 | 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
