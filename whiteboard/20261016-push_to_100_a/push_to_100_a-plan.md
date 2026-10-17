@@ -10,10 +10,10 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: second session (2026-10-17, from 03:00Z). 5b finishing its list (#139); 6, 7, 8
-  and 11 restacking onto 10's tip side by side, then 14 onto 7, then chained 6 → 7 → 14 → 8 → 11
-  (YOLO 21); 5 moves above 11 (YOLO 20); 15 (#138) flagged, waiting on the Coach; then 16 and
-  17, 9, and 12 (its clock has passed)
+* **Status**: **done** (2026-10-17). The line main → #128 → #133 → #127 → #132 → #137 → #136 →
+  #126 → #129 → #134 → #130 → #131 → #139 → #142 → #141 → #144 → #143 → #140 → #145 → #125 stands
+  on today's main; #138 (15) waits on the Coach outside it; G403/G415 follow after 16:00Z.
+  `human/20261017-sprint_push_to_100_a_done.md` has the summary and every open question
 
 ## Resume here (for a fresh session)
 
@@ -774,6 +774,13 @@ From the sprint doc's *Open Matters*, as rows are swept:
     (`restack-owed-rulings.md`), a `plan:` commit on each branch as it goes. Then 12 rebases onto
     the new 9a, and 9c is cut from 12, so neither moves twice. One justify at the top, CI for the
     middle.
+31. **The sprint PR squashes to its documents only** (2026-10-17): the first session had also
+    edited `.claude/` agents and skills (open matters to the Coach, rulings carried back, the
+    resolutions file) and `TODO.md`/`NOTYET.md` on this branch; #135 has since rewritten those
+    `.claude/` files on main, and 9a filed the same TODO/NOTYET entries in the Coach's words (all
+    of the branch's, plus two). So the squash carries the sprint's whiteboard and `human/` entry;
+    the TODO/NOTYET edits are dropped as superseded by #143; the process rules go to a small PR of
+    their own from main, `20261017-sprint_rules`, outside the line, folded into #135's text.
 
 ## For the Coach
 

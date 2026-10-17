@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status** (2026-10-17 05:05Z): the line main → #128 → #133 → #127 → #132 → #137 → #136 → #126 → #129 → #134 → #130 → #131 → #139 → #142 → #141 → #144 → #143 is restacked onto today's main (365d1dcd) and filed; 12 filing onto it, then 9c, then the sprint PR; 15 waits on the Coach.
+**Status** (2026-10-17): **done**. The line through #145 is filed on today's main; the sprint PR #125 closes on top; 15 (#138) waits on the Coach; G403/G415 follow after 16:00Z.
 
 ## Status
 
@@ -23,8 +23,8 @@
 | 17 | written_at | on 16 | filed (tip a63b2529) | [#141](https://github.com/mrflip/safebyok/pull/141) |
 | 9b | core_tidy | on 17 (YOLO 28) | filed (tip a034f23c) | [#144](https://github.com/mrflip/safebyok/pull/144) |
 | 9a | sweep_small | on 9b (YOLO 28) | filed (tip 1d19c5a1) | [#143](https://github.com/mrflip/safebyok/pull/143) |
-| 12 | floors_forward | onto 9a (YOLO 24, 29) | filing; tsdown half (G403, G415) a follow-up after 16:00Z | [#140](https://github.com/mrflip/safebyok/pull/140) |
-| 9c | budgets | onto 12, last | pending | |
+| 12 | floors_forward | on 9a (YOLO 24, 29) | filed (tip b9a61cc1); G403/G415 a follow-up after 16:00Z | [#140](https://github.com/mrflip/safebyok/pull/140) |
+| 9c | budgets | on 12 | filed (tip 5eab9956; G520 closed: nine lines re-derived, four raised) | [#145](https://github.com/mrflip/safebyok/pull/145) |
 | 15 | deriver_shim | on 6's old tip (adc94772) | flagged: waits on the Coach | [#138](https://github.com/mrflip/safebyok/pull/138) |
 
 ## What the threads have taught
@@ -100,7 +100,7 @@
   G032 had no row left (gone with thread 6's sweep). Thread 2 (#133): G023, G025, G040, G482 and
   G177 swept; G357 annotated (its last bullet settled). Thread 13 (#137): G065 swept; G138 (ruled
   `proceed` on "answered by 3.8", which thread 13 delivered) still stands: the permission check
-  refused its delete, so it waits on the Coach. Thread 5b (#139, 2026-10-17): its 34 rows swept (18 Storage & adapters, 9 Convex, 4 Small matters, G247 Validators, G149 Vault core, G523 Tests & tooling); G207, G208 and G214 carried the Coach's `proceed` notes, which `matters/` keeps. The Gripefest doc stands at 92 matters.
+  refused its delete, so it waits on the Coach. Thread 5b (#139, 2026-10-17): its 34 rows swept (18 Storage & adapters, 9 Convex, 4 Small matters, G247 Validators, G149 Vault core, G523 Tests & tooling); G207, G208 and G214 carried the Coach's `proceed` notes, which `matters/` keeps. The Gripefest doc stood at 92 matters. Threads 9a, 12 and 9c (2026-10-17): 21 rows swept (13 Soonish, 7 Small matters, G508 NOTYET); G135, G253, G238 already gone; G138, G344, G403, G415 left open. The doc stands at 71 matters (its Open Matters header still says 132: stale).
 * *Orchestrator:* **Rulings carried back** (the sprint skill's §3, new this sprint): the Coach's
   rulings are in `20261016-push_to_100_a-resolutions.md` in full, and a `→ *Coach:*` line goes
   beside each question in its PR (done for #126-#130; #131's worker did its own). Lines owed to
