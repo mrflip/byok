@@ -93,5 +93,6 @@ other package as on main. `pnpm size`: openVault 22.21 kB, under main's 23 kB.
 * **For the Coach**:
   - Is `lockSoon()` soft (an unlock under way finishes, as the strawman's table has it) or as
     built (it loses, per G115)? Now an Open Matters row.
+    - → *Coach (2026-10-16):* lockSoon() is a soft lock; thread 4 (#132) builds it so.
   - A passkey proving a change keeps the deadline rather than renewing it: the narrower reading
     of "type a password ... and prove I am mrflip". G530 (NOT YET) asks the deeper question.
