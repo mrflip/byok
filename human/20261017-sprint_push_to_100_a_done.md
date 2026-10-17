@@ -34,7 +34,10 @@ Each PR's first line says "Stacked on #<the one below>, in the line main → ...
 19. [#125](https://github.com/mrflip/safebyok/pull/125) the sprint PR, squashed to one `plan:` commit -- the top
 
 Outside the line: [#138](https://github.com/mrflip/safebyok/pull/138) deriver_shim (15), stacked
-on #126's old tip, unfiled in `/workspace/byok-deriver_shim`.
+on #126's old tip, unfiled in `/workspace/byok-deriver_shim`; and
+[#146](https://github.com/mrflip/safebyok/pull/146) sprint_rules, from `main`, the first session's
+process rules folded into #135's text (independent of the line; it adds
+`whiteboard/20261016-push_to_100_a/thread-sprint_rules.md`, a file no other PR touches).
 
 ## YOLO decisions this session (20 to 30; 1 to 19 in the plan)
 
@@ -54,7 +57,7 @@ on #126's old tip, unfiled in `/workspace/byok-deriver_shim`.
   threads 1, 2, 3, 4, 13 and 10's files.
 * **31.** This PR squashes to the sprint's documents only. The first session's `.claude/` rule
   edits (open matters to the Coach, rulings carried back, a resolutions file) move to their own
-  small PR from main, `20261017-sprint_rules`, folded into #135's text; its `TODO.md`/`NOTYET.md`
+  small PR from main, [#146](https://github.com/mrflip/safebyok/pull/146) (`20261017-sprint_rules`), folded into #135's text; its `TODO.md`/`NOTYET.md`
   edits are dropped, superseded by #143's (the same entries, in your words, plus two).
 
 ## Open questions, in one place
@@ -79,7 +82,8 @@ on #126's old tip, unfiled in `/workspace/byok-deriver_shim`.
   entries were appended at the end under the old rule, and stay there.
 * **Folders for you to remove** (each unregistered by `git worktree remove`, then held by a
   `.DS_Store` Finder wrote; no git link, nothing unpushed): `/workspace/byok-ci_release`,
-  `/workspace/byok-store_base`, `/workspace/byok-core_tidy`, `/workspace/byok-budgets`.
+  `/workspace/byok-store_base`, `/workspace/byok-core_tidy`, `/workspace/byok-budgets`,
+  `/workspace/byok-sprint_rules`.
 * **Gripefest doc**: 71 matters now (its *Open Matters* header still says 132); G138, G344, G403,
   G415 stay open.
 * **Your hands, from the first session**: `node-compat (22)` and `postgres` as required checks;

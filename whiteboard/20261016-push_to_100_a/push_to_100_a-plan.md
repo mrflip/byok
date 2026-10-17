@@ -780,7 +780,7 @@ From the sprint doc's *Open Matters*, as rows are swept:
     `.claude/` files on main, and 9a filed the same TODO/NOTYET entries in the Coach's words (all
     of the branch's, plus two). So the squash carries the sprint's whiteboard and `human/` entry;
     the TODO/NOTYET edits are dropped as superseded by #143; the process rules go to a small PR of
-    their own from main, `20261017-sprint_rules`, outside the line, folded into #135's text.
+    their own from main, #146 (`20261017-sprint_rules`), outside the line, folded into #135's text.
 
 ## For the Coach
 
