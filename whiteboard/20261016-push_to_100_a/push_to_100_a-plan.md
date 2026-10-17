@@ -294,6 +294,18 @@ handoff carries it whole. Below, the orchestrator's gloss.
   #134): an entry in `notes/wontfix.md` -- Chrome ignores `autocomplete="off"` on a password-type
   field, so the whisper field may still be offered a saved password; avoiding it would take a
   text field masked by the non-standard `-webkit-text-security`, which not every browser honours.
+* **Added, YOLO 22** (2026-10-17): the TODO and NOTYET entries the Coach ruled this sprint are in
+  neither `TODO.md` nor `NOTYET.md` on main. Check each and add what is missing, in the Coach's
+  words, on the shelf the ruling names: "Are we doing anyone a favor by accepting multiple
+  passphrases?" (TODO, beside NOTYET G530); ShelfVaultDB (TODO); "Identity should not be tied to
+  the backing database" (TODO); review call-time work that could be composed once or memoized
+  (TODO); `postgres` and `node-compat (22)` as required checks (TODO, *Sand in the sandals*; the
+  ruleset is the Coach's); thread 4's pre-existing race (TODO, Soonish); "Option to let the user
+  add a hint on their passphrase" (NOTYET); "Break out dependencies, including -fastkey, into a
+  -utils or -bestpractices package" (NOTYET); the React binding under a real screen reader,
+  shadow-DOM host and browser (NOTYET); G499's conflict handler (NOTYET); the adapters' own
+  Postgres tests staying on PGlite (NOTYET); RAGEBAIT: an omitted bag keeping the old, and the
+  demo App tests' order. Full wording: the resolutions file.
 
 ### 10. `secure_floor` -- the Coach's three Soonish lines
 
@@ -654,6 +666,9 @@ From the sprint doc's *Open Matters*, as rows are swept:
     once, 14 onto 7's new tip after; the orchestrator then chains them 6 → 7 → 14 → 8 → 11, and a
     conflict at a join (`notes/security.md`, export lists, `ci.yml`, the lockfile) goes back to
     that thread's worker. About two workers' wall-clock instead of five.
+22. **Thread 9 files the TODO and NOTYET entries the Coach ruled** (2026-10-17): thread 6's
+    restacker found the passphrases TODO nowhere, and none of the sprint's ruled entries are in
+    `TODO.md` or `NOTYET.md` on main. Thread 9 adds what is missing, in the Coach's words.
 
 ## For the Coach
 

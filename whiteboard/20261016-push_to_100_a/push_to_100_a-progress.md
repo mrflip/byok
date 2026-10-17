@@ -12,12 +12,12 @@
 | 4 | refusals_and_catchup | on 3 (65642238), restacked | filed (tip f6d424ef) | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
 | 5b | store_base build | on 10 (8439aa01); filer rebases onto 11 (YOLO 20) | underway: a fresh worker finishes the nine items | [#139](https://github.com/mrflip/safebyok/pull/139) |
-| 6 | crypto_small | main; restacking onto 10 (8439aa01) | filed; restacking | [#126](https://github.com/mrflip/safebyok/pull/126) |
+| 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3); chain next | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | main; restacking onto 10 (8439aa01) | filed; restacking | [#129](https://github.com/mrflip/safebyok/pull/129) |
-| 8 | ci_release | main; restacking onto 10 (8439aa01) | filed; restacking | [#130](https://github.com/mrflip/safebyok/pull/130) |
+| 8 | ci_release | on 10 (8439aa01), restacked | filed (tip 88915cb1); chain next | [#130](https://github.com/mrflip/safebyok/pull/130) |
 | 9 | sweep_small | top of the line | pending | |
 | 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
-| 11 | pg_container | main; restacking onto 10 (8439aa01) | filed; restacking | [#131](https://github.com/mrflip/safebyok/pull/131) |
+| 11 | pg_container | on 10 (8439aa01), restacked | filed (tip 52c69b23); chain next | [#131](https://github.com/mrflip/safebyok/pull/131) |
 | 12 | floors_forward | top of the line | pending (clock passed) | |
 | 13 | epoch_expectation | on 4 (f6d424ef), restacked | filed (tip f89b0c42) | [#137](https://github.com/mrflip/safebyok/pull/137) |
 | 14 | uncontrolled_fields | on 7 (3d62fc04); restacks onto 7's new tip | filed; restack pending | [#134](https://github.com/mrflip/safebyok/pull/134) |
@@ -27,6 +27,17 @@
 
 ## What the threads have taught
 
+* *Orchestrator:* **The restack onto 10** (2026-10-17), for the chain and later threads.
+  Thread 6 (`83ed9ce3`): `passphraseKeyOf` in `envelope.ts` is the one place the core receives a
+  deriver's output, in a fixed order (isView, shared memory, length, all-zero, import, wipe); a
+  passkey-proved `changePassphrase` runs through `deadlineFor(proof, 'revise')`, with a new test
+  where threads 3 and 6 meet; G032 is closed by #126 (wipe) and #136 (all-zero) together. Thread
+  8 (`88915cb1`): `ScheduleHungMillis`, `WaitedTooLongMillis`, `inTime(promise, limitMillis)`;
+  its three size entries follow thread 10's zxcvbn line at the end of `.size-limit.json`; a
+  Convex fixture moved from `note` to `public_json`. Thread 11 (`52c69b23`):
+  `comparesVaultKeyEpoch` gone from the e2e battery; real-Postgres suites proven only in CI.
+  Every join conflicts in `notes/security.md` (append at the end). zxcvbn's line measures 216.26
+  of 220 kB: thread 16 changes how it ships.
 
 * *Orchestrator:* **Sweep ledger.** At the start: the 23 no-code rows (G204, G205, G206, G478,
   G215, G291, G135, G321, G440, G443, G445, G474, G475, G235, G238, G253, G293, G376, G400,
