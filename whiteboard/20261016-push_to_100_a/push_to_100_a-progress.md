@@ -16,7 +16,7 @@
 | 7 | react_tidy | on 6 (83ed9ce3), chained | filed (tip 9169da4d) | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | on 14 (e2711c21), chained | filed (tip 8eb453fd) | [#130](https://github.com/mrflip/safebyok/pull/130) |
 | 9a | sweep_small | on 17 (e8141917), YOLO 28 | in review (tip 7656b323) | [#143](https://github.com/mrflip/safebyok/pull/143) |
-| 9b | core_tidy | on 17 (e8141917), YOLO 28 | underway | |
+| 9b | core_tidy | on 17 (e8141917), YOLO 28 | in review (tip 079d2be5) | [#144](https://github.com/mrflip/safebyok/pull/144) |
 | 9c | budgets | the line's top, last | pending | |
 | 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
 | 11 | pg_container | on 8 (8eb453fd), chained | filed (tip 07aed87c) | [#131](https://github.com/mrflip/safebyok/pull/131) |
