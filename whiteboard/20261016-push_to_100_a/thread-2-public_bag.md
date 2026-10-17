@@ -100,16 +100,21 @@ for the bag's check.
   1. **An omitted bag keeps the standing one.** Recommend keep: a host replacing a key need not
      re-send its metadata, and the demo's blank field relies on it. The alternative (omitted means
      `{}`) is one line in `store()`.
+     - → *Coach (2026-10-16):* Keep for now; filed under RAGEBAIT.
   2. **The empty bag counts toward `maxWhisperBytes`.** Recommend keep, as ruled: a whisper at
      exactly the limit now needs two bytes more.
+     - → *Coach (2026-10-16):* Yes, keep.
   3. **`LockboxFieldsBytes` could fall from 2048 to 1024.** Recommend leave it to thread 9 or
      later: lowering it lets `openVault` admit more lockboxes per backend, a behaviour change of
      its own.
+     - → *Coach (2026-10-16):* Lower to 1,024 in thread 9, without letting many more lockboxes in.
   4. **Refuse unknown keys in `store()`'s options** (a leftover `note` is now silently ignored).
      From the review; not built. Recommend yes, as `bad_option`, as `validators` already refuses
      a field it does not know.
+     - → *Coach (2026-10-16):* Refuse them in thread 9, through one helper shared with validators if possible.
   5. **Extend `cipherBinding`'s `undefined` guard to top-level parts and `null`.** From the
      review; not built. Recommend yes: the type already forbids both, and the guard is one line.
+     - → *Coach (2026-10-16):* Yes, thread 9.
   6. **depth-band** (first in the PR): the record check passes bags ~4,700-6,100 deep on Node,
      `PublicBag` only ~3,000, so a planted bag between lists as sound, and `lockSoon(grace)`
      threw a bare `RangeError` at 5,800 under ~800 host frames before erasing the remembered
@@ -120,4 +125,6 @@ for the bag's check.
      keeps the remembered unlock (older than this thread; `lock()` erases first).
   8. **lockbox-module**: the ~2 kB in `idbDeviceDB` and `browserOpts` is safe-stable-stringify,
      kept by `Lockbox`'s refine; `Lockbox` in a module of its own would let them drop it.
+     - → *Coach (2026-10-16):* Yes, a file of its own, thread 9.
   9. **proto-key**: `__proto__` keys are silently dropped from bags and whispers.
+     - → *Coach (2026-10-16):* No refusal: WONTFIX, undefined behaviour (thread 9 writes it).
