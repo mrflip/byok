@@ -15,8 +15,8 @@
 | 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3) | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | on 6 (83ed9ce3), chained | filed (tip 9169da4d) | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | on 14 (e2711c21), chained | filed (tip 8eb453fd) | [#130](https://github.com/mrflip/safebyok/pull/130) |
-| 9a | sweep_small | on 17 (e8141917), YOLO 28; restacks onto 9b at filing | reviewed `fixed` (tip 9ad69ffb, unpushed); files once 9b files | [#143](https://github.com/mrflip/safebyok/pull/143) |
-| 9b | core_tidy | on 17 (e8141917), YOLO 28 | in review (tip 079d2be5) | [#144](https://github.com/mrflip/safebyok/pull/144) |
+| 9a | sweep_small | on 9b (6795a1d9), YOLO 28 | reviewed `fixed`; filing onto 9b | [#143](https://github.com/mrflip/safebyok/pull/143) |
+| 9b | core_tidy | on 17 (e8141917), YOLO 28 | filed (tip 6795a1d9) | [#144](https://github.com/mrflip/safebyok/pull/144) |
 | 9c | budgets | the line's top, last | pending | |
 | 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
 | 11 | pg_container | on 8 (8eb453fd), chained | filed (tip 07aed87c) | [#131](https://github.com/mrflip/safebyok/pull/131) |
@@ -62,6 +62,14 @@
   minor: `eventually` hand-rolled beside `vi.waitUntil`; `randomHex` hand-written (test-only, per
   the ruling); the digest grep matches numeric tags only; Convex reads `getUserId` per call (G255);
   `Label`'s `maxLength` without `abort`; `untilStatementBlocked` tied to the insert's SQL text.
+* *Orchestrator:* **9b's review** (#144, `fixed`, one doc fix `c4a4ba2d`): `cipherBinding` gives
+  byte-identical bindings for existing records; the 1,024 allowance only loosens `openVault`'s
+  plan; Postgres's `unlock_epoch < $new` refuses a non-forward update as `stale_write`. Left,
+  minor: `rejectionOf` copied in two test files (`TH` is published); the no-IndexedDB guard in
+  core and `safebyok-indexeddb`; `adviceFrom` drops a rejection unlogged; the demo's doubled
+  `storage_blocked` sentence; `WaysIn`'s inline username format; one long doc line. Leftover
+  folders with no git link, the Coach's to remove: `/workspace/byok-ci_release`,
+  `/workspace/byok-store_base`, `/workspace/byok-core_tidy`.
 
 * *Orchestrator:* **Sweep ledger.** At the start: the 23 no-code rows (G204, G205, G206, G478,
   G215, G291, G135, G321, G440, G443, G445, G474, G475, G235, G238, G253, G293, G376, G400,
