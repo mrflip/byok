@@ -74,10 +74,10 @@ only through the objects and refs every checkout shares. Hence:
    back again is the review's. If anything changed in a way the review could have made, stop,
    touch nothing there, and report `bailed` with what you found.
 
-   **Style**, the part of the review workers no longer front-load. Read STYLE.md's *Naming* and
-   *Tests* sections, and look up in VOCABULARY.md each term of the cast the diff names; then
-   check the names the diff introduces and the tests it adds against them. The linter has the
-   rest of STYLE.md.
+   **Style**, the part of the review workers no longer front-load. Read STYLE.md whole -- the
+   linter keeps only part of it: braces, quotes, negation spacing, imports, naming, doc blocks
+   and the shape of tests are by hand -- and look up in VOCABULARY.md each term of the cast the
+   diff names; then check what the diff adds against them.
 
    **By hand**, where the skill did not see the thread: read `git diff <base-sha>...HEAD` in the
    worktree, file by file, with the code around each change, and hunt at the depth the level

@@ -163,8 +163,10 @@ your context. The documents below are looked up by section, not read through.
   thing in the cast.
 * `STYLE.md` -- the naming vocabulary (`val`, `ckey`, `bag`, `kind`, and what `key` means here),
   braces, quotes, doc blocks, and how tests are written. These conventions are specific and
-  unguessable, and the linter enforces most of the layout. **Read *Naming* before naming
-  anything new, and *Tests* before writing a test.**
+  unguessable, and the linter enforces only some of them. *Conventions At A Glance*, below,
+  covers a local name and a small edit. **Read the section you need before naming an export, a
+  module, a stored field or a new tag (*Naming*), and before writing a doc block, a test, or an
+  entrypoint that takes a caller's input (*Validation*).**
 * `packages/safebyok/eslint.config.mjs` -- mechanically enforced style; the other packages' and
   the root's configs are cut from it. Where it and a prose document disagree, it is a bug -- flag
   it.
@@ -174,16 +176,20 @@ your context. The documents below are looked up by section, not read through.
 
 ## Conventions At A Glance
 
-Enough to keep you out of trouble on a small edit. STYLE.md is the real source.
+The house conventions a writer gets wrong unless told: the linter does not catch these, or they
+shape code too deeply to fix in review. The linter has semicolons, indents, `const` and the
+banned names. STYLE.md is the real source.
 
-* Semicolonless. Two-space indents, no tabs.
-* Always brace blocks, even single-statement ones: `if (nope) { return }`
-* Opening brace at end of line; cuddle `} else if (...) {` and `} catch (err) {`.
-* No single-letter names. Never bare `name`, `value`, `node`, `query`. Use `err`, never `error`.
-  `type` only for an actual datatype; for "variety of", `kind` or `flavor`.
-* Never a bare `key`: a cryptographic key is named for its role (`vaultKey`, `lockboxKey`); a
-  map key is a `ckey`. The linter refuses `key`, `name`, `value`, `node`, `error` and `query` as
-  a variable or parameter.
-* `const` by default; when necessary, `let`; never `var`. Functional style is strongly preferred.
-* Parenthesize and space every negation: `if (! approved) { ... }`
-* Stored fields are underbar_case (`salt_bytes`); everything else camelCase.
+* Always brace, opening brace at the end of the line, cuddled: `if (nope) { return }`,
+  `} else if (...) {`, `} catch (err) {`. Parenthesize and space every negation: `if (! approved)`.
+* `'` by default; `"` for prose, error messages, and every `describe` and `it` title.
+* No single-letter names, even in a lambda: `(row) => row.label`. `ii`, `jj` for a loop counter.
+* The cast keeps VOCABULARY.md's names -- whisper, lockbox, vault -- never `data` or `payload`. A
+  cryptographic key is named for its role (`vaultKey`, `lockboxKey`); a map key is a `ckey`.
+* Smush the tags `name`, `kind`, `label`, `path` and `bag` into one word: `vaultlabel`,
+  `woodkind`. `type` is only a datatype; a menu choice is a `kind` or a `flavor`.
+* Stored fields are underbar_case (`salt_bytes`); everything else camelCase. A time is integer
+  UTC epoch milliseconds, never a `Date` or an ISO string.
+* A module of related verbs is star-imported under its Startcase name: `Envelope.swak(...)`.
+* Functional style; every export has a doc block written for its caller. Tests are chai-style
+  (`expect(foo).to.eq(bar)`), their helpers star-imported as `TH`.
