@@ -323,6 +323,11 @@ handoff carries it whole. Below, the orchestrator's gloss.
   there is none, for React Native/Hermes), with a test; `storage_blocked`'s message keeps each
   verb's own retry text; `VaultProvider`'s doc and `@example` offer Retry only for an `openError`
   a retry may mend (not `storage_blocked`).
+* **Added, thread 16's review** (YOLO 27, 2026-10-17): freeze the vault's checked `scope`
+  (`Names.checkScope` in `names.ts`, or where `vault.ts` keeps it), since the host's strength
+  test and `getSnapshot().scope` both hand it out; and `VaultProvider`'s `adviceFrom` treats a
+  rejected advice call as nothing to say (no advice shown, no error boundary), so a zxcvbn chunk
+  that fails to load mid-typing no longer ends the dialog. Tests for both.
 
 ### 10. `secure_floor` -- the Coach's three Soonish lines
 
@@ -513,6 +518,15 @@ handoff carries it whole. Below, the orchestrator's gloss.
   test's reason as the passphrase advice when the host passes no `passphraseAdvice` (the restack
   wiring of 10 into 14). The 12-character floor inside the good estimator stays unless the worker
   finds cause (NIST's 15 was the Rec; the Coach answered with the principles).
+* *Review* (`fixed`, #142, 2026-10-17): two fixes (`286680be` the React README: the advice
+  default is `VaultProvider`'s only; `4d04dd06` a test through `TH.expectRefusal`). Verified: a
+  failed zxcvbn load is forgotten and retried with no unhandled rejection; no passphrase or prefix
+  reaches a message, log or cause; `withUnlockedVault`'s null applies only to a let-go handle;
+  `"entry": ["index"]` measures the first load. Left, minor: a failed load ends the dialog (while
+  typing: thread 9, YOLO 27; at Create, a raw error with no kind: a row); a browser's re-fetch of a
+  failed chunk and CJS Jest unverified; `scope` unfrozen (thread 9, YOLO 27); a stale handle with
+  none live still rejects (cautious, kept); `adviceFrom` does not check a verdict's shape. The
+  filer rewords `core:` → `api:`, `react:` → `client:`.
 * **Added, 2026-10-17** (from the restack):
   * **The advice default** is this thread's, not 14's: thread 14's restacker wired none. Its file
     sketches `passphraseAdvice ?? adviceFrom(passphraseStrengthTest)` in `VaultProvider`, the
@@ -724,6 +738,9 @@ From the sprint doc's *Open Matters*, as rows are swept:
     guard into `shelfStore` with a Hermes-safe error, a verb's retry text, the provider's Retry
     doc), rather than reopening #141 after a `fixed` review. The Hermes fallback changes the
     worker's recorded "a `DOMException`": a row lets the Coach object.
+27. **Two of thread 16's review leftovers go to thread 9** (2026-10-17): freezing `scope`, and
+    advice that rejects shows nothing rather than ending the dialog. Both are local and two-way;
+    what kind a failed zxcvbn load carries at Create is a design call, so it is a row.
 
 ## For the Coach
 

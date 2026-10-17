@@ -22,7 +22,7 @@
 | 13 | epoch_expectation | on 4 (f6d424ef), restacked | filed (tip f89b0c42) | [#137](https://github.com/mrflip/safebyok/pull/137) |
 | 14 | uncontrolled_fields | on 7 (9169da4d), chained | filed (tip e2711c21) | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 (adc94772) | flagged: waits on the Coach [#138](https://github.com/mrflip/safebyok/pull/138) | |
-| 16 | strength_principles (new) | on 5 (9eb576a7) | in review (tip 31a4120d) | [#142](https://github.com/mrflip/safebyok/pull/142) |
+| 16 | strength_principles (new) | on 5 (9eb576a7) | reviewed `fixed`; filing (rewording two prefixes) | [#142](https://github.com/mrflip/safebyok/pull/142) |
 | 17 | written_at (new) | on 5 (9eb576a7); restacks onto 16 at filing | reviewed `fixed` (tip 5f2d72c2, unpushed); files once 16 files | [#141](https://github.com/mrflip/safebyok/pull/141) |
 
 ## What the threads have taught
