@@ -56,6 +56,10 @@ on its base. `pnpm size`: green; openVault 25.22 kB of 28 kB.
   the core's not-a-function check and default (a `checkStrengthTest` beside `checkValidators`
   later); no provider tests for switching back to no test, StrictMode, or a test changing while
   the open is pending.
+  - A host's test that throws: → *Coach (2026-10-16):* Keep.
+  - A hand-written all-zero check: → *Coach (2026-10-16):* Yes, the one line.
+  - An inline strength test reopens the vault: → *Coach (2026-10-16):* Hold it like logger instead (thread 16, YOLO 17).
+  - The provider repeats the core's check: → *Coach (2026-10-16):* Validate early, keep immutable: export checkStrengthTest (thread 16).
 * **Decisions taken**:
   - **`@zxcvbn-ts/language-common` came in beside `@zxcvbn-ts/core`.** On its own, core is a sham:
     `password1234` scores 4 of 4, and only repeats and sequences are caught. The dictionary is what
@@ -87,13 +91,20 @@ on its base. `pnpm size`: green; openVault 25.22 kB of 28 kB.
   - **NIST's number.** SP 800-63B rev. 4 asks 15 characters of a password that is the only
     factor, and a vault passphrase is one. The ruling said 12, so 12 it is; `MinPassphraseChars`
     is one constant to raise.
+    - → *Coach (2026-10-16):* No length-only test; a good estimator in safebyok/browser; host override (thread 16).
+    - Spaces count toward the floor: → *Coach (2026-10-16):* Why no length test is offered (thread 16).
   - **A second runtime dependency**, `@zxcvbn-ts/language-common`: read as covered by your yes
     (above). Say so if not, and `zxcvbnPassphraseTest` would take the dictionary from the host
     instead.
+    - → *Coach (2026-10-16):* Yes, keep.
+    - zxcvbn as hard dependencies: → *Coach (2026-10-16):* Optional peers (thread 16).
   - **zxcvbn's threshold** is score 3 (zxcvbn's own advice). 4 would refuse more
     sentence-passphrases.
+    - → *Coach (2026-10-16):* Keep 3.
   - **Not passed to the test: the vault's names** (zxcvbn's `userInputs`, which penalize
     `acme-mrflip`). It would need a second argument. Left out for one plain signature.
+    - → *Coach (2026-10-16):* Yes: a bag with their id and the vault label (thread 16).
   - **A race at create**: a weak passphrase is refused even when another device creates the vault
     in the same instant, where it would have been tried against theirs. The retry finds the vault
     and unlocks.
+    - → *Coach (2026-10-16):* Accept.
