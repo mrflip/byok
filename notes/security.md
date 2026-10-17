@@ -1408,7 +1408,7 @@ Interest*. Either way it keeps the voice above, and returns the lines it changed
   host can keep the unlock window short, call `lock()` on sign-out and on screen lock, serve the
   page under a strict Content-Security-Policy, and never load third-party script into a page that
   holds an unlocked vault.
-* 2026-10-17 (thread sweep_small): **the Postgres README no longer ships a hard-cap trigger
+* 2026-10-17 (thread sweep_small, [#143](https://github.com/mrflip/safebyok/pull/143)): **the Postgres README no longer ships a hard-cap trigger
   recipe.** The `safebyok-postgres` README used to carry SQL for a `BEFORE INSERT` trigger on
   `safebyok_lockboxes` that refused a lockbox past a hard limit, taking a transaction-scoped
   advisory lock per vault; under REPEATABLE READ it counts from its snapshot, so racers may
