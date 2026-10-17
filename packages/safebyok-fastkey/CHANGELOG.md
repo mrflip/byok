@@ -1,5 +1,45 @@
 # safebyok-fastkey
 
+## 0.4.0
+
+### Minor Changes
+
+- [#125](https://github.com/mrflip/safebyok/pull/125) [`161a6b1`](https://github.com/mrflip/safebyok/commit/161a6b17f9cf6d602c627712e22dc0edc453b2e0) Thanks [@mrflip](https://github.com/mrflip)! - Key derivers are checked harder, and a passkey can change a passphrase.
+  
+  **`KeyDeriver` is now a union** (breaking for a host's types; the reserved labels and the zeroed
+  bytes below may break a host's own deriver too): `Argon2idKeyDeriver`
+  (a whole `KeyDeriverSpec` beside `key_deriver_label`, `salt_bytes` and `deriveKeyBytes`: what
+  `argon2idDeriver`, `argon2idWebV1Deriver` and `safebyok-fastkey`'s derivers return) or
+  `CustomKeyDeriver` (those three fields, and optionally an `algorithm` of the host's naming).
+  Every field keeps its name. What changes: an `Argon2idKeyDeriver` must carry every parameter
+  of the spec (the union as a whole still admits a partial set, which `openVault` checks only on a
+  deriver declaring `algorithm: 'argon2id'`), and a class can `implements
+  CustomKeyDeriver` or `Argon2idKeyDeriver` but not `KeyDeriver` itself. `openVault` now runs
+  the Argon2id spec check on any deriver declaring `algorithm: 'argon2id'`, so a spec Argon2id
+  cannot run is refused at open (`bad_option`) rather than failing at the first unlock, and
+  refuses a label beginning `argon2id_web_` (any case) that is not a spec safebyok supplies. A
+  label beginning `test_` is warned of through the logger, not refused.
+  
+  * `changePassphrase(proof, newPassphrase, { unlockId? })` takes any way in as proof, a
+    passkey's answer included. Given a passkey's answer on a vault of several passphrases, say
+    which to replace with `unlockId` (`bad_option` otherwise). A passphrase proof behaves as before.
+  * The vault zeroes the bytes a deriver hands back once imported, so a deriver must return a
+    fresh array each call, and refuses (`bad_option`) bytes in a `SharedArrayBuffer`.
+  * `argon2idDeriver`, `argon2idWebV1Deriver` and `argon2idWasmDeriver` refuse a salt of another
+    length than the spec's (`bad_option`) before deriving. `ensureSaltFits` is exported for a
+    deriver of another implementation to do the same.
+  * `parseKeyDeriverSpec` now lives in the spec module and refuses the reserved labels too.
+  * A `wrong_passphrase` beside passphrases made by another key deriver says how many went
+    untried, and that opening the vault where it was made may help.
+  * `UnlockSummary` (the snapshot's `unlocks`) gains `device_id` and `registered_at`.
+  * New exports: `Argon2idKeyDeriver`, `CustomKeyDeriver`, `ensureSaltFits`.
+  * `Envelope.sealPassphrase` and `sealPasskey` (internal) return the envelope alone.
+
+### Patch Changes
+
+- Updated dependencies [[`c3127d9`](https://github.com/mrflip/safebyok/commit/c3127d9c8020524458cbc065bfa98cbbeb23fa50), [`161a6b1`](https://github.com/mrflip/safebyok/commit/161a6b17f9cf6d602c627712e22dc0edc453b2e0), [`80673f9`](https://github.com/mrflip/safebyok/commit/80673f9d073f592b111a9144df1a3eb26e394e6c), [`e25bf68`](https://github.com/mrflip/safebyok/commit/e25bf6885b6f42cc621a3d4108c2fc007da5c79f), [`6f037b4`](https://github.com/mrflip/safebyok/commit/6f037b43bcf3c7041280b6fa9966551ec85227f7), [`443e7f6`](https://github.com/mrflip/safebyok/commit/443e7f68ab088fb290c62a37712c44d6bd67f18d), [`91f22ee`](https://github.com/mrflip/safebyok/commit/91f22eed2628d7cf7fbbf526e07f1f9523d77f96), [`3cf065c`](https://github.com/mrflip/safebyok/commit/3cf065cc528d43447b3f439a3a37f4c81de36190), [`abbe79c`](https://github.com/mrflip/safebyok/commit/abbe79c79725ab4592ebc5c6bfbac1a8a6bdeb33), [`0b99b51`](https://github.com/mrflip/safebyok/commit/0b99b517f71318718d87e2d459dc5090f5d2674c), [`47b156b`](https://github.com/mrflip/safebyok/commit/47b156b6fcd301de73771677b42b680c096708bc), [`91afb90`](https://github.com/mrflip/safebyok/commit/91afb90fe9a075dfb753204b141e16acb6ad92b4), [`af18f4d`](https://github.com/mrflip/safebyok/commit/af18f4d90a0aae83a1abfdc4c6acac1260771afa), [`bcd69a9`](https://github.com/mrflip/safebyok/commit/bcd69a9437b4a69a98db242d974f1e058cb1f698), [`d1b8f08`](https://github.com/mrflip/safebyok/commit/d1b8f0824a4333d164190c78d178244b17bd926f)]:
+  - safebyok@0.4.0
+
 ## 0.3.0
 
 ### Minor Changes
