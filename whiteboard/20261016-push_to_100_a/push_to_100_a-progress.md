@@ -11,7 +11,7 @@
 | 3 | locks_and_expiry | on 2 (c397b745), restacked | filed (tip 65642238) | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 (65642238), restacked | filed (tip f6d424ef) | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
-| 5b | store_base build | on 11 (07aed87c), YOLO 20 | filed (tip 9eb576a7); rows sweeping | [#139](https://github.com/mrflip/safebyok/pull/139) |
+| 5b | store_base build | on 11 (07aed87c), YOLO 20 | filed (tip 9eb576a7); rows swept | [#139](https://github.com/mrflip/safebyok/pull/139) |
 | 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3) | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | on 6 (83ed9ce3), chained | filed (tip 9169da4d) | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | on 14 (e2711c21), chained | filed (tip 8eb453fd) | [#130](https://github.com/mrflip/safebyok/pull/130) |
@@ -77,7 +77,7 @@
   G032 had no row left (gone with thread 6's sweep). Thread 2 (#133): G023, G025, G040, G482 and
   G177 swept; G357 annotated (its last bullet settled). Thread 13 (#137): G065 swept; G138 (ruled
   `proceed` on "answered by 3.8", which thread 13 delivered) still stands: the permission check
-  refused its delete, so it waits on the Coach. The Gripefest doc stands at 126 matters.
+  refused its delete, so it waits on the Coach. Thread 5b (#139, 2026-10-17): its 34 rows swept (18 Storage & adapters, 9 Convex, 4 Small matters, G247 Validators, G149 Vault core, G523 Tests & tooling); G207, G208 and G214 carried the Coach's `proceed` notes, which `matters/` keeps. The Gripefest doc stands at 92 matters.
 * *Orchestrator:* **Rulings carried back** (the sprint skill's §3, new this sprint): the Coach's
   rulings are in `20261016-push_to_100_a-resolutions.md` in full, and a `→ *Coach:*` line goes
   beside each question in its PR (done for #126-#130; #131's worker did its own). Lines owed to
