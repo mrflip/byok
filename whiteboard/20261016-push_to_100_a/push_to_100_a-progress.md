@@ -15,7 +15,7 @@
 | 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3) | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | on 6 (83ed9ce3), chained | filed (tip 9169da4d) | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | on 14 (e2711c21), chained | filed (tip 8eb453fd) | [#130](https://github.com/mrflip/safebyok/pull/130) |
-| 9a | sweep_small | on 17 (e8141917), YOLO 28 | in review (tip 7656b323) | [#143](https://github.com/mrflip/safebyok/pull/143) |
+| 9a | sweep_small | on 17 (e8141917), YOLO 28; restacks onto 9b at filing | reviewed `fixed` (tip 9ad69ffb, unpushed); files once 9b files | [#143](https://github.com/mrflip/safebyok/pull/143) |
 | 9b | core_tidy | on 17 (e8141917), YOLO 28 | in review (tip 079d2be5) | [#144](https://github.com/mrflip/safebyok/pull/144) |
 | 9c | budgets | the line's top, last | pending | |
 | 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
@@ -55,6 +55,13 @@
   `eslint-disable unicorn/prefer-promise-with-resolvers` at
   `safebyok-react/tests/vault-provider.test.tsx:499` warns (thread 9). Its worktree folder
   `/workspace/byok-store_base` was left on disk with no git link (a `.DS_Store`): the Coach's.
+* *Orchestrator:* **9a's review** (#143, `fixed`): `LabelPattern`'s rewrite proven equal to the
+  old on 1.8M strings and linear on 12M-character input; `mask`'s doc, `liveWatch`'s unsubscribe,
+  the e2e `afterEach`, and two NOTYET quotes fixed. RAGEBAIT is kept in `NOTYET.md` (the Coach's
+  own #124 moves it there; #124 and #143 meet in `TODO.md`/`NOTYET.md` when both merge). Left,
+  minor: `eventually` hand-rolled beside `vi.waitUntil`; `randomHex` hand-written (test-only, per
+  the ruling); the digest grep matches numeric tags only; Convex reads `getUserId` per call (G255);
+  `Label`'s `maxLength` without `abort`; `untilStatementBlocked` tied to the insert's SQL text.
 
 * *Orchestrator:* **Sweep ledger.** At the start: the 23 no-code rows (G204, G205, G206, G478,
   G215, G291, G135, G321, G440, G443, G445, G474, G475, G235, G238, G253, G293, G376, G400,
