@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status** (2026-10-17 05:00Z): the line main → 1 → 2 → 3 → 4 → 13 → 10 → 6 → 7 → 14 → 8 → 11 → 5 is restacked and filed; 16 and 17 underway from 5's tip; 15 waits on the Coach; then 9 and 12.
+**Status** (2026-10-17): the line through 17 is filed (main → 1 → 2 → 3 → 4 → 13 → 10 → 6 → 7 → 14 → 8 → 11 → 5 → 16 → 17); 9a and 9b underway from 17's tip; 12 ready, its tsdown half after 16:00Z; 15 waits on the Coach; 9c last.
 
 ## Status
 
@@ -15,8 +15,8 @@
 | 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3) | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | on 6 (83ed9ce3), chained | filed (tip 9169da4d) | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | on 14 (e2711c21), chained | filed (tip 8eb453fd) | [#130](https://github.com/mrflip/safebyok/pull/130) |
-| 9a | sweep_small | on 17, YOLO 28 | pending: once 17 files | |
-| 9b | core_tidy | on 17, YOLO 28 | pending: once 17 files | |
+| 9a | sweep_small | on 17 (e8141917), YOLO 28 | underway | |
+| 9b | core_tidy | on 17 (e8141917), YOLO 28 | underway | |
 | 9c | budgets | the line's top, last | pending | |
 | 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
 | 11 | pg_container | on 8 (8eb453fd), chained | filed (tip 07aed87c) | [#131](https://github.com/mrflip/safebyok/pull/131) |
@@ -25,7 +25,7 @@
 | 14 | uncontrolled_fields | on 7 (9169da4d), chained | filed (tip e2711c21) | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 (adc94772) | flagged: waits on the Coach [#138](https://github.com/mrflip/safebyok/pull/138) | |
 | 16 | strength_principles (new) | on 5 (9eb576a7) | filed (tip 23743f18; `core:`/`react:` reworded `api:`/`client:`) | [#142](https://github.com/mrflip/safebyok/pull/142) |
-| 17 | written_at (new) | on 16 (23743f18) | reviewed `fixed`; filing onto 16 | [#141](https://github.com/mrflip/safebyok/pull/141) |
+| 17 | written_at (new) | on 16 (23743f18) | filed (tip e8141917) | [#141](https://github.com/mrflip/safebyok/pull/141) |
 
 ## What the threads have taught
 
