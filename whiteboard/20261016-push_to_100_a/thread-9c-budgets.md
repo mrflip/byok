@@ -1,6 +1,6 @@
 # Thread 9c: budgets (2026-10-17)
 
-Branch `20261017-budgets`, PR #145 (to confirm), stacked on #140. Justify: see the PR's Tests line.
+Branch `20261017-budgets`, PR #145, stacked on #140. Justify: green (lint, typecheck, all tests, build, size check).
 
 * **Built**: every line of `.size-limit.json` re-derived from `npx size-limit --json` (after `pnpm build`) by PROCESS.md, *Size budgets*: measure, plus 3 kB at 5 kB or more (+50% and at least +1 kB under), rounded up to two significant figures. Only `limit` changed; names, paths, imports, `browserOpts`'s `"entry": ["index"]` and the `ignore` lists are as they were.
 * **Closed**: G520 **closed**.
