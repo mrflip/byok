@@ -1,34 +1,40 @@
 # Sprint push_to_100_a -- progress
 
-**Status** (2026-10-17): the line through 9a is filed; the final restack onto today's main (YOLO 30) underway; then 12 onto 9a, 9c, the sprint PR; 15 waits on the Coach; 12's tsdown half after 16:00Z.
+**Status** (2026-10-17 05:05Z): the line main → #128 → #133 → #127 → #132 → #137 → #136 → #126 → #129 → #134 → #130 → #131 → #139 → #142 → #141 → #144 → #143 is restacked onto today's main (365d1dcd) and filed; 12 filing onto it, then 9c, then the sprint PR; 15 waits on the Coach.
 
 ## Status
 
-| # | Thread | Base | Status | PR |
+| # | Thread | Base (after the final restack, 2026-10-17) | Status | PR |
 |---|---|---|---|---|
-| 1 | names_and_keys | main | filed #128 | [#128](https://github.com/mrflip/safebyok/pull/128) |
-| 2 | public_bag | on 1 (ce653fbb) | filed | [#133](https://github.com/mrflip/safebyok/pull/133) |
-| 3 | locks_and_expiry | on 2 (c397b745), restacked | filed (tip 65642238) | [#127](https://github.com/mrflip/safebyok/pull/127) |
-| 4 | refusals_and_catchup | on 3 (65642238), restacked | filed (tip f6d424ef) | [#132](https://github.com/mrflip/safebyok/pull/132) |
-| 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
-| 5b | store_base build | on 11 (07aed87c), YOLO 20 | filed (tip 9eb576a7); rows swept | [#139](https://github.com/mrflip/safebyok/pull/139) |
-| 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3) | [#126](https://github.com/mrflip/safebyok/pull/126) |
-| 7 | react_tidy | on 6 (83ed9ce3), chained | filed (tip 9169da4d) | [#129](https://github.com/mrflip/safebyok/pull/129) |
-| 8 | ci_release | on 14 (e2711c21), chained | filed (tip 8eb453fd) | [#130](https://github.com/mrflip/safebyok/pull/130) |
-| 9a | sweep_small | on 9b (6795a1d9), YOLO 28 | filed (tip 72a3a52a) | [#143](https://github.com/mrflip/safebyok/pull/143) |
-| 9b | core_tidy | on 17 (e8141917), YOLO 28 | filed (tip 6795a1d9) | [#144](https://github.com/mrflip/safebyok/pull/144) |
-| 9c | budgets | the line's top, last | pending | |
-| 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
-| 11 | pg_container | on 8 (8eb453fd), chained | filed (tip 07aed87c) | [#131](https://github.com/mrflip/safebyok/pull/131) |
-| 12 | floors_forward | on 5 (9eb576a7), YOLO 24 | ready (G402, floors); G403/G415 wait for tsdown to age at 16:00Z (YOLO 25) | [#140](https://github.com/mrflip/safebyok/pull/140) |
-| 13 | epoch_expectation | on 4 (f6d424ef), restacked | filed (tip f89b0c42) | [#137](https://github.com/mrflip/safebyok/pull/137) |
-| 14 | uncontrolled_fields | on 7 (9169da4d), chained | filed (tip e2711c21) | [#134](https://github.com/mrflip/safebyok/pull/134) |
-| 15 | deriver_shim | on 6 (adc94772) | flagged: waits on the Coach [#138](https://github.com/mrflip/safebyok/pull/138) | |
-| 16 | strength_principles (new) | on 5 (9eb576a7) | filed (tip 23743f18; `core:`/`react:` reworded `api:`/`client:`) | [#142](https://github.com/mrflip/safebyok/pull/142) |
-| 17 | written_at (new) | on 16 (23743f18) | filed (tip e8141917) | [#141](https://github.com/mrflip/safebyok/pull/141) |
+| 1 | names_and_keys | main (365d1dcd) | filed (tip ab13f3a4) | [#128](https://github.com/mrflip/safebyok/pull/128) |
+| 2 | public_bag | on 1 | filed (tip 0855aad0) | [#133](https://github.com/mrflip/safebyok/pull/133) |
+| 3 | locks_and_expiry | on 2 | filed (tip 29ca0b32) | [#127](https://github.com/mrflip/safebyok/pull/127) |
+| 4 | refusals_and_catchup | on 3 | filed (tip 5b1533ad) | [#132](https://github.com/mrflip/safebyok/pull/132) |
+| 13 | epoch_expectation | on 4 | filed (tip bb7317a7) | [#137](https://github.com/mrflip/safebyok/pull/137) |
+| 10 | secure_floor | on 13 | filed (tip 5e67cb17) | [#136](https://github.com/mrflip/safebyok/pull/136) |
+| 6 | crypto_small | on 10 | filed (tip ff2af258) | [#126](https://github.com/mrflip/safebyok/pull/126) |
+| 7 | react_tidy | on 6 | filed (tip d910c7d1) | [#129](https://github.com/mrflip/safebyok/pull/129) |
+| 14 | uncontrolled_fields | on 7 | filed (tip 4737792f) | [#134](https://github.com/mrflip/safebyok/pull/134) |
+| 8 | ci_release | on 14 | filed (tip c407ad1e) | [#130](https://github.com/mrflip/safebyok/pull/130) |
+| 11 | pg_container | on 8 | filed (tip 38e9faf1) | [#131](https://github.com/mrflip/safebyok/pull/131) |
+| 5a | store_base design | -- | done | |
+| 5b | store_base build | on 11 (YOLO 20) | filed (tip b76a791c) | [#139](https://github.com/mrflip/safebyok/pull/139) |
+| 16 | strength_principles | on 5b | filed (tip ce9cb7af) | [#142](https://github.com/mrflip/safebyok/pull/142) |
+| 17 | written_at | on 16 | filed (tip a63b2529) | [#141](https://github.com/mrflip/safebyok/pull/141) |
+| 9b | core_tidy | on 17 (YOLO 28) | filed (tip a034f23c) | [#144](https://github.com/mrflip/safebyok/pull/144) |
+| 9a | sweep_small | on 9b (YOLO 28) | filed (tip 1d19c5a1) | [#143](https://github.com/mrflip/safebyok/pull/143) |
+| 12 | floors_forward | onto 9a (YOLO 24, 29) | filing; tsdown half (G403, G415) a follow-up after 16:00Z | [#140](https://github.com/mrflip/safebyok/pull/140) |
+| 9c | budgets | onto 12, last | pending | |
+| 15 | deriver_shim | on 6's old tip (adc94772) | flagged: waits on the Coach | [#138](https://github.com/mrflip/safebyok/pull/138) |
 
 ## What the threads have taught
 
+* *Orchestrator:* **The final restack** (YOLO 30, 2026-10-17 05:00Z): one restacker moved all
+  sixteen onto `365d1dcd`; one conflict (thread 3's docs commit, `CLAUDE.md` and `PROCESS.md`,
+  both sides kept); the owed ruling lines are now in threads 1, 2, 3, 4, 13 and 10's files (one
+  `plan:` commit each). Justify at the top: core 2089, sizes all within (everything 34.74/40,
+  openVault 27.51/30, VaultProvider 4.53/4.7). No merge commits. Every PR's first line names
+  the line.
 * *Orchestrator:* **The restack onto 10** (2026-10-17), for the chain and later threads.
   Thread 6 (`83ed9ce3`): `passphraseKeyOf` in `envelope.ts` is the one place the core receives a
   deriver's output, in a fixed order (isView, shared memory, length, all-zero, import, wipe); a
