@@ -133,7 +133,7 @@ The documents below are looked up by section, not read through.
 
 ## Notable files
 
-* `PROCESS.md` -- threads, branches, commits, PRs, releases, dependencies. **Read the section
+* `PROCESS.md` -- threads, branches, commits, PRs, changesets, dependencies. **Read the section
   you need before any git operation beyond a commit, and before adding a dependency.**
 * `VOCABULARY.md` -- the cast: whisper, lockbox, vault, passphrase, each key by role, and their
   encrypted forms. Its names are the only names for those things, in code, docs and stored fields.
