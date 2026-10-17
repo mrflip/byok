@@ -10,13 +10,22 @@
 * **Sprint PR**: [#125](https://github.com/mrflip/safebyok/pull/125)
 * **Sprint doc**: https://claude.ai/code/artifact/12453adc-57ea-4c47-9a4a-1425a670bb98 --
   *Open Matters* is its first tab
-* **Status**: handing over to a fresh session (the Coach's word, near the session limit): read
-  *Resume here*, below, first. 5b at a checkpoint (#139, 2270693c; see *Resume here*); 15 (#138) flagged, waiting on the
-  Coach; the line main → 1 (#128) → 2 (#133) → 3 (#127) → 4 (#132) → 13 (#137) → 10 (#136) is
-  restacked; 6 (#126), 7 (#129), 8 (#130), 11 (#131), 14 (#134) filed, restack before 16; then
-  16 and 17 (new, the fifth batch of rulings), 9, and 12 after 23:01Z
+* **Status**: second session (2026-10-17, from 03:00Z). 5b finishing its list (#139); 6, 7, 8
+  and 11 restacking onto 10's tip side by side, then 14 onto 7, then chained 6 → 7 → 14 → 8 → 11
+  (YOLO 21); 5 moves above 11 (YOLO 20); 15 (#138) flagged, waiting on the Coach; then 16 and
+  17, 9, and 12 (its clock has passed)
 
 ## Resume here (for a fresh session)
+
+*Orchestrator, 2026-10-17 03:05Z:* a second session picked up from here. What it changed:
+**5 moves above 11** (YOLO 20), so the restack of 6 → 7 → 14 → 8 → 11 runs while 5b finishes;
+5b's filer rebases it onto 11's restacked tip, and 16 and 17 are cut from 5's. **The restack
+runs peer by peer** (YOLO 21). Worktrees now also: `/workspace/byok-crypto_small`,
+`-react_tidy`, `-ci_release`, `-pg_container` (restack workers, kept until the chain is
+assembled), and `/workspace/byok-restack_a` (the orchestrator's, detached, for the chain). The
+owed ruling lines for threads 1, 2, 3, 4, 10 and 13 go in at wrap-up, when the whole line is
+rebased onto today's `origin/main` (`365d1dcd`, which added `.claude/` and `notes/security.md`
+lines). The list below is the first session's handoff.
 
 The sprint ran in one session until near its limit; the Coach restarts `/sprint` in a fresh one
 (YOLO, `/turbochat`), which picks up from this section. Everything else in this file stands.
@@ -137,7 +146,10 @@ Bases and the planned merge order. "On N" is cut from thread N's tip once N has 
   starts after that, on top of the line.
 * **9** goes last before 12, on top of the line.
 
-Planned merge order: main -> 1 -> 2 -> 3 -> 4 -> 13 -> 10 -> 5 -> 6 -> 15 -> 7 -> 14 -> 8 -> 11 -> 16 -> 17
+Planned merge order (revised 2026-10-17, YOLO 20): main -> 1 -> 2 -> 3 -> 4 -> 13 -> 10 -> 6 -> 7
+-> 14 -> 8 -> 11 -> 5 -> 16 -> 17 -> 15 -> 9 -> 12 -> the sprint PR. 16 and 17 are cut from 5's
+tip once it files, side by side; 15 goes in once the Coach answers its row. *Earlier order:*
+main -> 1 -> 2 -> 3 -> 4 -> 13 -> 10 -> 5 -> 6 -> 15 -> 7 -> 14 -> 8 -> 11 -> 16 -> 17
 -> 9 -> 12 -> the sprint PR. **16** and **17** (the fifth batch of rulings) are cut from the line's
 top once 5 through 11 are restacked onto it; 17 restacks onto 16 when both file. If 15 still
 waits on the Coach then, it moves to just below 9.
@@ -632,6 +644,16 @@ From the sprint doc's *Open Matters*, as rows are swept:
     and "change something first". A row says so.
 19. **"yes export" on the `node:crypto` row** read as: export the random-name helper from the
     e2e Postgres helpers so the suites share it, using `crypto.getRandomValues`. A row asks.
+20. **5 moves above 11 in the line** (2026-10-17): main → … → 10 → 6 → 7 → 14 → 8 → 11 → 5.
+    5b still had nine items to build; restacking 6 through 11 onto 5 would have idled until it
+    filed. 5b's filer rebases it onto 11's restacked tip, so 5b's own worker meets 8's
+    `safebyok/testing` and 11's e2e callers of the adapter factories it reshaped. 16 and 17 are
+    cut from 5's tip.
+21. **The restack runs peer by peer** (2026-10-17): 6, 7, 8 and 11 were each cut from main and
+    each conflicted with the line, so each is rebased onto 10's tip by its own fresh worker at
+    once, 14 onto 7's new tip after; the orchestrator then chains them 6 → 7 → 14 → 8 → 11, and a
+    conflict at a join (`notes/security.md`, export lists, `ci.yml`, the lockfile) goes back to
+    that thread's worker. About two workers' wall-clock instead of five.
 
 ## For the Coach
 

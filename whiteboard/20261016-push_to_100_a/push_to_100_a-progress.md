@@ -1,6 +1,6 @@
 # Sprint push_to_100_a -- progress
 
-**Status**: thread 13 underway; 2, 10 and 14 in review; 1, 3, 4, 6, 7, 8 and 11 filed; 5b cleared, cut once 4 files.
+**Status** (2026-10-17 03:10Z): 5b underway (finishing its list); 6, 7, 8 and 11 restacking onto 10's tip, 14 after 7; 15 waits on the Coach; 16, 17, 9, 12 pending.
 
 ## Status
 
@@ -11,19 +11,19 @@
 | 3 | locks_and_expiry | on 2 (c397b745), restacked | filed (tip 65642238) | [#127](https://github.com/mrflip/safebyok/pull/127) |
 | 4 | refusals_and_catchup | on 3 (65642238), restacked | filed (tip f6d424ef) | [#132](https://github.com/mrflip/safebyok/pull/132) |
 | 5a | store_base design | -- | done: the Coach said proceed, with comments (plan, thread 5) | |
-| 5b | store_base build | on 10 (8439aa01) | checkpoint at 2270693c (justify green at 3ef9fd97); nine items left, in its thread file | [#139](https://github.com/mrflip/safebyok/pull/139) |
-| 6 | crypto_small | main | filed #126 | [#126](https://github.com/mrflip/safebyok/pull/126) |
-| 7 | react_tidy | main | filed #129 | [#129](https://github.com/mrflip/safebyok/pull/129) |
-| 8 | ci_release | main | filed #130 | [#130](https://github.com/mrflip/safebyok/pull/130) |
+| 5b | store_base build | on 10 (8439aa01); filer rebases onto 11 (YOLO 20) | underway: a fresh worker finishes the nine items | [#139](https://github.com/mrflip/safebyok/pull/139) |
+| 6 | crypto_small | main; restacking onto 10 (8439aa01) | filed; restacking | [#126](https://github.com/mrflip/safebyok/pull/126) |
+| 7 | react_tidy | main; restacking onto 10 (8439aa01) | filed; restacking | [#129](https://github.com/mrflip/safebyok/pull/129) |
+| 8 | ci_release | main; restacking onto 10 (8439aa01) | filed; restacking | [#130](https://github.com/mrflip/safebyok/pull/130) |
 | 9 | sweep_small | top of the line | pending | |
 | 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
-| 11 | pg_container | main | filed #131 | [#131](https://github.com/mrflip/safebyok/pull/131) |
-| 12 | floors_forward | top of the line | pending: after 2026-10-16T23:01Z | |
+| 11 | pg_container | main; restacking onto 10 (8439aa01) | filed; restacking | [#131](https://github.com/mrflip/safebyok/pull/131) |
+| 12 | floors_forward | top of the line | pending (clock passed) | |
 | 13 | epoch_expectation | on 4 (f6d424ef), restacked | filed (tip f89b0c42) | [#137](https://github.com/mrflip/safebyok/pull/137) |
-| 14 | uncontrolled_fields | on 7 (3d62fc04) | filed | [#134](https://github.com/mrflip/safebyok/pull/134) |
+| 14 | uncontrolled_fields | on 7 (3d62fc04); restacks onto 7's new tip | filed; restack pending | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 (adc94772) | flagged: waits on the Coach [#138](https://github.com/mrflip/safebyok/pull/138) | |
-| 16 | strength_principles (new) | top of the line, after 11 | pending | |
-| 17 | written_at (new) | top of the line, after 11 (needs 5b) | pending | |
+| 16 | strength_principles (new) | on 5 | pending | |
+| 17 | written_at (new) | on 5 | pending | |
 
 ## What the threads have taught
 
