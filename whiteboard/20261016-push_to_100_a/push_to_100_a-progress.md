@@ -15,15 +15,17 @@
 | 6 | crypto_small | on 10 (8439aa01), restacked | filed (tip 83ed9ce3) | [#126](https://github.com/mrflip/safebyok/pull/126) |
 | 7 | react_tidy | on 6 (83ed9ce3), chained | filed (tip 9169da4d) | [#129](https://github.com/mrflip/safebyok/pull/129) |
 | 8 | ci_release | on 14 (e2711c21), chained | filed (tip 8eb453fd) | [#130](https://github.com/mrflip/safebyok/pull/130) |
-| 9 | sweep_small | top of the line | pending | |
+| 9a | sweep_small | on 17, YOLO 28 | pending: once 17 files | |
+| 9b | core_tidy | on 17, YOLO 28 | pending: once 17 files | |
+| 9c | budgets | the line's top, last | pending | |
 | 10 | secure_floor | on 13 (f89b0c42), restacked | filed (tip 8439aa01) | [#136](https://github.com/mrflip/safebyok/pull/136) |
 | 11 | pg_container | on 8 (8eb453fd), chained | filed (tip 07aed87c) | [#131](https://github.com/mrflip/safebyok/pull/131) |
 | 12 | floors_forward | on 5 (9eb576a7), YOLO 24 | ready (G402, floors); G403/G415 wait for tsdown to age at 16:00Z (YOLO 25) | [#140](https://github.com/mrflip/safebyok/pull/140) |
 | 13 | epoch_expectation | on 4 (f6d424ef), restacked | filed (tip f89b0c42) | [#137](https://github.com/mrflip/safebyok/pull/137) |
 | 14 | uncontrolled_fields | on 7 (9169da4d), chained | filed (tip e2711c21) | [#134](https://github.com/mrflip/safebyok/pull/134) |
 | 15 | deriver_shim | on 6 (adc94772) | flagged: waits on the Coach [#138](https://github.com/mrflip/safebyok/pull/138) | |
-| 16 | strength_principles (new) | on 5 (9eb576a7) | reviewed `fixed`; filing (rewording two prefixes) | [#142](https://github.com/mrflip/safebyok/pull/142) |
-| 17 | written_at (new) | on 5 (9eb576a7); restacks onto 16 at filing | reviewed `fixed` (tip 5f2d72c2, unpushed); files once 16 files | [#141](https://github.com/mrflip/safebyok/pull/141) |
+| 16 | strength_principles (new) | on 5 (9eb576a7) | filed (tip 23743f18; `core:`/`react:` reworded `api:`/`client:`) | [#142](https://github.com/mrflip/safebyok/pull/142) |
+| 17 | written_at (new) | on 16 (23743f18) | reviewed `fixed`; filing onto 16 | [#141](https://github.com/mrflip/safebyok/pull/141) |
 
 ## What the threads have taught
 

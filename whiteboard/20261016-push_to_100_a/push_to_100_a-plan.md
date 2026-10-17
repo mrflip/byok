@@ -147,7 +147,7 @@ Bases and the planned merge order. "On N" is cut from thread N's tip once N has 
 * **9** goes last before 12, on top of the line.
 
 Planned merge order (revised 2026-10-17, YOLO 20): main -> 1 -> 2 -> 3 -> 4 -> 13 -> 10 -> 6 -> 7
--> 14 -> 8 -> 11 -> 5 -> 16 -> 17 -> 15 -> 9 -> 12 -> the sprint PR. 16 and 17 are cut from 5's
+-> 14 -> 8 -> 11 -> 5 -> 16 -> 17 -> 9b -> 9a -> 15 -> 12 -> 9c -> the sprint PR (YOLO 28). 16 and 17 are cut from 5's
 tip once it files, side by side; 15 goes in once the Coach answers its row. *Earlier order:*
 main -> 1 -> 2 -> 3 -> 4 -> 13 -> 10 -> 5 -> 6 -> 15 -> 7 -> 14 -> 8 -> 11 -> 16 -> 17
 -> 9 -> 12 -> the sprint PR. **16** and **17** (the fifth batch of rulings) are cut from the line's
@@ -287,6 +287,19 @@ handoff carries it whole. Below, the orchestrator's gloss.
   thread edits in `ci.yml`.
 
 ### 9. `sweep_small` -- the small tab, last, on top of the line
+
+*Orchestrator, 2026-10-17 (YOLO 28):* **9 splits three ways**, too long for one worker:
+**9a `sweep_small`** (sonnet) -- the preplan's §9 rows but G520, thread 11's Postgres leftovers,
+the Postgres e2e helper's `getRandomValues` (YOLO 19), the hard-cap recipe swapped for an agent
+prompt, the `notes/wontfix.md` entries (Chrome autocomplete; `__proto__`), the ruled TODO/NOTYET
+entries (YOLO 22), and the unused `eslint-disable` at `safebyok-react/tests/vault-provider.test.tsx:499`.
+**9b `core_tidy`** (opus) -- the fifth batch's code rulings (the 1,024 allowance, unknown `store()`
+options, `cipherBinding`'s guard, `Lockbox` in its own module, the demo's WaysIn form, the inline
+`display: none`), 5b's logger fallback, YOLO 26 and 27, and three drafting rows' Recs taken in YOLO
+28: the epoch-forward check in Postgres's `UpdateBundleSql`, `storage_blocked` from `idbVaultDB`,
+and a failed zxcvbn load wrapped with the nearest existing kind meaning "try again". **9c
+`budgets`** (sonnet) -- G520 alone, last of all, once every other thread's sizes are known.
+9a and 9b are cut from 17's tip side by side; 9a restacks onto 9b.
 
 * **Model**: sonnet. **Depends on**: the top of the line (every other filed thread but 12).
 * **Look-ahead**: lowers every size budget to the rule (G520), last.
@@ -741,6 +754,13 @@ From the sprint doc's *Open Matters*, as rows are swept:
 27. **Two of thread 16's review leftovers go to thread 9** (2026-10-17): freezing `scope`, and
     advice that rejects shows nothing rather than ending the dialog. Both are local and two-way;
     what kind a failed zxcvbn load carries at Create is a design call, so it is a row.
+28. **Thread 9 splits into 9a, 9b and 9c, and three drafting Recs are taken** (2026-10-17): one
+    worker could not hold 9's forty-odd items. 9a is the preplan's sweep (sonnet), 9b the code
+    rulings and review leftovers (opus, for `cipherBinding` and the `Lockbox` module), 9c the
+    budgets alone, last. The Recs of three rows the Coach had not reached -- the epoch-forward
+    check in Postgres, `storage_blocked` from `idbVaultDB`, a kind for a failed zxcvbn load --
+    are two-way and small, so 9b builds them; the rows stay, so the Coach can object before
+    merging.
 
 ## For the Coach
 
