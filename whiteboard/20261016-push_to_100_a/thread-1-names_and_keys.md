@@ -119,4 +119,5 @@ once (its fixes `37c3d8b4`, `2f4a383b`, the second reworked away by the ruling b
   - Settled: dropping `bindValidators` (the Coach: yes, as built).
   - Opened: G497 (Standard Schema) would now land only in `Names.rulesOf`, the vault's one
     entry; no VaultDB takes a schema.
+    - → *Coach (2026-10-16):* NOTYET: stays unbuilt, nothing in this sprint needs it.
   - `^` in the floor for every store stays the orchestrator's YOLO call, above.
