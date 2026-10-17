@@ -317,6 +317,12 @@ handoff carries it whole. Below, the orchestrator's gloss.
 * **Added, 5b's review** (2026-10-17): the base `VaultDB`'s protected `logger` getter calls
   `parseLogger(undefined)` on every line when it has no logger of its own or adopted; build that
   fallback once.
+* **Added, thread 17's review** (YOLO 26, 2026-10-17): in `idb.ts`, move the no-IndexedDB guard
+  into `shelfStore`, so `inspectIdbDeviceDB`'s `rows()` and `wipe()` meet it too, and build its
+  error without assuming a `DOMException` global (a plain `Error` named `NotSupportedError` where
+  there is none, for React Native/Hermes), with a test; `storage_blocked`'s message keeps each
+  verb's own retry text; `VaultProvider`'s doc and `@example` offer Retry only for an `openError`
+  a retry may mend (not `storage_blocked`).
 
 ### 10. `secure_floor` -- the Coach's three Soonish lines
 
@@ -542,6 +548,13 @@ handoff carries it whole. Below, the orchestrator's gloss.
   `stale_write`, with a message that says what happened. A store's catch-up passes
   `identity_revoked`, `rolled_back` and `newer_format` through unchanged, unless thread 13 already
   does (thread 4's review, Rec taken).
+* *Review* (`fixed`, #141, 2026-10-17): four fixes (`de293f46` a helper's doc block, `89459a06`
+  a v3 row in `DamagedListings` proving the changeset's promise, `9ab90121` VOCABULARY's format
+  entry to v4, `5f2d72c2` `cipherBinding`'s tests under v4). Left, minor: the `DOMException` guard
+  on Hermes; the inspector skipping the guard; `storage_blocked`'s message dropping a verb's retry
+  text; `VaultProvider`'s doc offering Retry for every `openError` (all four to thread 9, YOLO
+  26); `erase()`'s message reading the shared `syncing` flag (thread 4's decision); the
+  passthrough covering only the three ruled kinds (as ruled).
 
 ## Coach rulings during the sprint
 
@@ -707,6 +720,10 @@ From the sprint doc's *Open Matters*, as rows are swept:
     today; the worker's worktree waits, and the worker is resumed after 16:00Z to make the move
     and the `dist/` comparison. If the sprint ends first, G403 and G415 stay open rows. Majors
     that have aged (typescript 7, @types/node 26, convex 3) are rows, not crossed.
+26. **Thread 17's review leftovers go to thread 9** (2026-10-17): four small, local tidy-ups (the
+    guard into `shelfStore` with a Hermes-safe error, a verb's retry text, the provider's Retry
+    doc), rather than reopening #141 after a `fixed` review. The Hermes fallback changes the
+    worker's recorded "a `DOMException`": a row lets the Coach object.
 
 ## For the Coach
 
