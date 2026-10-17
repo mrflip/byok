@@ -96,6 +96,8 @@ stacked on [#132](https://github.com/mrflip/safebyok/pull/132), restacked onto i
     `storage_unavailable` like a passing failure, though retrying will not help. Rec: keep the kind
     (the Coach's grouping); the message now says what to check. A kind of its own only if a host
     asks to branch on it.
+    - → *Coach (2026-10-16):* A kind of its own: cannot succeed vs might later (thread 17).
   - **The advisory-lock key** in the hard-cap trigger is `hashtext` of the scope, so two vaults
     may share a key and take turns needlessly; the two-int form keeps it apart from a host's own
     one-bigint advisory locks. Rec: as built; the recipe is unsupported anyway.
+    - The hard-cap recipe: → *Coach (2026-10-16):* Delete it; a short agent prompt instead (thread 9).
