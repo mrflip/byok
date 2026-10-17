@@ -47,16 +47,19 @@ The per-row ledger the orchestrator sweeps by is beside this file:
   - **Every device-store failure is `storage_unavailable`** (leftover 6 asked for the open only):
     a kind for every condition is a non-negotiable, and `lock()` now tells the snapshot `locked`
     even when the device store fails.
+    - → *Coach (2026-10-16):* Keep the kind; each message as fine-grained as reasonable, groupings later if needed (thread 13).
   - **`store()` over a damaged box takes its revision from the snapshot's listing**, not a fresh
     read: no new VaultDB verb (thread 5's base is next), and storage arbitrates, so a stale
     listing costs one refusal and retry, never a record.
   - **Who hears `vault_locked` after a catch-up relocks**: `store()`, `read()`, `use()`. `erase()`,
     `destroy()` and the ways-in changes stay `stale_write` (strawman: news the user must hear).
+    - erase() into a reborn vault says stale_write: → *Coach (2026-10-16):* Keep the kind, as long as the message says what happened (thread 17).
   - **A `read()` whose catch-up fails throws the catch-up's own refusal**: whether the box is
     damaged is unknown, so neither `damaged_lockbox` ("erase it") nor `stale_write` fits.
   - `syncing` goes false on any failed refresh, foreground ones too; recovery is said at `log`.
   - Soft `lockSoon()` still forgets the remembered unlock at once (thread 3's choice), and with no
     key held it is soft too; only a failed clock read makes it hard.
+    - → *Coach (2026-10-16):* Kept as built: no, a soft lock.
   - `rolled_back` at open forgets the remembered unlock, as `identity_revoked` at open does.
   - Logger story calls: `untrustedStorage` (was `whenIdentityRevoked`), `expiry` (new).
 
@@ -64,6 +67,7 @@ The per-row ledger the orchestrator sweeps by is beside this file:
   - **The single-flight refresh queue is hand-rolled** (about 20 lines). Library-first says find
     one: `p-limit` and kin serialize but do not coalesce, the debounce family is time-based, and
     a runtime dependency is no two-way door this sprint. Raised for the Coach below.
+    - → *Coach (2026-10-16):* Yes, kept, but out of vault.ts: thread 13 moves it to a module of its own.
   - Touched `safebyok-react` (the `whenIdentityRevoked` prop, `syncing` in its empty snapshot, a
     README line) and the demo's dashboard test, which now waits for its read before locking: a
     lock landing mid-read now refuses it, correctly. G333 untouched, as struck.
@@ -88,6 +92,7 @@ The per-row ledger the orchestrator sweeps by is beside this file:
     remembered unlock. `takeUpUnlock` restores the key in memory, but that erase can land after
     the new record, so the next open asks for the passphrase. Safe direction; serialization does
     not cure it. A small later thread: don't judge `outlived` against a bundle this handle wrote.
+    - → *Coach (2026-10-16):* Into TODO.md (Soonish), beside "Are we doing anyone a favor by accepting multiple passphrases?".
   - Thread 2: the format snapshot lists `safebyok-mark-v3`, and `DamagedLockbox` has a field.
   - Thread 5: `listedOrDamaged` returns `revision_id`; `eraseDamagedVault` checks `mayBeNewer`
     before soundness; `newer_format`'s constructor is `newerBundle()`.
@@ -101,8 +106,10 @@ The per-row ledger the orchestrator sweeps by is beside this file:
   1. `close()`, an outlived relock, a clock failure and `lockSoon()` past its shut time drop the
      key without counting a shut, so a read in flight still returns (none is a hard lock by
      `lock()`'s doc).
+     - → *Coach (2026-10-16):* Yes: close() and the outlived key count as hard locks; lock()'s doc says the clock and soft cases do not (thread 13).
   2. `catchUp` wraps `rolled_back`, `identity_revoked`, `newer_format` and `damaged_bundle` as
      `stale_write`, where `read()` passes the catch-up's kind through.
+     - → *Coach (2026-10-16):* Rec taken: pass the kinds through (thread 17, unless 13 did).
   3. `isCaughtUpStale` reads the shared `syncing` flag (fails safe both ways).
   4. A box under the prior vaultKey epoch lists sound but reads `damaged_lockbox`: latent until
      rotation lands.
@@ -113,3 +120,5 @@ The per-row ledger the orchestrator sweeps by is beside this file:
 
 * **For the Coach**: the *Open matters* list in the PR body and the report: the hand-rolled
   queue, the pre-existing race, and five calls above that a reviewer may want to see.
+  - G499, the conflict hook: → *Coach (2026-10-16):* G499 stays on the NOT YET shelf (NOTYET.md).
+  - store() deciphers the old whisper to compare: → *Coach (2026-10-16):* Drop the compare; changed_at becomes written_at, with no claim of change (thread 17).
