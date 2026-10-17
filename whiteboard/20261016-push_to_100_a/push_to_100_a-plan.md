@@ -766,6 +766,14 @@ From the sprint doc's *Open Matters*, as rows are swept:
     four floors and goes into the line below 9c; the tsdown move (G403, G415) is a follow-up thread
     of its own after 16:00Z, from the line's top, its rows open until then. The wrap-up does not
     wait for it, nor for 15 (#138), which joins the top when the Coach answers its row.
+30. **The final restack goes to one fresh restacker, before 12 and 9c** (2026-10-17): the line
+    through 9a is rebased onto today's `origin/main` (`365d1dcd`) by one opus worker that holds
+    the old-to-new base map, resolves the mechanical stops (a trial stopped at thread 3 on
+    `CLAUDE.md` and `PROCESS.md`, additions side by side) and reports `blocked` on any taking
+    judgment; it also puts the owed ruling lines into threads 1, 2, 3, 4, 10 and 13's files
+    (`restack-owed-rulings.md`), a `plan:` commit on each branch as it goes. Then 12 rebases onto
+    the new 9a, and 9c is cut from 12, so neither moves twice. One justify at the top, CI for the
+    middle.
 
 ## For the Coach
 
