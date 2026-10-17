@@ -701,6 +701,12 @@ From the sprint doc's *Open Matters*, as rows are swept:
     the lockfile and `package.json` floors (take the base's lockfile, re-run `pnpm install`). It
     leaves the two zxcvbn packages to thread 16 and `convex`'s floor to the version 5b's pin test
     follows.
+25. **Thread 12 holds for its second half, unreviewed** (2026-10-17): its diff is manifests, the
+    lockfile and docs (G402 and four devDependency floors), so no code review. G403 and G415 need
+    tsdown 0.23.1 and rolldown-plugin-dts 0.28.7, which turn seven days old at 15:25Z and 16:00Z
+    today; the worker's worktree waits, and the worker is resumed after 16:00Z to make the move
+    and the `dist/` comparison. If the sprint ends first, G403 and G415 stay open rows. Majors
+    that have aged (typescript 7, @types/node 26, convex 3) are rows, not crossed.
 
 ## For the Coach
 
