@@ -696,6 +696,11 @@ From the sprint doc's *Open Matters*, as rows are swept:
     `vault_closed` rejection from `VaultProvider` showed once in thread 8's justify, in code
     threads 7 and 14 own. Thread 16 rewrites how the provider holds its options, so it finds and
     settles the cause there, rather than a new thread or a resumed restacker.
+24. **Thread 12 starts now, beside 16 and 17** (2026-10-17): its clock has passed and a slot was
+    free. It is cut from 5's tip and goes to the line's top at wrap-up; its conflicts there are
+    the lockfile and `package.json` floors (take the base's lockfile, re-run `pnpm install`). It
+    leaves the two zxcvbn packages to thread 16 and `convex`'s floor to the version 5b's pin test
+    follows.
 
 ## For the Coach
 
