@@ -201,7 +201,9 @@ Vitest, in each package's `tests/`, path for path with its `src/`: `src/foo/bar.
   passes. Name it for what it does: if the helper should not assert, give it a different name
   (`check...`, `read...`); if it should, make it assert and keep the name. Never add an assertion
   to a helper merely to make the rule happy.
-* **Every use case of an exported function has a test, and every `@example` has one.**
+* **Every use case of an exported function has a test, and every `@example` has one whose
+  title points back to it**: `"refuses a misspelt field as 'bad_option', as its second example
+  shows"`, so a reviewer, or whoever changes the example, finds its test by the title.
 * **Each example ties to a plausible failure mode.** Ask what null, undefined and a missing value
   mean; what an absurd type does (`seal(42)`); what a not-quite-absurd one does (a salt one byte
   short, a passphrase of only whitespace, a vault written by a newer version).
