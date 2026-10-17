@@ -75,13 +75,19 @@ The chip is the only signal. An answer whose chip still says `drafting` is still
 
 ## When to read it
 
-The Coach says "go" when they want something fast-tracked, or when a good batch is waiting. An
-agent already working in the doc may act on flipped rows whenever it is there.
+The Coach says "go" when they want something fast-tracked, or when a good batch is waiting. The
+session that keeps the doc may act on flipped rows whenever it is there.
+
+**That session keeps the tab.** In a sprint it is the orchestrator: a row that proceeds into a
+thread goes into that thread's handoff as text -- the matter and the Coach's answer, or a
+snapshot file in the sprint directory -- and the orchestrator sweeps the row when the thread
+files. Other agents send what belongs in the tab -- a new matter, a row they have settled -- to
+the session that keeps it, rather than writing it themselves.
 
 1. **Read the tab once** per pass. A doc read returns that tab alone, not the session.
 2. **Act on every flipped row** in that pass. Investigation goes to subagents, so the code they
    read stays out of the session's context and only their paragraph comes back; independent
-   proceed work goes to workers or threads at once.
+   proceed work goes to workers or threads at once, carrying the row's text, not the doc.
 3. **Edit by id, cell by cell.** Make every write from that one read, against the ids it gave:
    replace one *Matter* cell's paragraph, one chip's paragraph, or delete one swept row. Each
    replace or delete of a whole block carries the guards that read printed for it, `ifHash` (its

@@ -7,9 +7,9 @@ description: Orchestrate a sprint -- an ordered series of threads issued at once
 
 You run a **sprint**: the Coach hands you an ordered list of threads and walks away. You plan
 it, cut each thread a worktree, hand it to a fresh `thread-worker` subagent, put a fresh
-`thread-reviewer` over what it built, have the worker file its PR, and decide as each report
-comes in whether to continue, resume, or stop. Threads whose dependencies are met run side by
-side. A thread's mechanics are `PROCESS.md` (*Threads*, *A worktree per thread*, *The history we
+`thread-reviewer` over what it built, have another fresh worker file its PR, and decide as each
+report comes in whether to continue, resume, or stop. Threads whose dependencies are met run side
+by side. A thread's mechanics are `PROCESS.md` (*Threads*, *A worktree per thread*, *The history we
 keep*); the workers' procedures are `.claude/agents/thread-worker.md` and
 `.claude/agents/thread-reviewer.md`. Read all three before your first sprint of a session.
 
@@ -37,14 +37,17 @@ worktree's root; hand on the sprint directory's in full, since workers read it f
   another, or `none` if they said to skip review), how many threads may run at once (3 unless
   the Coach named another), who issued it, and a status line you keep current (planned /
   threads N, M underway / paused: why / done).
-* *Read first*: the notes and files every worker needs beyond CLAUDE.md.
+* *Read first*: the notes and files every worker needs beyond CLAUDE.md, by section where a
+  section will do. It goes into every handoff.
 * *Ground rules*: only what is particular to this sprint; PROCESS.md and the agent files have
   the rest.
 * The threads, numbered, each with the Coach's text **verbatim** and then your gloss: what it
   likely touches; the model it wants, if the Coach named one or it is small and mechanical
-  enough for `sonnet`; **what it depends on**; and your **look-ahead**. Read the whole request
-  before writing any of this, because later threads bend earlier ones: a capability built in
-  thread 3 and reused in thread 5 is designed once, for both.
+  enough for `sonnet`; **what it depends on**; your **look-ahead**; and its **size**. Read the
+  whole request before writing any of this, because later threads bend earlier ones: a
+  capability built in thread 3 and reused in thread 5 is designed once, for both. A worker's
+  context only grows, and the long threads cost the most by far, so a thread that would build
+  two features, or plainly run long, is two threads.
 * *For the Coach*: anything already visible that needs a human.
 
 **Dependencies decide the base.** A thread depends on another when it builds on its code, or
@@ -76,6 +79,7 @@ the budgets to the rule once the sprint's sizes are known (it need only re-deriv
 **`<sprint_name>-progress.md`** -- yours alone: a one-line-per-thread *Status* table (`pending`
 each; then `underway`, `in review`, `filing`, `filed #N`, `blocked`, `waiting on a merge`), and a
 curated summary of what the threads have taught, newer than the plan wherever they disagree.
+It is what you write each handoff from; workers only look things up in it.
 Each worker writes its own section to `thread-<N>-<label>.md` in the same directory of its own
 branch, so no two writers ever share a file.
 
@@ -97,10 +101,12 @@ directory is mirrored in full** -- a *Plan* tab, a *Progress* tab, one tab for a
 other input you copied in, and **one tab per thread** (not per worker: a resumed or replaced
 worker still writes the same thread file) holding that thread's `thread-<N>-<label>.md`, read
 from the thread's branch, with the thread's own `human/` entry, if it wrote one, below it under
-its own heading. A sprint-level `human/` entry gets a tab of its own. You are the doc's only
-writer; workers never touch it, so parallel threads never race for it and a background worker
-needs no Docs tools. Mirror at milestones and when idle, not after every edit: the *Plan* and
-*Progress* tabs when you first write them; a thread's tab when the thread is `ready` and again
+its own heading. A sprint-level `human/` entry gets a tab of its own. You keep the doc:
+the mirror is yours, not a worker's, so parallel threads never race for it. Workers send you
+what belongs in it, in their reports. What a worker needs from a doc -- a turbochat row, the
+Coach's answer -- goes in its handoff as text, so it need not go looking; point it at a tab when
+the tab is the clearest source. Mirror at milestones and when idle, not after every edit: the
+*Plan* and *Progress* tabs when you first write them; a thread's tab when the thread is `ready` and again
 when it files, with *Progress* beside it; everything at a pause and at wrap-up; and, while you
 wait on workers with nothing else to do, any tab whose file has changed since its last mirror.
 Mirror a tab whole -- the whole text, not a summary. The repo files stay the source of truth: write the file first, mirror it after. No
@@ -122,22 +128,33 @@ from the base §1 gives it, and record that base for the reviewer:
 `git -C <root> config branch.<branch>.sprintbase <base-sha>`. Never use the Agent tool's
 `isolation: "worktree"` instead. Spawn one `thread-worker` with `run_in_background: true` (and
 the plan's `model`, if it names one), so threads run side by side and you hear of each as it
-finishes. The prompt is the whole handoff:
+finishes. The prompt is the whole handoff, and **written to be enough**: everything the thread
+needs from the plan and the progress document is in it, so the worker need not read either.
+Whatever goes in is re-sent on every one of the worker's turns, so put in what this thread
+needs and point to the rest, by file and section:
 
 ```
 Thread <N> of sprint <sprint_name>. Sprint directory: <sprint root>/whiteboard/<YYYYMMDD-sprint_name>/.
 Your worktree: <root>, on branch <branch>, cut from <origin/main | thread M's branch, PR #M> at <base-sha>.
 Begin every shell command with `cd <root> && `. Mode: <normal | YOLO: prefer your recorded best
 judgment over blocking on minor calls>.
-Read <sprint_name>-plan.md and <sprint_name>-progress.md before touching code, then build
-this thread per your agent definition, in a draft PR from its first push, and report `ready`
-when it is built, committed and pushed, with the PR out of draft.
+Build this thread per your agent definition, in a draft PR from its first push, and report
+`ready` when it is built, committed and pushed, with the PR out of draft. This handoff is meant
+to be enough; <sprint_name>-plan.md and -progress.md are there to look things up in, not to read.
 Your scratch files go in <scratchpad>/<label>/.
 
 <the thread's text, verbatim>
 
-Look-ahead from the orchestrator: <what later threads need from this one, if anything>.
+From the sprint: <the plan's ground rules that bear on this thread; the decisions and
+discoveries of earlier threads it builds on or beside, from the progress document; a size
+budget it owns, if any>.
+Look-ahead: <what later threads need from this one, if anything>.
+Read: <the files, and the sections of them, this thread needs beyond CLAUDE.md -- the plan's
+*Read first*, by section>.
 ```
+
+When a worker reports what it went looking for in the plan or progress document, that is a gap
+in the handoffs: put it in the next ones.
 
 The thread that owns `.size-limit.json` (§1, *Size budgets*) raises the budgets to cover the
 sprint's sum; every other worker leaves them alone, and a worker whose thread would overshoot
@@ -169,11 +186,23 @@ The tip is `git -C <root> rev-parse HEAD`; the base is the `sprintbase` you reco
 reviewer commits the fixes it can stand behind in the worktree, and reports; anything it may not
 decide comes back `flagged` for §4.
 
-**File.** Resume the worker (SendMessage, same agent, so its context survives) with "File it",
-and anything from the review it should know. It catches up, proves the branch, pushes the
-review's fixes to its PR, removes its worktree, and reports `filed` with the PR number, or
-`blocked`. Then post the reviewer's PR comment (`gh pr comment <n>`, the text from its report),
-so the review sits on the PR. A thread stacked on this one may now be cut.
+**File.** Spawn a fresh `thread-worker` to file it. By now the builder's context is at its
+largest, and filing -- a rebase, a justify, a push -- needs none of it: the thread file is
+written to be a handoff, and a fresh worker files from it at a fraction of the cost.
+
+```
+File thread <N> of sprint <sprint_name>. Sprint directory: <sprint root>/whiteboard/<YYYYMMDD-sprint_name>/.
+Worktree: <root>, on branch <branch>, PR #<n>, <cut from origin/main | stacked on thread M's branch, PR #M>.
+Begin every shell command with `cd <root> && `. The builder's thread file: <sprint dir>/thread-<N>-<label>.md.
+File it per *Filing* in your agent definition, and report `filed` or `blocked`.
+From the review: <the reviewer's commits, and anything it left that the filer should know>.
+```
+
+It catches up, proves the branch, pushes the review's fixes to the PR, removes the worktree, and
+reports `filed` with the PR number, or `blocked`. Resuming the builder instead (SendMessage)
+is for work that needs what it knows: rework after a `flagged` review, or the answer to its
+blocking question. Then post the reviewer's PR comment (`gh pr comment <n>`, the text from its
+report), so the review sits on the PR. A thread stacked on this one may now be cut.
 
 A `blocked` or `abandoned` worker gets no review: the review is of a finished thread, and
 follows the resume that finishes it.
@@ -194,8 +223,8 @@ follows the resume that finishes it.
    from the later thread's text, so it is not asked for twice. Beyond that bookkeeping, curate:
    condense what later threads no longer need, hoist a buried finding to where its reader will
    look, and spin an outgrown block into a file of its own in the sprint directory, with a line
-   on who should read it. Keep the progress document under about 5,000 words: every later
-   worker reads it whole. Mark what you add with `*Orchestrator:*`; never edit a worker's
+   on who should read it. Keep the progress document under about 5,000 words: you write every
+   later handoff from it. Mark what you add with `*Orchestrator:*`; never edit a worker's
    thread file. Commit (`plan:`) and push to the sprint PR; mirror at the milestones §1 names.
 4. **Decide** (§4), refill the frontier, and wait for the next report. If the Coach has
    interjected in chat meanwhile, fold their guidance in first.
@@ -249,9 +278,9 @@ When the last thread files (or the sprint pauses for good):
 1. **Restack** the filed threads into one line on `origin/main`. A stack the threads already
    form keeps its order; peers go biggest and messiest first, so the large changes merge first
    and the small ones adapt. In a worktree of your own (a name no other session uses), rebase
-   each branch onto the one below with `--no-update-refs`. A conflict goes back to that
-   thread's worker (resumed, with the new base), which resolves it, proves it, and pushes. When
-   every rebase is clean, run `pnpm justify` (and `pnpm size`) once, at the top, and let CI
+   each branch onto the one below with `--no-update-refs`. A conflict goes to a fresh
+   `thread-worker`, handed the thread file and the new base, which resolves it, proves it, and
+   pushes. When every rebase is clean, run `pnpm justify` (and `pnpm size`) once, at the top, and let CI
    check the middle. Push each branch with a lease on the SHA it replaces
    (`--force-with-lease=<branch>:<old sha>`), and rewrite each PR's first line to "Stacked on
    #N, in the line main → #A → #B → …". Check the bottom stands on today's `origin/main`, not on

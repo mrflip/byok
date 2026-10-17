@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "deny": [
+      "mcp__claude_ai_Vercel",
+      "mcp__claude_ai_Google_Docs",
+      "mcp__claude_ai_Google_Drive",
+      "mcp__claude_ai_Google_Sheets",
+      "mcp__claude_ai_WebMCP_Evaluator"
+    ]
+  }
+}

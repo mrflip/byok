@@ -5,6 +5,14 @@ interact with later decisions to create a security issue. Do not justify why the
 concerning; do not predict what might heighten concerns. Instead, in a sentence or so, brief a
 security expert who knows what questions to ask.
 
+**Adding an entry.** The agent that made the decision hands it to a `sonnet` subagent with this
+file's path, the caution in a sentence or two, the date, and the PR or branch, and commits what
+the subagent wrote. The subagent searches the entries for the same mechanism (`grep -n` for its
+names), reading only the ones it finds. Where one already says it, the subagent folds the new
+fact into that entry, keeping its date and adding the new one beside it ("2026-10-14; 2026-10-17:
+..."), and changes no other entry. Otherwise it writes a new dated entry at the top of *Of
+Interest*. Either way it keeps the voice above, and returns the lines it changed.
+
 ## Of Interest
 
 * 2026-10-16: `describeVaultDB` now races every compare-and-write line (VAULTDB.md, 3.1 to 3.5, 3.7,

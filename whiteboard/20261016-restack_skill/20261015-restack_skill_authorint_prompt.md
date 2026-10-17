@@ -1,8 +1,20 @@
+write a claude skill `/restacker [details and clarifications, eg "ignore these PRS and restack PR#X first"]`
 given a list of prs, restack them as quickly as reasonable
 
-when prs are already stacked, handle them as a unit
-don't push until you have green at the tip of a stack
-if a substack
+Please "restack" prs into a linear chain, so that merging the top makes the others go purple. Do this in a time and resource-efficient way. Background:
+1. when prs are already stacked, handle them as a unit
+2. ignore PRs that are in draft mode
+3. given free choice, restack ones with no (or only trivial) merge conflicts first; all else equal put higher number PRs after lower-number ones. You may be able to identify potential for merge conflicts and integrate that into your planning.
+4. running the justify tests over and over costs time, and it's very likely that a clean or mostly-clean rebase will pass the tests
+5. push the most important CI job (head of the stack) first, so that the others don't compete for containers with it
+You may wish to proceed as follows:
+* stack everything that rebases cleanly, and run `pnpm justify`. If that is green, force-push the tip with a **named lease**
+* continue to restack, using your judgement about when to run the full test suite. As you get to a green result, force-push-with-named-lease the tip.
+When you have completed restacking everything not-hairy and pushed the tip, also force-push-with-named-lease each other PR.
+Edit each pr message to have the line eg "Stacked as main -> #40 -> #45 -> #47 -> #48 (this PR) -> #46 -> #50". Each PR in this line should be a link `[#12](https://github.com/<org>/<reponame>/pull/12)`, not a bare number
+If a rebase is hairy -- requiring significant judgement calls, or large edit or file volume -- set it aside and report what you found in chat and in your summary
+
+The above is the strategy to follow. The below has specifics from a certain run while developing my prompt, demonstrating specifics about each step; if it varies with the above in strategy, follow the above.
 
 Steps:
 1. `git -C /workspace/byok fetch origin`, then `git -C /workspace/byok worktree add --detach /workspace/byok-gp2-restack3 origin/20261016-validators_tightening`. Begin every later shell command with `cd /workspace/byok-gp2-restack3 && `. Run `scripts/clear-ds-store.sh` there before rebasing.
