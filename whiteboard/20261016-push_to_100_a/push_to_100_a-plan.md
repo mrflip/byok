@@ -761,6 +761,11 @@ From the sprint doc's *Open Matters*, as rows are swept:
     check in Postgres, `storage_blocked` from `idbVaultDB`, a kind for a failed zxcvbn load --
     are two-way and small, so 9b builds them; the rows stay, so the Coach can object before
     merging.
+29. **Thread 12 files without its tsdown half** (2026-10-17, revising YOLO 25): tsdown 0.23.1 ages
+    at 16:00Z, eleven hours after the rest of the line could be done. 12 files with G402 and the
+    four floors and goes into the line below 9c; the tsdown move (G403, G415) is a follow-up thread
+    of its own after 16:00Z, from the line's top, its rows open until then. The wrap-up does not
+    wait for it, nor for 15 (#138), which joins the top when the Coach answers its row.
 
 ## For the Coach
 
