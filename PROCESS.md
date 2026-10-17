@@ -16,20 +16,13 @@ mid-refactor, not on a timer.
 
 ### A worktree per thread
 
-Other agents share the main checkout, so a thread is built in a worktree of its own beside it,
-`../byok-<label>`. From the main checkout:
-
-```sh
-git fetch origin
-git worktree add --no-track -b YYYYMMDD-<label> ../byok-<label> origin/main
-git -C ../byok-<label> config branch.YYYYMMDD-<label>.remote origin
-git -C ../byok-<label> config branch.YYYYMMDD-<label>.merge refs/heads/YYYYMMDD-<label>
-cd ../byok-<label> && pnpm install
-```
-
-`--no-track` matters: the container's git pushes a branch to its upstream, and a branch cut
-tracking `origin/main` would push to main. A thread built on another's unmerged work is cut from
-that branch's tip instead of `origin/main`, and its PR says "Stacked on #N". Push with
+Other agents share the main checkout, so a thread is built in a worktree of its own beside it:
+`scripts/cut-thread <label> [<base>]` makes `../byok-<label>` on a branch `YYYYMMDD-<label>`, cut
+from `origin/main` or the base given, records that base as `branch.<branch>.sprintbase`, and runs
+`pnpm install` there. It cuts with `--no-track`, as anyone cutting one by hand must: the
+container's git pushes a branch to its upstream, and a branch tracking `origin/main` would push to
+main. A thread built on another's unmerged work is cut from that branch's tip, and its PR says
+"Stacked on #N". Push with
 `git -c credential.helper= -c credential.helper='!gh auth git-credential' push`. Once the PR is
 filed, `git worktree remove ../byok-<label>`; the branch stays for the PR. Once it has merged,
 `/branch-sweep`, run when the Coach asks, has `scripts/git-survey.sh` tag the branch
@@ -227,9 +220,12 @@ size-limit's `kB` is 1000 bytes, and it measures minified and brotlied.
 2. **Add the room.** A bundle of 5 kB or more gets **+3 kB**; one under 5 kB gets **+50%**, and at
    least +1 kB, so a small bundle is not given more room than its own size.
 3. **Round up to a round number**: two significant figures, never down (2.3 kB of measure is
-   3.5 kB of budget; 22.15 kB is 23 kB; 26.83 kB is 30 kB). Round numbers keep a stack of PRs
+   3.5 kB of budget; 22.15 kB is 23 kB; 26.83 kB is 27 kB). Round numbers keep a stack of PRs
    from fighting over digits: a budget of 2_431 bytes is a conflict waiting for the next
    thread, and 2_500 is not.
+
+`pnpm size:budget` applies the rule: it prints each budget beside the rule's, and `--raise` or
+`--write` sets them (its header says how).
 
 The rule sets a budget; it may lower one as well as raise it. A bundle that shrank gets the
 smaller budget the rule gives, so a budget never sits looser than its measure earns.
@@ -242,8 +238,8 @@ measured packages once and measures them; `pnpm size:check` measures what is alr
 which is what `pnpm justify` does after its tests have built everything. size-limit itself runs
 on Node `^22.19`, `^24.5` or `>=26`, narrower than our `engines`; CI runs it on the pinned Node.
 
-A sprint's orchestrator guesses the target up front and has the first thread set it, so the
-stacked PRs agree (`.claude/skills/sprint/SKILL.md`); a late thread lowers the budgets to this
+A sprint's orchestrator guesses the target up front and has the first thread set it
+(`pnpm size:budget --raise --add <entry>=<kB>`), so the stacked PRs agree (`.claude/skills/sprint/SKILL.md`); a late thread lowers the budgets to this
 rule once the sprint's sizes are known. Anyone else raising a budget follows the same rule, and
 says in the PR why the bundle grew.
 
